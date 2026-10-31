@@ -61,4 +61,14 @@ pub enum SessionError {
         /// Which rule it breaks.
         reason: String,
     },
+    /// A loaded recording does not hold the number of samples `meta.json` records for it.
+    #[error("{file} holds {found} samples, metadata says {expected}")]
+    SampleCountMismatch {
+        /// The sample file name.
+        file: String,
+        /// Count recorded in the metadata.
+        expected: u32,
+        /// Count actually loaded.
+        found: usize,
+    },
 }

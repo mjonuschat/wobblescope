@@ -53,6 +53,12 @@ pub fn real_text(name: &str) -> String {
     let bytes: &[u8] = match name {
         "ws_x_adxl345" => include_bytes!("../../../core/tests/data/real/ws_x_adxl345.csv.zst"),
         "ws_x_ebb36" => include_bytes!("../../../core/tests/data/real/ws_x_ebb36.csv.zst"),
+        "win_x_short_adxl345" => {
+            include_bytes!("../../../core/tests/data/real/win_x_short_adxl345.csv.zst")
+        }
+        "win_x_short_ebb36" => {
+            include_bytes!("../../../core/tests/data/real/win_x_short_ebb36.csv.zst")
+        }
         _ => panic!("unknown real capture {name}"),
     };
     unzstd(bytes)
@@ -61,4 +67,24 @@ pub fn real_text(name: &str) -> String {
 /// A real capture, parsed with the reference parser.
 pub fn real(name: &str) -> RawSamples {
     parse_csv(&real_text(name))
+}
+
+/// `print_time` markers recorded with the `win_x_short` whole-window capture.
+pub struct WindowMarkers {
+    /// End of the positioning move, read right after `M400`.
+    pub p1_move_end: f64,
+    /// End of the sweep.
+    pub p2_sweep_end: f64,
+}
+
+/// The markers of the `win_x_short` capture.
+pub fn window_markers_x_short() -> WindowMarkers {
+    let v: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../core/tests/data/real/win_x_short.markers.json"
+    ))
+    .unwrap();
+    WindowMarkers {
+        p1_move_end: v["p1_move_end"].as_f64().unwrap(),
+        p2_sweep_end: v["p2_sweep_end"].as_f64().unwrap(),
+    }
 }
