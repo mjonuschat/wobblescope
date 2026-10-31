@@ -2,7 +2,8 @@
 mod common;
 
 use common::{
-    Case, assert_close, assert_result, case, check_recommendation, close, fit_params, normalized,
+    Case, REAL_CASES, assert_close, assert_result, case, check_recommendation, close, fit_params,
+    normalized, stem,
 };
 use wobblescope_core::fit::{Axis, FitParams, Recommendation, find_best_shaper, fit_shaper};
 use wobblescope_core::shaper::{AUTOTUNE_SHAPERS, builtin};
@@ -10,20 +11,16 @@ use wobblescope_core::{CORE_VERSION, CoreError};
 
 fn recommend(case_name: &str) -> (Recommendation, Case) {
     let case = case(case_name);
-    let data: Vec<_> = case
-        .inputs
-        .iter()
-        .map(|i| normalized(i.trim_end_matches(".csv")))
-        .collect();
+    let data: Vec<_> = case.inputs.iter().map(|i| normalized(stem(i))).collect();
     let rec = find_best_shaper(&data, &fit_params(&case.params)).unwrap();
     (rec, case)
 }
 
 parity_test! {
     fn candidates_match_klipper_for_chip_a_and_chip_b() {
-        for name in ["chip_a", "chip_b"] {
+        for name in ["chip_a", "chip_b"].into_iter().chain(REAL_CASES) {
             let case = case(name);
-            let data: Vec<_> = case.inputs.iter().map(|i| normalized(i.trim_end_matches(".csv"))).collect();
+            let data: Vec<_> = case.inputs.iter().map(|i| normalized(stem(i))).collect();
             for (shaper_name, entry) in &case.fit {
                 let shaper = builtin(shaper_name).unwrap();
                 let got = fit_shaper(shaper, &data, &fit_params(&case.params)).unwrap();
@@ -39,7 +36,7 @@ parity_test! {
 
 parity_test! {
     fn final_shaper_values_match_klipper() {
-        for name in ["chip_a", "chip_b"] {
+        for name in ["chip_a", "chip_b"].into_iter().chain(REAL_CASES) {
             let (rec, case) = recommend(name);
             for got in &rec.all {
                 let want = &case.fit[&got.name].fin;
@@ -55,7 +52,7 @@ parity_test! {
 
 parity_test! {
     fn recommendation_matches_klipper_or_logs_near_tie() {
-        for name in ["chip_a", "chip_b"] {
+        for name in ["chip_a", "chip_b"].into_iter().chain(REAL_CASES) {
             let (rec, case) = recommend(name);
             check_recommendation(name, &rec, &case);
         }

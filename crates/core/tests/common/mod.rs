@@ -66,7 +66,24 @@ pub fn csv(name: &str) -> &'static str {
     }
 }
 
+/// Strips the capture-file suffixes (`.csv`, `.csv.zst`) from an input file name.
+pub fn stem(input: &str) -> &str {
+    input.trim_end_matches(".zst").trim_end_matches(".csv")
+}
+
+pub const REAL_CASES: [&str; 6] = [
+    "real_x_adxl345",
+    "real_x_ebb36",
+    "real_x_both",
+    "real_y_adxl345",
+    "real_y_ebb36",
+    "real_y_both",
+];
+
 pub fn load_csv(name: &str) -> RawSamples {
+    if name.starts_with("ws_") || name.starts_with("win_") {
+        return load_real(name);
+    }
     let mut s = RawSamples::default();
     for line in csv(name)
         .lines()
@@ -190,6 +207,12 @@ pub fn case(name: &str) -> Case {
         "chip_a.max_smoothing",
         "chip_a.scv10_damp05",
         "chip_a.max_vibrs",
+        "real_x_adxl345",
+        "real_x_ebb36",
+        "real_x_both",
+        "real_y_adxl345",
+        "real_y_ebb36",
+        "real_y_both",
     );
     serde_json::from_str(&unzstd(bytes)).unwrap()
 }
@@ -307,4 +330,98 @@ pub fn unzstd(bytes: &[u8]) -> String {
     let mut out = String::new();
     dec.read_to_string(&mut out).unwrap();
     out
+}
+
+pub fn parse_csv(text: &str) -> RawSamples {
+    let mut s = RawSamples::default();
+    for line in text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+    {
+        let v: Vec<f64> = line.split(',').map(|f| f.parse().unwrap()).collect();
+        s.t.push(v[0]);
+        s.x.push(v[1]);
+        s.y.push(v[2]);
+        s.z.push(v[3]);
+    }
+    s
+}
+
+/// A real capture from `tests/data/real`, stored as `<name>.csv.zst`.
+pub fn load_real(name: &str) -> RawSamples {
+    let bytes: &[u8] = match name {
+        "ws_x_adxl345" => include_bytes!("../data/real/ws_x_adxl345.csv.zst"),
+        "ws_x_ebb36" => include_bytes!("../data/real/ws_x_ebb36.csv.zst"),
+        "ws_y_adxl345" => include_bytes!("../data/real/ws_y_adxl345.csv.zst"),
+        "ws_y_ebb36" => include_bytes!("../data/real/ws_y_ebb36.csv.zst"),
+        "win_x_short_adxl345" => include_bytes!("../data/real/win_x_short_adxl345.csv.zst"),
+        "win_x_short_klipper_adxl345" => {
+            include_bytes!("../data/real/win_x_short_klipper_adxl345.csv.zst")
+        }
+        "win_x_short_ebb36" => include_bytes!("../data/real/win_x_short_ebb36.csv.zst"),
+        "win_x_short_klipper_ebb36" => {
+            include_bytes!("../data/real/win_x_short_klipper_ebb36.csv.zst")
+        }
+        "win_y_short_adxl345" => include_bytes!("../data/real/win_y_short_adxl345.csv.zst"),
+        "win_y_short_klipper_adxl345" => {
+            include_bytes!("../data/real/win_y_short_klipper_adxl345.csv.zst")
+        }
+        "win_y_short_ebb36" => include_bytes!("../data/real/win_y_short_ebb36.csv.zst"),
+        "win_y_short_klipper_ebb36" => {
+            include_bytes!("../data/real/win_y_short_klipper_ebb36.csv.zst")
+        }
+        "win_x_same_adxl345" => include_bytes!("../data/real/win_x_same_adxl345.csv.zst"),
+        "win_x_same_klipper_adxl345" => {
+            include_bytes!("../data/real/win_x_same_klipper_adxl345.csv.zst")
+        }
+        "win_x_same_ebb36" => include_bytes!("../data/real/win_x_same_ebb36.csv.zst"),
+        "win_x_same_klipper_ebb36" => {
+            include_bytes!("../data/real/win_x_same_klipper_ebb36.csv.zst")
+        }
+        "win_y_same_adxl345" => include_bytes!("../data/real/win_y_same_adxl345.csv.zst"),
+        "win_y_same_klipper_adxl345" => {
+            include_bytes!("../data/real/win_y_same_klipper_adxl345.csv.zst")
+        }
+        "win_y_same_ebb36" => include_bytes!("../data/real/win_y_same_ebb36.csv.zst"),
+        "win_y_same_klipper_ebb36" => {
+            include_bytes!("../data/real/win_y_same_klipper_ebb36.csv.zst")
+        }
+        _ => panic!("unknown real capture {name}"),
+    };
+    parse_csv(&unzstd(bytes))
+}
+
+/// `print_time` markers recorded with a whole-window capture (`win_<case>_*`).
+pub struct WindowMarkers {
+    /// End of the positioning move, read right after `M400`.
+    pub p1_move_end: f64,
+    /// End of the sweep.
+    pub p2_sweep_end: f64,
+}
+
+pub const WINDOW_CASES: [&str; 4] = ["x_short", "y_short", "x_same", "y_same"];
+
+pub fn window_markers(case: &str) -> WindowMarkers {
+    let text = match case {
+        "x_short" => include_str!("../data/real/win_x_short.markers.json"),
+        "y_short" => include_str!("../data/real/win_y_short.markers.json"),
+        "x_same" => include_str!("../data/real/win_x_same.markers.json"),
+        "y_same" => include_str!("../data/real/win_y_same.markers.json"),
+        _ => panic!("unknown window case {case}"),
+    };
+    let v: serde_json::Value = serde_json::from_str(text).unwrap();
+    WindowMarkers {
+        p1_move_end: v["p1_move_end"].as_f64().unwrap(),
+        p2_sweep_end: v["p2_sweep_end"].as_f64().unwrap(),
+    }
+}
+
+/// Sum of the three per-axis variances over the samples with timestamps in `range`.
+pub fn energy_between(s: &RawSamples, range: std::ops::Range<f64>) -> f64 {
+    let idx: Vec<usize> = (0..s.len()).filter(|&i| range.contains(&s.t[i])).collect();
+    let var = |v: &[f64]| {
+        let m = idx.iter().map(|&i| v[i]).sum::<f64>() / idx.len() as f64;
+        idx.iter().map(|&i| (v[i] - m).powi(2)).sum::<f64>() / idx.len() as f64
+    };
+    var(&s.x) + var(&s.y) + var(&s.z)
 }

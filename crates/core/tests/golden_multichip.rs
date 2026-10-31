@@ -59,3 +59,39 @@ parity_test! {
         assert!(a.per_chip[1].datasets[0].1.is_normalized());
     }
 }
+
+fn real_input(chip: &str, axis: &str) -> DatasetInput {
+    DatasetInput {
+        chip: chip.to_owned(),
+        point: 0,
+        samples: load_csv(&format!("ws_{axis}_{chip}")),
+        health: Health::Unknown,
+        coverage: Coverage::Complete,
+        include_override: false,
+        window: None,
+    }
+}
+
+parity_test! {
+    fn real_two_chip_worst_case_and_per_chip_match_klipper() {
+        for axis in ["x", "y"] {
+            let a = analyze(
+                &[real_input("adxl345", axis), real_input("ebb36", axis)],
+                &FitParams::default(),
+            )
+            .unwrap();
+            check_recommendation(
+                &format!("real {axis} worst case"),
+                a.worst_case.as_ref().unwrap(),
+                &case(&format!("real_{axis}_both")),
+            );
+            for (chip, c) in ["adxl345", "ebb36"].iter().zip(&a.per_chip) {
+                check_recommendation(
+                    &format!("real {axis} {chip}"),
+                    c.recommendation.as_ref().unwrap(),
+                    &case(&format!("real_{axis}_{chip}")),
+                );
+            }
+        }
+    }
+}
