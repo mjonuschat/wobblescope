@@ -288,6 +288,32 @@ fn a_file_entry_the_metadata_does_not_list_is_refused() {
     ));
 }
 
+#[test]
+fn open_sample_reads_the_bytes_on_disk_and_refuses_unlisted_entries() {
+    use std::io::Read;
+    let root = TempDir::new().unwrap();
+    write_session(root.path(), &meta("run1"), source).unwrap();
+    let session = open_session(root.path(), "run1").unwrap();
+    let f = session.meta().find_file(1, 0).unwrap();
+    let mut bytes = Vec::new();
+    session
+        .open_sample(f)
+        .unwrap()
+        .read_to_end(&mut bytes)
+        .unwrap();
+    assert_eq!(bytes, fs::read(root.path().join("run1/c1-s0.zst")).unwrap());
+    let foreign = SegmentFile {
+        chip: 0,
+        sample_file: "meta.json".to_owned(),
+        sample_count: 1,
+        coverage: Coverage::Complete,
+    };
+    assert!(matches!(
+        session.open_sample(&foreign),
+        Err(SessionError::UnsafePath(_))
+    ));
+}
+
 #[cfg(unix)]
 mod symlinks {
     use std::os::unix::fs::symlink;
@@ -310,6 +336,23 @@ mod symlinks {
         let session = open_session(root.path(), "run1").unwrap();
         let f = &session.meta().segments[0].files[0];
         assert!(matches!(session.load(f), Err(SessionError::UnsafePath(_))));
+    }
+
+    #[test]
+    fn a_symlinked_sample_file_is_refused_by_open_sample() {
+        let root = TempDir::new().unwrap();
+        write_session(root.path(), &meta("run1"), source).unwrap();
+        let outside = root.path().join("outside.zst");
+        fs::copy(root.path().join("run1/c0-s0.zst"), &outside).unwrap();
+        let target = root.path().join("run1").join("c0-s0.zst");
+        fs::remove_file(&target).unwrap();
+        symlink(&outside, &target).unwrap();
+        let session = open_session(root.path(), "run1").unwrap();
+        let f = session.meta().find_file(0, 0).unwrap();
+        assert!(matches!(
+            session.open_sample(f),
+            Err(SessionError::UnsafePath(_))
+        ));
     }
 
     #[test]

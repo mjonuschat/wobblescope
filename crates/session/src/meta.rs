@@ -275,6 +275,15 @@ impl SessionMeta {
         Ok(serde_json::to_string_pretty(self)?)
     }
 
+    /// The recording `chip` made in `segment` (positions in the metadata lists), if any.
+    pub fn find_file(&self, chip: u32, segment: usize) -> Option<&SegmentFile> {
+        self.segments
+            .get(segment)?
+            .files
+            .iter()
+            .find(|f| f.chip == chip)
+    }
+
     /// Checks every rule of the format.
     ///
     /// # Errors

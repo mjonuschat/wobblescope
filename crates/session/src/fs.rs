@@ -5,7 +5,7 @@
 //! sealed exactly when that directory exists and holds `meta.json`.
 
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use wobblescope_core::RawSamples;
@@ -29,13 +29,14 @@ impl Session {
         &self.meta
     }
 
-    /// Loads and decodes one recording. `file` must be an entry of this session's metadata, so
-    /// only names the metadata validated are ever opened.
+    /// Opens the sample file of one recording. `file` must be an entry of this session's
+    /// metadata, so only names the metadata validated are ever opened, and a symlink is
+    /// refused.
     ///
     /// # Errors
-    /// [`SessionError::UnsafePath`] for an unlisted entry or a non-regular file, a decoding
-    /// error, or [`SessionError::SampleCountMismatch`].
-    pub fn load(&self, file: &SegmentFile) -> Result<RawSamples, SessionError> {
+    /// [`SessionError::UnsafePath`] for an unlisted entry or a non-regular file, or an I/O
+    /// error.
+    pub fn open_sample(&self, file: &SegmentFile) -> Result<File, SessionError> {
         let listed = self
             .meta
             .segments
@@ -45,7 +46,18 @@ impl Session {
         if !listed {
             return Err(SessionError::UnsafePath(file.sample_file.clone()));
         }
-        let bytes = fs::read(regular_file(&self.dir.join(&file.sample_file))?)?;
+        Ok(File::open(regular_file(
+            &self.dir.join(&file.sample_file),
+        )?)?)
+    }
+
+    /// Loads and decodes one recording. `file` must be an entry of this session's metadata.
+    ///
+    /// # Errors
+    /// As [`Session::open_sample`], a decoding error, or [`SessionError::SampleCountMismatch`].
+    pub fn load(&self, file: &SegmentFile) -> Result<RawSamples, SessionError> {
+        let mut bytes = Vec::new();
+        self.open_sample(file)?.read_to_end(&mut bytes)?;
         let samples = decode_samples(&bytes)?;
         if samples.len() != file.sample_count as usize {
             return Err(SessionError::SampleCountMismatch {
