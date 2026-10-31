@@ -1161,6 +1161,7 @@ name = "wobblescope"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "http-body-util",
  "mime_guess",
  "rust-embed",
  "rustix",
@@ -1172,6 +1173,7 @@ dependencies = [
  "time",
  "tokio",
  "toml",
+ "tower",
  "wobblescope-core",
  "wobblescope-session",
 ]
