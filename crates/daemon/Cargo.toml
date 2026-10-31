@@ -24,6 +24,7 @@ wobblescope-session = { version = "0.1.0", path = "../session" }
 workspace = true
 
 [dev-dependencies]
+futures-util = { version = "0.3", default-features = false }
 http-body-util = "0.1.5"
 structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
 tempfile = "3.27.0"
