@@ -125,3 +125,42 @@ pub fn source(f: &SegmentFile) -> Result<RawSamples, SessionError> {
 pub fn seal(root: &Path, spec: &Spec) {
     write_session(root, &spec.meta(), source).unwrap();
 }
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use wobblescope::config::Settings;
+use wobblescope::storage::{OpenReport, Probe, Storage};
+
+pub fn sessions_dir(data: &Path) -> PathBuf {
+    data.join("sessions")
+}
+
+/// Seals `spec` under `<data>/sessions`, creating the directory when needed.
+pub fn seal_in(data: &Path, spec: &Spec) {
+    std::fs::create_dir_all(sessions_dir(data)).unwrap();
+    seal(&sessions_dir(data), spec);
+}
+
+/// A probe that reports `free` bytes whatever the path.
+pub fn probe(free: u64) -> Probe {
+    Arc::new(move |_| Ok(free))
+}
+
+pub fn settings(cap: u64, headroom: u64) -> Settings {
+    Settings {
+        storage_dir: None,
+        retention_cap_bytes: cap,
+        free_space_headroom_bytes: headroom,
+    }
+}
+
+/// Opens storage on `data` with plenty of free space.
+pub fn open(data: &Path, cap: u64) -> (Storage, OpenReport) {
+    Storage::open(data, &settings(cap, 0), probe(u64::MAX / 2)).unwrap()
+}
+
+/// Sizes of the sessions `ids`, read back from storage.
+pub fn size_of(storage: &Storage, id: &str) -> u64 {
+    storage.get(id).unwrap().size_bytes
+}
