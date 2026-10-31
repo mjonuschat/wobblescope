@@ -828,6 +828,7 @@ dependencies = [
  "deranged",
  "num-conv",
  "powerfmt",
+ "serde_core",
  "time-core",
  "time-macros",
 ]
@@ -1165,6 +1166,7 @@ dependencies = [
  "rustix",
  "serde",
  "serde_json",
+ "structured-zstd",
  "tempfile",
  "thiserror",
  "time",
