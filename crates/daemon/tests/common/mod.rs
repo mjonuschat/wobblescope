@@ -164,3 +164,39 @@ pub fn open(data: &Path, cap: u64) -> (Storage, OpenReport) {
 pub fn size_of(storage: &Storage, id: &str) -> u64 {
     storage.get(id).unwrap().size_bytes
 }
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{HeaderMap, Request, StatusCode};
+use http_body_util::BodyExt;
+use tower::ServiceExt;
+
+/// The API router on `storage`.
+pub fn app(storage: Option<Storage>) -> Router {
+    wobblescope::api::mount(storage)
+}
+
+/// Sends one request through `app` and returns the status, headers and body.
+pub async fn send(app: &Router, request: Request<Body>) -> (StatusCode, HeaderMap, Vec<u8>) {
+    let response = app.clone().oneshot(request).await.unwrap();
+    let (parts, body) = response.into_parts();
+    let bytes = body.collect().await.unwrap().to_bytes().to_vec();
+    (parts.status, parts.headers, bytes)
+}
+
+/// A request with no body.
+pub fn request(method: &str, uri: &str) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
+}
+
+/// Sends a bodiless request and parses the answer as JSON.
+pub async fn json(app: &Router, method: &str, uri: &str) -> (StatusCode, serde_json::Value) {
+    let (status, _, body) = send(app, request(method, uri)).await;
+    let value = serde_json::from_slice(&body)
+        .unwrap_or_else(|e| panic!("{method} {uri} gave {status} and a non-JSON body: {e}"));
+    (status, value)
+}
