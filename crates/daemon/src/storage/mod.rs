@@ -19,7 +19,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
 use wobblescope_session::SessionError;
-use wobblescope_session::fs::{remove_session, sweep_leftovers};
+use wobblescope_session::fs::{Session, open_session, remove_session, sweep_leftovers};
+use wobblescope_session::meta::SessionMeta;
 
 pub use admission::Reservation;
 use index::{Index, ListFilter, Skipped, Summary};
@@ -82,6 +83,16 @@ pub enum StorageError {
         need: u64,
         /// Free bytes after eviction, minus space promised to live reservations.
         available: u64,
+    },
+    /// The session has no recording for this chip and segment.
+    #[error("session {id} has no recording for chip {chip} in segment {segment}")]
+    NoRecording {
+        /// The session.
+        id: String,
+        /// Chip position asked for.
+        chip: u32,
+        /// Segment position asked for.
+        segment: usize,
     },
     /// The session to store does not match its reservation or cannot be indexed.
     #[error("cannot store session: {0}")]
@@ -219,6 +230,59 @@ impl Storage {
         self.inner.lock().index.get(id).cloned()
     }
 
+    /// The summary and the stored metadata of one session.
+    ///
+    /// # Errors
+    /// [`StorageError::NotFound`] for an unknown id, a skipped directory, or a session removed
+    /// from disk since the index was built; otherwise the error from reading it.
+    pub fn session(&self, id: &str) -> Result<(Summary, SessionMeta), StorageError> {
+        let summary = self
+            .get(id)
+            .ok_or_else(|| StorageError::NotFound(id.to_owned()))?;
+        let session = self.open_sealed(id)?;
+        Ok((summary, session.meta().clone()))
+    }
+
+    /// Opens a session's directory, treating one that vanished since the scan as not found.
+    fn open_sealed(&self, id: &str) -> Result<Session, StorageError> {
+        match open_session(&self.inner.sessions_dir, id) {
+            Ok(session) => Ok(session),
+            Err(SessionError::NotSealed { .. }) => Err(StorageError::NotFound(id.to_owned())),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Opens the sample file of one recording and holds a download lease on its session until
+    /// the returned guard drops, so delete and eviction skip the session meanwhile. The lease
+    /// is taken before the session is opened.
+    ///
+    /// # Errors
+    /// [`StorageError::NotFound`], [`StorageError::NoRecording`] for a pair the session did not
+    /// record, or the error from opening the file. No lease outlives a failure.
+    pub fn open_sample(
+        &self,
+        id: &str,
+        chip: u32,
+        segment: usize,
+    ) -> Result<SampleGuard, StorageError> {
+        let lease = self.lease(id)?;
+        let session = self.open_sealed(id)?;
+        let entry =
+            session
+                .meta()
+                .find_file(chip, segment)
+                .ok_or_else(|| StorageError::NoRecording {
+                    id: id.to_owned(),
+                    chip,
+                    segment,
+                })?;
+        let file = session.open_sample(entry)?;
+        Ok(SampleGuard {
+            file,
+            _lease: lease,
+        })
+    }
+
     /// Storage use against the cap.
     ///
     /// # Errors
@@ -312,6 +376,23 @@ impl Storage {
             inner: self.inner.clone(),
             id: id.to_owned(),
         })
+    }
+}
+
+/// An open sample file that keeps its session leased while it exists. Read from it, then drop
+/// it.
+pub struct SampleGuard {
+    file: fs::File,
+    _lease: DownloadLease,
+}
+
+impl io::Read for SampleGuard {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.file.read(buf)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        self.file.read_to_end(buf)
     }
 }
 

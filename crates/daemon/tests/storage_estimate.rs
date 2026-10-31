@@ -1,4 +1,4 @@
-use wobblescope::storage::estimate::estimate_bytes;
+use wobblescope::storage::estimate::{EstimateError, estimate_bytes, estimate_from_samples};
 
 #[test]
 fn one_full_sweep_at_3200_hz() {
@@ -28,4 +28,14 @@ fn nan_infinite_and_negative_inputs_are_errors() {
     assert!(estimate_bytes(&[(f64::NAN, 1.0)]).is_err());
     assert!(estimate_bytes(&[(3200.0, f64::INFINITY)]).is_err());
     assert!(estimate_bytes(&[(3200.0, -1.0)]).is_err());
+}
+
+#[test]
+fn a_sample_count_is_priced_like_a_recording_of_that_many_samples() {
+    assert_eq!(estimate_from_samples(0).unwrap(), 0);
+    assert_eq!(estimate_from_samples(3201).unwrap(), 153_648);
+    assert_eq!(
+        estimate_from_samples(u64::MAX),
+        Err(EstimateError::OutOfRange)
+    );
 }

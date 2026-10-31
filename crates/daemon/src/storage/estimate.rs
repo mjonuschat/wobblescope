@@ -39,6 +39,15 @@ pub fn estimate_bytes(recordings: &[(f64, f64)]) -> Result<u64, EstimateError> {
             .checked_add(n as u64)
             .ok_or(EstimateError::OutOfRange)?;
     }
+    estimate_from_samples(samples)
+}
+
+/// Estimated bytes for `samples` samples in total: 32 bytes each, times a safety factor of
+/// 1.5, rounded up. For callers that already know the count, such as a parsed CSV import.
+///
+/// # Errors
+/// [`EstimateError::OutOfRange`] when the result does not fit in `u64`.
+pub fn estimate_from_samples(samples: u64) -> Result<u64, EstimateError> {
     // times 1.5, rounded up
     samples
         .checked_mul(BYTES_PER_SAMPLE * 3)
