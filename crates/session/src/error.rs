@@ -90,4 +90,18 @@ pub enum SessionError {
     /// Reading or writing the session directory failed.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    /// A row of a Klipper raw CSV cannot be imported.
+    #[error("CSV line {line}: {reason}")]
+    CsvRow {
+        /// 1-based line number in the text.
+        line: usize,
+        /// What is wrong with the row.
+        reason: String,
+    },
+    /// The CSV holds fewer than the two samples an import needs.
+    #[error("CSV holds {found} samples, an import needs at least 2")]
+    CsvTooShort {
+        /// Samples found.
+        found: usize,
+    },
 }
