@@ -1,0 +1,127 @@
+//! Shared helpers: real sessions written through the session crate. The session crate's own
+//! test helpers are not exported, so this keeps a minimal one-chip-per-name meta builder.
+#![allow(dead_code)]
+
+use std::path::Path;
+
+use wobblescope_core::RawSamples;
+use wobblescope_core::eligibility::{Coverage, Health};
+use wobblescope_core::fit::Axis;
+use wobblescope_session::SessionError;
+use wobblescope_session::fs::write_session;
+use wobblescope_session::meta::{
+    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionMeta,
+    Source, TimeDomain, sample_file_name,
+};
+
+/// What a test session looks like. Defaults: a complete capture with one chip.
+#[derive(Clone)]
+pub struct Spec {
+    pub id: String,
+    pub created_at: String,
+    pub source: Source,
+    pub outcome: Outcome,
+    pub mode: Option<Mode>,
+    pub chips: Vec<String>,
+    pub printer: Option<String>,
+    pub samples: usize,
+}
+
+impl Spec {
+    pub fn new(id: &str, created_at: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            created_at: created_at.to_owned(),
+            source: Source::Capture,
+            outcome: Outcome::Complete,
+            mode: None,
+            chips: vec!["adxl345".to_owned()],
+            printer: None,
+            samples: 200,
+        }
+    }
+
+    pub fn chips(mut self, chips: &[&str]) -> Self {
+        self.chips = chips.iter().map(|c| (*c).to_owned()).collect();
+        self
+    }
+
+    pub fn printer(mut self, name: &str) -> Self {
+        self.printer = Some(name.to_owned());
+        self
+    }
+
+    pub fn samples(mut self, n: usize) -> Self {
+        self.samples = n;
+        self
+    }
+
+    pub fn meta(&self) -> SessionMeta {
+        let chips = self
+            .chips
+            .iter()
+            .map(|name| ChipMeta {
+                name: name.clone(),
+                chip_type: None,
+                nominal_rate_hz: None,
+                observed_rate_hz: None,
+                axes_map: None,
+                mounting: None,
+                health: Health::Ok,
+                health_notes: vec![],
+            })
+            .collect();
+        let files = (0..self.chips.len())
+            .map(|chip| SegmentFile {
+                chip: chip as u32,
+                sample_file: sample_file_name(chip, 0),
+                sample_count: self.samples as u32,
+                coverage: Coverage::Complete,
+            })
+            .collect();
+        SessionMeta {
+            format_version: 1,
+            id: self.id.clone(),
+            created_at: self.created_at.clone(),
+            source: self.source.clone(),
+            time_domain: TimeDomain::KlipperPrintTime,
+            mode: self.mode,
+            settings: None,
+            printer: self.printer.as_ref().map(|n| PrinterInfo {
+                name: Some(n.clone()),
+                klipper_version: None,
+                mcu_firmware: vec![],
+            }),
+            outcome: self.outcome.clone(),
+            notes: vec![],
+            probe_points: vec![ProbePoint { position: None }],
+            chips,
+            segments: vec![SegmentMeta {
+                axis: Axis::X,
+                point: 0,
+                window: None,
+                files,
+            }],
+        }
+    }
+}
+
+pub fn samples(n: usize, seed: f64) -> RawSamples {
+    let mut s = RawSamples::default();
+    for i in 0..n {
+        s.t.push(41230.322878 + i as f64 * 0.000313);
+        s.x.push((i as f64 * 0.37 + seed).sin() * 300.0);
+        s.y.push(seed);
+        s.z.push(-9806.022374);
+    }
+    s
+}
+
+pub fn source(f: &SegmentFile) -> Result<RawSamples, SessionError> {
+    Ok(samples(f.sample_count as usize, f64::from(f.chip)))
+}
+
+/// Seals the session `spec` describes under `root`.
+pub fn seal(root: &Path, spec: &Spec) {
+    write_session(root, &spec.meta(), source).unwrap();
+}
