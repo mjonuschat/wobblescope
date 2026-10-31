@@ -19,6 +19,7 @@ use crate::storage::index::{ListFilter, Summary, created_at_unix};
 /// by name.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ListQuery {
     /// Sessions created at or after this RFC 3339 time.
     pub created_from: Option<String>,
@@ -61,6 +62,7 @@ impl ListQuery {
 
 /// The body of `GET /api/sessions`.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SessionList {
     /// Matching sessions, newest first.
     pub sessions: Vec<Summary>,
@@ -68,6 +70,7 @@ pub struct SessionList {
 
 /// The body of `GET /api/sessions/{id}`.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SessionDetail {
     /// The listing summary.
     pub summary: Summary,
@@ -99,6 +102,7 @@ pub(super) async fn usage(Store(storage): Store) -> Result<Json<Usage>, ApiError
 /// The body of `PATCH /api/sessions/{id}`.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PinRequest {
     /// Whether the session should be pinned.
     pub pinned: bool,
@@ -135,6 +139,7 @@ pub(super) async fn delete(
 /// by name.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ImportQuery {
     /// Klipper config section name of the chip that recorded the file. Required.
     pub chip: Option<String>,

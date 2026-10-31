@@ -16,6 +16,7 @@ use crate::storage::StorageError;
 /// refusals that have them. The code is the stable part; the message is for people.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "error", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ApiError {
     /// No such session, recording or path.
     NotFound { message: String },
@@ -36,15 +37,21 @@ pub enum ApiError {
     /// The retention cap cannot fit the import even after evicting everything eligible.
     CapExceeded {
         message: String,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         need: u64,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         cap: u64,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         pinned_bytes: u64,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         evictable_bytes: u64,
     },
     /// The disk cannot hold the import plus headroom.
     InsufficientDisk {
         message: String,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         need: u64,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         available: u64,
     },
     /// A write from another origin.

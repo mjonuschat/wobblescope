@@ -15,6 +15,7 @@ use super::pins::Pins;
 
 /// Where a session came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum SourceKind {
     /// Recorded by a test.
     Capture,
@@ -24,6 +25,7 @@ pub enum SourceKind {
 
 /// How a session ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum OutcomeKind {
     /// Every segment was recorded.
     Complete,
@@ -35,12 +37,14 @@ pub enum OutcomeKind {
 
 /// What listing needs to know about one session.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Summary {
     /// Session id, also its directory name.
     pub id: String,
     /// The writer's RFC 3339 timestamp, as recorded.
     pub created_at: String,
     /// `created_at` as seconds since the Unix epoch, used for ordering and range filters.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub created_at_unix: i64,
     /// Capture or import.
     pub source: SourceKind,
@@ -53,6 +57,7 @@ pub struct Summary {
     /// Names of the chips in the session.
     pub chips: Vec<String>,
     /// Bytes the session occupies on disk.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub size_bytes: u64,
     /// Whether the user pinned it.
     pub pinned: bool,

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use axum::Router;
+use wobblescope::api;
 use wobblescope::config;
 use wobblescope::storage::{Storage, default_probe};
 use wobblescope::web;
@@ -26,7 +26,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // TEMPORARY: the default data directory comes from Moonraker's file roots, and there is no
     // Moonraker client yet. Until discovery exists, storage needs `storage_dir` in the config.
-    let _storage = match settings.storage_dir.as_deref() {
+    let storage = match settings.storage_dir.as_deref() {
         Some(dir) => {
             let (storage, report) = Storage::open(dir, &settings, default_probe())?;
             for line in report.lines() {
@@ -43,7 +43,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let app = Router::new().fallback(web::static_handler);
+    let app = api::mount(storage).fallback(web::static_handler);
     let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
     axum::serve(listener, app).await?;
     Ok(())
