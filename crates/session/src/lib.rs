@@ -3,5 +3,6 @@
 
 pub mod codec;
 pub mod error;
+pub mod meta;
 
 pub use error::SessionError;

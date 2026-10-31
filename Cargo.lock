@@ -956,6 +956,8 @@ dependencies = [
 name = "wobblescope-session"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "structured-zstd",
  "thiserror",
  "wasm-bindgen-test",

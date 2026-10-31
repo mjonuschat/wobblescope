@@ -7,6 +7,8 @@ rust-version.workspace = true
 description = "Session format: metadata, sample files and Klipper CSV import; builds natively and to WASM"
 
 [dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
 thiserror = "2.0.21"
 wobblescope-core = { version = "0.1.0", path = "../core" }
