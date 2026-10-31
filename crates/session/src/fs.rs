@@ -58,6 +58,24 @@ impl Session {
     }
 }
 
+impl Session {
+    /// Total length in bytes of the regular files directly inside the session directory.
+    /// Symlinks and subdirectories are ignored, and lengths are file sizes, not disk blocks.
+    ///
+    /// # Errors
+    /// [`SessionError::Io`] when the directory cannot be read.
+    pub fn size_bytes(&self) -> Result<u64, SessionError> {
+        let mut total = 0;
+        for entry in fs::read_dir(&self.dir)? {
+            let md = fs::symlink_metadata(entry?.path())?;
+            if md.is_file() {
+                total += md.len();
+            }
+        }
+        Ok(total)
+    }
+}
+
 /// Returns `path` when it is a regular file and not a symlink.
 fn regular_file(path: &Path) -> Result<&Path, SessionError> {
     let md = fs::symlink_metadata(path)?;
@@ -181,4 +199,96 @@ fn sync_dir(dir: &Path) {
     if let Ok(d) = File::open(dir) {
         let _ = d.sync_all();
     }
+}
+
+/// Names of the sealed sessions directly under `root`, sorted.
+///
+/// An entry counts when its name is valid UTF-8 and does not start with a dot, it is a real
+/// directory (a symlink is not), and it holds `meta.json`. The metadata is not parsed, so a
+/// listed session can still fail [`open_session`].
+///
+/// # Errors
+/// [`SessionError::Io`] when `root` cannot be read.
+pub fn list_sealed(root: &Path) -> Result<Vec<String>, SessionError> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if name.starts_with('.') || !fs::symlink_metadata(entry.path())?.is_dir() {
+            continue;
+        }
+        if fs::symlink_metadata(entry.path().join(META_FILE)).is_ok() {
+            names.push(name);
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
+/// Deletes the sealed session `id` from `root`.
+///
+/// The directory is renamed to `.<id>.deleting` first, which is the commit point: from then on
+/// the session no longer lists as sealed, and a crash before the files are gone leaves a
+/// remnant that [`sweep_leftovers`] removes. The final sync of `root` is best-effort.
+///
+/// # Errors
+/// [`SessionError::Invalid`] for a bad id, [`SessionError::NotSealed`] when there is no such
+/// directory, [`SessionError::UnsafePath`] when it is not a real directory, or an I/O error.
+pub fn remove_session(root: &Path, id: &str) -> Result<(), SessionError> {
+    validate_session_id(id)?;
+    let dir = root.join(id);
+    match fs::symlink_metadata(&dir) {
+        Ok(md) if md.is_dir() => {}
+        Ok(_) => return Err(SessionError::UnsafePath(dir.display().to_string())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(SessionError::NotSealed { id: id.to_owned() });
+        }
+        Err(e) => return Err(e.into()),
+    }
+    let doomed = root.join(format!(".{id}.deleting"));
+    if fs::symlink_metadata(&doomed).is_ok() {
+        remove_entry(&doomed)?;
+    }
+    fs::rename(&dir, &doomed)?;
+    sync_dir(root);
+    fs::remove_dir_all(&doomed)?;
+    Ok(())
+}
+
+/// Removes the remnants of crashed writes and deletes directly under `root`: entries named
+/// `.<id>.tmp` or `.<id>.deleting` where `<id>` is a valid session id. A symlink with such a
+/// name is unlinked, never followed. Returns the removed names, sorted.
+///
+/// # Errors
+/// The first I/O error stops the sweep and is returned.
+pub fn sweep_leftovers(root: &Path) -> Result<Vec<String>, SessionError> {
+    let mut swept = Vec::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        let id = name.strip_prefix('.').and_then(|n| {
+            n.strip_suffix(".tmp")
+                .or_else(|| n.strip_suffix(".deleting"))
+        });
+        if id.is_some_and(|id| validate_session_id(id).is_ok()) {
+            remove_entry(&entry.path())?;
+            swept.push(name);
+        }
+    }
+    swept.sort();
+    Ok(swept)
+}
+
+/// Removes a file, a symlink (without following it) or a directory tree.
+fn remove_entry(path: &Path) -> Result<(), SessionError> {
+    if fs::symlink_metadata(path)?.is_dir() {
+        fs::remove_dir_all(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
+    Ok(())
 }
