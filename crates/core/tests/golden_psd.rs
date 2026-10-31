@@ -28,8 +28,9 @@ fn synthetic(n: usize, fs: f64) -> RawSamples {
 
 parity_test! {
     fn psd_matches_klipper_before_and_after_normalisation() {
-        let golden = case("chip_a+chip_b");
-        for ds in &golden.datasets {
+        let mut cases = vec![case("chip_a+chip_b")];
+        cases.extend(["real_x_both", "real_y_both"].map(case));
+        for ds in cases.iter().flat_map(|c| &c.datasets) {
             let mut cd = CalibrationData::from_samples(&ds.name, &load_csv(&ds.name)).unwrap();
             check(&format!("{} raw", ds.name), &cd, &ds.raw);
             cd.normalize_to_frequencies();

@@ -1,0 +1,27 @@
+Real accelerometer captures used as parity inputs (raw Klipper CSV, stored zstd-compressed).
+
+Printer:   Voron-style CoreXY (Klipper v0.13.0-658-gbd09e017-dirty, Moonraker)
+Captured:  2026-10-30
+Chips:     adxl345      ADXL345 on the Cartographer board (SPI), 3200 Hz, gravity on Z
+           lis2dw ebb36 LIS2DW on the EBB36 toolhead board (SPI), ~400 Hz, gravity on Y
+Command:   TEST_RESONANCES AXIS=<X|Y> CHIPS="adxl345,lis2dw ebb36" OUTPUT=raw_data NAME=ws
+           SWEEPING_PERIOD=0
+Sweep:     5-135 Hz at 1 Hz/s, accel_per_hz 60, test point at the bed centre (Z=50)
+           (one run per axis; both chips recorded the same run)
+
+Files:     ws_x_adxl345  ws_x_ebb36  ws_y_adxl345  ws_y_ebb36   (.csv.zst)
+           Lossless: `zstd -dc FILE.csv.zst` gives Klipper's original /tmp/raw_data_* output.
+Goldens:   scripts/golden/regen.py -> tests/golden/real_{x,y}_{adxl345,ebb36,both}.json
+
+Whole-window captures (win_<case>_<chip>, win_<case>_klipper_<chip>, win_<case>.markers.json):
+scripts/hardware/capture_window.py, 2026-10-31, same printer and chips. The accelerometers run
+from before a positioning move until after TEST_RESONANCES (20-40 Hz at 2 Hz/s,
+SWEEPING_PERIOD=0), so the file holds the positioning burst, Klipper's pause and the sweep.
+Cases: x_short / y_short start away from the test point (Klipper's move to it is a real burst);
+x_same / y_same start already at it, so there is no positioning move to wait for. win_<case>_klipper_<chip> is Klipper's own OUTPUT=raw_data file from
+the same command: bit-identical samples, starting 0.99-1.05 s after the marker (the vibration
+start). The markers hold toolhead print_time read over Moonraker right after the positioning move
+(p1) and after the sweep (p2); sample timestamps and print_time share a clock, and the burst ends
+within 50 ms of p1 in the _short captures (the _same ones have no burst: the recording opens at the marker). Not stored (about 20 MB each): full 5-135 Hz sweeps on both
+axes; there the window and Klipper's file gave the same shaper and frequency on both chips, with
+the PSD within 0.3% of the peak on average.

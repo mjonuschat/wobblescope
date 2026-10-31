@@ -49,6 +49,13 @@ CASES = {
     "chip_a.max_vibrs": (["synthetic/chip_a.csv"], {"max_vibrations": 0.05}),
 }
 
+for _axis in ("x", "y"):
+    _a = f"real/ws_{_axis}_adxl345.csv.zst"
+    _e = f"real/ws_{_axis}_ebb36.csv.zst"
+    CASES[f"real_{_axis}_adxl345"] = ([_a], {})
+    CASES[f"real_{_axis}_ebb36"] = ([_e], {})
+    CASES[f"real_{_axis}_both"] = ([_a, _e], {})
+
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
