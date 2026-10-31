@@ -1,13 +1,15 @@
 //! The one JSON error body every `/api` failure uses, and how storage errors map onto it.
 
 use axum::Json;
-use axum::extract::{FromRequestParts, Path, Query};
+use axum::body::Bytes;
+use axum::extract::{FromRequest, FromRequestParts, Path, Query, Request};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::csv_import::ImportError;
 use crate::storage::StorageError;
 
 /// An error response: `{"error": "<code>", "message": "<text>"}`, plus byte counts for the two
@@ -161,5 +163,54 @@ impl<S: Send + Sync, T: DeserializeOwned> FromRequestParts<S> for ApiQuery<T> {
             .await
             .map(|q| Self(q.0))
             .map_err(|r| ApiError::invalid(r.body_text()))
+    }
+}
+
+impl From<ImportError> for ApiError {
+    fn from(e: ImportError) -> Self {
+        let message = e.to_string();
+        match e {
+            ImportError::MissingChip | ImportError::MissingAxis => Self::InvalidRequest { message },
+            ImportError::InvalidCsv(_) => Self::InvalidCsv { message },
+            ImportError::NoFreeId => Self::Internal { message },
+            ImportError::Storage(e) => e.into(),
+        }
+    }
+}
+
+/// `axum::Json` that rejects with the JSON error body. A body that does not parse, has the
+/// wrong shape or lacks a JSON content type is a 400.
+pub struct ApiJson<T>(pub T);
+
+impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for ApiJson<T> {
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, ApiError> {
+        Json::<T>::from_request(req, state)
+            .await
+            .map(|j| Self(j.0))
+            .map_err(|r| ApiError::invalid(r.body_text()))
+    }
+}
+
+/// The request body as bytes, up to the route's body limit. Over the limit is a 413.
+pub struct ApiBody(pub Bytes);
+
+impl<S: Send + Sync> FromRequest<S> for ApiBody {
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, ApiError> {
+        Bytes::from_request(req, state)
+            .await
+            .map(Self)
+            .map_err(|r| {
+                if r.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    ApiError::TooLarge {
+                        message: "the request body is over the size limit".to_owned(),
+                    }
+                } else {
+                    ApiError::invalid(r.body_text())
+                }
+            })
     }
 }
