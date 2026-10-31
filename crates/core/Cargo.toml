@@ -6,10 +6,15 @@ license.workspace = true
 rust-version.workspace = true
 description = "Pure DSP for resonance analysis; builds natively and to WASM"
 
+[features]
+# Derives TypeScript types for the public data types that cross the API.
+ts = ["dep:ts-rs"]
+
 [dependencies]
 realfft = "3.5.1"
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
+ts-rs = { version = "12.0.1", optional = true }
 
 [lints]
 workspace = true

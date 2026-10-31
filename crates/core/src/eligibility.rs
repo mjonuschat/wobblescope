@@ -6,6 +6,7 @@ use crate::samples::RawSamples;
 
 /// Capture health of a chip for a test.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Health {
     /// No problems detected.
     Ok,
@@ -17,6 +18,7 @@ pub enum Health {
 
 /// Whether the capture covers the whole segment window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Coverage {
     /// All expected samples are present.
     Complete,
