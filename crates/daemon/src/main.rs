@@ -1,6 +1,5 @@
-mod web;
-
 use axum::Router;
+use wobblescope::web;
 
 const LISTEN_ADDR: &str = "127.0.0.1:7126";
 
