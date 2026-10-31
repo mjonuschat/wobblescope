@@ -1116,10 +1116,12 @@ dependencies = [
  "mime_guess",
  "rust-embed",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "toml",
+ "wobblescope-session",
 ]
 
 [[package]]
