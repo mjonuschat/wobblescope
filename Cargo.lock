@@ -1175,6 +1175,7 @@ dependencies = [
  "tokio",
  "toml",
  "tower",
+ "ts-rs",
  "wobblescope-core",
  "wobblescope-session",
 ]

@@ -132,16 +132,22 @@ impl OpenReport {
 
 /// Storage use, for "storage use against the cap".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Usage {
     /// Bytes used by indexed sessions.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub used_bytes: u64,
     /// Bytes promised to admitted tests that have not been stored yet.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub reserved_bytes: u64,
     /// Bytes used by pinned sessions.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub pinned_bytes: u64,
     /// The retention cap.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub cap_bytes: u64,
     /// Free bytes on the sessions filesystem.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub free_bytes: u64,
     /// Number of indexed sessions.
     pub session_count: usize,
