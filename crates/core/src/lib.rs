@@ -4,6 +4,7 @@ pub mod error;
 pub mod numeric;
 pub mod psd;
 pub mod samples;
+pub mod score;
 pub mod shaper;
 
 pub use error::CoreError;
