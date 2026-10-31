@@ -9,7 +9,9 @@ use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::codec::encode_samples;
-use wobblescope_session::fs::{open_session, write_session};
+use wobblescope_session::fs::{
+    list_sealed, open_session, remove_session, sweep_leftovers, write_session,
+};
 use wobblescope_session::meta::{
     ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
     sample_file_name,
@@ -333,5 +335,162 @@ mod symlinks {
             open_session(root.path(), "link"),
             Err(SessionError::UnsafePath(_))
         ));
+    }
+}
+
+fn seal(root: &Path, id: &str) {
+    write_session(root, &meta(id), source).unwrap();
+}
+
+#[test]
+fn list_sealed_applies_the_sealed_rule() {
+    let root = TempDir::new().unwrap();
+    seal(root.path(), "a");
+    seal(root.path(), "b");
+    fs::create_dir_all(root.path().join(".a2.tmp")).unwrap();
+    fs::create_dir_all(root.path().join(".b2.deleting")).unwrap();
+    fs::create_dir(root.path().join("c")).unwrap();
+    fs::write(root.path().join("d"), b"x").unwrap();
+    fs::create_dir(root.path().join(".hidden")).unwrap();
+    fs::write(root.path().join(".hidden").join("meta.json"), b"{}").unwrap();
+    assert_eq!(list_sealed(root.path()).unwrap(), ["a", "b"]);
+}
+
+#[test]
+fn list_sealed_of_an_empty_root_is_empty_and_of_a_missing_root_is_an_error() {
+    let root = TempDir::new().unwrap();
+    assert!(list_sealed(root.path()).unwrap().is_empty());
+    assert!(matches!(
+        list_sealed(&root.path().join("nope")),
+        Err(SessionError::Io(_))
+    ));
+}
+
+#[test]
+fn remove_session_leaves_nothing_behind() {
+    let root = TempDir::new().unwrap();
+    seal(root.path(), "a");
+    seal(root.path(), "b");
+    remove_session(root.path(), "a").unwrap();
+    assert!(matches!(
+        open_session(root.path(), "a"),
+        Err(SessionError::NotSealed { .. })
+    ));
+    assert_eq!(list_sealed(root.path()).unwrap(), ["b"]);
+    assert_eq!(names(root.path()), ["b"]);
+}
+
+#[test]
+fn remove_session_replaces_a_stale_deleting_directory() {
+    let root = TempDir::new().unwrap();
+    seal(root.path(), "a");
+    let stale = root.path().join(".a.deleting");
+    fs::create_dir(&stale).unwrap();
+    fs::write(stale.join("junk"), b"junk").unwrap();
+    remove_session(root.path(), "a").unwrap();
+    assert!(names(root.path()).is_empty());
+}
+
+#[test]
+fn remove_session_refuses_unknown_and_invalid_ids() {
+    let root = TempDir::new().unwrap();
+    let outer = TempDir::new().unwrap();
+    seal(outer.path(), "x");
+    assert!(matches!(
+        remove_session(root.path(), "ghost"),
+        Err(SessionError::NotSealed { .. })
+    ));
+    let nested = root.path().join("sessions");
+    fs::create_dir(&nested).unwrap();
+    fs::rename(outer.path().join("x"), root.path().join("x")).unwrap();
+    assert!(matches!(
+        remove_session(&nested, "../x"),
+        Err(SessionError::Invalid { .. })
+    ));
+    assert!(root.path().join("x").join("meta.json").exists());
+}
+
+#[test]
+fn sweep_leftovers_removes_only_crash_remnants() {
+    let root = TempDir::new().unwrap();
+    seal(root.path(), "a");
+    let tmp = root.path().join(".a.tmp");
+    fs::create_dir(&tmp).unwrap();
+    fs::write(tmp.join("c0-s0.zst"), b"half").unwrap();
+    let deleting = root.path().join(".b.deleting");
+    fs::create_dir(&deleting).unwrap();
+    fs::write(deleting.join("meta.json"), b"{}").unwrap();
+    fs::write(root.path().join(".DS_Store"), b"x").unwrap();
+    fs::create_dir(root.path().join(".config")).unwrap();
+    fs::create_dir(root.path().join(".x y.tmp")).unwrap();
+    let mut swept = sweep_leftovers(root.path()).unwrap();
+    swept.sort();
+    assert_eq!(swept, [".a.tmp", ".b.deleting"]);
+    assert_eq!(
+        names(root.path()),
+        [".DS_Store", ".config", ".x y.tmp", "a"]
+    );
+}
+
+#[test]
+fn a_crashed_delete_is_unlisted_and_then_swept() {
+    let root = TempDir::new().unwrap();
+    seal(root.path(), "a");
+    fs::rename(root.path().join("a"), root.path().join(".a.deleting")).unwrap();
+    assert!(list_sealed(root.path()).unwrap().is_empty());
+    assert_eq!(sweep_leftovers(root.path()).unwrap(), [".a.deleting"]);
+    assert!(names(root.path()).is_empty());
+}
+
+#[test]
+fn size_bytes_sums_meta_and_sample_files() {
+    let root = TempDir::new().unwrap();
+    seal(root.path(), "a");
+    let session = open_session(root.path(), "a").unwrap();
+    let dir = root.path().join("a");
+    let expected: u64 = names(&dir)
+        .iter()
+        .map(|n| fs::metadata(dir.join(n)).unwrap().len())
+        .sum();
+    assert_eq!(session.size_bytes().unwrap(), expected);
+}
+
+#[cfg(unix)]
+mod links {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn list_sealed_skips_a_symlinked_session() {
+        let root = TempDir::new().unwrap();
+        let elsewhere = TempDir::new().unwrap();
+        seal(elsewhere.path(), "e");
+        seal(root.path(), "a");
+        symlink(elsewhere.path().join("e"), root.path().join("e")).unwrap();
+        assert_eq!(list_sealed(root.path()).unwrap(), ["a"]);
+    }
+
+    #[test]
+    fn remove_session_refuses_a_symlink_and_keeps_the_target() {
+        let root = TempDir::new().unwrap();
+        let elsewhere = TempDir::new().unwrap();
+        seal(elsewhere.path(), "e");
+        symlink(elsewhere.path().join("e"), root.path().join("e")).unwrap();
+        assert!(matches!(
+            remove_session(root.path(), "e"),
+            Err(SessionError::UnsafePath(_))
+        ));
+        assert!(elsewhere.path().join("e").join("meta.json").exists());
+    }
+
+    #[test]
+    fn sweep_leftovers_unlinks_a_symlink_without_following_it() {
+        let root = TempDir::new().unwrap();
+        let elsewhere = TempDir::new().unwrap();
+        seal(elsewhere.path(), "e");
+        symlink(elsewhere.path().join("e"), root.path().join(".a.tmp")).unwrap();
+        assert_eq!(sweep_leftovers(root.path()).unwrap(), [".a.tmp"]);
+        assert!(names(root.path()).is_empty());
+        assert!(elsewhere.path().join("e").join("meta.json").exists());
     }
 }
