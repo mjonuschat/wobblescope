@@ -1,0 +1,21 @@
+[package]
+name = "wobblescope-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Session format: metadata, sample files and Klipper CSV import; builds natively and to WASM"
+
+[dependencies]
+structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
+thiserror = "2.0.21"
+wobblescope-core = { version = "0.1.0", path = "../core" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.80"
