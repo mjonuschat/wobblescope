@@ -103,6 +103,19 @@ parity_test! {
 }
 
 parity_test! {
+    fn find_file_looks_up_a_recording_by_chip_and_segment() {
+        let mut meta = capture_meta();
+        meta.segments[1].files.remove(1);
+        assert_eq!(meta.find_file(0, 0), Some(&file(0, 0, 100_000)));
+        assert_eq!(meta.find_file(1, 0), Some(&file(1, 0, 12_000)));
+        assert_eq!(meta.find_file(0, 1), Some(&file(0, 1, 100_000)));
+        assert_eq!(meta.find_file(1, 1), None);
+        assert_eq!(meta.find_file(2, 0), None);
+        assert_eq!(meta.find_file(0, 5), None);
+    }
+}
+
+parity_test! {
     fn import_shaped_meta_parses_and_validates() {
         let json = r#"{
             "format_version": 1,
