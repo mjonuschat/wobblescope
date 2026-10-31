@@ -6,6 +6,7 @@ pub mod codec;
 pub mod error;
 #[cfg(feature = "fs")]
 pub mod fs;
+pub mod import;
 pub mod meta;
 
 pub use error::SessionError;
