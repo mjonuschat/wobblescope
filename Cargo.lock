@@ -941,13 +941,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wobblescope-cli"
-version = "0.1.0"
-dependencies = [
- "wobblescope-core",
-]
-
-[[package]]
 name = "wobblescope-core"
 version = "0.1.0"
 dependencies = [
