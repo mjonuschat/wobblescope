@@ -14,6 +14,7 @@ const MAX_ID_LEN: usize = 64;
 
 /// Where a session came from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Source {
     /// Recorded by the daemon during a test.
     Capture,
@@ -27,6 +28,7 @@ pub enum Source {
 
 /// The clock sample timestamps and segment windows are in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum TimeDomain {
     /// Klipper's toolhead `print_time`, in seconds.
     KlipperPrintTime,
@@ -34,6 +36,7 @@ pub enum TimeDomain {
 
 /// Test mode, as in Klipper's `TEST_RESONANCES`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Mode {
     /// `SWEEPING_PERIOD=0`: the toolhead vibrates in place.
     Pulse,
@@ -43,6 +46,7 @@ pub enum Mode {
 
 /// The sweep settings a test actually ran with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SweepSettings {
     /// Start frequency in Hz.
     pub freq_start: f64,
@@ -62,6 +66,7 @@ pub struct SweepSettings {
 
 /// Printer identity recorded with a capture.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PrinterInfo {
     /// Printer name, when known.
     #[serde(default)]
@@ -76,6 +81,7 @@ pub struct PrinterInfo {
 
 /// How a session ended.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Outcome {
     /// Every segment was captured.
     Complete,
@@ -93,6 +99,7 @@ pub enum Outcome {
 
 /// A test point.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ProbePoint {
     /// Position in machine coordinates (mm); unknown for imports without one.
     #[serde(default)]
@@ -101,6 +108,7 @@ pub struct ProbePoint {
 
 /// One accelerometer in the session.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChipMeta {
     /// Klipper config section name, such as `adxl345 nh36`; also what `CHIPS=` takes.
     pub name: String,
@@ -128,6 +136,7 @@ pub struct ChipMeta {
 
 /// A window of sample timestamps, start inclusive and end exclusive.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct TimeWindow {
     /// Window start in seconds.
     pub start: f64,
@@ -137,6 +146,7 @@ pub struct TimeWindow {
 
 /// One chip's recording of one segment.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SegmentFile {
     /// Position of the chip in [`SessionMeta::chips`].
     pub chip: u32,
@@ -150,6 +160,7 @@ pub struct SegmentFile {
 
 /// One (axis, probe point) measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SegmentMeta {
     /// Test axis.
     pub axis: Axis,
@@ -164,6 +175,7 @@ pub struct SegmentMeta {
 
 /// The contents of `meta.json`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SessionMeta {
     /// Version of this shape; see [`FORMAT_VERSION`].
     pub format_version: u32,

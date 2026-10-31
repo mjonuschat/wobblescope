@@ -110,6 +110,7 @@ pub struct Recommendation {
 
 /// Axis of an exported configuration snippet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Axis {
     /// X axis.
     X,

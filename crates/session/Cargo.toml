@@ -10,12 +10,15 @@ description = "Session format: metadata, sample files and Klipper CSV import; bu
 default = ["fs"]
 # Directory I/O. The browser bundle builds with default features off.
 fs = []
+# Derives and exports TypeScript types for the metadata.
+ts = ["dep:ts-rs", "wobblescope-core/ts"]
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
 thiserror = "2.0.21"
+ts-rs = { version = "12.0.1", optional = true }
 wobblescope-core = { version = "0.1.0", path = "../core" }
 
 [lints]
