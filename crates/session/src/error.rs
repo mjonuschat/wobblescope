@@ -71,4 +71,23 @@ pub enum SessionError {
         /// Count actually loaded.
         found: usize,
     },
+    /// A session with this id is already sealed.
+    #[error("session {id} already exists")]
+    AlreadyExists {
+        /// The session id.
+        id: String,
+    },
+    /// No sealed session has this id: the directory or its `meta.json` is missing.
+    #[error("session {id} is not sealed")]
+    NotSealed {
+        /// The session id.
+        id: String,
+    },
+    /// A path inside a session is not a regular file or directory, or names a file the metadata
+    /// does not list.
+    #[error("refusing {0}: not a regular file inside the session")]
+    UnsafePath(String),
+    /// Reading or writing the session directory failed.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 }
