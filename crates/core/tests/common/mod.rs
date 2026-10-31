@@ -200,6 +200,106 @@ pub fn normalized(name: &str) -> wobblescope_core::CalibrationData {
     cd
 }
 
+pub fn fit_params(p: &Params) -> wobblescope_core::fit::FitParams {
+    wobblescope_core::fit::FitParams {
+        scv: p.scv,
+        damping_ratio: p.damping_ratio,
+        max_smoothing: p.max_smoothing,
+        max_vibrations: p.max_vibrations,
+        test_damping_ratios: p.test_damping_ratios.clone(),
+        max_freq: p.max_freq,
+        shapers: None,
+    }
+}
+
+pub fn assert_result(label: &str, got: &wobblescope_core::fit::CalibrationResult, want: &Cand) {
+    close(&format!("{label} freq"), got.freq, want.freq);
+    close(&format!("{label} vibrs"), got.vibrs, want.vibrs);
+    close(&format!("{label} smoothing"), got.smoothing, want.smoothing);
+    close(&format!("{label} score"), got.score, want.score);
+    close(&format!("{label} max_accel"), got.max_accel, want.max_accel);
+}
+
+fn rel_diff(a: f64, b: f64) -> f64 {
+    (a - b).abs() / b.abs()
+}
+
+/// Level 1 on every shaper's final result, then level 2 on the recommendation, falling back to
+/// an accepted-and-logged level-3 near tie.
+pub fn check_recommendation(label: &str, rec: &wobblescope_core::fit::Recommendation, case: &Case) {
+    assert_eq!(rec.all.len(), case.ranking.len(), "{label}: ranking length");
+    for (got, want) in rec.all.iter().zip(&case.ranking) {
+        assert_eq!(got.name, want.name, "{label}: ranking order");
+        let c = Cand {
+            freq: want.freq,
+            vibrs: want.vibrs,
+            smoothing: want.smoothing,
+            score: want.score,
+            max_accel: case.fit[&want.name].fin.max_accel,
+        };
+        assert_result(&format!("{label} {}", want.name), got, &c);
+    }
+    let want = &case.best;
+    let got = &rec.best;
+    if got.name == want.name && (got.freq - want.freq).abs() <= 1e-6 {
+        let r = &case.ranking[case.best_index];
+        let fin = &case.fit[&want.name].fin;
+        let c = Cand {
+            freq: want.freq,
+            vibrs: r.vibrs,
+            smoothing: r.smoothing,
+            score: r.score,
+            max_accel: fin.max_accel,
+        };
+        assert_result(&format!("{label} best"), got, &c);
+        return;
+    }
+    let best_score = case.ranking[case.best_index].score;
+    let near = rel_diff(got.score, best_score) <= NEAR_TIE_MARGIN;
+    let entry: Option<Cand> = if got.name != want.name {
+        case.ranking
+            .iter()
+            .find(|r| r.name == got.name)
+            .map(|r| Cand {
+                freq: r.freq,
+                vibrs: r.vibrs,
+                smoothing: r.smoothing,
+                score: r.score,
+                max_accel: case.fit[&got.name].fin.max_accel,
+            })
+    } else if (got.freq - want.freq).abs() <= 0.2 + 1e-6 {
+        case.fit[&got.name]
+            .candidates
+            .iter()
+            .find(|c| (c.freq - got.freq).abs() <= 1e-6)
+            .map(|c| Cand {
+                freq: c.freq,
+                vibrs: c.vibrs,
+                smoothing: c.smoothing,
+                score: c.score,
+                max_accel: c.max_accel,
+            })
+    } else {
+        None
+    };
+    let alternative = entry.unwrap_or_else(|| {
+        panic!(
+            "{label}: got {} @ {}, want {} @ {}: not an accepted alternative",
+            got.name, got.freq, want.name, want.freq
+        )
+    });
+    assert!(
+        near,
+        "{label}: got {} @ {} is not a near tie of {} @ {}",
+        got.name, got.freq, want.name, want.freq
+    );
+    assert_result(&format!("{label} tie"), got, &alternative);
+    log(&format!(
+        "{label}: near tie accepted: got {} @ {:.1}, Klipper {} @ {:.1}",
+        got.name, got.freq, want.name, want.freq
+    ));
+}
+
 /// Decompresses an embedded zstd file with the pure-Rust decoder (works on wasm32).
 pub fn unzstd(bytes: &[u8]) -> String {
     use std::io::Read;
