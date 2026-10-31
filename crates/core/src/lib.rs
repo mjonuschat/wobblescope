@@ -1,6 +1,7 @@
 //! Pure DSP for resonance analysis. No I/O.
 
 pub mod error;
+pub mod fit;
 pub mod numeric;
 pub mod psd;
 pub mod samples;
