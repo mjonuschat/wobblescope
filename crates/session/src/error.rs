@@ -44,4 +44,21 @@ pub enum SessionError {
     /// The compressed frame is damaged or fails its checksum.
     #[error("corrupt sample file: {0}")]
     Corrupt(String),
+    /// `meta.json` was written by a newer format version.
+    #[error("unsupported session format version {found}")]
+    UnsupportedFormatVersion {
+        /// Version found in the metadata.
+        found: u32,
+    },
+    /// `meta.json` is not valid JSON for the metadata shape.
+    #[error("invalid metadata JSON: {0}")]
+    Json(#[from] serde_json::Error),
+    /// A metadata field breaks a format rule.
+    #[error("invalid metadata field {field}: {reason}")]
+    Invalid {
+        /// Path of the offending field, such as `segments[0].window`.
+        field: String,
+        /// Which rule it breaks.
+        reason: String,
+    },
 }

@@ -109,7 +109,7 @@ pub struct Recommendation {
 }
 
 /// Axis of an exported configuration snippet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Axis {
     /// X axis.
     X,
