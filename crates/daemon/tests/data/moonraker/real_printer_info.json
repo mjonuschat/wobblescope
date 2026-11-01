@@ -1,0 +1,14 @@
+{
+  "state": "ready",
+  "state_message": "Printer is ready",
+  "hostname": "buster",
+  "klipper_path": "/home/pi/klipper",
+  "python_path": "/home/pi/klippy-env/bin/python",
+  "process_id": 309448,
+  "user_id": 1000,
+  "group_id": 1000,
+  "log_file": "/home/pi/printer_data/logs/klippy.log",
+  "config_file": "/home/pi/printer_data/config/printer.cfg",
+  "software_version": "v0.13.0-658-gbd09e017-dirty",
+  "cpu_info": "4 core ?"
+}

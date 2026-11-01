@@ -1,0 +1,27 @@
+[
+  {
+    "name": "config",
+    "path": "/home/pi/printer_data/config",
+    "permissions": "rw"
+  },
+  {
+    "name": "logs",
+    "path": "/home/pi/printer_data/logs",
+    "permissions": "r"
+  },
+  {
+    "name": "gcodes",
+    "path": "/home/pi/printer_data/gcodes",
+    "permissions": "rw"
+  },
+  {
+    "name": "config_examples",
+    "path": "/home/pi/klipper/config",
+    "permissions": "r"
+  },
+  {
+    "name": "docs",
+    "path": "/home/pi/klipper/docs",
+    "permissions": "r"
+  }
+]

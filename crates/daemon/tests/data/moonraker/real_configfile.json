@@ -1,0 +1,76 @@
+{
+  "eventtime": 608429.899926125,
+  "status": {
+    "configfile": {
+      "config": {
+        "printer": {
+          "kinematics": "corexy",
+          "max_velocity": "500",
+          "max_accel": "20000",
+          "max_z_velocity": "15",
+          "max_z_accel": "500",
+          "square_corner_velocity": "5.0"
+        },
+        "idle_timeout": {
+          "timeout": "7200",
+          "gcode": "\nRESPOND MSG=\"Idle timeout reached\"\nTURN_OFF_HEATERS\nM84\n{% if printer[\"gcode_macro _USER_VARIABLES\"].light_enabled %}\nLIGHT_OFF\n{% endif %}\n{% if printer[\"gcode_macro _USER_VARIABLES\"].status_leds_control_enabled|default(False) %}\nSTATUS_LEDS COLOR=\"OFF\"\n{% endif %}"
+        },
+        "force_move": {
+          "enable_force_move": "True"
+        },
+        "mcu": {},
+        "mcu cartographer": {
+          "restart_method": "command"
+        },
+        "mcu toolhead": {},
+        "stepper_x": {
+          "rotation_distance": "40",
+          "microsteps": "32",
+          "full_steps_per_rotation": "200",
+          "step_pin": "ouroboros:STEP0",
+          "dir_pin": "ouroboros:DIR0",
+          "enable_pin": "ouroboros:ENA0",
+          "endstop_pin": "foci_stepper_x:virtual_endstop",
+          "homing_speed": "150",
+          "homing_retract_dist": "5",
+          "position_min": "0",
+          "position_endstop": "301",
+          "position_max": "301"
+        },
+        "stepper_y": {
+          "rotation_distance": "40",
+          "microsteps": "32",
+          "full_steps_per_rotation": "200",
+          "step_pin": "ouroboros:STEP1",
+          "dir_pin": "ouroboros:DIR1",
+          "enable_pin": "ouroboros:ENA1",
+          "endstop_pin": "foci_stepper_y:virtual_endstop",
+          "homing_speed": "150",
+          "homing_retract_dist": "5",
+          "position_min": "0",
+          "position_endstop": "308",
+          "position_max": "308"
+        },
+        "adxl345": {
+          "cs_pin": "cartographer:PA3",
+          "spi_bus": "spi1",
+          "axes_map": "x,y,z"
+        },
+        "lis2dw ebb36": {
+          "cs_pin": "toolhead:LIS2DW_CS",
+          "spi_bus": "spi2_PB2_PB11_PB10",
+          "axes_map": "x,y,z"
+        },
+        "resonance_tester": {
+          "accel_chip": "lis2dw ebb36",
+          "probe_points": "\n-1,-1,-1"
+        },
+        "gcode_macro CANCEL_PRINT": {
+          "rename_existing": "CANCEL_PRINT_BASE",
+          "description": "Cancel the actual running print",
+          "gcode": "\n\n{% set client = printer['gcode_macro _CLIENT_VARIABLE'] | default({}) %}\n{% set allow_park = client.park_at_cancel | default(false) | lower == 'true' %}\n{% set retract = client.cancel_retract | default(5.0) | abs %}\n\n{% set park_x = \"\" if (client.park_at_cancel_x | default(none) is none)\nelse \"X=\" ~ client.park_at_cancel_x %}\n{% set park_y = \"\" if (client.park_at_cancel_y | default(none) is none)\nelse \"Y=\" ~ client.park_at_cancel_y %}\n{% set custom_park = park_x | length > 0 or park_y | length > 0 %}\n\n\n{% if printer['gcode_macro RESUME'].restore_idle_timeout > 0 %}\nSET_IDLE_TIMEOUT TIMEOUT={printer['gcode_macro RESUME'].restore_idle_timeout}\n{% endif %}\n{% if (custom_park or not printer.pause_resume.is_paused) and allow_park %} _TOOLHEAD_PARK_PAUSE_CANCEL {park_x} {park_y} {% endif %}\n_CLIENT_RETRACT LENGTH={retract}\nTURN_OFF_HEATERS\nM106 S0\n{client.user_cancel_macro | default(\"\")}\nSET_GCODE_VARIABLE MACRO=RESUME VARIABLE=idle_state VALUE=False\n\nSET_PAUSE_NEXT_LAYER ENABLE=0\nSET_PAUSE_AT_LAYER ENABLE=0 LAYER=0\nCANCEL_PRINT_BASE"
+        }
+      }
+    }
+  }
+}
