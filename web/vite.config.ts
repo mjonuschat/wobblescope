@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'src') },
   },
+  worker: { format: 'es' },
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:7126',
