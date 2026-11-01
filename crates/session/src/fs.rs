@@ -14,7 +14,7 @@ use crate::SessionError;
 use crate::codec::{decode_samples, encode_samples};
 use crate::meta::{SegmentFile, SessionMeta, validate_session_id};
 
-const META_FILE: &str = "meta.json";
+pub(crate) const META_FILE: &str = "meta.json";
 
 /// A sealed session opened for reading.
 #[derive(Debug)]
@@ -89,7 +89,7 @@ impl Session {
 }
 
 /// Returns `path` when it is a regular file and not a symlink.
-fn regular_file(path: &Path) -> Result<&Path, SessionError> {
+pub(crate) fn regular_file(path: &Path) -> Result<&Path, SessionError> {
     let md = fs::symlink_metadata(path)?;
     if md.is_file() {
         Ok(path)
@@ -182,11 +182,20 @@ where
                 found: samples.len(),
             });
         }
-        write_synced(&dir.join(&file.sample_file), &encode_samples(&samples)?)?;
+        write_sample(dir, &file.sample_file, &samples)?;
     }
     write_synced(&dir.join(META_FILE), json.as_bytes())?;
     sync_temp_dir(dir)?;
     Ok(())
+}
+
+/// Encodes `samples` and writes them to `<dir>/<name>`, synced. The file must not exist yet.
+pub(crate) fn write_sample(
+    dir: &Path,
+    name: &str,
+    samples: &RawSamples,
+) -> Result<(), SessionError> {
+    write_synced(&dir.join(name), &encode_samples(samples)?)
 }
 
 fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), SessionError> {
@@ -198,7 +207,7 @@ fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), SessionError> {
 
 /// Syncs the temporary directory before the rename, so a failed durability check stops the
 /// seal. Directories cannot be opened for syncing on every platform, so only Unix checks.
-fn sync_temp_dir(dir: &Path) -> Result<(), SessionError> {
+pub(crate) fn sync_temp_dir(dir: &Path) -> Result<(), SessionError> {
     #[cfg(unix)]
     File::open(dir)?.sync_all()?;
     #[cfg(not(unix))]
@@ -207,7 +216,7 @@ fn sync_temp_dir(dir: &Path) -> Result<(), SessionError> {
 }
 
 /// Syncs `root` after the rename, best-effort: the session is already sealed by then.
-fn sync_dir(dir: &Path) {
+pub(crate) fn sync_dir(dir: &Path) {
     if let Ok(d) = File::open(dir) {
         let _ = d.sync_all();
     }
@@ -270,7 +279,8 @@ pub fn remove_session(root: &Path, id: &str) -> Result<(), SessionError> {
 }
 
 /// Removes the remnants of crashed writes and deletes directly under `root`: entries named
-/// `.<id>.tmp` or `.<id>.deleting` where `<id>` is a valid session id. A symlink with such a
+/// `.<id>.tmp` or `.<id>.deleting` where `<id>` is a valid session id. A `.tmp` capture that
+/// still holds finished segments is left alone. A symlink with such a
 /// name is unlinked, never followed. Returns the removed names, sorted.
 ///
 /// # Errors
@@ -287,6 +297,11 @@ pub fn sweep_leftovers(root: &Path) -> Result<Vec<String>, SessionError> {
                 .or_else(|| n.strip_suffix(".deleting"))
         });
         if id.is_some_and(|id| validate_session_id(id).is_ok()) {
+            // A capture that holds finished segments is kept even when recovering it failed;
+            // the next start tries again.
+            if name.ends_with(".tmp") && crate::writer::holds_recoverable_capture(&entry.path()) {
+                continue;
+            }
             remove_entry(&entry.path())?;
             swept.push(name);
         }
@@ -296,7 +311,7 @@ pub fn sweep_leftovers(root: &Path) -> Result<Vec<String>, SessionError> {
 }
 
 /// Removes a file, a symlink (without following it) or a directory tree.
-fn remove_entry(path: &Path) -> Result<(), SessionError> {
+pub(crate) fn remove_entry(path: &Path) -> Result<(), SessionError> {
     if fs::symlink_metadata(path)?.is_dir() {
         fs::remove_dir_all(path)?;
     } else {
