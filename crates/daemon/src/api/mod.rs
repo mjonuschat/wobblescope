@@ -18,6 +18,7 @@ use axum::routing::{get, post};
 pub use error::ApiError;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 
+use crate::startup::StorageCell;
 use crate::storage::Storage;
 
 /// The largest CSV an import accepts. A Klipper raw row is about 49 bytes, so this holds about
@@ -47,7 +48,7 @@ impl Drop for ImportPermit {
 /// What every handler shares.
 #[derive(Clone)]
 struct ApiState {
-    storage: Option<Storage>,
+    storage: StorageCell,
     imports: ImportGate,
 }
 
@@ -61,7 +62,7 @@ impl FromRequestParts<ApiState> for ImportPermit {
     }
 }
 
-/// The storage handle, or the 503 for a daemon with no storage directory. Declared first in a
+/// The storage handle, or the 503 while storage is not open yet. Declared first in a
 /// handler, it answers before any other extractor can reject the request.
 struct Store(Storage);
 
@@ -71,10 +72,12 @@ impl FromRequestParts<ApiState> for Store {
     async fn from_request_parts(_: &mut Parts, state: &ApiState) -> Result<Self, ApiError> {
         state
             .storage
-            .clone()
+            .get()
+            .cloned()
             .map(Store)
-            .ok_or_else(|| ApiError::StorageDisabled {
-                message: "no storage directory is configured".to_owned(),
+            .ok_or_else(|| ApiError::StorageUnavailable {
+                message: "the daemon is waiting for Moonraker to report where to store sessions"
+                    .to_owned(),
             })
     }
 }
@@ -100,14 +103,14 @@ async fn method_not_allowed() -> ApiError {
     }
 }
 
-/// The API mounted at `/api`, with JSON answers for unknown paths and methods. `storage` is
-/// `None` when the daemon runs without a storage directory.
-pub fn mount(storage: Option<Storage>) -> Router {
+/// The API mounted at `/api`, with JSON answers for unknown paths and methods. Session
+/// endpoints answer 503 `storage_unavailable` until `storage` holds a [`Storage`].
+pub fn mount(storage: StorageCell) -> Router {
     mount_with(storage, ImportGate::default())
 }
 
 /// [`mount`] with the gate that limits imports to one at a time, so a test can hold it.
-pub fn mount_with(storage: Option<Storage>, imports: ImportGate) -> Router {
+pub fn mount_with(storage: StorageCell, imports: ImportGate) -> Router {
     let api = Router::new()
         .route(
             "/sessions",

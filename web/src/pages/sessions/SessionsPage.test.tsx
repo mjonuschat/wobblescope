@@ -6,7 +6,7 @@ import { stubApi } from '@/test/http'
 import { renderRoute } from '@/test/render'
 import { summary, usage } from '@/test/summaries'
 
-const disabled = { error: 'storage_disabled', message: 'no storage dir' }
+const waiting = { error: 'storage_unavailable', message: 'waiting for Moonraker' }
 
 function api(sessions = [summary('s1'), summary('s2')], extra: (path: string, method: string) => Reply | null = () => null) {
   return stubApi(({ url, method }) => {
@@ -100,14 +100,14 @@ describe('the sessions page', () => {
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false)
   })
 
-  it('explains a daemon without storage instead of showing a table', async () => {
+  it('explains a daemon waiting for storage instead of showing a table', async () => {
     stubApi(({ url }) =>
       url.pathname.endsWith('/storage') || url.pathname.endsWith('/sessions')
-        ? { status: 503, body: disabled }
+        ? { status: 503, body: waiting }
         : { status: 404, body: { error: 'not_found', message: 'no' } },
     )
     renderRoute('/sessions')
-    expect(await screen.findByText(/no storage directory configured/)).toBeTruthy()
+    expect(await screen.findByText(/waiting for Moonraker to report where to store sessions/)).toBeTruthy()
     expect(screen.queryByRole('table')).toBeNull()
   })
 

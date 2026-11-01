@@ -21,8 +21,8 @@ import { ImportDialog } from './ImportDialog'
 import { SessionFilters } from './SessionFilters'
 import { StorageUsage } from './StorageUsage'
 
-function isDisabled(error: unknown): boolean {
-  return error instanceof ApiClientError && error.code === 'storage_disabled'
+function isWaiting(error: unknown): boolean {
+  return error instanceof ApiClientError && error.code === 'storage_unavailable'
 }
 
 export function SessionsPage() {
@@ -36,11 +36,11 @@ export function SessionsPage() {
   const filtered = Object.values(filters).some((v) => v !== undefined)
 
   let body
-  if (isDisabled(list.error)) {
+  if (isWaiting(list.error)) {
     body = (
       <p className="rounded-lg border p-4 text-sm">
-        The daemon has no storage directory configured, so sessions cannot be stored or listed.
-        Set <code>storage_dir</code> in its config file and restart it.
+        The daemon is waiting for Moonraker to report where to store sessions. They appear here
+        once it does.
       </p>
     )
   } else if (list.isPending) {
@@ -130,7 +130,7 @@ export function SessionsPage() {
         <Button onClick={() => setImporting(true)}>Import CSV</Button>
       </div>
       {storage.data && <StorageUsage usage={storage.data} />}
-      {!isDisabled(list.error) && (
+      {!isWaiting(list.error) && (
         <SessionFilters filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
       )}
       {body}

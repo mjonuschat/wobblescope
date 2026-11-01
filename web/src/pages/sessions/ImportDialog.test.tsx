@@ -9,7 +9,7 @@ import { summary } from '@/test/summaries'
 function api(onImport: Reply | ((search: URLSearchParams) => Reply) = { status: 201, body: summary('csv-20261031T120000Z') }) {
   return stubApi(({ url, method }) => {
     if (method === 'POST') return typeof onImport === 'function' ? onImport(url.searchParams) : onImport
-    if (url.pathname.endsWith('/storage')) return { status: 503, body: { error: 'storage_disabled', message: 'x' } }
+    if (url.pathname.endsWith('/storage')) return { status: 503, body: { error: 'storage_unavailable', message: 'x' } }
     if (url.pathname.endsWith('/sessions')) return { body: { sessions: [summary('s1')] } }
     return { status: 404, body: { error: 'not_found', message: 'no' } }
   })
