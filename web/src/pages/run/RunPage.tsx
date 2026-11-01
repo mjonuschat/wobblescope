@@ -5,7 +5,9 @@ import { ApiClientError } from '@/lib/api/client'
 import { queryKeys, useChips, useCheckChips, useSettings, useStatus } from '@/lib/api/queries'
 
 import { ChipsPanel } from './ChipsPanel'
+import { ProgressView, ResultView, StartingView } from './ProgressView'
 import { TestForm } from './TestForm'
+import { useLive } from './useLive'
 
 /** The Run test screen: the chips panel and the test form. */
 export function RunPage() {
@@ -13,7 +15,12 @@ export function RunPage() {
   const settings = useSettings()
   const chips = useChips()
   const check = useCheckChips()
+  const live = useLive()
   const [chosen, setChosen] = useState<string[] | null>(null)
+  // The test the form just started, until the live socket names it.
+  const [startedId, setStartedId] = useState<string | null>(null)
+  // The finished test whose result the user has dismissed.
+  const [dismissed, setDismissed] = useState<string | null>(null)
 
   const klippyReady =
     status.data?.moonraker.state === 'connected' && status.data.klippy.state === 'ready'
@@ -55,6 +62,23 @@ export function RunPage() {
     (s) => chipList?.chips.find((c) => c.section === s)?.availability.state !== 'unavailable',
   )
 
+  if (live.test) return <ProgressView test={live.test} connected={live.connected} />
+  const finished = live.last
+  if (startedId && finished?.id !== startedId) {
+    return <StartingView id={startedId} connected={live.connected} />
+  }
+  if (finished && finished.id !== dismissed) {
+    return (
+      <ResultView
+        last={finished}
+        onNewTest={() => {
+          setDismissed(finished.id)
+          setStartedId(null)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <h1 className="text-xl font-semibold">Run test</h1>
@@ -90,7 +114,7 @@ export function RunPage() {
           settings={settings.data}
           chips={usable}
           blocked={notReady}
-          onStarted={() => {}}
+          onStarted={setStartedId}
         />
       )}
     </div>

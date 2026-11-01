@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChipsSnapshot } from '@/lib/generated/ChipsSnapshot'
 import type { PrinterSettings } from '@/lib/generated/PrinterSettings'
@@ -8,6 +8,7 @@ import { chipsSnapshot, printerSettings } from '@/test/capture'
 import type { ApiCall, Reply } from '@/test/http'
 import { renderRoute } from '@/test/render'
 import { apiPath, healthyStatus, stubApiWithStatus } from '@/test/status'
+import { stubWebSocket } from '@/test/websocket'
 
 interface Options {
   settings?: PrinterSettings
@@ -42,6 +43,8 @@ async function open(options?: Options) {
 }
 
 describe('the run screen', () => {
+  beforeEach(() => stubWebSocket())
+
   it('shows the printer values as placeholders, preselects the mode and enables Start', async () => {
     await open()
     expect(field(/End frequency/).placeholder).toBe('135')
@@ -159,7 +162,8 @@ describe('the run screen', () => {
     fireEvent.submit(busy.closest('form')!)
     expect(posts).toBe(1)
     release(new Response(JSON.stringify({ id: 'test-1' }), { status: 202 }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start test' })).toBeTruthy())
+    // The 202 hands over to the starting view.
+    expect(await screen.findByText('Starting…')).toBeTruthy()
     expect(posts).toBe(1)
   })
 
