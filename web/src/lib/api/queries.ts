@@ -17,13 +17,19 @@ import { ApiClientError } from './client'
 import {
   type ImportRequest,
   type SessionFilters,
+  type StartTestRequest,
+  checkChips,
   deleteSession,
+  emergencyStop,
+  getChips,
   getSession,
+  getSettings,
   getStatus,
   getStorage,
   importCsv,
   listSessions,
   pinSession,
+  startTest,
 } from './endpoints'
 
 export const queryKeys = {
@@ -31,6 +37,8 @@ export const queryKeys = {
   sessionList: (filters: SessionFilters) => ['sessions', 'list', filters] as const,
   session: (id: string) => ['sessions', 'detail', id] as const,
   storage: ['storage'] as const,
+  settings: ['settings'] as const,
+  chips: ['chips'] as const,
   status: ['status'] as const,
   analysesOf: (id: string) => ['analysis', id] as const,
   analysis: (id: string, axis: Axis, params: FitParams) =>
@@ -166,4 +174,39 @@ export function useImportCsv() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage })
     },
   })
+}
+
+/** The printer's settings, read when the run screen opens. */
+export function useSettings() {
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: ({ signal }) => getSettings(signal),
+  })
+}
+
+/** The configured chips. A check updates them, so the list is read again when the screen opens. */
+export function useChips() {
+  return useQuery({
+    queryKey: queryKeys.chips,
+    queryFn: ({ signal }) => getChips(signal),
+  })
+}
+
+/** Checks every chip and puts the answer into the chip list. */
+export function useCheckChips() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => checkChips(),
+    onSuccess: (chips) => {
+      queryClient.setQueryData(queryKeys.chips, chips)
+    },
+  })
+}
+
+export function useStartTest() {
+  return useMutation({ mutationFn: (request: StartTestRequest) => startTest(request) })
+}
+
+export function useEmergencyStop() {
+  return useMutation({ mutationFn: (id: string) => emergencyStop(id) })
 }

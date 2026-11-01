@@ -2,12 +2,18 @@ import { describe, expect, it } from 'vitest'
 
 import { setBase, stubFetch } from '@/test/http'
 
+import { ApiClientError } from './client'
 import {
+  checkChips,
   deleteSession,
+  emergencyStop,
   fetchSample,
+  getChips,
+  getSettings,
   importCsv,
   listSessions,
   pinSession,
+  startTest,
 } from './endpoints'
 
 describe('endpoints', () => {
@@ -63,5 +69,68 @@ describe('endpoints', () => {
     const url = new URL(http.url())
     expect(url.searchParams.has('axis')).toBe(false)
     expect(url.searchParams.has('point')).toBe(false)
+  })
+
+  it('reads settings and chips with GET and checks chips with POST', async () => {
+    const http = stubFetch({ body: {} })
+    await getSettings()
+    await getChips()
+    await checkChips()
+    expect(http.url(0)).toMatch(/\/api\/settings$/)
+    expect(http.url(1)).toMatch(/\/api\/chips$/)
+    expect(http.url(2)).toMatch(/\/api\/chips\/check$/)
+    expect(http.init(2).method).toBe('POST')
+    expect(http.header(2, 'X-Wobblescope-Client')).toBe('1')
+  })
+
+  it('starts a test with a JSON body and stops it by id', async () => {
+    const http = stubFetch({ status: 202, body: { id: 'test-1' } })
+    await startTest({
+      chips: ['adxl345'],
+      axes: ['X'],
+      mode: 'Pulse',
+      overrides: { freq_end: 100 },
+      points: [[100, 100, 20]],
+    })
+    expect(http.init().method).toBe('POST')
+    expect(http.header(0, 'Content-Type')).toBe('application/json')
+    expect(JSON.parse(String(http.init().body))).toEqual({
+      chips: ['adxl345'],
+      axes: ['X'],
+      mode: 'Pulse',
+      overrides: { freq_end: 100 },
+      points: [[100, 100, 20]],
+    })
+    await emergencyStop('test 1')
+    expect(http.url(1)).toMatch(/\/api\/tests\/test%201\/emergency-stop$/)
+    expect(http.init(1).method).toBe('POST')
+  })
+
+  it('surfaces a preflight_failed answer as an error that carries every failed check', async () => {
+    stubFetch({
+      status: 409,
+      body: {
+        error: 'preflight_failed',
+        message: '2 checks failed',
+        failures: [
+          { check: 'homed', message: 'home X, Y and Z first' },
+          { check: 'klipper_ready', message: 'Klipper is shutdown, not ready' },
+        ],
+      },
+    })
+    const error = await startTest({
+      chips: ['adxl345'],
+      axes: ['X'],
+      mode: 'Pulse',
+      overrides: {},
+      points: [[1, 2, 3]],
+    }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiClientError)
+    const body = (error as ApiClientError).body
+    expect(body?.error).toBe('preflight_failed')
+    expect(body?.error === 'preflight_failed' && body.failures.map((f) => f.check)).toEqual([
+      'homed',
+      'klipper_ready',
+    ])
   })
 })

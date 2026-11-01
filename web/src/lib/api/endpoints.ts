@@ -1,7 +1,13 @@
 import type { Axis } from '@/lib/generated/Axis'
+import type { ChipsSnapshot } from '@/lib/generated/ChipsSnapshot'
+import type { Mode } from '@/lib/generated/Mode'
+import type { Overrides } from '@/lib/generated/Overrides'
+import type { PrinterSettings } from '@/lib/generated/PrinterSettings'
 import type { SessionDetail } from '@/lib/generated/SessionDetail'
 import type { SessionList } from '@/lib/generated/SessionList'
+import type { StartedTest } from '@/lib/generated/StartedTest'
 import type { StatusResponse } from '@/lib/generated/StatusResponse'
+import type { StopDispatched } from '@/lib/generated/StopDispatched'
 import type { Summary } from '@/lib/generated/Summary'
 import type { Usage } from '@/lib/generated/Usage'
 
@@ -98,4 +104,43 @@ export async function fetchSample(
     { signal },
   )
   return response.arrayBuffer()
+}
+
+/** The printer's effective `[resonance_tester]` settings and the toolhead's travel. */
+export function getSettings(signal?: AbortSignal) {
+  return apiJson<PrinterSettings>('settings', { signal })
+}
+
+/** The printer's accelerometers and what the daemon knows of each. */
+export function getChips(signal?: AbortSignal) {
+  return apiJson<ChipsSnapshot>('chips', { signal })
+}
+
+/** Opens every chip, waits for samples and answers with the updated chip list. */
+export function checkChips() {
+  return apiJson<ChipsSnapshot>('chips/check', { method: 'POST' })
+}
+
+/** What the run form sends. Only the settings the user changed are in `overrides`. */
+export interface StartTestRequest {
+  chips: string[]
+  axes: Axis[]
+  mode: Mode
+  overrides: Partial<Overrides>
+  points: [number, number, number][]
+}
+
+export function startTest(request: StartTestRequest) {
+  return apiJson<StartedTest>('tests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+}
+
+/** Calls Moonraker's emergency stop at once, with no confirmation. */
+export function emergencyStop(id: string) {
+  return apiJson<StopDispatched>(`tests/${encodeURIComponent(id)}/emergency-stop`, {
+    method: 'POST',
+  })
 }
