@@ -608,3 +608,44 @@ async fn real_recorded_responses_bootstrap_the_supervisor() {
     assert_eq!(chip_sections(&m), ["adxl345", "lis2dw ebb36"]);
     assert_eq!(m.chips().list.defaults.x, ["lis2dw ebb36"]);
 }
+
+#[tokio::test]
+async fn the_control_handle_reaches_the_fake_and_goes_away_with_the_connection() {
+    let fake = FakeMoonraker::start().await;
+    Printer::new(&fake, "ready", one_chip());
+    fake.on("printer.gcode.script", Script::Result(json!("ok")));
+    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    assert!(m.control().is_none());
+    until("a control handle", || m.control().is_some()).await;
+
+    let rpc = m.control().unwrap();
+    rpc.call(
+        "printer.gcode.script",
+        Some(json!({"script": "G28"})),
+        ms(500),
+    )
+    .await
+    .unwrap();
+    assert_eq!(fake.requests_for("printer.gcode.script").len(), 1);
+
+    fake.set_accepting(false);
+    fake.close_connections();
+    until("no control handle", || m.control().is_none()).await;
+}
+
+#[tokio::test]
+async fn the_bridge_url_keeps_the_route_prefix_and_encodes_the_token() {
+    let fake = FakeMoonraker::start().await;
+    let mut s = settings(&fake, None);
+    s.moonraker_url = format!("{}/printer-a", fake.http_url()).parse().unwrap();
+    let addr = fake.http_url().replace("http://", "");
+    assert_eq!(
+        s.moonraker_bridge_url("T"),
+        format!("ws://{addr}/printer-a/klippysocket?token=T")
+    );
+    let (m, _) = spawn(&s, fast(), false);
+    assert_eq!(
+        m.bridge_url("a b"),
+        format!("ws://{addr}/printer-a/klippysocket?token=a%20b")
+    );
+}
