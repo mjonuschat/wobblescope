@@ -149,9 +149,9 @@ pub fn probe(free: u64) -> Probe {
 
 pub fn settings(cap: u64, headroom: u64) -> Settings {
     Settings {
-        storage_dir: None,
         retention_cap_bytes: cap,
         free_space_headroom_bytes: headroom,
+        ..Settings::default()
     }
 }
 
