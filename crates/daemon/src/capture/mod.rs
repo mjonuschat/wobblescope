@@ -2,6 +2,7 @@
 
 pub mod availability;
 pub mod preflight;
+pub mod recorder;
 pub mod request;
 pub mod session_id;
 pub mod slot;
