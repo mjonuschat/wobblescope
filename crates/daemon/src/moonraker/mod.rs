@@ -8,6 +8,7 @@ use tokio::sync::{oneshot, watch};
 use crate::config::Settings;
 use rpc::Rpc;
 
+pub mod bridge;
 pub mod chips;
 pub mod discovery;
 mod link;
