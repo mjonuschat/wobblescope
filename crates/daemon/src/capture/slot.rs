@@ -96,6 +96,14 @@ impl TestSlot {
         }
     }
 
+    /// Withdraws a stop request, for a stop whose dispatch to Moonraker failed.
+    pub fn cancel_stop(&self, id: &str) {
+        let s = lock(&self.state);
+        if s.id.as_deref() == Some(id) {
+            s.stop.store(false, Ordering::Release);
+        }
+    }
+
     /// Starts the quarantine: no test may start for `duration`.
     pub fn start_quarantine(&self, duration: Duration) {
         let until = Instant::now() + duration;

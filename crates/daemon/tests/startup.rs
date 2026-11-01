@@ -53,6 +53,7 @@ fn start(
         settings,
         probe(u64::MAX / 2),
         cell.clone(),
+        None,
     ));
     (moonraker, task)
 }
@@ -165,4 +166,33 @@ async fn with_storage_dir_set_sessions_answer_at_once_and_roots_are_never_asked(
     })
     .await;
     assert!(fake.requests_for("server.files.roots").is_empty());
+}
+
+#[tokio::test]
+async fn an_unfinished_capture_found_at_startup_starts_the_quarantine_and_refuses_a_test() {
+    use wobblescope::capture::slot::TestSlot;
+    use wobblescope_session::writer::SessionWriter;
+
+    let data = tempfile::TempDir::new().unwrap();
+    let sessions = data.path().join("sessions");
+    std::fs::create_dir_all(&sessions).unwrap();
+    let meta = common::Spec::new("test-old", "2026-11-01T12:00:00Z").meta();
+    let mut first = meta.clone();
+    first.segments.clear();
+    // A capture the last run never finished: a journal and no finished segment.
+    drop(SessionWriter::create(&sessions, "test-old", &first).unwrap());
+
+    let slot = TestSlot::default();
+    let settings = wobblescope::config::Settings::default();
+    wobblescope::startup::open_storage(data.path(), &settings, probe(u64::MAX / 2), Some(&slot))
+        .unwrap();
+    let left = slot.quarantine_remaining().expect("a quarantine started");
+    assert!(left.as_secs() > 600, "{left:?}");
+
+    // Without leftovers there is none.
+    let clean = tempfile::TempDir::new().unwrap();
+    let slot = TestSlot::default();
+    wobblescope::startup::open_storage(clean.path(), &settings, probe(u64::MAX / 2), Some(&slot))
+        .unwrap();
+    assert!(slot.quarantine_remaining().is_none());
 }
