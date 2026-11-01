@@ -6,6 +6,7 @@ use std::path::Path;
 
 pub mod fake_bridge;
 pub mod fake_moonraker;
+pub mod fake_printer;
 
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
@@ -217,4 +218,9 @@ pub async fn json(app: &Router, method: &str, uri: &str) -> (StatusCode, serde_j
     let value = serde_json::from_slice(&body)
         .unwrap_or_else(|e| panic!("{method} {uri} gave {status} and a non-JSON body: {e}"));
     (status, value)
+}
+
+/// Sends a bodiless POST and parses the answer as JSON.
+pub async fn json_post(app: &Router, uri: &str) -> (StatusCode, serde_json::Value) {
+    json(app, "POST", uri).await
 }

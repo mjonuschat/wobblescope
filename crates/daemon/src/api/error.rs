@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::capture::CheckFailure;
 use crate::csv_import::ImportError;
 use crate::storage::StorageError;
 
@@ -19,21 +20,37 @@ use crate::storage::StorageError;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ApiError {
     /// No such session, recording or path.
-    NotFound { message: String },
+    NotFound {
+        message: String,
+    },
     /// The path exists but not for this method.
-    MethodNotAllowed { message: String },
+    MethodNotAllowed {
+        message: String,
+    },
     /// A bad path, query or body.
-    InvalidRequest { message: String },
+    InvalidRequest {
+        message: String,
+    },
     /// The uploaded file is not a valid Klipper raw CSV.
-    InvalidCsv { message: String },
+    InvalidCsv {
+        message: String,
+    },
     /// The upload is over the size limit.
-    TooLarge { message: String },
+    TooLarge {
+        message: String,
+    },
     /// Another import is running.
-    Busy { message: String },
+    Busy {
+        message: String,
+    },
     /// The session is pinned.
-    Pinned { message: String },
+    Pinned {
+        message: String,
+    },
     /// The session is being downloaded.
-    InUse { message: String },
+    InUse {
+        message: String,
+    },
     /// The retention cap cannot fit the import even after evicting everything eligible.
     CapExceeded {
         message: String,
@@ -55,14 +72,34 @@ pub enum ApiError {
         available: u64,
     },
     /// A write from another origin.
-    CrossOrigin { message: String },
+    /// One or more pre-flight checks failed; every failed check is listed.
+    PreflightFailed {
+        message: String,
+        failures: Vec<CheckFailure>,
+    },
+    CrossOrigin {
+        message: String,
+    },
     /// Storage is not open yet: the daemon is waiting for Moonraker to report the data directory.
-    StorageUnavailable { message: String },
+    StorageUnavailable {
+        message: String,
+    },
     /// Anything else that went wrong on the daemon.
-    Internal { message: String },
+    Internal {
+        message: String,
+    },
 }
 
 impl ApiError {
+    /// A refusal that lists every failed check.
+    pub fn preflight(failures: Vec<CheckFailure>) -> Self {
+        let message = match failures.as_slice() {
+            [one] => one.message.clone(),
+            many => format!("{} checks failed", many.len()),
+        };
+        Self::PreflightFailed { message, failures }
+    }
+
     /// A 400 with `message`.
     pub fn invalid(message: impl Into<String>) -> Self {
         Self::InvalidRequest {
@@ -93,7 +130,9 @@ impl ApiError {
             Self::InvalidCsv { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Busy { .. } => StatusCode::TOO_MANY_REQUESTS,
-            Self::Pinned { .. } | Self::InUse { .. } => StatusCode::CONFLICT,
+            Self::Pinned { .. } | Self::InUse { .. } | Self::PreflightFailed { .. } => {
+                StatusCode::CONFLICT
+            }
             Self::CapExceeded { .. } | Self::InsufficientDisk { .. } => {
                 StatusCode::INSUFFICIENT_STORAGE
             }

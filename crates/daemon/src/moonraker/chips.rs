@@ -17,12 +17,24 @@ pub enum ChipType {
 }
 
 /// Whether a chip was seen delivering samples.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "state", rename_all = "lowercase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Availability {
     /// No check has run.
     Unchecked,
+    /// The subscription succeeded and valid samples arrived.
+    Available {
+        /// The sample rate seen during the check, in Hz.
+        observed_rate_hz: f64,
+        /// When the check ran, as an ISO 8601 UTC time.
+        checked_at: String,
+    },
+    /// The chip did not deliver, with the reason.
+    Unavailable {
+        /// What went wrong, in Klipper's words where it had any.
+        reason: String,
+    },
 }
 
 /// An accelerometer section of the Klipper config.
