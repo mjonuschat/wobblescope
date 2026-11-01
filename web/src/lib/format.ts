@@ -12,6 +12,11 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(1).replace(/\.0$/, '')} ${UNITS[unit]}`
 }
 
+/** A frequency to the 0.1 Hz core's snippet uses, so float noise such as 52.60000000000019 never shows. */
+export function formatHz(hz: number): string {
+  return hz.toFixed(1)
+}
+
 /** An RFC 3339 time in the viewer's locale. */
 export function formatTime(iso: string): string {
   const date = new Date(iso)

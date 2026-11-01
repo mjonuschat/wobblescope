@@ -1,0 +1,167 @@
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { AnalysisResult } from '@/analysis/protocol'
+import type { Analysis } from '@/lib/generated/Analysis'
+import { analysis, recommendation, twoAxisMeta } from '@/test/fixtures'
+import { stubApi } from '@/test/http'
+import { renderRoute } from '@/test/render'
+import { summary } from '@/test/summaries'
+
+const fake = vi.hoisted(() => ({ analyze: vi.fn(), forget: vi.fn() }))
+
+vi.mock('@/analysis/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/analysis/client')>()),
+  getAnalysisClient: () => fake,
+}))
+vi.mock('@/components/charts/EChart', () => ({
+  EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
+}))
+
+const SNIPPET = '[input_shaper]\nshaper_type_x: mzv\nshaper_freq_x: 48.2\ndamping_ratio_x: 0.1\n'
+
+function result(a: Analysis, perChip: (string | null)[]): AnalysisResult {
+  return { analysis: a, snippets: { worstCase: a.worst_case ? SNIPPET : null, perChip } }
+}
+
+function serve(meta = twoAxisMeta()) {
+  return stubApi(({ url }) =>
+    url.pathname.endsWith('/sessions/s1')
+      ? { body: { summary: summary('s1'), meta } }
+      : { status: 404, body: { error: 'not_found', message: 'no such session' } },
+  )
+}
+
+function clipboard(value: unknown) {
+  Object.defineProperty(navigator, 'clipboard', { value, configurable: true })
+}
+
+beforeEach(() => {
+  fake.analyze.mockReset()
+})
+afterEach(() => clipboard(undefined))
+
+describe('the session view', () => {
+  it('covers AE3: an imported session shows the unknown-health warning and a copyable snippet', async () => {
+    const a = analysis()
+    a.per_chip = [{ ...a.per_chip[0], chip: 'adxl345' }]
+    a.eligibility.decisions = [
+      { chip: 'adxl345', point: 0, decision: 'Included', reasons: ['unknown capture health'] },
+    ]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET]))
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    clipboard({ writeText })
+    serve()
+    renderRoute('/sessions/s1')
+    expect(await screen.findByText(/unknown capture health/)).toBeTruthy()
+    expect(screen.getAllByText(/shaper_type_x: mzv/).length).toBeGreaterThan(0)
+    const worst = screen.getByRole('region', { name: 'Worst case across all chips' })
+    fireEvent.click(worst.querySelector('button')!)
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(SNIPPET))
+    expect(await screen.findByText('Copied')).toBeTruthy()
+  })
+
+  it.each([
+    ['no clipboard', undefined],
+    ['a rejecting clipboard', { writeText: () => Promise.reject(new Error('denied')) }],
+  ])('says the copy failed and keeps the text on screen with %s', async (_name, value) => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]))
+    clipboard(value)
+    serve()
+    renderRoute('/sessions/s1')
+    const worst = await screen.findByRole('region', { name: 'Worst case across all chips' })
+    fireEvent.click(worst.querySelector('button')!)
+    expect(await screen.findByText(/Copy failed/)).toBeTruthy()
+    expect(worst.textContent).toContain('shaper_type_x: mzv')
+  })
+
+  it('covers AE4: a degraded chip is drawn, has no recommendation, and the worst case comes from the other chip', async () => {
+    const a = analysis()
+    a.eligibility.decisions = [
+      { chip: 'a', point: 0, decision: 'Included', reasons: [] },
+      { chip: 'b', point: 0, decision: 'Excluded', reasons: ['degraded capture health'] },
+    ]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    const degraded = await screen.findByRole('region', { name: 'Chip b' })
+    expect(degraded.textContent).toContain('No recommendation for this chip: degraded capture health')
+    expect(degraded.querySelector('[role="img"]')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Worst case across all chips' }).textContent).toContain('mzv at 48.2 Hz')
+  })
+
+  it('explains an axis without any eligible dataset and shows no snippet', async () => {
+    const a = analysis()
+    a.worst_case = null
+    a.per_chip = a.per_chip.map((c) => ({ ...c, recommendation: null }))
+    a.eligibility.decisions = [
+      { chip: 'a', point: 0, decision: 'Excluded', reasons: ['degraded capture health'] },
+      { chip: 'b', point: 0, decision: 'Excluded', reasons: ['incomplete coverage: tail'] },
+    ]
+    fake.analyze.mockResolvedValue(result(a, [null, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    expect(await screen.findByText(/none of its recordings is eligible/)).toBeTruthy()
+    expect(screen.getAllByText(/incomplete coverage: tail/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/shaper_type_x/)).toBeNull()
+  })
+
+  it('shows an analysis error while the metadata stays visible', async () => {
+    fake.analyze.mockImplementation(() =>
+      Promise.reject(new Error('c0-s0.zst holds 999 samples, metadata says 1000')),
+    )
+    serve()
+    renderRoute('/sessions/s1')
+    expect(await screen.findByText(/c0-s0.zst holds 999 samples, metadata says 1000/)).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Session details' })).toBeTruthy()
+  })
+
+  it('shows only the axes the session recorded', async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]))
+    const meta = twoAxisMeta()
+    meta.segments = meta.segments.filter((s) => s.axis === 'X')
+    serve(meta)
+    renderRoute('/sessions/s1')
+    await screen.findByRole('tab', { name: 'Axis X' })
+    expect(screen.queryByRole('tab', { name: 'Axis Y' })).toBeNull()
+  })
+
+  it('analyses the other axis when its tab is chosen', async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    fireEvent.click(await screen.findByRole('tab', { name: 'Axis Y' }))
+    await waitFor(() =>
+      expect(fake.analyze.mock.calls.map((c) => c[0].axis)).toEqual(['X', 'Y']),
+    )
+  })
+
+  it('re-runs with the fit settings that are applied', async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    await screen.findByRole('region', { name: 'Worst case across all chips' })
+    fireEvent.change(screen.getByLabelText(/Smoothing limit/), { target: { value: '0.1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2))
+    expect(fake.analyze.mock.calls[1][0].params.max_smoothing).toBe(0.1)
+  })
+
+  it('shows the core version and the effective fit settings', async () => {
+    const a = analysis()
+    a.worst_case = recommendation()
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    const note = await screen.findByText(/Analysed with core 0.1.0/)
+    expect(note.textContent).toContain('corner velocity 5 mm/s')
+    expect(note.textContent).toContain('up to 200 Hz')
+  })
+
+  it('shows the daemon\u2019s message when the session cannot be loaded', async () => {
+    serve()
+    renderRoute('/sessions/other')
+    expect(await screen.findByText('no such session')).toBeTruthy()
+    expect(fake.analyze).not.toHaveBeenCalled()
+  })
+})
