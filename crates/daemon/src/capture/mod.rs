@@ -1,10 +1,13 @@
 //! Capture: running a resonance test and recording what the accelerometers see.
 
 pub mod availability;
+pub mod live;
+pub mod meta;
 pub mod position;
 pub mod preflight;
 pub mod recorder;
 pub mod request;
+pub mod runner;
 pub mod session_id;
 pub mod slot;
 
