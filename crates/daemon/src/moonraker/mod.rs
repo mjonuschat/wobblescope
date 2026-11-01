@@ -2,3 +2,4 @@
 
 pub mod chips;
 pub mod discovery;
+pub mod rpc;

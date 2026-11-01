@@ -4,6 +4,8 @@
 
 use std::path::Path;
 
+pub mod fake_moonraker;
+
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
