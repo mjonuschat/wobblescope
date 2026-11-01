@@ -1,0 +1,132 @@
+{
+  "_note": "Recorded from buster-wlan.sharks-with-lasers.net:7125 by scripts/hardware/record_bridge_frames.py; each batch trimmed to 4 rows (_rows_in_batch has the real count). counterless_batch is the first lis2dw batch with errors and overflows removed, standing in for a chip type without counters (none was available).",
+  "subscribe_reply": {
+    "id": 1,
+    "result": {
+      "header": [
+        "time",
+        "x_acceleration",
+        "y_acceleration",
+        "z_acceleration"
+      ]
+    }
+  },
+  "missing_sensor": {
+    "id": 1,
+    "error": {
+      "error": "WebRequestError",
+      "message": "Missing Argument [sensor]"
+    }
+  },
+  "bad_sensor": {
+    "id": 1,
+    "error": {
+      "error": "WebRequestError",
+      "message": "The value 'nope' is not valid for sensor"
+    }
+  },
+  "unregistered_endpoint": {
+    "id": 1,
+    "error": {
+      "error": "WebRequestError",
+      "message": "webhooks: No registered callback for path 'adxl345/dump_nothing'"
+    }
+  },
+  "adxl345_batch": {
+    "params": {
+      "data": [
+        [
+          8680.240059,
+          74.020594,
+          222.061783,
+          -9806.022374
+        ],
+        [
+          8680.240374,
+          74.020594,
+          74.020594,
+          -9652.803275
+        ],
+        [
+          8680.24069,
+          0.0,
+          74.020594,
+          -9806.022374
+        ],
+        [
+          8680.241005,
+          222.061783,
+          148.041188,
+          -9806.022374
+        ]
+      ],
+      "errors": 0,
+      "overflows": 0,
+      "_rows_in_batch": 310
+    }
+  },
+  "lis2dw_batch": {
+    "params": {
+      "data": [
+        [
+          8680.582902,
+          153.140646,
+          9839.286531,
+          -210.568389
+        ],
+        [
+          8680.585629,
+          172.283227,
+          9820.14395,
+          -191.425808
+        ],
+        [
+          8680.588356,
+          172.283227,
+          9820.14395,
+          -229.71097
+        ],
+        [
+          8680.591083,
+          191.425808,
+          9820.14395,
+          -248.85355
+        ]
+      ],
+      "errors": 0,
+      "overflows": 0,
+      "_rows_in_batch": 32
+    }
+  },
+  "counterless_batch": {
+    "params": {
+      "data": [
+        [
+          8680.582902,
+          153.140646,
+          9839.286531,
+          -210.568389
+        ],
+        [
+          8680.585629,
+          172.283227,
+          9820.14395,
+          -191.425808
+        ],
+        [
+          8680.588356,
+          172.283227,
+          9820.14395,
+          -229.71097
+        ],
+        [
+          8680.591083,
+          191.425808,
+          9820.14395,
+          -248.85355
+        ]
+      ],
+      "_rows_in_batch": 32
+    }
+  }
+}

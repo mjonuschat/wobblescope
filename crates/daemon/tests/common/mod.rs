@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+pub mod fake_bridge;
 pub mod fake_moonraker;
 
 use wobblescope_core::RawSamples;

@@ -74,6 +74,7 @@ pub struct FakeMoonraker {
     addr: std::net::SocketAddr,
     state: Arc<Mutex<State>>,
     accept: tokio::task::JoinHandle<()>,
+    bridge: super::fake_bridge::FakeBridge,
 }
 
 impl Drop for FakeMoonraker {
@@ -92,17 +93,29 @@ impl FakeMoonraker {
             accepting: true,
             ..State::default()
         }));
-        let accept = tokio::spawn(accept_loop(listener, state.clone()));
+        let bridge = super::fake_bridge::FakeBridge::default();
+        let accept = tokio::spawn(accept_loop(listener, state.clone(), bridge.clone()));
         Self {
             addr,
             state,
             accept,
+            bridge,
         }
     }
 
     /// The websocket URL.
     pub fn ws_url(&self) -> String {
         format!("ws://{}/websocket", self.addr)
+    }
+
+    /// The bridge on `/klippysocket`, which speaks Klipper's webhooks protocol.
+    pub fn bridge(&self) -> &super::fake_bridge::FakeBridge {
+        &self.bridge
+    }
+
+    /// The bridge's websocket URL with `token` in the query.
+    pub fn bridge_url(&self, token: &str) -> String {
+        format!("ws://{}/klippysocket?token={token}", self.addr)
     }
 
     /// The base URL a config would hold.
@@ -184,7 +197,11 @@ impl FakeMoonraker {
     }
 }
 
-async fn accept_loop(listener: TcpListener, state: Arc<Mutex<State>>) {
+async fn accept_loop(
+    listener: TcpListener,
+    state: Arc<Mutex<State>>,
+    bridge: super::fake_bridge::FakeBridge,
+) {
     loop {
         let Ok((tcp, _)) = listener.accept().await else {
             return;
@@ -198,7 +215,7 @@ async fn accept_loop(listener: TcpListener, state: Arc<Mutex<State>>) {
             drop(tcp);
             continue;
         }
-        tokio::spawn(connection(tcp, state.clone(), status));
+        tokio::spawn(connection(tcp, state.clone(), status, bridge.clone()));
     }
 }
 
@@ -215,15 +232,31 @@ fn upgrade(status: Option<u16>, response: Response) -> Result<Response, ErrorRes
 }
 
 #[allow(clippy::result_large_err)]
-async fn connection(tcp: tokio::net::TcpStream, state: Arc<Mutex<State>>, status: Option<u16>) {
+async fn connection(
+    tcp: tokio::net::TcpStream,
+    state: Arc<Mutex<State>>,
+    status: Option<u16>,
+    bridge: super::fake_bridge::FakeBridge,
+) {
+    let target = Arc::new(Mutex::new(String::new()));
+    let seen = target.clone();
     let Ok(socket) =
-        tokio_tungstenite::accept_hdr_async(tcp, move |_: &Request, response: Response| {
+        tokio_tungstenite::accept_hdr_async(tcp, move |request: &Request, response: Response| {
+            *seen.lock().unwrap() = request.uri().to_string();
             upgrade(status, response)
         })
         .await
     else {
         return;
     };
+    let target = target.lock().unwrap().clone();
+    if let Some((path, query)) = target.split_once('?').or(Some((target.as_str(), "")))
+        && path.ends_with("/klippysocket")
+    {
+        let token = query.strip_prefix("token=").unwrap_or_default().to_owned();
+        super::fake_bridge::serve(socket, bridge, token).await;
+        return;
+    }
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Out>();
     let number = {
         let mut s = state.lock().unwrap();
