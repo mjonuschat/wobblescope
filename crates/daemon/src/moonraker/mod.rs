@@ -18,6 +18,7 @@ use status::Status;
 
 /// The chips the printer's config lists, and how fresh that list is.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChipsSnapshot {
     /// Whether a list has been read since the daemon started.
     pub known: bool,
@@ -25,6 +26,7 @@ pub struct ChipsSnapshot {
     pub current: bool,
     /// The last list read.
     #[serde(flatten)]
+    #[cfg_attr(feature = "ts", ts(flatten))]
     pub list: ChipList,
 }
 

@@ -5,6 +5,7 @@ use serde::Serialize;
 /// The state of the daemon's connection to Moonraker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum MoonrakerState {
     /// No attempt has finished yet.
     Connecting,
@@ -32,6 +33,7 @@ impl MoonrakerState {
 /// Klipper's state as Moonraker reports it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum KlippyState {
     /// Not known: no connection to Moonraker, or a state Moonraker named that this daemon
     /// does not.
@@ -85,6 +87,7 @@ impl KlippyState {
 
 /// Moonraker's side of the status.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MoonrakerStatus {
     /// The connection's state.
     pub state: MoonrakerState,
@@ -96,6 +99,7 @@ pub struct MoonrakerStatus {
 
 /// Klipper's side of the status.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct KlippyStatus {
     /// Klipper's state.
     pub state: KlippyState,

@@ -5,6 +5,7 @@ mod error;
 mod origin;
 mod samples;
 mod sessions;
+mod status;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,7 +18,9 @@ use axum::routing::{get, post};
 
 pub use error::ApiError;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
+pub use status::{StatusResponse, StorageState, StorageStatus};
 
+use crate::moonraker::Moonraker;
 use crate::startup::StorageCell;
 use crate::storage::Storage;
 
@@ -49,6 +52,7 @@ impl Drop for ImportPermit {
 #[derive(Clone)]
 struct ApiState {
     storage: StorageCell,
+    moonraker: Moonraker,
     imports: ImportGate,
 }
 
@@ -104,13 +108,14 @@ async fn method_not_allowed() -> ApiError {
 }
 
 /// The API mounted at `/api`, with JSON answers for unknown paths and methods. Session
-/// endpoints answer 503 `storage_unavailable` until `storage` holds a [`Storage`].
-pub fn mount(storage: StorageCell) -> Router {
-    mount_with(storage, ImportGate::default())
+/// endpoints answer 503 `storage_unavailable` until `storage` holds a [`Storage`]. `moonraker`
+/// feeds the status and chips endpoints.
+pub fn mount(storage: StorageCell, moonraker: Moonraker) -> Router {
+    mount_with(storage, moonraker, ImportGate::default())
 }
 
 /// [`mount`] with the gate that limits imports to one at a time, so a test can hold it.
-pub fn mount_with(storage: StorageCell, imports: ImportGate) -> Router {
+pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGate) -> Router {
     let api = Router::new()
         .route(
             "/sessions",
@@ -129,9 +134,15 @@ pub fn mount_with(storage: StorageCell, imports: ImportGate) -> Router {
             get(samples::download),
         )
         .route("/storage", get(sessions::usage))
+        .route("/status", get(status::status))
+        .route("/chips", get(status::chips))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(origin::guard))
-        .with_state(ApiState { storage, imports });
+        .with_state(ApiState {
+            storage,
+            moonraker,
+            imports,
+        });
     Router::new().nest("/api", api)
 }

@@ -183,9 +183,14 @@ pub fn cell(storage: Option<Storage>) -> StorageCell {
     cell
 }
 
-/// The API router on `storage`.
+/// A Moonraker handle nothing publishes to: connecting, no chips.
+pub fn idle_moonraker() -> wobblescope::moonraker::Moonraker {
+    wobblescope::moonraker::channel().1
+}
+
+/// The API router on `storage`, with an idle Moonraker.
 pub fn app(storage: Option<Storage>) -> Router {
-    wobblescope::api::mount(cell(storage))
+    wobblescope::api::mount(cell(storage), idle_moonraker())
 }
 
 /// Sends one request through `app` and returns the status, headers and body.
