@@ -1,0 +1,30 @@
+[package]
+name = "wobblescope-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The browser's route into wobblescope-core and wobblescope-session: wasm-bindgen exports only"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde-wasm-bindgen = "0.6.5"
+thiserror = "2.0.21"
+wasm-bindgen = "0.2.130"
+wobblescope-core = { version = "0.1.0", path = "../core" }
+wobblescope-session = { version = "0.1.0", path = "../session", default-features = false }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
+structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+js-sys = "0.3.107"
+serde = { version = "1.0.229", features = ["derive"] }
+wasm-bindgen-test = "0.3.80"
