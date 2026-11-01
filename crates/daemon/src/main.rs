@@ -29,8 +29,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // With `storage_dir` set, storage opens before the listener binds. Without it, the
     // coordinator opens storage once Moonraker names the config root.
     let cell = startup::new_cell();
+    let capture = api::CaptureState::new(settings.max_segment_seconds);
     if let Some(dir) = settings.storage_dir.as_deref() {
-        let storage = startup::open_storage(dir, &settings, default_probe())?;
+        let storage = startup::open_storage(dir, &settings, default_probe(), Some(&capture.slot))?;
         let _ = cell.set(storage);
     }
     let (moonraker, report) = moonraker::spawn(
@@ -39,12 +40,24 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         settings.storage_dir.is_none(),
     );
 
-    let app = api::mount(cell.clone(), moonraker.clone()).fallback(web::static_handler);
+    let app = api::mount_capture(
+        cell.clone(),
+        moonraker.clone(),
+        api::ImportGate::default(),
+        capture.clone(),
+    )
+    .fallback(web::static_handler);
     let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
     let serve = std::future::IntoFuture::into_future(axum::serve(listener, app));
     tokio::pin!(serve);
     if let Some(report) = report {
-        let coordinator = startup::resolve_storage(report, settings, default_probe(), cell);
+        let coordinator = startup::resolve_storage(
+            report,
+            settings,
+            default_probe(),
+            cell,
+            Some(capture.slot.clone()),
+        );
         tokio::select! {
             served = &mut serve => return Ok(served?),
             opened = coordinator => opened?,

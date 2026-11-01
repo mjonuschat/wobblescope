@@ -10,7 +10,7 @@ description = "Wobblescope service: captures accelerometer data via Moonraker an
 ts = ["dep:ts-rs", "wobblescope-session/ts"]
 
 [dependencies]
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["ws"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 mime_guess = "2.0.5"
 rust-embed = "8.13.0"

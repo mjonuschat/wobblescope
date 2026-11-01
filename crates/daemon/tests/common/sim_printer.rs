@@ -94,6 +94,8 @@ struct State {
 #[derive(Clone)]
 pub struct Sim {
     state: Arc<Mutex<State>>,
+    /// True while the pre-flight feeder may push; the first script turns it off.
+    feeding: Arc<Mutex<bool>>,
     pub fake: Arc<FakeMoonraker>,
     pub printer: FakePrinter,
 }
@@ -126,6 +128,8 @@ impl Sim {
         let fake = Arc::new(FakeMoonraker::start().await);
         let printer = FakePrinter::new(&fake, "ready", config());
         printer.set_field("toolhead", "position", json!([0.0, 0.0, 0.0, 0.0]));
+        let real = super::fake_printer::fixture("real_settings.json");
+        printer.set_settings(real["status"]["configfile"]["settings"].clone());
         let state = Arc::new(Mutex::new(State {
             t: 100.0,
             fed: 100.0,
@@ -145,6 +149,7 @@ impl Sim {
         }));
         let sim = Self {
             state,
+            feeding: Arc::new(Mutex::new(false)),
             fake,
             printer,
         };
@@ -239,6 +244,8 @@ impl Sim {
         };
         if ok {
             self.sync_clock();
+            self.printer
+                .set_field("idle_timeout", "state", json!("Ready"));
             gate.release(Script::Result(json!("ok")));
         } else {
             gate.release(Script::error(400, "Klipper state: Shutdown"));
@@ -297,7 +304,34 @@ impl Sim {
         }
     }
 
+    /// Gives every chip valid samples (timestamps below the clock) until the first script, so
+    /// pre-flight can prove them without the feeder ever interleaving with the simulation.
+    pub fn feed_until_motion(&self) {
+        *self.feeding.lock().unwrap() = true;
+        let sim = self.clone();
+        tokio::spawn(async move {
+            let mut k = 0u64;
+            loop {
+                {
+                    let on = sim.feeding.lock().unwrap();
+                    if !*on {
+                        return;
+                    }
+                    for (_, sensor, rate) in CHIPS {
+                        let rows: Vec<[f64; 4]> = (0..20)
+                            .map(|i| [50.0 + (k * 20 + i) as f64 / rate, 0.0, 0.0, 9800.0])
+                            .collect();
+                        sim.bridge().push(sensor, &rows, Some((0, 0)));
+                    }
+                }
+                k += 1;
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        });
+    }
+
     fn script(&self, script: &str) -> Script {
+        *self.feeding.lock().unwrap() = false;
         let mut s = self.state.lock().unwrap();
         s.scripts.push(script.to_owned());
         if script.starts_with("TEST_RESONANCES") {
@@ -423,7 +457,6 @@ pub struct Rig {
     pub hub: LiveHub,
     pub runner: Runner,
     pub dir: TempDir,
-    feeder: Mutex<Vec<tokio::task::JoinHandle<()>>>,
 }
 
 pub async fn rig() -> Rig {
@@ -462,46 +495,17 @@ pub async fn rig_with(timings: RunnerTimings, cap: u64) -> Rig {
         hub,
         runner,
         dir,
-        feeder: Mutex::new(Vec::new()),
     }
 }
 
 impl Rig {
-    /// Starts a feeder that gives every chip valid samples (with timestamps below the
-    /// simulation's clock) until [`Rig::stop_feeder`], so pre-flight can prove them.
-    fn start_feeder(&self) {
-        let bridge = self.sim.bridge().clone();
-        let task = tokio::spawn(async move {
-            let mut k = 0u64;
-            loop {
-                for (_, sensor, rate) in CHIPS {
-                    let rows: Vec<[f64; 4]> = (0..20)
-                        .map(|i| [50.0 + (k * 20 + i) as f64 / rate, 0.0, 0.0, 9800.0])
-                        .collect();
-                    bridge.push(sensor, &rows, Some((0, 0)));
-                }
-                k += 1;
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        });
-        self.feeder.lock().unwrap().push(task);
-    }
-
-    fn stop_feeder(&self) {
-        for task in self.feeder.lock().unwrap().drain(..) {
-            task.abort();
-        }
-    }
-
     /// Runs pre-flight for `plan` and, when it passes, starts the runner.
     pub async fn start(&self, plan: &TestPlan) -> Result<tokio::task::JoinHandle<()>, Refusal> {
         let permit = self.slot.try_acquire().expect("the slot is free");
         let mut deps = Deps::new(&self.moonraker, &self.cell, &self.slot);
         deps.availability_timeout = Duration::from_secs(1);
-        self.start_feeder();
-        let started = preflight(&deps, plan, false, OffsetDateTime::now_utc()).await;
-        self.stop_feeder();
-        let started = started?;
+        self.sim.feed_until_motion();
+        let started = preflight(&deps, plan, false, OffsetDateTime::now_utc()).await?;
         Ok(self.runner.spawn(Job {
             started,
             plan: plan.clone(),
@@ -556,4 +560,31 @@ impl Rig {
 
 pub fn outcome(f: &wobblescope::capture::live::FinishedTest) -> FinishedOutcome {
     f.outcome
+}
+
+impl Rig {
+    /// The API router sharing this rig's slot and live hub.
+    pub fn app(&self) -> axum::Router {
+        wobblescope::api::mount_capture(
+            self.cell.clone(),
+            self.moonraker.clone(),
+            wobblescope::api::ImportGate::default(),
+            wobblescope::api::CaptureState {
+                slot: self.slot.clone(),
+                hub: self.hub.clone(),
+                max_segment_seconds: 600,
+                timings: self.runner.timings,
+            },
+        )
+    }
+}
+
+/// Serves `app` on a local port and returns its address.
+pub async fn serve(app: axum::Router) -> std::net::SocketAddr {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    addr
 }

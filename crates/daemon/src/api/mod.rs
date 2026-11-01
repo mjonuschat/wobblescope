@@ -2,11 +2,13 @@
 //! on a blocking thread.
 
 mod error;
+mod live;
 mod origin;
 mod samples;
 mod sessions;
 mod settings;
 mod status;
+mod tests;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,7 +22,11 @@ use axum::routing::{get, post};
 pub use error::ApiError;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 pub use status::{StatusResponse, StorageState, StorageStatus};
+pub use tests::{StartedTest, StopDispatched};
 
+use crate::capture::live::LiveHub;
+use crate::capture::runner::{Runner, RunnerTimings};
+use crate::capture::slot::TestSlot;
 use crate::moonraker::Moonraker;
 use crate::startup::StorageCell;
 use crate::storage::Storage;
@@ -50,11 +56,55 @@ impl Drop for ImportPermit {
 }
 
 /// What every handler shares.
+/// What the capture endpoints share with the runner. Clones share it.
+#[derive(Clone)]
+pub struct CaptureState {
+    /// The one-test slot, the quarantine and the stop flags.
+    pub slot: TestSlot,
+    /// What the live socket shows.
+    pub hub: LiveHub,
+    /// The longest one sweep command may run, in seconds.
+    pub max_segment_seconds: u32,
+    /// The runner's timings.
+    pub timings: RunnerTimings,
+}
+
+impl Default for CaptureState {
+    fn default() -> Self {
+        Self::new(crate::config::Settings::default().max_segment_seconds)
+    }
+}
+
+impl CaptureState {
+    /// Fresh capture state with the usual timings.
+    #[must_use]
+    pub fn new(max_segment_seconds: u32) -> Self {
+        Self {
+            slot: TestSlot::default(),
+            hub: LiveHub::new(),
+            max_segment_seconds,
+            timings: RunnerTimings::default(),
+        }
+    }
+
+    fn runner(&self, moonraker: Moonraker, storage: Storage) -> Runner {
+        Runner {
+            moonraker,
+            storage,
+            slot: self.slot.clone(),
+            hub: self.hub.clone(),
+            max_segment_seconds: self.max_segment_seconds,
+            timings: self.timings,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ApiState {
     storage: StorageCell,
     moonraker: Moonraker,
     imports: ImportGate,
+    capture: CaptureState,
 }
 
 impl FromRequestParts<ApiState> for ImportPermit {
@@ -117,6 +167,16 @@ pub fn mount(storage: StorageCell, moonraker: Moonraker) -> Router {
 
 /// [`mount`] with the gate that limits imports to one at a time, so a test can hold it.
 pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGate) -> Router {
+    mount_capture(storage, moonraker, imports, CaptureState::default())
+}
+
+/// The API router with the capture state shared with the rest of the daemon.
+pub fn mount_capture(
+    storage: StorageCell,
+    moonraker: Moonraker,
+    imports: ImportGate,
+    capture: CaptureState,
+) -> Router {
     let api = Router::new()
         .route(
             "/sessions",
@@ -139,6 +199,9 @@ pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGat
         .route("/chips", get(status::chips))
         .route("/chips/check", post(status::check_chips))
         .route("/settings", get(settings::settings))
+        .route("/tests", post(tests::start))
+        .route("/tests/{id}/emergency-stop", post(tests::emergency_stop))
+        .route("/live", get(live::live))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(origin::guard))
@@ -146,6 +209,7 @@ pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGat
             storage,
             moonraker,
             imports,
+            capture,
         });
     Router::new().nest("/api", api)
 }

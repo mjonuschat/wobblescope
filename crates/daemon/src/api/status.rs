@@ -69,6 +69,12 @@ pub(super) async fn check_chips(
 ) -> Result<Json<ChipsSnapshot>, ApiError> {
     let status = state.moonraker.status();
     let mut failures = Vec::new();
+    if state.capture.slot.is_held() {
+        failures.push(CheckFailure::new(
+            "no_test_running",
+            "a test is running; chips are in use until it ends",
+        ));
+    }
     if status.moonraker.state != MoonrakerState::Connected {
         failures.push(CheckFailure::new(
             "moonraker_connected",

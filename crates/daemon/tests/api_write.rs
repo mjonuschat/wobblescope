@@ -520,3 +520,29 @@ async fn without_storage_a_cross_site_write_is_403_and_a_same_origin_one_503() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body_json(&body)["error"], "storage_unavailable");
 }
+
+#[tokio::test]
+async fn the_capture_writes_are_refused_across_sites_and_nothing_is_started() {
+    let app = app(None);
+    for uri in [
+        "/api/chips/check",
+        "/api/tests",
+        "/api/tests/test-1/emergency-stop",
+    ] {
+        let (status, _, body) = send(
+            &app,
+            write(
+                "POST",
+                uri,
+                &[
+                    ("sec-fetch-site", "cross-site"),
+                    ("content-type", "application/json"),
+                ],
+                b"{}".to_vec(),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+        assert_eq!(body_json(&body)["error"], "cross_origin", "{uri}");
+    }
+}

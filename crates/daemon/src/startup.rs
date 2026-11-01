@@ -3,6 +3,8 @@
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
+use crate::capture::preflight::quarantine_duration;
+use crate::capture::slot::TestSlot;
 use crate::config::{ConfigError, Settings, default_data_dir};
 use crate::moonraker::ConfigRootReport;
 use crate::moonraker::discovery::RootsError;
@@ -55,6 +57,7 @@ pub fn open_storage(
     dir: &Path,
     settings: &Settings,
     probe: Probe,
+    slot: Option<&TestSlot>,
 ) -> Result<Storage, StartupError> {
     let (storage, report) =
         Storage::open(dir, settings, probe).map_err(|source| StartupError::Storage {
@@ -64,6 +67,14 @@ pub fn open_storage(
     eprintln!("storage: opened {}", dir.display());
     for line in report.lines() {
         eprintln!("storage: {line}");
+    }
+    // A capture the last run left unfinished may have a sweep still running, so no test may
+    // start until the longest possible sweep has had time to end.
+    if report.unfinished_capture_found()
+        && let Some(slot) = slot
+    {
+        slot.start_quarantine(quarantine_duration(settings.max_segment_seconds));
+        eprintln!("capture: no test can start until a sweep that may still be running has ended");
     }
     Ok(storage)
 }
@@ -78,15 +89,17 @@ pub async fn resolve_storage(
     settings: Settings,
     probe: Probe,
     cell: StorageCell,
+    slot: Option<TestSlot>,
 ) -> Result<(), StartupError> {
     let root = report.await.map_err(|_| StartupError::Stopped)??;
     if !root.is_absolute() {
         return Err(StartupError::NotAbsolute(root));
     }
     let dir = default_data_dir(&root)?;
-    let storage = tokio::task::spawn_blocking(move || open_storage(&dir, &settings, probe))
-        .await
-        .map_err(|e| StartupError::Task(e.to_string()))??;
+    let storage =
+        tokio::task::spawn_blocking(move || open_storage(&dir, &settings, probe, slot.as_ref()))
+            .await
+            .map_err(|e| StartupError::Task(e.to_string()))??;
     // Only this coordinator fills an empty cell, and only once.
     let _ = cell.set(storage);
     Ok(())
