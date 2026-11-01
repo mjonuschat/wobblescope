@@ -131,6 +131,12 @@ impl Moonraker {
         self.control.borrow().clone()
     }
 
+    /// A receiver that changes whenever Moonraker's or Klipper's state does.
+    #[must_use]
+    pub fn watch_status(&self) -> watch::Receiver<Status> {
+        self.status.clone()
+    }
+
     /// A receiver that changes whenever the control connection appears or goes away.
     #[must_use]
     pub fn watch_control(&self) -> watch::Receiver<Option<Rpc>> {

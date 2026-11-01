@@ -26,6 +26,30 @@ pub enum Script {
     Silent,
     /// Closes the socket.
     Close,
+    /// Answers when a test releases the gate.
+    Gated(Gate),
+}
+
+/// A reply a test holds back until it chooses to send it.
+#[derive(Clone, Default)]
+pub struct Gate(Arc<GateInner>);
+
+#[derive(Default)]
+struct GateInner {
+    script: Mutex<Option<Script>>,
+    notify: tokio::sync::Notify,
+}
+
+impl Gate {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sends the held-back reply: `script` decides what it is.
+    pub fn release(&self, script: Script) {
+        *self.0.script.lock().unwrap() = Some(script);
+        self.0.notify.notify_waiters();
+    }
 }
 
 impl Script {
@@ -326,6 +350,21 @@ fn reply(out: &mpsc::UnboundedSender<Out>, id: Value, script: Script) {
             });
         }
         Script::Silent => {}
+        Script::Gated(gate) => {
+            let out = out.clone();
+            tokio::spawn(async move {
+                loop {
+                    let wake = gate.0.notify.notified();
+                    tokio::pin!(wake);
+                    wake.as_mut().enable();
+                    if let Some(script) = gate.0.script.lock().unwrap().take() {
+                        reply(&out, id, script);
+                        return;
+                    }
+                    wake.await;
+                }
+            });
+        }
         Script::Close => {
             let _ = out.send(Out::Close);
         }
