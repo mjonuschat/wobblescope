@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { shouldRetry, queryKeys } from '@/lib/api/queries'
+import { ApiClientError } from '@/lib/api/client'
+import { queryKeys, shouldRetry } from '@/lib/api/queries'
 import type { Axis } from '@/lib/generated/Axis'
 import type { FitParams } from '@/lib/generated/FitParams'
 import type { SessionMeta } from '@/lib/generated/SessionMeta'
 
-import { SupersededError, getAnalysisClient, type AnalysisClient } from './client'
+import { getAnalysisClient, type AnalysisClient } from './client'
 
 interface Args {
   sessionId: string
@@ -35,6 +36,7 @@ export function useSessionAnalysis({
     enabled: meta !== undefined && axis !== null,
     gcTime: 0,
     staleTime: 0,
-    retry: (count, error) => !(error instanceof SupersededError) && shouldRetry(count, error),
+    // A failed analysis is deterministic, so only a download that may have hit a blip is retried.
+    retry: (count, error) => error instanceof ApiClientError && shouldRetry(count, error),
   })
 }

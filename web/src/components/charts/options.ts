@@ -1,0 +1,107 @@
+import type { EChartsCoreOption } from 'echarts/core'
+
+import { formatHz } from '@/lib/format'
+import type { ChipAnalysis } from '@/lib/generated/ChipAnalysis'
+import type { ProbePoint } from '@/lib/generated/ProbePoint'
+import type { Recommendation } from '@/lib/generated/Recommendation'
+import type { SummedPsd } from '@/lib/generated/SummedPsd'
+
+/** Where a probe point is, or its number when its position is not known. */
+export function pointLabel(index: number, probePoints: ProbePoint[]): string {
+  const position = probePoints[index]?.position
+  return position ? `(${position.join(', ')})` : `point ${index}`
+}
+
+const zip = (xs: number[], ys: number[]) => xs.map((x, i) => [x, ys[i]])
+
+const text = '#d4d4d4'
+
+function base(title: string, maxFreq: number): EChartsCoreOption {
+  return {
+    backgroundColor: 'transparent',
+    textStyle: { color: text },
+    title: { text: title, textStyle: { color: text, fontSize: 14 } },
+    tooltip: { trigger: 'axis' },
+    grid: { top: 80, left: 64, right: 64, bottom: 40 },
+    xAxis: { type: 'value', name: 'Hz', min: 0, max: maxFreq },
+  }
+}
+
+interface PsdInput {
+  chip: ChipAnalysis
+  recommendation: Recommendation | null
+  probePoints: ProbePoint[]
+  /** The largest frequency the fit considered, in Hz. */
+  maxFreq: number
+}
+
+/**
+ * One chip's PSDs on the left axis (the total per probe point, with X, Y and Z behind the
+ * legend) and every fitted shaper's response on the right axis, with the recommended
+ * frequency marked. Every curve is `core`'s array as returned.
+ */
+export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInput): EChartsCoreOption {
+  const series: Record<string, unknown>[] = []
+  const selected: Record<string, boolean> = {}
+  for (const [point, data] of chip.datasets) {
+    const label = pointLabel(point, probePoints)
+    series.push({
+      name: `${label} total`,
+      type: 'line',
+      showSymbol: false,
+      data: zip(data.freq_bins, data.psd_sum),
+    })
+    for (const [axis, values] of [
+      ['X', data.psd_x],
+      ['Y', data.psd_y],
+      ['Z', data.psd_z],
+    ] as const) {
+      const name = `${label} ${axis}`
+      selected[name] = false
+      series.push({ name, type: 'line', showSymbol: false, data: zip(data.freq_bins, values) })
+    }
+  }
+  if (recommendation && series.length > 0) {
+    const { best } = recommendation
+    series[0].markLine = {
+      silent: true,
+      symbol: 'none',
+      data: [{ xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: text } }],
+    }
+  }
+  for (const candidate of recommendation?.all ?? []) {
+    series.push({
+      name: `${candidate.name} ${formatHz(candidate.freq)} Hz`,
+      type: 'line',
+      yAxisIndex: 1,
+      showSymbol: false,
+      lineStyle: { type: 'dashed' },
+      data: zip(candidate.freq_bins, candidate.vals),
+    })
+  }
+  return {
+    ...base(`${chip.chip}: PSD and shaper response`, maxFreq),
+    legend: { type: 'scroll', top: 28, selected, textStyle: { color: text } },
+    yAxis: [
+      { type: 'value', name: 'PSD' },
+      { type: 'value', name: 'Shaper response', min: 0, max: 1, splitLine: { show: false } },
+    ],
+    series,
+  }
+}
+
+/** The sum of the eligible chips' PSDs. It is for looking at; no recommendation comes from it. */
+export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
+  return {
+    ...base('Summed PSD (display only)', maxFreq),
+    yAxis: { type: 'value', name: 'PSD' },
+    series: [
+      {
+        name: 'Summed PSD',
+        type: 'line',
+        showSymbol: false,
+        data: zip(summed.freq_bins, summed.psd),
+      },
+    ],
+  }
+}
