@@ -20,37 +20,21 @@ use crate::storage::StorageError;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ApiError {
     /// No such session, recording or path.
-    NotFound {
-        message: String,
-    },
+    NotFound { message: String },
     /// The path exists but not for this method.
-    MethodNotAllowed {
-        message: String,
-    },
+    MethodNotAllowed { message: String },
     /// A bad path, query or body.
-    InvalidRequest {
-        message: String,
-    },
+    InvalidRequest { message: String },
     /// The uploaded file is not a valid Klipper raw CSV.
-    InvalidCsv {
-        message: String,
-    },
+    InvalidCsv { message: String },
     /// The upload is over the size limit.
-    TooLarge {
-        message: String,
-    },
+    TooLarge { message: String },
     /// Another import is running.
-    Busy {
-        message: String,
-    },
+    Busy { message: String },
     /// The session is pinned.
-    Pinned {
-        message: String,
-    },
+    Pinned { message: String },
     /// The session is being downloaded.
-    InUse {
-        message: String,
-    },
+    InUse { message: String },
     /// The retention cap cannot fit the import even after evicting everything eligible.
     CapExceeded {
         message: String,
@@ -71,23 +55,19 @@ pub enum ApiError {
         #[cfg_attr(feature = "ts", ts(type = "number"))]
         available: u64,
     },
-    /// A write from another origin.
     /// One or more pre-flight checks failed; every failed check is listed.
     PreflightFailed {
         message: String,
         failures: Vec<CheckFailure>,
     },
-    CrossOrigin {
-        message: String,
-    },
+    /// A write from another origin.
+    CrossOrigin { message: String },
     /// Storage is not open yet: the daemon is waiting for Moonraker to report the data directory.
-    StorageUnavailable {
-        message: String,
-    },
+    StorageUnavailable { message: String },
+    /// Moonraker cannot answer: not connected, or it answered with an error.
+    MoonrakerUnavailable { message: String },
     /// Anything else that went wrong on the daemon.
-    Internal {
-        message: String,
-    },
+    Internal { message: String },
 }
 
 impl ApiError {
@@ -137,7 +117,9 @@ impl ApiError {
                 StatusCode::INSUFFICIENT_STORAGE
             }
             Self::CrossOrigin { .. } => StatusCode::FORBIDDEN,
-            Self::StorageUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            Self::StorageUnavailable { .. } | Self::MoonrakerUnavailable { .. } => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
             Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
