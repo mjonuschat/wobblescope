@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "pnpm run build:wasm && vite",
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "build": "pnpm run build:wasm && tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
