@@ -6,6 +6,7 @@
 //! them on a blocking thread.
 
 pub mod admission;
+pub mod capture;
 pub mod estimate;
 pub mod index;
 pub mod pins;
@@ -21,6 +22,7 @@ use serde::Serialize;
 use wobblescope_session::SessionError;
 use wobblescope_session::fs::{Session, open_session, remove_session, sweep_leftovers};
 use wobblescope_session::meta::SessionMeta;
+use wobblescope_session::writer::{Recovery, recover_unsealed};
 
 pub use admission::Reservation;
 use index::{Index, ListFilter, Skipped, Summary};
@@ -106,11 +108,19 @@ pub struct OpenReport {
     pub skipped: Vec<Skipped>,
     /// Crash leftovers that were removed.
     pub swept: Vec<String>,
+    /// Captures a crash left unfinished, and what recovery did with each.
+    pub recovered: Vec<Recovery>,
     /// Pins dropped because their session no longer exists.
     pub pruned_pins: Vec<String>,
 }
 
 impl OpenReport {
+    /// Whether startup found a capture that a crash cut short.
+    #[must_use]
+    pub fn unfinished_capture_found(&self) -> bool {
+        !self.recovered.is_empty()
+    }
+
     /// One human-readable line per item.
     pub fn lines(&self) -> Vec<String> {
         let mut out = Vec::new();
@@ -119,6 +129,24 @@ impl OpenReport {
                 "skipped session directory {}: {}",
                 s.name, s.reason
             ));
+        }
+        for r in &self.recovered {
+            out.push(match r {
+                Recovery::Finished { id } => {
+                    format!("finished sealing capture {id}, which a crash interrupted")
+                }
+                Recovery::Failed { id, segments } => format!(
+                    "recovered unfinished capture {id} as a failed session with {segments} \
+                     segment(s)"
+                ),
+                Recovery::Discarded { id } => {
+                    format!("discarded unfinished capture {id}: no segment had finished")
+                }
+                Recovery::Kept { id, reason } => format!(
+                    "could not recover unfinished capture {id}: {reason}; its files are kept for \
+                     the next start"
+                ),
+            });
         }
         for n in &self.swept {
             out.push(format!("removed leftover {n}"));
@@ -198,6 +226,7 @@ impl Storage {
         let pins_path = data_dir.join("pins.json");
         fs::create_dir_all(&sessions_dir)?;
         let mut pins = Pins::load(&pins_path)?;
+        let recovered = recover_unsealed(&sessions_dir)?;
         let swept = sweep_leftovers(&sessions_dir)?;
         let pruned_pins = pins.prune(|id| fs::symlink_metadata(sessions_dir.join(id)).is_ok());
         let (index, skipped) = index::scan(&sessions_dir, &pins)?;
@@ -221,6 +250,7 @@ impl Storage {
             OpenReport {
                 skipped,
                 swept,
+                recovered,
                 pruned_pins,
             },
         ))
