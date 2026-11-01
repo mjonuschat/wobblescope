@@ -14,9 +14,9 @@ use super::{Inner, State, Storage, StorageError, leased, remove_and_forget, rese
 
 /// Space and an id held for a test that has been admitted. Dropping it unused releases both.
 pub struct Reservation {
-    inner: Arc<Inner>,
-    id: String,
-    armed: bool,
+    pub(super) inner: Arc<Inner>,
+    pub(super) id: String,
+    pub(super) armed: bool,
 }
 
 impl Reservation {
@@ -60,6 +60,7 @@ impl Storage {
         if st.index.get(id).is_some()
             || st.reservations.contains_key(id)
             || fs::symlink_metadata(inner.sessions_dir.join(id)).is_ok()
+            || fs::symlink_metadata(inner.sessions_dir.join(format!(".{id}.tmp"))).is_ok()
         {
             return Err(StorageError::IdTaken(id.to_owned()));
         }
@@ -134,6 +135,16 @@ where
     }
     index::created_at_unix(&meta.created_at).map_err(StorageError::BadSession)?;
     write_session(&inner.sessions_dir, meta, source)?;
+    index_sealed(inner, st, id, meta)
+}
+
+/// Sizes the sealed session `id`, indexes it and returns its summary.
+pub(super) fn index_sealed(
+    inner: &Inner,
+    st: &mut State,
+    id: &str,
+    meta: &SessionMeta,
+) -> Result<Summary, StorageError> {
     let size = open_session(&inner.sessions_dir, id)?.size_bytes()?;
     let summary =
         Summary::from_meta(meta, size, st.pins.contains(id)).map_err(StorageError::BadSession)?;

@@ -1,19 +1,19 @@
 //! Turning a Klipper raw CSV into a stored session: resolve the axis, parse, then admit and
 //! store. Nothing is admitted, and so nothing evicted, until the file has parsed.
 
-use time::{OffsetDateTime, UtcOffset};
+use time::OffsetDateTime;
 use wobblescope_core::fit::Axis;
 use wobblescope_session::import::{
     ImportRequest, import_klipper_csv, suggest_hints_from_file_name,
 };
 
+use crate::capture::iso_utc;
+use crate::capture::session_id::{base_id, first_free_id};
 use crate::storage::estimate::estimate_from_samples;
 use crate::storage::index::Summary;
 use crate::storage::{Storage, StorageError};
 
 /// The highest id suffix tried when ids from the same second collide.
-const MAX_SUFFIX: u32 = 99;
-
 /// What the caller says about the file being imported.
 #[derive(Debug, Clone, Copy)]
 pub struct ImportOptions<'a> {
@@ -74,17 +74,8 @@ pub fn import_csv<B: AsRef<[u8]>>(
         .or(hints.axis)
         .ok_or(ImportError::MissingAxis)?;
 
-    let now = now.to_offset(UtcOffset::UTC);
-    let created_at = format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        now.year(),
-        u8::from(now.month()),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second()
-    );
-    let base = format!("csv-{}", created_at.replace(['-', ':'], ""));
+    let created_at = iso_utc(now);
+    let base = base_id("csv", &created_at);
 
     let text = std::str::from_utf8(body.as_ref())
         .map_err(|e| ImportError::InvalidCsv(format!("the body is not UTF-8: {e}")))?;
@@ -107,20 +98,10 @@ pub fn import_csv<B: AsRef<[u8]>>(
     let estimate = estimate_from_samples(imported.samples.len() as u64).unwrap_or(u64::MAX);
     let mut meta = imported.meta;
     let mut samples = imported.samples;
-    for attempt in 1..=MAX_SUFFIX {
-        let id = if attempt == 1 {
-            base.clone()
-        } else {
-            format!("{base}-{attempt}")
-        };
-        match storage.admit(&id, estimate) {
-            Ok(reservation) => {
-                meta.id = id;
-                return Ok(storage.store(reservation, &meta, |_| Ok(std::mem::take(&mut samples)))?);
-            }
-            Err(StorageError::IdTaken(_)) => {}
-            Err(e) => return Err(e.into()),
-        }
-    }
-    Err(ImportError::NoFreeId)
+    let admitted = first_free_id(&base, |id| storage.admit(id, estimate))?;
+    let Some((id, reservation)) = admitted else {
+        return Err(ImportError::NoFreeId);
+    };
+    meta.id = id;
+    Ok(storage.store(reservation, &meta, |_| Ok(std::mem::take(&mut samples)))?)
 }
