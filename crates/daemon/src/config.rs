@@ -1,13 +1,15 @@
-//! The daemon's config file. For now it holds only the storage settings; later plans add their
-//! own keys to the same file.
+//! The daemon's config file: the storage settings and where Moonraker is.
 
+use std::fmt;
 use std::path::{Path, PathBuf};
 
+use axum::http::Uri;
 use serde::Deserialize;
 
 const MIB: u64 = 1024 * 1024;
 const DEFAULT_CAP_MIB: u64 = 2048;
 const DEFAULT_HEADROOM_MIB: u64 = 256;
+const DEFAULT_MOONRAKER_URL: &str = "http://127.0.0.1:7125";
 
 /// Why the config could not be used.
 #[derive(Debug, thiserror::Error)]
@@ -20,13 +22,21 @@ pub enum ConfigError {
         /// The I/O error.
         source: std::io::Error,
     },
-    /// The file is not valid TOML, has an unknown key or a value of the wrong type.
-    #[error("invalid config {}: {source}", path.display())]
+    /// The file is not valid TOML, has an unknown key or a value of the wrong type. The text is
+    /// the parser's message with its position, never the offending line, which could hold the
+    /// API key.
+    #[error("invalid config {}: {message} at line {line}, column {column}{}", path.display(), key_note(key))]
     Parse {
         /// The config file.
         path: PathBuf,
-        /// The parser's error, which names the key.
-        source: toml::de::Error,
+        /// The parser's message.
+        message: String,
+        /// The 1-based line of the error.
+        line: usize,
+        /// The 1-based column of the error.
+        column: usize,
+        /// The key on that line, when the line starts with one.
+        key: Option<String>,
     },
     /// A value is out of range.
     #[error("invalid config {}: {key} {reason}", path.display())]
@@ -43,6 +53,38 @@ pub enum ConfigError {
     NoParent(PathBuf),
 }
 
+fn key_note(key: &Option<String>) -> String {
+    key.as_ref()
+        .map_or_else(String::new, |k| format!(" (key {k})"))
+}
+
+/// Builds the parse error from the parser's, keeping only its message, its position and the
+/// line's key.
+fn parse_error(path: &Path, text: &str, e: &toml::de::Error) -> ConfigError {
+    let offset = e.span().map_or(0, |s| s.start).min(text.len());
+    let before = &text[..offset];
+    let line = before.matches('\n').count() + 1;
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    let column = text[line_start..offset].chars().count() + 1;
+    let line_text = text[line_start..].lines().next().unwrap_or_default();
+    let key = line_text
+        .split_once('=')
+        .map(|(k, _)| k.trim())
+        .filter(|k| {
+            !k.is_empty()
+                && k.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        })
+        .map(str::to_owned);
+    ConfigError::Parse {
+        path: path.to_owned(),
+        message: e.message().to_owned(),
+        line,
+        column,
+        key,
+    }
+}
+
 /// The keys of the file, in the units a person writes.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,10 +92,12 @@ struct RawConfig {
     storage_dir: Option<PathBuf>,
     retention_cap_mib: Option<u64>,
     free_space_headroom_mib: Option<u64>,
+    moonraker_url: Option<String>,
+    moonraker_api_key: Option<String>,
 }
 
 /// The storage settings, with sizes in bytes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Settings {
     /// Where sessions and pins live, when the config names it.
     pub storage_dir: Option<PathBuf>,
@@ -61,6 +105,39 @@ pub struct Settings {
     pub retention_cap_bytes: u64,
     /// Free space that must remain on the sessions filesystem after a test's estimate.
     pub free_space_headroom_bytes: u64,
+    /// The base URL of Moonraker: plain `http`, a host, and a path that is its route prefix.
+    pub moonraker_url: Uri,
+    /// The API key sent when identifying to Moonraker, when the config sets one.
+    pub moonraker_api_key: Option<String>,
+}
+
+impl Settings {
+    /// The websocket URL of Moonraker: the base URL with the `ws` scheme and `/websocket`
+    /// appended to its path.
+    #[must_use]
+    pub fn moonraker_ws_url(&self) -> String {
+        let authority = self
+            .moonraker_url
+            .authority()
+            .map_or("", axum::http::uri::Authority::as_str);
+        let prefix = self.moonraker_url.path().trim_end_matches('/');
+        format!("ws://{authority}{prefix}/websocket")
+    }
+}
+
+impl fmt::Debug for Settings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Settings")
+            .field("storage_dir", &self.storage_dir)
+            .field("retention_cap_bytes", &self.retention_cap_bytes)
+            .field("free_space_headroom_bytes", &self.free_space_headroom_bytes)
+            .field("moonraker_url", &self.moonraker_url)
+            .field(
+                "moonraker_api_key",
+                &self.moonraker_api_key.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
 }
 
 impl Default for Settings {
@@ -69,8 +146,38 @@ impl Default for Settings {
             storage_dir: None,
             retention_cap_bytes: DEFAULT_CAP_MIB * MIB,
             free_space_headroom_bytes: DEFAULT_HEADROOM_MIB * MIB,
+            moonraker_url: Uri::from_static(DEFAULT_MOONRAKER_URL),
+            moonraker_api_key: None,
         }
     }
+}
+
+/// Checks `moonraker_url` and returns it parsed.
+fn moonraker_url(text: &str) -> Result<Uri, &'static str> {
+    if text.contains('#') {
+        return Err("must not have a fragment");
+    }
+    let uri: Uri = text
+        .parse()
+        .map_err(|_| "must be a URL like http://127.0.0.1:7125")?;
+    match uri.scheme_str() {
+        Some("http") => {}
+        Some("https") => return Err("https is not supported yet; use a plain http URL"),
+        _ => return Err("must start with http://"),
+    }
+    let Some(authority) = uri.authority() else {
+        return Err("must name a host");
+    };
+    if authority.as_str().contains('@') {
+        return Err("must not contain credentials");
+    }
+    if authority.host().is_empty() {
+        return Err("must name a host");
+    }
+    if uri.query().is_some() {
+        return Err("must not have a query");
+    }
+    Ok(uri)
 }
 
 /// Loads the settings from `path`, or returns the defaults when there is no path.
@@ -85,10 +192,7 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         path: path.to_owned(),
         source,
     })?;
-    let raw: RawConfig = toml::from_str(&text).map_err(|source| ConfigError::Parse {
-        path: path.to_owned(),
-        source,
-    })?;
+    let raw: RawConfig = toml::from_str(&text).map_err(|e| parse_error(path, &text, &e))?;
     let invalid = |key, reason| ConfigError::Invalid {
         path: path.to_owned(),
         key,
@@ -100,8 +204,17 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
     if raw.retention_cap_mib == Some(0) {
         return Err(invalid("retention_cap_mib", "must be above 0"));
     }
+    if raw.moonraker_api_key.as_deref() == Some("") {
+        return Err(invalid("moonraker_api_key", "must not be empty"));
+    }
     let defaults = Settings::default();
+    let moonraker_url = match raw.moonraker_url {
+        Some(text) => moonraker_url(&text).map_err(|reason| invalid("moonraker_url", reason))?,
+        None => defaults.moonraker_url,
+    };
     Ok(Settings {
+        moonraker_url,
+        moonraker_api_key: raw.moonraker_api_key,
         storage_dir: raw.storage_dir,
         retention_cap_bytes: raw
             .retention_cap_mib
