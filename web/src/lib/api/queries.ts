@@ -9,6 +9,8 @@ import type { Axis } from '@/lib/generated/Axis'
 import type { FitParams } from '@/lib/generated/FitParams'
 import type { SessionDetail } from '@/lib/generated/SessionDetail'
 
+import { getAnalysisClient } from '@/analysis/client'
+
 import { ApiClientError } from './client'
 import {
   type ImportRequest,
@@ -26,6 +28,7 @@ export const queryKeys = {
   sessionList: (filters: SessionFilters) => ['sessions', 'list', filters] as const,
   session: (id: string) => ['sessions', 'detail', id] as const,
   storage: ['storage'] as const,
+  analysesOf: (id: string) => ['analysis', id] as const,
   analysis: (id: string, axis: Axis, params: FitParams) =>
     ['analysis', id, axis, params] as const,
 }
@@ -83,6 +86,9 @@ export function useDeleteSession() {
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: queryKeys.session(id) })
+      // The id can be written again with other data, so nothing of the old session may stay.
+      queryClient.removeQueries({ queryKey: queryKeys.analysesOf(id) })
+      getAnalysisClient().forget(id)
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists })
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage })
     },

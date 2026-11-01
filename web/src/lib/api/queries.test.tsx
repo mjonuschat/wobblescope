@@ -1,7 +1,10 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+import { getAnalysisClient } from '@/analysis/client'
+import { defaultParams } from '@/test/fixtures'
 
 import { stubFetch } from '@/test/http'
 
@@ -38,15 +41,19 @@ describe('query hooks', () => {
     expect(client.getQueryState(queryKeys.storage)?.isInvalidated).toBe(true)
   })
 
-  it('removes the detail after a delete and invalidates lists and storage', async () => {
+  it('removes the session and its analyses after a delete, forgets it in the worker and invalidates lists and storage', async () => {
     const { client, wrapper } = setup()
     stubFetch({ status: 204 })
     client.setQueryData(queryKeys.session('s1'), { summary: {}, meta: {} })
+    client.setQueryData(queryKeys.analysis('s1', 'X', defaultParams), { analysis: {} })
+    const forget = vi.spyOn(getAnalysisClient(), 'forget')
     client.setQueryData(queryKeys.sessionList({ pinned: true }), { sessions: [] })
     client.setQueryData(queryKeys.storage, {})
     const { result } = renderHook(() => useDeleteSession(), { wrapper })
     await act(() => result.current.mutateAsync('s1'))
     expect(client.getQueryData(queryKeys.session('s1'))).toBeUndefined()
+    expect(client.getQueryData(queryKeys.analysis('s1', 'X', defaultParams))).toBeUndefined()
+    expect(forget).toHaveBeenCalledWith('s1')
     expect(client.getQueryState(queryKeys.sessionList({ pinned: true }))?.isInvalidated).toBe(true)
     expect(client.getQueryState(queryKeys.storage)?.isInvalidated).toBe(true)
   })
