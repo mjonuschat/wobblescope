@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute } from '@tanstack/react-router'
 
 import { RootLayout } from '@/components/RootLayout'
+import { RunPage } from '@/pages/run/RunPage'
 import { SessionRoute } from '@/pages/session/SessionRoute'
 import { SessionsPage } from '@/pages/sessions/SessionsPage'
 
@@ -9,7 +10,7 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const runRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => <h1 className="text-xl font-semibold">Run test</h1>,
+  component: RunPage,
 })
 
 const sessionsRoute = createRoute({
