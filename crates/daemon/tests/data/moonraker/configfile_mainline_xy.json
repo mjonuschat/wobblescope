@@ -1,0 +1,17 @@
+{
+  "eventtime": 812.5,
+  "status": {
+    "configfile": {
+      "config": {
+        "printer": {"kinematics": "cartesian"},
+        "adxl345 nh36": {"cs_pin": "nh36: PA4"},
+        "lis2dw ebb36": {"cs_pin": "ebb36: PA4"},
+        "resonance_tester": {
+          "accel_chip_x": "adxl345 nh36",
+          "accel_chip_y": "lis2dw ebb36",
+          "probe_points": "100, 100, 20"
+        }
+      }
+    }
+  }
+}

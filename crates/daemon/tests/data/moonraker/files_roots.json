@@ -1,0 +1,5 @@
+[
+  {"name": "config", "path": "/home/pi/printer_data/config", "permissions": "rw"},
+  {"name": "gcodes", "path": "/home/pi/printer_data/gcodes", "permissions": "rw"},
+  {"name": "logs", "path": "/home/pi/printer_data/logs", "permissions": "r"}
+]

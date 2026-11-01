@@ -1,0 +1,22 @@
+{
+  "eventtime": 6142.2,
+  "status": {
+    "configfile": {
+      "config": {
+        "printer": {"kinematics": "corexy", "max_velocity": "300"},
+        "stepper_x": {"step_pin": "PF13", "dir_pin": "PF12"},
+        "gcode_macro PRINT_START": {"gcode": "G28"},
+        "adxl345 nh36": {"cs_pin": "nh36: PA4", "rate": "1600"},
+        "lis2dw ebb36": {"cs_pin": "ebb36: PA4"},
+        "beacon": {"serial": "/dev/serial/by-id/beacon"},
+        "beacon model default": {"model_temp": "18.0"},
+        "lis3dh bed": {"cs_pin": "PA9"},
+        "resonance_tester": {
+          "accel_chips": "adxl345 nh36, lis2dw ebb36",
+          "accel_chip": "adxl345 nh36",
+          "probe_points": "150, 150, 20"
+        }
+      }
+    }
+  }
+}
