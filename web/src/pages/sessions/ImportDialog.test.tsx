@@ -1,9 +1,10 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import type { Reply } from '@/test/http'
 import { stubApiWithStatus as stubApi } from '@/test/status'
 import { renderRoute } from '@/test/render'
+import { chipsSnapshot } from '@/test/capture'
 import { summary } from '@/test/summaries'
 
 function api(onImport: Reply | ((search: URLSearchParams) => Reply) = { status: 201, body: summary('csv-20261031T120000Z') }) {
@@ -120,6 +121,63 @@ describe('reopening the import dialog', () => {
     fill({ chip: 'adxl345' })
     submit()
     expect(await screen.findByText('Choose a CSV file.')).toBeTruthy()
+    expect(posts(calls)).toHaveLength(0)
+  })
+})
+
+describe('the chip picker', () => {
+  // The sessions page behind the dialog has its own chip filter, so look inside the dialog.
+  const inDialog = () => within(screen.getByRole('dialog'))
+
+  function apiWithChips() {
+    return stubApi(({ url, method }) => {
+      if (method === 'POST') return { status: 201, body: summary('csv-20261031T120000Z') }
+      if (url.pathname.endsWith('/chips')) return { body: chipsSnapshot() }
+      if (url.pathname.endsWith('/storage')) return { status: 503, body: { error: 'storage_unavailable', message: 'x' } }
+      if (url.pathname.endsWith('/sessions')) return { body: { sessions: [summary('s1')] } }
+      return { status: 404, body: { error: 'not_found', message: 'no' } }
+    })
+  }
+
+  it('imports with the section name of a listed chip', async () => {
+    const calls = apiWithChips()
+    await openDialog()
+    await waitFor(() => expect(inDialog().queryByLabelText('Chip')).toBeTruthy())
+    fireEvent.change(inDialog().getByLabelText('Chip'), { target: { value: 'lis2dw ebb36' } })
+    expect(inDialog().queryByLabelText('Chip name')).toBeNull()
+    fill({ file: csv() })
+    submit()
+    await waitFor(() => expect(posts(calls)).toHaveLength(1))
+    const { url } = posts(calls)[0] as unknown as { url: URL }
+    expect(url.searchParams.get('chip')).toBe('lis2dw ebb36')
+  })
+
+  it('reveals the text field for Other… and submits the typed name', async () => {
+    const calls = apiWithChips()
+    await openDialog()
+    await waitFor(() => expect(inDialog().queryByLabelText('Chip')).toBeTruthy())
+    fireEvent.change(inDialog().getByLabelText('Chip'), { target: { value: '__other__' } })
+    fill({ file: csv(), chip: 'adxl345 nh36' })
+    submit()
+    await waitFor(() => expect(posts(calls)).toHaveLength(1))
+    const { url } = posts(calls)[0] as unknown as { url: URL }
+    expect(url.searchParams.get('chip')).toBe('adxl345 nh36')
+  })
+
+  it('shows only the text field when no chips are known', async () => {
+    api()
+    await openDialog()
+    expect(inDialog().getByLabelText('Chip name')).toBeTruthy()
+    expect(inDialog().queryByLabelText('Chip')).toBeNull()
+  })
+
+  it('asks for a chip when none is chosen', async () => {
+    const calls = apiWithChips()
+    await openDialog()
+    await waitFor(() => expect(inDialog().queryByLabelText('Chip')).toBeTruthy())
+    fill({ file: csv() })
+    submit()
+    expect(await screen.findByText('Enter the chip name.')).toBeTruthy()
     expect(posts(calls)).toHaveLength(0)
   })
 })

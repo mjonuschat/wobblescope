@@ -13,9 +13,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiClientError } from '@/lib/api/client'
-import { useImportCsv } from '@/lib/api/queries'
+import { useChips, useImportCsv } from '@/lib/api/queries'
 import { formatBytes } from '@/lib/format'
 import type { Axis } from '@/lib/generated/Axis'
+
+/** The select entry that reveals the typed field. */
+const OTHER = '__other__'
 
 /** The daemon refuses a larger body, so the browser does not send one. */
 export const MAX_IMPORT_BYTES = 64 * 1024 * 1024
@@ -55,7 +58,14 @@ function ImportForm({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate()
   const importCsv = useImportCsv()
   const [file, setFile] = useState<File | null>(null)
-  const [chip, setChip] = useState('')
+  const chips = useChips()
+  const known = chips.data?.known ? chips.data.chips.map((c) => c.section) : []
+  // With known chips the user picks one, or "Other…" to type a name. Without them only the
+  // text field shows, as before.
+  const [choice, setChoice] = useState('')
+  const [typed, setTyped] = useState('')
+  const typing = known.length === 0 || choice === OTHER
+  const chip = typing ? typed : choice
   const [axis, setAxis] = useState<Axis | ''>('')
   const [point, setPoint] = useState('')
   const [problem, setProblem] = useState<{ field: 'file' | 'chip'; text: string } | null>(null)
@@ -100,16 +110,38 @@ function ImportForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
       </div>
-      <div className="space-y-1">
-        <Label htmlFor="import-chip">Chip name</Label>
-        <Input
-          id="import-chip"
-          placeholder="adxl345"
-          value={chip}
-          aria-invalid={problem?.field === 'chip'}
-          onChange={(e) => setChip(e.target.value)}
-        />
-      </div>
+      {known.length > 0 && (
+        <div className="space-y-1">
+          <Label htmlFor="import-chip-select">Chip</Label>
+          <select
+            id="import-chip-select"
+            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+            value={choice}
+            aria-invalid={problem?.field === 'chip' && !typing}
+            onChange={(e) => setChoice(e.target.value)}
+          >
+            <option value="">Choose a chip</option>
+            {known.map((section) => (
+              <option key={section} value={section}>
+                {section}
+              </option>
+            ))}
+            <option value={OTHER}>Other…</option>
+          </select>
+        </div>
+      )}
+      {typing && (
+        <div className="space-y-1">
+          <Label htmlFor="import-chip">Chip name</Label>
+          <Input
+            id="import-chip"
+            placeholder="adxl345"
+            value={typed}
+            aria-invalid={problem?.field === 'chip'}
+            onChange={(e) => setTyped(e.target.value)}
+          />
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <Label htmlFor="import-axis">Axis</Label>
