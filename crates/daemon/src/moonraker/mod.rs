@@ -15,6 +15,7 @@ mod link;
 pub mod rpc;
 pub mod status;
 
+use chips::Availability;
 use discovery::{ChipList, RootsError};
 use status::Status;
 
@@ -70,8 +71,21 @@ impl Default for Timings {
 pub struct Moonraker {
     status: watch::Receiver<Status>,
     chips: watch::Receiver<ChipsSnapshot>,
+    chips_writer: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Receiver<Option<Rpc>>,
     bridge_base: std::sync::Arc<str>,
+}
+
+impl ChipsSnapshot {
+    /// Forgets every availability result and reports whether there was one.
+    pub fn reset_availability(&mut self) -> bool {
+        let mut had = false;
+        for chip in &mut self.list.chips {
+            had |= chip.availability != Availability::Unchecked;
+            chip.availability = Availability::Unchecked;
+        }
+        had
+    }
 }
 
 impl Moonraker {
@@ -85,6 +99,29 @@ impl Moonraker {
     #[must_use]
     pub fn chips(&self) -> ChipsSnapshot {
         self.chips.borrow().clone()
+    }
+
+    /// Records what a check found. A result for a section that is no longer listed is dropped,
+    /// and so is every result when the list is not current: a restart overtook the check.
+    pub fn set_availability(&self, results: Vec<(String, Availability)>) {
+        self.chips_writer.send_if_modified(|snapshot| {
+            if !snapshot.current {
+                return false;
+            }
+            let mut changed = false;
+            for (section, availability) in results {
+                if let Some(chip) = snapshot
+                    .list
+                    .chips
+                    .iter_mut()
+                    .find(|c| c.section == section)
+                {
+                    chip.availability = availability;
+                    changed = true;
+                }
+            }
+            changed
+        });
     }
 
     /// The current control connection, or `None` while Moonraker is not connected.
@@ -123,7 +160,7 @@ fn encode_query(text: &str) -> String {
 /// The writing half of the pair: what the supervisor publishes through.
 pub struct Publisher {
     status: watch::Sender<Status>,
-    chips: watch::Sender<ChipsSnapshot>,
+    chips: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Sender<Option<Rpc>>,
 }
 
@@ -149,16 +186,18 @@ impl Publisher {
 pub fn channel() -> (Publisher, Moonraker) {
     let (status_tx, status) = watch::channel(Status::default());
     let (chips_tx, chips) = watch::channel(ChipsSnapshot::default());
+    let chips_tx = std::sync::Arc::new(chips_tx);
     let (control_tx, control) = watch::channel(None);
     (
         Publisher {
             status: status_tx,
-            chips: chips_tx,
+            chips: chips_tx.clone(),
             control: control_tx,
         },
         Moonraker {
             status,
             chips,
+            chips_writer: chips_tx,
             control,
             bridge_base: Settings::default().moonraker_bridge_base().into(),
         },

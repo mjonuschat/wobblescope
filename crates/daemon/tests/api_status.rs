@@ -109,11 +109,11 @@ async fn the_chips_show_each_chip_unchecked_the_skipped_reason_and_the_defaults(
     assert_eq!(chips[0]["chip_type"], "adxl345");
     assert_eq!(chips[0]["sensor"], "nh36");
     assert_eq!(chips[0]["nominal_rate_hz"], 3200.0);
-    assert_eq!(chips[0]["availability"], "unchecked");
+    assert_eq!(chips[0]["availability"], json!({"state": "unchecked"}));
     assert_eq!(chips[1]["chip_type"], "beacon");
     assert_eq!(chips[1]["sensor"], serde_json::Value::Null);
     assert_eq!(chips[1]["nominal_rate_hz"], serde_json::Value::Null);
-    assert_eq!(chips[1]["availability"], "unchecked");
+    assert_eq!(chips[1]["availability"], json!({"state": "unchecked"}));
     assert_eq!(body["skipped"][0]["section"], "lis3dh");
     assert_eq!(body["skipped"][0]["reason"], "lis3dh is not supported yet");
     assert_eq!(body["defaults"]["x"], json!(["adxl345 nh36"]));

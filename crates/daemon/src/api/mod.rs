@@ -136,6 +136,7 @@ pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGat
         .route("/storage", get(sessions::usage))
         .route("/status", get(status::status))
         .route("/chips", get(status::chips))
+        .route("/chips/check", post(status::check_chips))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(origin::guard))

@@ -5,9 +5,13 @@ use axum::Json;
 use axum::extract::State;
 use serde::Serialize;
 
-use super::ApiState;
+use time::OffsetDateTime;
+
+use super::{ApiError, ApiState};
+use crate::capture::CheckFailure;
+use crate::capture::availability::{AVAILABILITY_TIMEOUT, availability_of, open_chips};
 use crate::moonraker::ChipsSnapshot;
-use crate::moonraker::status::{KlippyStatus, MoonrakerStatus};
+use crate::moonraker::status::{KlippyState, KlippyStatus, MoonrakerState, MoonrakerStatus};
 
 /// Whether storage is open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -56,4 +60,48 @@ pub(super) async fn status(State(state): State<ApiState>) -> Json<StatusResponse
 
 pub(super) async fn chips(State(state): State<ApiState>) -> Json<ChipsSnapshot> {
     Json(state.moonraker.chips())
+}
+
+/// `POST /api/chips/check`: opens every configured chip, waits for valid samples, records what
+/// each one did and closes the connections again. The answer is the updated chip list.
+pub(super) async fn check_chips(
+    State(state): State<ApiState>,
+) -> Result<Json<ChipsSnapshot>, ApiError> {
+    let status = state.moonraker.status();
+    let mut failures = Vec::new();
+    if status.moonraker.state != MoonrakerState::Connected {
+        failures.push(CheckFailure::new(
+            "moonraker_connected",
+            "the daemon is not connected to Moonraker",
+        ));
+    } else if status.klippy.state != KlippyState::Ready {
+        failures.push(CheckFailure::new(
+            "klipper_ready",
+            format!(
+                "Klipper is {}, not ready; chips can be checked once it is",
+                status.klippy.state.as_str()
+            ),
+        ));
+    }
+    if !failures.is_empty() {
+        return Err(ApiError::preflight(failures));
+    }
+    let chips = state.moonraker.chips().list.chips;
+    let outcomes = open_chips(&state.moonraker, &chips, AVAILABILITY_TIMEOUT)
+        .await
+        .map_err(|e| {
+            ApiError::preflight(vec![CheckFailure::new(
+                "moonraker_connected",
+                e.to_string(),
+            )])
+        })?;
+    let now = OffsetDateTime::now_utc();
+    let results = outcomes
+        .iter()
+        .map(|(chip, outcome)| (chip.section.clone(), availability_of(outcome, now)))
+        .collect();
+    // The connections close when `outcomes` drops, after the results are recorded.
+    state.moonraker.set_availability(results);
+    drop(outcomes);
+    Ok(Json(state.moonraker.chips()))
 }

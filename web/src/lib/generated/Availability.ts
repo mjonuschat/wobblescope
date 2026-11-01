@@ -3,4 +3,16 @@
 /**
  * Whether a chip was seen delivering samples.
  */
-export type Availability = "unchecked";
+export type Availability = { "state": "unchecked" } | { "state": "available", 
+/**
+ * The sample rate seen during the check, in Hz.
+ */
+observed_rate_hz: number, 
+/**
+ * When the check ran, as an ISO 8601 UTC time.
+ */
+checked_at: string, } | { "state": "unavailable", 
+/**
+ * What went wrong, in Klipper's words where it had any.
+ */
+reason: string, };

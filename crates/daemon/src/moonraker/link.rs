@@ -268,9 +268,10 @@ impl Link {
         }
         if old == KlippyState::Ready && state != KlippyState::Ready {
             tracker.chips_current = false;
-            self.publisher
-                .chips
-                .send_if_modified(|s| std::mem::replace(&mut s.current, false));
+            self.publisher.chips.send_if_modified(|s| {
+                let was_current = std::mem::replace(&mut s.current, false);
+                s.reset_availability() | was_current
+            });
         }
         if old != state {
             tracker.changes += 1;
@@ -317,9 +318,10 @@ impl Link {
             s.klippy.state = KlippyState::Unknown;
             s.klippy.message = None;
         });
-        self.publisher
-            .chips
-            .send_if_modified(|s| std::mem::replace(&mut s.current, false));
+        self.publisher.chips.send_if_modified(|s| {
+            let was_current = std::mem::replace(&mut s.current, false);
+            s.reset_availability() | was_current
+        });
     }
 
     /// Logs a change of Moonraker's state, once per change.
