@@ -1,26 +1,10 @@
-import {
-  Link,
-  Outlet,
-  createRootRoute,
-  createRoute,
-} from '@tanstack/react-router'
+import { createRootRoute, createRoute } from '@tanstack/react-router'
 
+import { RootLayout } from '@/components/RootLayout'
 import { SessionRoute } from '@/pages/session/SessionRoute'
 import { SessionsPage } from '@/pages/sessions/SessionsPage'
 
-const rootRoute = createRootRoute({
-  component: () => (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <nav className="flex gap-4 border-b border-neutral-800 px-6 py-3">
-        <Link to="/">Run test</Link>
-        <Link to="/sessions">Sessions</Link>
-      </nav>
-      <main className="p-6">
-        <Outlet />
-      </main>
-    </div>
-  ),
-})
+const rootRoute = createRootRoute({ component: RootLayout })
 
 const runRoute = createRoute({
   getParentRoute: () => rootRoute,

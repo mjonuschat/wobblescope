@@ -1,10 +1,11 @@
 import type { Axis } from '@/lib/generated/Axis'
 import type { SessionDetail } from '@/lib/generated/SessionDetail'
 import type { SessionList } from '@/lib/generated/SessionList'
+import type { StatusResponse } from '@/lib/generated/StatusResponse'
 import type { Summary } from '@/lib/generated/Summary'
 import type { Usage } from '@/lib/generated/Usage'
 
-import { apiFetch, apiJson, apiUrl } from './client'
+import { ApiClientError, apiFetch, apiJson, apiUrl } from './client'
 
 /** The list filters the app offers. */
 export interface SessionFilters {
@@ -27,6 +28,33 @@ export function getSession(id: string, signal?: AbortSignal) {
 
 export function getStorage(signal?: AbortSignal) {
   return apiJson<Usage>('storage', { signal })
+}
+
+/** How long the status request may take before the app treats the daemon as not answering. */
+export const STATUS_DEADLINE_MS = 4000
+
+/**
+ * The daemon's status. A request that never settles would keep the previous healthy answer on
+ * screen, because a query reuses a pending fetch, so it fails after [`STATUS_DEADLINE_MS`].
+ */
+export async function getStatus(signal?: AbortSignal): Promise<StatusResponse> {
+  const controller = new AbortController()
+  signal?.addEventListener('abort', () => controller.abort())
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new ApiClientError('The daemon did not answer in time', null))
+    }, STATUS_DEADLINE_MS)
+  })
+  try {
+    return await Promise.race([
+      apiJson<StatusResponse>('status', { signal: controller.signal }),
+      deadline,
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export function pinSession(id: string, pinned: boolean) {
