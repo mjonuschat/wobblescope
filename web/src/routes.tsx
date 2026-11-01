@@ -5,6 +5,8 @@ import {
   createRoute,
 } from '@tanstack/react-router'
 
+import { SessionsPage } from '@/pages/sessions/SessionsPage'
+
 const rootRoute = createRootRoute({
   component: () => (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -28,7 +30,13 @@ const runRoute = createRoute({
 const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions',
-  component: () => <h1 className="text-xl font-semibold">Sessions</h1>,
+  component: SessionsPage,
 })
 
-export const routeTree = rootRoute.addChildren([runRoute, sessionsRoute])
+const sessionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$id',
+  component: () => <h1 className="text-xl font-semibold">Session</h1>,
+})
+
+export const routeTree = rootRoute.addChildren([runRoute, sessionsRoute, sessionRoute])
