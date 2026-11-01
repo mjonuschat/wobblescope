@@ -39,7 +39,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         settings.storage_dir.is_none(),
     );
 
-    let app = api::mount(cell.clone()).fallback(web::static_handler);
+    let app = api::mount(cell.clone(), moonraker.clone()).fallback(web::static_handler);
     let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
     let serve = std::future::IntoFuture::into_future(axum::serve(listener, app));
     tokio::pin!(serve);

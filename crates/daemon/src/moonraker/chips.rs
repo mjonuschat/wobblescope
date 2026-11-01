@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 /// The accelerometer types the daemon can capture from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ChipType {
     /// An ADXL345, plain or named.
     Adxl345,
@@ -18,6 +19,7 @@ pub enum ChipType {
 /// Whether a chip was seen delivering samples.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Availability {
     /// No check has run.
     Unchecked,
@@ -25,6 +27,7 @@ pub enum Availability {
 
 /// An accelerometer section of the Klipper config.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Chip {
     /// The section name as configured, for example `adxl345 nh36`.
     pub section: String,
@@ -42,6 +45,7 @@ pub struct Chip {
 
 /// An accelerometer section the daemon cannot use yet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SkippedSection {
     /// The section name as configured.
     pub section: String,

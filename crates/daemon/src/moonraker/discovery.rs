@@ -31,6 +31,7 @@ pub enum ConfigfileError {
 
 /// The chips a test would use by default on each axis.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Defaults {
     /// Section names for the X axis.
     pub x: Vec<String>,
@@ -40,6 +41,7 @@ pub struct Defaults {
 
 /// What the printer's config says about accelerometers.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChipList {
     /// The usable accelerometer sections.
     pub chips: Vec<Chip>,
