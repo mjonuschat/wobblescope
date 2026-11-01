@@ -8,5 +8,7 @@ pub mod error;
 pub mod fs;
 pub mod import;
 pub mod meta;
+#[cfg(feature = "fs")]
+pub mod writer;
 
 pub use error::SessionError;
