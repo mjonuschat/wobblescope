@@ -334,7 +334,7 @@ async fn bad_options_are_refused_before_the_permit_or_the_body_is_touched() {
     let dir = TempDir::new().unwrap();
     let (s, _) = open(dir.path(), BIG);
     let gate = ImportGate::default();
-    let app = mount_with(Some(s), gate.clone());
+    let app = mount_with(common::cell(Some(s)), gate.clone());
     // While another import holds the gate, a request with bad options still gets its 400.
     let _held = gate.try_acquire().unwrap();
     let polled = Arc::new(AtomicBool::new(false));
@@ -380,7 +380,7 @@ async fn a_second_import_while_one_runs_is_busy() {
     let dir = TempDir::new().unwrap();
     let (s, _) = open(dir.path(), BIG);
     let gate = ImportGate::default();
-    let app = mount_with(Some(s), gate.clone());
+    let app = mount_with(common::cell(Some(s)), gate.clone());
     let permit = gate.try_acquire().unwrap();
     let (status, _, body) = send(&app, import_req("chip=a&axis=x", CSV.as_bytes().to_vec())).await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
@@ -510,5 +510,5 @@ async fn without_storage_a_cross_site_write_is_403_and_a_same_origin_one_503() {
     assert_eq!(send(&app, cross).await.0, StatusCode::FORBIDDEN);
     let (status, _, body) = send(&app, ui("DELETE", "/api/sessions/s1")).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(body_json(&body)["error"], "storage_disabled");
+    assert_eq!(body_json(&body)["error"], "storage_unavailable");
 }

@@ -132,6 +132,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use wobblescope::config::Settings;
+use wobblescope::startup::StorageCell;
 use wobblescope::storage::{OpenReport, Probe, Storage};
 
 pub fn sessions_dir(data: &Path) -> PathBuf {
@@ -173,9 +174,18 @@ use axum::http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
+/// A storage cell that holds `storage`, or is still empty.
+pub fn cell(storage: Option<Storage>) -> StorageCell {
+    let cell = wobblescope::startup::new_cell();
+    if let Some(storage) = storage {
+        let _ = cell.set(storage);
+    }
+    cell
+}
+
 /// The API router on `storage`.
 pub fn app(storage: Option<Storage>) -> Router {
-    wobblescope::api::mount(storage)
+    wobblescope::api::mount(cell(storage))
 }
 
 /// Sends one request through `app` and returns the status, headers and body.

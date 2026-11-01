@@ -229,7 +229,7 @@ async fn unknown_api_paths_and_methods_answer_json() {
 }
 
 #[tokio::test]
-async fn without_storage_every_endpoint_answers_503() {
+async fn until_storage_opens_every_endpoint_answers_503() {
     let app = app(None);
     for uri in [
         "/api/sessions",
@@ -240,7 +240,7 @@ async fn without_storage_every_endpoint_answers_503() {
     ] {
         let (status, body) = json(&app, "GET", uri).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{uri}");
-        assert_eq!(body["error"], "storage_disabled");
+        assert_eq!(body["error"], "storage_unavailable");
     }
     let (status, _) = json(&app, "GET", "/api/nope").await;
     assert_eq!(status, StatusCode::NOT_FOUND);

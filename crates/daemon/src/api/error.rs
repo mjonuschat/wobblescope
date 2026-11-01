@@ -56,8 +56,8 @@ pub enum ApiError {
     },
     /// A write from another origin.
     CrossOrigin { message: String },
-    /// No storage directory is configured.
-    StorageDisabled { message: String },
+    /// Storage is not open yet: the daemon is waiting for Moonraker to report the data directory.
+    StorageUnavailable { message: String },
     /// Anything else that went wrong on the daemon.
     Internal { message: String },
 }
@@ -98,7 +98,7 @@ impl ApiError {
                 StatusCode::INSUFFICIENT_STORAGE
             }
             Self::CrossOrigin { .. } => StatusCode::FORBIDDEN,
-            Self::StorageDisabled { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            Self::StorageUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

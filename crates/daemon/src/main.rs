@@ -3,7 +3,9 @@ use std::process::ExitCode;
 
 use wobblescope::api;
 use wobblescope::config;
-use wobblescope::storage::{Storage, default_probe};
+use wobblescope::moonraker::{self, Timings};
+use wobblescope::startup;
+use wobblescope::storage::default_probe;
 use wobblescope::web;
 
 const LISTEN_ADDR: &str = "127.0.0.1:7126";
@@ -24,27 +26,31 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let config_path = std::env::var_os(CONFIG_ENV).map(PathBuf::from);
     let settings = config::load(config_path.as_deref())?;
 
-    // TEMPORARY: the default data directory comes from Moonraker's file roots, and there is no
-    // Moonraker client yet. Until discovery exists, storage needs `storage_dir` in the config.
-    let storage = match settings.storage_dir.as_deref() {
-        Some(dir) => {
-            let (storage, report) = Storage::open(dir, &settings, default_probe())?;
-            for line in report.lines() {
-                eprintln!("storage: {line}");
-            }
-            Some(storage)
-        }
-        None => {
-            eprintln!(
-                "storage disabled: set storage_dir in the file named by {CONFIG_ENV} \
-                 (the default directory cannot be derived until Moonraker discovery exists)"
-            );
-            None
-        }
-    };
+    // With `storage_dir` set, storage opens before the listener binds. Without it, the
+    // coordinator opens storage once Moonraker names the config root.
+    let cell = startup::new_cell();
+    if let Some(dir) = settings.storage_dir.as_deref() {
+        let storage = startup::open_storage(dir, &settings, default_probe())?;
+        let _ = cell.set(storage);
+    }
+    let (moonraker, report) = moonraker::spawn(
+        &settings,
+        Timings::default(),
+        settings.storage_dir.is_none(),
+    );
 
-    let app = api::mount(storage).fallback(web::static_handler);
+    let app = api::mount(cell.clone()).fallback(web::static_handler);
     let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
-    axum::serve(listener, app).await?;
+    let serve = std::future::IntoFuture::into_future(axum::serve(listener, app));
+    tokio::pin!(serve);
+    if let Some(report) = report {
+        let coordinator = startup::resolve_storage(report, settings, default_probe(), cell);
+        tokio::select! {
+            served = &mut serve => return Ok(served?),
+            opened = coordinator => opened?,
+        }
+    }
+    serve.await?;
+    drop(moonraker);
     Ok(())
 }
