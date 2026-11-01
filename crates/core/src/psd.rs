@@ -15,6 +15,7 @@ pub const WINDOW_T_SEC: f64 = 0.5;
 
 /// Power spectral densities of one recording.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct CalibrationData {
     /// Source name (for display).
     pub name: String,
