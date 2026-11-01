@@ -565,3 +565,46 @@ async fn without_asking_for_the_root_the_fake_never_sees_the_roots_call() {
     until("current chips", || m.chips().current).await;
     assert!(fake.requests_for("server.files.roots").is_empty());
 }
+
+#[tokio::test]
+async fn real_recorded_responses_bootstrap_the_supervisor() {
+    let fake = FakeMoonraker::start().await;
+    fake.on(
+        "server.connection.identify",
+        Script::Result(json!({"connection_id": 1})),
+    );
+    fake.on(
+        "server.info",
+        Script::Result(fixture("real_server_info.json")),
+    );
+    fake.on(
+        "printer.info",
+        Script::Result(fixture("real_printer_info.json")),
+    );
+    fake.on(
+        "server.files.roots",
+        Script::Result(fixture("real_files_roots.json")),
+    );
+    fake.on(
+        "printer.objects.query",
+        Script::Result(fixture("real_configfile.json")),
+    );
+    let (m, report) = spawn(&settings(&fake, None), fast(), true);
+    let root = tokio::time::timeout(DEADLINE, report.unwrap())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        root,
+        std::path::PathBuf::from("/home/pi/printer_data/config")
+    );
+    until("ready and current chips", || {
+        m.status().klippy.state == KlippyState::Ready && m.chips().current
+    })
+    .await;
+    let version = fixture("real_server_info.json")["moonraker_version"].clone();
+    assert_eq!(json!(m.status().moonraker.version), version);
+    assert_eq!(chip_sections(&m), ["adxl345", "lis2dw ebb36"]);
+    assert_eq!(m.chips().list.defaults.x, ["lis2dw ebb36"]);
+}

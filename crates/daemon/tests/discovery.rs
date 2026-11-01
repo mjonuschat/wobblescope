@@ -207,3 +207,24 @@ fn a_query_without_configfile_or_config_is_an_error_not_an_empty_list() {
         Err(ConfigfileError::NoConfig)
     );
 }
+
+#[test]
+fn a_real_printers_config_gives_its_two_chips_and_the_accel_chip_default() {
+    // Recorded from a real Moonraker, trimmed to a few sections around the accelerometers.
+    let list = parse_configfile(&fixture("real_configfile.json")).unwrap();
+    let sections: Vec<&str> = list.chips.iter().map(|c| c.section.as_str()).collect();
+    assert_eq!(sections, ["adxl345", "lis2dw ebb36"]);
+    assert_eq!(list.chips[0].nominal_rate_hz, Some(3200.0));
+    assert_eq!(list.chips[1].sensor.as_deref(), Some("ebb36"));
+    assert!(list.skipped.is_empty());
+    assert_eq!(list.defaults.x, ["lis2dw ebb36"]);
+    assert_eq!(list.defaults.y, ["lis2dw ebb36"]);
+}
+
+#[test]
+fn a_real_printers_file_roots_give_the_config_root() {
+    assert_eq!(
+        parse_config_root(&fixture("real_files_roots.json")).unwrap(),
+        PathBuf::from("/home/pi/printer_data/config")
+    );
+}
