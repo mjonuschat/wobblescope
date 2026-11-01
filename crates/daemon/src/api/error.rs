@@ -60,6 +60,8 @@ pub enum ApiError {
         message: String,
         failures: Vec<CheckFailure>,
     },
+    /// No running test has this id, and no finished test with uncertain motion.
+    TestNotRunning { message: String },
     /// A write from another origin.
     CrossOrigin { message: String },
     /// Storage is not open yet: the daemon is waiting for Moonraker to report the data directory.
@@ -104,7 +106,7 @@ impl ApiError {
     /// The HTTP status of this error.
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::NotFound { .. } => StatusCode::NOT_FOUND,
+            Self::NotFound { .. } | Self::TestNotRunning { .. } => StatusCode::NOT_FOUND,
             Self::MethodNotAllowed { .. } => StatusCode::METHOD_NOT_ALLOWED,
             Self::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             Self::InvalidCsv { .. } => StatusCode::UNPROCESSABLE_ENTITY,
