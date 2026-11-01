@@ -1,8 +1,10 @@
 //! Capture: running a resonance test and recording what the accelerometers see.
 
 pub mod availability;
+pub mod preflight;
 pub mod request;
 pub mod session_id;
+pub mod slot;
 
 use serde::Serialize;
 use time::{OffsetDateTime, UtcOffset};

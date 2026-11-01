@@ -224,3 +224,26 @@ pub async fn json(app: &Router, method: &str, uri: &str) -> (StatusCode, serde_j
 pub async fn json_post(app: &Router, uri: &str) -> (StatusCode, serde_json::Value) {
     json(app, "POST", uri).await
 }
+
+/// A plan for a pulse test of `chips` on the given axes at the printer's default point, built
+/// from the real settings fixture.
+pub fn test_plan(
+    chips: &[&str],
+    axes: &[wobblescope_core::fit::Axis],
+) -> wobblescope::capture::request::TestPlan {
+    use wobblescope::capture::request::{Overrides, TestRequest, plan};
+    use wobblescope::moonraker::settings::parse_settings;
+    let printer = parse_settings(
+        &fake_printer::fixture("real_settings.json"),
+        &fake_printer::fixture("real_printer_info.json"),
+    )
+    .unwrap();
+    let request = TestRequest {
+        chips: chips.iter().map(|c| (*c).to_owned()).collect(),
+        axes: axes.to_vec(),
+        mode: wobblescope_session::meta::Mode::Pulse,
+        overrides: Overrides::default(),
+        points: None,
+    };
+    plan(&request, &printer, 600).unwrap()
+}
