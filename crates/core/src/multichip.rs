@@ -12,6 +12,7 @@ use crate::psd::{CalibrationData, MAX_FREQ};
 /// Display-only sum of several datasets' total PSD on a shared grid. No recommendation is
 /// ever computed from it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SummedPsd {
     /// Frequency grid in Hz.
     pub freq_bins: Vec<f64>,
@@ -49,6 +50,7 @@ pub fn summed_psd(data: &[CalibrationData], max_freq: f64) -> Option<SummedPsd> 
 
 /// An input that could not be turned into a PSD and was not eligible anyway.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct DatasetFailure {
     /// Chip name.
     pub chip: String,
@@ -60,6 +62,7 @@ pub struct DatasetFailure {
 
 /// Analysis of one chip.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChipAnalysis {
     /// Chip name.
     pub chip: String,
@@ -76,6 +79,7 @@ pub struct ChipAnalysis {
 
 /// Full multi-chip analysis.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Analysis {
     /// One entry per chip, in order of first appearance.
     pub per_chip: Vec<ChipAnalysis>,

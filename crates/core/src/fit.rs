@@ -20,6 +20,7 @@ const SMOOTHING_ACCEL: f64 = 5000.0;
 
 /// Caller-supplied fitting parameters. `None` selects Klipper's default.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct FitParams {
     /// Square corner velocity in mm/s used for smoothing.
@@ -54,6 +55,7 @@ impl Default for FitParams {
 
 /// The effective values a fit used, saved with every result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct FitSettings {
     /// Square corner velocity in mm/s.
     pub scv: f64,
@@ -75,6 +77,7 @@ pub struct FitSettings {
 
 /// One fitted shaper at one frequency.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct CalibrationResult {
     /// Shaper name.
     pub name: String,
@@ -97,6 +100,7 @@ pub struct CalibrationResult {
 
 /// The outcome of a shaper search.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Recommendation {
     /// The recommended shaper.
     pub best: CalibrationResult,

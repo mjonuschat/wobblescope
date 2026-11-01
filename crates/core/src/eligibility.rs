@@ -52,6 +52,7 @@ pub struct DatasetInput {
 
 /// How a dataset was treated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Decision {
     /// Used.
     Included,
@@ -63,6 +64,7 @@ pub enum Decision {
 
 /// The decision for one dataset, with the reasons behind it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct DatasetDecision {
     /// Chip name.
     pub chip: String,
@@ -76,6 +78,7 @@ pub struct DatasetDecision {
 
 /// Decisions for all inputs, in input order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Eligibility {
     /// One decision per input.
     pub decisions: Vec<DatasetDecision>,
