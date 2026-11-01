@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnalysisResult } from '@/analysis/protocol'
 import type { Analysis } from '@/lib/generated/Analysis'
 import { analysis, recommendation, twoAxisMeta } from '@/test/fixtures'
-import { stubApi } from '@/test/http'
+import { stubApiWithStatus as stubApi } from '@/test/status'
 import { renderRoute } from '@/test/render'
 import { summary } from '@/test/summaries'
 

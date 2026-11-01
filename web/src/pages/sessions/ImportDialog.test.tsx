@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import type { Reply } from '@/test/http'
-import { stubApi } from '@/test/http'
+import { stubApiWithStatus as stubApi } from '@/test/status'
 import { renderRoute } from '@/test/render'
 import { summary } from '@/test/summaries'
 

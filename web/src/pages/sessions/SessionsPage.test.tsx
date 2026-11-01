@@ -2,8 +2,11 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import type { Reply } from '@/test/http'
-import { stubApi } from '@/test/http'
+import { stubApiWithStatus as stubApi } from '@/test/status'
+import { queryKeys } from '@/lib/api/queries'
+import type { StatusResponse } from '@/lib/generated/StatusResponse'
 import { renderRoute } from '@/test/render'
+import { healthyStatus } from '@/test/status'
 import { summary, usage } from '@/test/summaries'
 
 const waiting = { error: 'storage_unavailable', message: 'waiting for Moonraker' }
@@ -109,6 +112,55 @@ describe('the sessions page', () => {
     renderRoute('/sessions')
     expect(await screen.findByText(/waiting for Moonraker to report where to store sessions/)).toBeTruthy()
     expect(screen.queryByRole('table')).toBeNull()
+  })
+
+  it('lists the sessions without a reload once the status says storage is open', async () => {
+    let open = false
+    const waitingStatus: StatusResponse = { ...healthyStatus, storage: { state: 'waiting' } }
+    stubApi(
+      ({ url }) =>
+        open
+          ? url.pathname.endsWith('/sessions')
+            ? { body: { sessions: [summary('s1')] } }
+            : { body: usage }
+          : { status: 503, body: waiting },
+      () => ({ body: open ? healthyStatus : waitingStatus }),
+    )
+    const { client } = renderRoute('/sessions')
+    expect(await screen.findByText(/waiting for Moonraker to report where to store sessions/)).toBeTruthy()
+    open = true
+    await client.invalidateQueries({ queryKey: queryKeys.status })
+    expect(await screen.findByRole('table')).toBeTruthy()
+    expect(screen.queryByText(/waiting for Moonraker to report/)).toBeNull()
+  })
+
+  it('recovers when the first status answer already says storage is open', async () => {
+    let first = true
+    const calls = stubApi(({ url }) => {
+      if (url.pathname.endsWith('/sessions')) {
+        if (first) {
+          first = false
+          return { status: 503, body: waiting }
+        }
+        return { body: { sessions: [summary('s1')] } }
+      }
+      return { body: usage }
+    })
+    renderRoute('/sessions')
+    expect(await screen.findByRole('table')).toBeTruthy()
+    expect(calls.filter((c) => c.url.pathname.endsWith('/sessions')).length).toBeGreaterThan(1)
+  })
+
+  it('does not fetch again a list that failed with another error code', async () => {
+    const calls = stubApi(({ url }) =>
+      url.pathname.endsWith('/sessions')
+        ? { status: 500, body: { error: 'internal', message: 'disk on fire' } }
+        : { body: usage },
+    )
+    renderRoute('/sessions')
+    expect(await screen.findByText('disk on fire')).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(calls.filter((c) => c.url.pathname.endsWith('/sessions'))).toHaveLength(1)
   })
 
   it('shows loading, then an empty list with an Import action', async () => {
