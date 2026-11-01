@@ -27,3 +27,36 @@ export function setBase(href: string) {
   base.href = href
   document.head.appendChild(base)
 }
+
+export interface ApiCall {
+  method: string
+  url: URL
+  body: unknown
+}
+
+/**
+ * Replaces `fetch` with a stub that asks `handler` for each answer, and records every call.
+ * A handler returns a `Reply`; for a JSON error give `{ status, body }`.
+ */
+export function stubApi(handler: (call: ApiCall) => Reply) {
+  const calls: ApiCall[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const call: ApiCall = {
+        method: init?.method ?? 'GET',
+        url: new URL(String(input)),
+        body: init?.body,
+      }
+      calls.push(call)
+      const reply = handler(call)
+      const status = reply.status ?? 200
+      if (status === 204) return new Response(null, { status })
+      return new Response(
+        reply.text ?? (reply.body === undefined ? '' : JSON.stringify(reply.body)),
+        { status },
+      )
+    }),
+  )
+  return calls
+}
