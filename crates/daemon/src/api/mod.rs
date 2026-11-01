@@ -5,6 +5,7 @@ mod error;
 mod origin;
 mod samples;
 mod sessions;
+mod settings;
 mod status;
 
 use std::sync::Arc;
@@ -137,6 +138,7 @@ pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGat
         .route("/status", get(status::status))
         .route("/chips", get(status::chips))
         .route("/chips/check", post(status::check_chips))
+        .route("/settings", get(settings::settings))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(origin::guard))

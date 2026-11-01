@@ -1,0 +1,29 @@
+{
+  "_note": "Trimmed to what the daemon reads, with the values the test printer reported on 2026-11-01 (mainline Klipper v0.13.0-658: accel_per_hz 60, sweeping_period 1.2). The real answer is 206 KB.",
+  "eventtime": 608430.1,
+  "status": {
+    "configfile": {
+      "settings": {
+        "printer": {"kinematics": "corexy", "max_velocity": 500.0},
+        "resonance_tester": {
+          "accel_chip": "lis2dw ebb36",
+          "probe_points": [[-1.0, -1.0, -1.0]],
+          "min_freq": 5.0,
+          "max_freq": 135.0,
+          "max_freq_z": 100.0,
+          "accel_per_hz": 60.0,
+          "accel_per_hz_z": 75.0,
+          "hz_per_sec": 1.0,
+          "sweeping_accel": 400.0,
+          "sweeping_accel_z": 400.0,
+          "sweeping_period": 1.2,
+          "move_speed": 50.0
+        }
+      }
+    },
+    "toolhead": {
+      "axis_minimum": [0.0, 0.0, -2.0, 0.0],
+      "axis_maximum": [301.0, 308.0, 300.0, 0.0]
+    }
+  }
+}

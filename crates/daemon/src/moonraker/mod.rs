@@ -13,6 +13,7 @@ pub mod chips;
 pub mod discovery;
 mod link;
 pub mod rpc;
+pub mod settings;
 pub mod status;
 
 use chips::Availability;
