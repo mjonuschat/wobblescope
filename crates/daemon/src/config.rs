@@ -9,6 +9,7 @@ use serde::Deserialize;
 const MIB: u64 = 1024 * 1024;
 const DEFAULT_CAP_MIB: u64 = 2048;
 const DEFAULT_HEADROOM_MIB: u64 = 256;
+const DEFAULT_MAX_SEGMENT_SECONDS: u32 = 600;
 const DEFAULT_MOONRAKER_URL: &str = "http://127.0.0.1:7125";
 
 /// Why the config could not be used.
@@ -94,6 +95,7 @@ struct RawConfig {
     free_space_headroom_mib: Option<u64>,
     moonraker_url: Option<String>,
     moonraker_api_key: Option<String>,
+    max_segment_seconds: Option<u32>,
 }
 
 /// The storage settings, with sizes in bytes.
@@ -109,6 +111,8 @@ pub struct Settings {
     pub moonraker_url: Uri,
     /// The API key sent when identifying to Moonraker, when the config sets one.
     pub moonraker_api_key: Option<String>,
+    /// The longest one `TEST_RESONANCES` command may be expected to run, in seconds.
+    pub max_segment_seconds: u32,
 }
 
 impl Settings {
@@ -116,12 +120,28 @@ impl Settings {
     /// appended to its path.
     #[must_use]
     pub fn moonraker_ws_url(&self) -> String {
+        format!("{}/websocket", self.moonraker_ws_base())
+    }
+
+    /// The URL of Moonraker's bridge to Klipper's own socket, without its token.
+    #[must_use]
+    pub fn moonraker_bridge_base(&self) -> String {
+        format!("{}/klippysocket", self.moonraker_ws_base())
+    }
+
+    /// The URL of the bridge with the one-shot `token` in its query.
+    #[must_use]
+    pub fn moonraker_bridge_url(&self, token: &str) -> String {
+        format!("{}?token={token}", self.moonraker_bridge_base())
+    }
+
+    fn moonraker_ws_base(&self) -> String {
         let authority = self
             .moonraker_url
             .authority()
             .map_or("", axum::http::uri::Authority::as_str);
         let prefix = self.moonraker_url.path().trim_end_matches('/');
-        format!("ws://{authority}{prefix}/websocket")
+        format!("ws://{authority}{prefix}")
     }
 }
 
@@ -132,6 +152,7 @@ impl fmt::Debug for Settings {
             .field("retention_cap_bytes", &self.retention_cap_bytes)
             .field("free_space_headroom_bytes", &self.free_space_headroom_bytes)
             .field("moonraker_url", &self.moonraker_url)
+            .field("max_segment_seconds", &self.max_segment_seconds)
             .field(
                 "moonraker_api_key",
                 &self.moonraker_api_key.as_ref().map(|_| "<redacted>"),
@@ -148,6 +169,7 @@ impl Default for Settings {
             free_space_headroom_bytes: DEFAULT_HEADROOM_MIB * MIB,
             moonraker_url: Uri::from_static(DEFAULT_MOONRAKER_URL),
             moonraker_api_key: None,
+            max_segment_seconds: DEFAULT_MAX_SEGMENT_SECONDS,
         }
     }
 }
@@ -204,6 +226,9 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
     if raw.retention_cap_mib == Some(0) {
         return Err(invalid("retention_cap_mib", "must be above 0"));
     }
+    if raw.max_segment_seconds == Some(0) {
+        return Err(invalid("max_segment_seconds", "must be above 0"));
+    }
     if raw.moonraker_api_key.as_deref() == Some("") {
         return Err(invalid("moonraker_api_key", "must not be empty"));
     }
@@ -215,6 +240,9 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
     Ok(Settings {
         moonraker_url,
         moonraker_api_key: raw.moonraker_api_key,
+        max_segment_seconds: raw
+            .max_segment_seconds
+            .unwrap_or(defaults.max_segment_seconds),
         storage_dir: raw.storage_dir,
         retention_cap_bytes: raw
             .retention_cap_mib

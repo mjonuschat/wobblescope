@@ -59,7 +59,9 @@ impl Link {
             if self.publisher.status.is_closed() {
                 return;
             }
-            match self.session(&mut backoff).await {
+            let failure = self.session(&mut backoff).await;
+            self.publisher.set_control(None);
+            match failure {
                 Failure::Stop => return,
                 failure => self.publish_failure(&failure),
             }
@@ -112,6 +114,7 @@ impl Link {
             .and_then(Value::as_str)
             .map(str::to_owned);
         self.publish_connected(version);
+        self.publisher.set_control(Some(rpc.clone()));
 
         if self.root_report.is_some() {
             let roots = self

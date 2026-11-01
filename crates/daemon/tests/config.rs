@@ -170,3 +170,15 @@ fn a_parse_error_names_the_file_and_line_but_never_echoes_the_line() {
 fn a_wrongly_typed_api_key_is_refused_by_name() {
     refused_naming("moonraker_api_key = 5\n", "moonraker_api_key");
 }
+
+#[test]
+fn max_segment_seconds_defaults_to_600_and_zero_is_refused() {
+    assert_eq!(load_text("").unwrap().max_segment_seconds, 600);
+    assert_eq!(
+        load_text("max_segment_seconds = 90\n")
+            .unwrap()
+            .max_segment_seconds,
+        90
+    );
+    refused_naming("max_segment_seconds = 0\n", "max_segment_seconds");
+}

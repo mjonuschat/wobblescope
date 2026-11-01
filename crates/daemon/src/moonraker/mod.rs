@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::sync::{oneshot, watch};
 
 use crate::config::Settings;
+use rpc::Rpc;
 
 pub mod chips;
 pub mod discovery;
@@ -68,6 +69,8 @@ impl Default for Timings {
 pub struct Moonraker {
     status: watch::Receiver<Status>,
     chips: watch::Receiver<ChipsSnapshot>,
+    control: watch::Receiver<Option<Rpc>>,
+    bridge_base: std::sync::Arc<str>,
 }
 
 impl Moonraker {
@@ -82,12 +85,45 @@ impl Moonraker {
     pub fn chips(&self) -> ChipsSnapshot {
         self.chips.borrow().clone()
     }
+
+    /// The current control connection, or `None` while Moonraker is not connected.
+    #[must_use]
+    pub fn control(&self) -> Option<Rpc> {
+        self.control.borrow().clone()
+    }
+
+    /// A receiver that changes whenever the control connection appears or goes away.
+    #[must_use]
+    pub fn watch_control(&self) -> watch::Receiver<Option<Rpc>> {
+        self.control.clone()
+    }
+
+    /// The websocket URL of Moonraker's bridge to Klipper's own socket, with the one-shot
+    /// `token` in the query.
+    #[must_use]
+    pub fn bridge_url(&self, token: &str) -> String {
+        format!("{}?token={}", self.bridge_base, encode_query(token))
+    }
+}
+
+/// Percent-encodes everything but unreserved characters.
+fn encode_query(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(char::from(b));
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 /// The writing half of the pair: what the supervisor publishes through.
 pub struct Publisher {
     status: watch::Sender<Status>,
     chips: watch::Sender<ChipsSnapshot>,
+    control: watch::Sender<Option<Rpc>>,
 }
 
 impl Publisher {
@@ -100,6 +136,11 @@ impl Publisher {
     pub fn set_chips(&self, chips: ChipsSnapshot) {
         self.chips.send_replace(chips);
     }
+
+    /// Publishes the control connection, or `None` when there is none.
+    pub fn set_control(&self, control: Option<Rpc>) {
+        self.control.send_replace(control);
+    }
 }
 
 /// A publisher and the handle that reads it, starting from "connecting" and no chips.
@@ -107,12 +148,19 @@ impl Publisher {
 pub fn channel() -> (Publisher, Moonraker) {
     let (status_tx, status) = watch::channel(Status::default());
     let (chips_tx, chips) = watch::channel(ChipsSnapshot::default());
+    let (control_tx, control) = watch::channel(None);
     (
         Publisher {
             status: status_tx,
             chips: chips_tx,
+            control: control_tx,
         },
-        Moonraker { status, chips },
+        Moonraker {
+            status,
+            chips,
+            control,
+            bridge_base: Settings::default().moonraker_bridge_base().into(),
+        },
     )
 }
 
@@ -132,7 +180,8 @@ pub fn spawn(
     timings: Timings,
     want_config_root: bool,
 ) -> (Moonraker, Option<ConfigRootReport>) {
-    let (publisher, handle) = channel();
+    let (publisher, mut handle) = channel();
+    handle.bridge_base = settings.moonraker_bridge_base().into();
     let (report, receiver) = if want_config_root {
         let (tx, rx) = oneshot::channel();
         (Some(tx), Some(rx))
