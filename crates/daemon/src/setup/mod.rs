@@ -2,6 +2,7 @@
 //! removes that install.
 
 pub mod host;
+pub mod render;
 
 use std::fmt;
 
