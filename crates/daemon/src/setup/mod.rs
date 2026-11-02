@@ -2,6 +2,7 @@
 //! removes that install.
 
 pub mod host;
+pub mod install;
 pub mod moonraker;
 pub mod render;
 
@@ -77,18 +78,57 @@ pub fn resolve_api_key(
     Ok(Some(line.to_owned()))
 }
 
+/// What the flags decided, with the key resolved.
+#[derive(Clone)]
+pub struct Options {
+    /// What to do.
+    pub mode: Mode,
+    /// Where Moonraker is, when the flag names it.
+    pub moonraker: Option<String>,
+    /// Moonraker's API key, when given.
+    pub api_key: Option<String>,
+}
+
+/// Runs `mode` on `host` against Moonraker, printing to `out`. Returns whether everything is
+/// in order.
+///
+/// # Errors
+/// [`SetupError`] for a failure that stops the run.
+pub async fn execute(
+    host: &host::Host,
+    moonraker: &moonraker::Moonraker,
+    opts: &Options,
+    out: &mut dyn std::io::Write,
+) -> Result<bool, SetupError> {
+    match opts.mode {
+        Mode::Install => install::install(host, moonraker, opts, out).await,
+        Mode::Check => install::check(host, moonraker, opts, out).await,
+        Mode::Remove => install::remove(host, moonraker, opts, out).await,
+    }
+}
+
 /// Runs `setup` and returns the process exit code.
 pub async fn run(args: SetupArgs) -> std::process::ExitCode {
     let outcome = async {
         let mode = Mode::of(&args);
         let host = host::Host::detect(mode != Mode::Check)?;
-        let _key = resolve_api_key(args.api_key.as_ref(), &mut std::io::stdin().lock())?;
-        let _ = host;
-        Err::<(), _>(SetupError::new("setup is not implemented yet"))
+        let api_key = resolve_api_key(args.api_key.as_ref(), &mut std::io::stdin().lock())?;
+        let opts = Options {
+            mode,
+            moonraker: args.moonraker,
+            api_key: api_key.clone(),
+        };
+        let moonraker = moonraker::Moonraker::new(
+            opts.moonraker.as_deref(),
+            api_key,
+            moonraker::Timings::default(),
+        )?;
+        execute(&host, &moonraker, &opts, &mut std::io::stdout()).await
     }
     .await;
     match outcome {
-        Ok(()) => std::process::ExitCode::SUCCESS,
+        Ok(true) => std::process::ExitCode::SUCCESS,
+        Ok(false) => std::process::ExitCode::FAILURE,
         Err(e) => {
             eprintln!("error: {e}");
             std::process::ExitCode::FAILURE
