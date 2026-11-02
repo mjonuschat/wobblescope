@@ -20,6 +20,10 @@ pub struct ChipFacts {
     pub nominal_rate_hz: Option<f64>,
     /// The rate seen when the chip was proven, in Hz.
     pub observed_rate_hz: f64,
+    /// The chip's `axes_map` as configured, when the config sets one.
+    pub axes_map: Option<String>,
+    /// The Klipper MCU the chip is wired to.
+    pub mcu: Option<String>,
 }
 
 impl ChipFacts {
@@ -31,6 +35,8 @@ impl ChipFacts {
             chip_type: chip.chip_type,
             nominal_rate_hz: chip.nominal_rate_hz,
             observed_rate_hz,
+            axes_map: chip.axes_map.clone(),
+            mcu: chip.mcu.clone(),
         }
     }
 }
@@ -94,7 +100,7 @@ pub fn initial(
                 chip_type: Some(type_name(c.chip_type).to_owned()),
                 nominal_rate_hz: c.nominal_rate_hz,
                 observed_rate_hz: Some(c.observed_rate_hz),
-                axes_map: None,
+                axes_map: c.axes_map.clone(),
                 mounting: None,
                 health: Health::Unknown,
                 health_notes: Vec::new(),

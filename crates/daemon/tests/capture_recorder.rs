@@ -20,6 +20,8 @@ fn chip() -> Chip {
         sensor: Some("adxl345".to_owned()),
         dump_endpoint: "adxl345/dump_adxl345".to_owned(),
         nominal_rate_hz: Some(RATE),
+        mcu: None,
+        axes_map: None,
         availability: Availability::Unchecked,
     }
 }

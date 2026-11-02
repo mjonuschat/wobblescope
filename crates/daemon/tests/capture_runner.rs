@@ -57,6 +57,14 @@ async fn two_chips_two_axes_one_point_finish_as_a_complete_session() {
             chip.health_notes
         );
     }
+    // The chips' wiring: the configured axes map, and the firmware of the MCUs they sit on.
+    assert_eq!(meta.chips[0].axes_map, None);
+    assert_eq!(meta.chips[1].axes_map.as_deref(), Some("x,z,-y"));
+    let printer = meta.printer.as_ref().unwrap();
+    assert_eq!(
+        printer.mcu_firmware,
+        ["ebb36: v0.13.0-820-g0cee841e", "mcu: v0.13.0-658-gbd09e017"]
+    );
     assert_eq!(meta.probe_points.len(), 1);
     assert_eq!(rig.sim.sweeps().len(), 2);
     assert!(rig.sim.sweeps()[0].contains("AXIS=X") && rig.sim.sweeps()[1].contains("AXIS=Y"));

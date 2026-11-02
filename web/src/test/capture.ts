@@ -40,6 +40,8 @@ export function chip(section: string, over: Partial<Chip> = {}): Chip {
     sensor: section.split(' ').pop() ?? null,
     dump_endpoint: 'x/dump',
     nominal_rate_hz: 3200,
+    mcu: 'mcu',
+    axes_map: null,
     availability: { state: 'unchecked' },
     ...over,
   }

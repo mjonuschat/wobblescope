@@ -27,6 +27,16 @@ dump_endpoint: string,
  */
 nominal_rate_hz: number | null, 
 /**
+ * The Klipper MCU the chip is wired to: `mcu` for the main board, else the name in front of
+ * the chip's `cs_pin` or its `i2c_mcu`. `None` for a chip that has its own device.
+ */
+mcu: string | null, 
+/**
+ * The chip's `axes_map` as configured, without spaces, such as `x,z,-y`. `None` when the
+ * config does not set it, which means Klipper's default `x,y,z`.
+ */
+axes_map: string | null, 
+/**
  * Whether the chip was seen delivering samples.
  */
 availability: Availability, };

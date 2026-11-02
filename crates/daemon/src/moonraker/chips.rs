@@ -51,6 +51,12 @@ pub struct Chip {
     pub dump_endpoint: String,
     /// The chip's nominal sample rate, when known.
     pub nominal_rate_hz: Option<f64>,
+    /// The Klipper MCU the chip is wired to: `mcu` for the main board, else the name in front of
+    /// the chip's `cs_pin` or its `i2c_mcu`. `None` for a chip that has its own device.
+    pub mcu: Option<String>,
+    /// The chip's `axes_map` as configured, without spaces, such as `x,z,-y`. `None` when the
+    /// config does not set it, which means Klipper's default `x,y,z`.
+    pub axes_map: Option<String>,
     /// Whether the chip was seen delivering samples.
     pub availability: Availability,
 }
@@ -104,6 +110,8 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
                 None => Some(ADXL345_DEFAULT_RATE_HZ),
                 Some(v) => positive_number(v),
             },
+            mcu: mcu_of(options),
+            axes_map: axes_map_of(options),
             availability: Availability::Unchecked,
         }),
         "lis2dw" => Section::Chip(Chip {
@@ -112,6 +120,8 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
             sensor: Some(last.to_owned()),
             dump_endpoint: "lis2dw/dump_lis2dw".to_owned(),
             nominal_rate_hz: Some(LIS2DW_RATE_HZ),
+            mcu: mcu_of(options),
+            axes_map: axes_map_of(options),
             availability: Availability::Unchecked,
         }),
         "beacon" if !named => Section::Chip(Chip {
@@ -120,6 +130,8 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
             sensor: None,
             dump_endpoint: "beacon/dump_accel".to_owned(),
             nominal_rate_hz: None,
+            mcu: None,
+            axes_map: axes_map_of(options),
             availability: Availability::Unchecked,
         }),
         // `[beacon model <name>]` holds a calibration model, not a device.
@@ -130,6 +142,25 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
         "icm20948" => skip("icm20948 is not supported yet"),
         _ => Section::Ignored,
     }
+}
+
+/// The MCU a chip is wired to. An SPI chip's `cs_pin` is `<mcu>:<pin>` when it is not on the main
+/// board, an I2C chip names it in `i2c_mcu`, and anything else is the main MCU.
+fn mcu_of(options: &Map<String, Value>) -> Option<String> {
+    let text = |key: &str| options.get(key).and_then(Value::as_str).map(str::trim);
+    let named = text("cs_pin")
+        .and_then(|pin| pin.split_once(':'))
+        .map(|(mcu, _)| mcu.trim())
+        .or_else(|| text("i2c_mcu"))
+        .filter(|mcu| !mcu.is_empty());
+    Some(named.unwrap_or("mcu").to_owned())
+}
+
+/// The `axes_map` option with its spaces removed, when the config sets one.
+fn axes_map_of(options: &Map<String, Value>) -> Option<String> {
+    let text = options.get("axes_map")?.as_str()?;
+    let map: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    (!map.is_empty()).then_some(map)
 }
 
 /// A config value as a positive, finite number. Klipper's raw config holds strings.
