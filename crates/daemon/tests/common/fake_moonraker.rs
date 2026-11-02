@@ -107,7 +107,35 @@ impl Drop for FakeMoonraker {
     }
 }
 
+/// A clone-able handle on a fake's connections, for handlers that must act after replying.
+#[derive(Clone)]
+pub struct FakeControl {
+    state: Arc<Mutex<State>>,
+}
+
+impl FakeControl {
+    /// Closes every open connection.
+    pub fn close_connections(&self) {
+        let mut state = self.state.lock().unwrap();
+        for out in state.outbound.drain(..) {
+            let _ = out.send(Out::Close);
+        }
+    }
+
+    /// While false, a connection is dropped before the upgrade.
+    pub fn set_accepting(&self, accepting: bool) {
+        self.state.lock().unwrap().accepting = accepting;
+    }
+}
+
 impl FakeMoonraker {
+    /// A handle that can close connections from inside a handler.
+    pub fn control(&self) -> FakeControl {
+        FakeControl {
+            state: self.state.clone(),
+        }
+    }
+
     /// Starts a fake that accepts connections and answers every method with an empty object until
     /// scripted.
     pub async fn start() -> Self {

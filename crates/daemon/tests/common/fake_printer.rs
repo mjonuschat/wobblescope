@@ -22,6 +22,17 @@ struct State {
     /// `config.authorization` in the `server.config` answer; `None` leaves it out.
     authorization: Option<Value>,
     printer_info_fails: bool,
+    /// Replaces the `server.files.roots` answer.
+    roots: Option<Value>,
+    /// The `files` of the `server.config` answer: file name and sections.
+    files: Vec<(String, Vec<String>)>,
+    /// When set, `server.connection.identify` refuses a call that lacks this key.
+    require_key: Option<String>,
+    /// The update manager's entry for wobblescope while Moonraker has it loaded.
+    entry: Option<Value>,
+    /// What `entry` becomes when Moonraker restarts.
+    after_restart: Option<Value>,
+    restarts: usize,
 }
 
 /// The printer's current state. Clones share it.
@@ -68,6 +79,12 @@ impl FakePrinter {
                     fixture("real_server_config.json")["config"]["authorization"].clone(),
                 ),
                 printer_info_fails: false,
+                roots: None,
+                files: Vec::new(),
+                require_key: None,
+                entry: None,
+                after_restart: None,
+                restarts: 0,
             })),
         };
         fake.on(
@@ -99,14 +116,32 @@ impl FakePrinter {
         fake.on_fn("printer.objects.query", move |params, _| {
             Script::Result(p.query(params))
         });
-        fake.on(
-            "server.files.roots",
-            Script::Result(fixture("files_roots.json")),
-        );
+        let p = printer.clone();
+        fake.on_fn("server.files.roots", move |_, _| {
+            let s = p.state.lock().unwrap();
+            Script::Result(
+                s.roots
+                    .clone()
+                    .unwrap_or_else(|| fixture("files_roots.json")),
+            )
+        });
         let p = printer.clone();
         fake.on_fn("server.config", move |_, _| {
             let s = p.state.lock().unwrap();
             let mut answer = fixture("real_server_config.json");
+            let mut files: Vec<Value> = s
+                .files
+                .iter()
+                .map(|(name, sections)| json!({"filename": name, "sections": sections}))
+                .collect();
+            if let (Some(entry), Some(first)) = (&s.entry, files.first_mut()) {
+                first["sections"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!("update_manager wobblescope"));
+                answer["config"]["update_manager wobblescope"] = json!({"path": entry["path"]});
+            }
+            answer["files"] = json!(files);
             match &s.authorization {
                 Some(auth) => answer["config"]["authorization"] = auth.clone(),
                 None => {
@@ -125,6 +160,91 @@ impl FakePrinter {
             Script::Result(info)
         });
         printer
+    }
+
+    /// Replaces the config and logs roots `server.files.roots` reports.
+    pub fn set_roots(&self, config: &std::path::Path, logs: &std::path::Path) {
+        self.state.lock().unwrap().roots = Some(json!([
+            {"name": "config", "path": config, "permissions": "rw"},
+            {"name": "logs", "path": logs, "permissions": "r"},
+        ]));
+    }
+
+    /// Replaces the raw `server.files.roots` answer.
+    pub fn set_raw_roots(&self, roots: Value) {
+        self.state.lock().unwrap().roots = Some(roots);
+    }
+
+    /// Sets the config files and their sections that `server.config` lists.
+    pub fn set_config_files(&self, files: &[(&str, &[&str])]) {
+        self.state.lock().unwrap().files = files
+            .iter()
+            .map(|(n, s)| ((*n).to_owned(), s.iter().map(|x| (*x).to_owned()).collect()))
+            .collect();
+    }
+
+    /// Makes identify refuse a client that does not send `key` as Unauthorized.
+    pub fn require_key(&self, key: Option<&str>) {
+        self.state.lock().unwrap().require_key = key.map(str::to_owned);
+    }
+
+    /// Sets the update manager's entry for wobblescope (with its `path`) while Moonraker has it
+    /// loaded, or `None` for not loaded.
+    pub fn set_entry(&self, entry: Option<Value>) {
+        self.state.lock().unwrap().entry = entry;
+    }
+
+    /// Sets what the entry becomes after the next restart.
+    pub fn set_entry_after_restart(&self, entry: Option<Value>) {
+        self.state.lock().unwrap().after_restart = entry;
+    }
+
+    /// How many restarts Moonraker was asked for.
+    pub fn restarts(&self) -> usize {
+        self.state.lock().unwrap().restarts
+    }
+
+    /// Registers the handlers setup needs beyond the bootstrap: `server.restart`, which closes
+    /// every connection and refuses new ones briefly, `machine.update.status`, and an identify
+    /// that can demand an API key.
+    pub fn install_setup_handlers(&self, fake: &FakeMoonraker, gap: std::time::Duration) {
+        let p = self.clone();
+        fake.on_fn("server.connection.identify", move |params, _| {
+            let s = p.state.lock().unwrap();
+            match &s.require_key {
+                Some(key) if params["api_key"].as_str() != Some(key) => {
+                    Script::Error(-32602, "Unauthorized")
+                }
+                _ => Script::Result(json!({"connection_id": 1})),
+            }
+        });
+        let p = self.clone();
+        let control = fake.control();
+        fake.on_fn("server.restart", move |_, _| {
+            {
+                let mut s = p.state.lock().unwrap();
+                s.restarts += 1;
+                s.entry = s.after_restart.clone();
+            }
+            let control = control.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                control.set_accepting(false);
+                control.close_connections();
+                tokio::time::sleep(gap).await;
+                control.set_accepting(true);
+            });
+            Script::Result(json!("ok"))
+        });
+        let p = self.clone();
+        fake.on_fn("machine.update.status", move |_, _| {
+            let s = p.state.lock().unwrap();
+            let mut versions = serde_json::Map::new();
+            if let Some(entry) = &s.entry {
+                versions.insert("wobblescope".to_owned(), entry.clone());
+            }
+            Script::Result(json!({"busy": false, "version_info": versions}))
+        });
     }
 
     /// Sets what `access.info` says about logins.
