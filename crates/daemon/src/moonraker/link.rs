@@ -261,10 +261,12 @@ impl Link {
             return false;
         }
         if old != state {
-            eprintln!(
-                "{}",
-                state_line("klipper", state.as_str(), message.as_deref())
-            );
+            let line = state_line("klipper", state.as_str(), message.as_deref());
+            if matches!(state, KlippyState::Error | KlippyState::Shutdown) {
+                tracing::warn!("{line}");
+            } else {
+                tracing::info!("{line}");
+            }
         }
         if old == KlippyState::Ready && state != KlippyState::Ready {
             tracker.chips_current = false;
@@ -307,7 +309,7 @@ impl Link {
         self.log_moonraker(state, Some(&message));
         let klippy_was = self.publisher.status.borrow().klippy.state;
         if klippy_was != KlippyState::Unknown {
-            eprintln!(
+            tracing::info!(
                 "{}",
                 state_line("klipper", KlippyState::Unknown.as_str(), None)
             );
@@ -327,7 +329,12 @@ impl Link {
     /// Logs a change of Moonraker's state, once per change.
     fn log_moonraker(&self, state: MoonrakerState, message: Option<&str>) {
         if self.publisher.status.borrow().moonraker.state != state {
-            eprintln!("{}", state_line("moonraker", state.as_str(), message));
+            let line = state_line("moonraker", state.as_str(), message);
+            if state == MoonrakerState::Connected {
+                tracing::info!("{line}");
+            } else {
+                tracing::warn!("{line}");
+            }
         }
     }
 

@@ -64,9 +64,9 @@ pub fn open_storage(
             dir: dir.to_owned(),
             source,
         })?;
-    eprintln!("storage: opened {}", dir.display());
+    tracing::info!("storage: opened {}", dir.display());
     for line in report.lines() {
-        eprintln!("storage: {line}");
+        tracing::info!("storage: {line}");
     }
     // A capture the last run left unfinished may have a sweep still running, so no test may
     // start until the longest possible sweep has had time to end.
@@ -74,7 +74,9 @@ pub fn open_storage(
         && let Some(slot) = slot
     {
         slot.start_quarantine(quarantine_duration(settings.max_segment_seconds));
-        eprintln!("capture: no test can start until a sweep that may still be running has ended");
+        tracing::warn!(
+            "capture: no test can start until a sweep that may still be running has ended"
+        );
     }
     Ok(storage)
 }

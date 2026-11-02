@@ -11,12 +11,25 @@ use wobblescope::web;
 const LISTEN_ADDR: &str = "127.0.0.1:7126";
 const CONFIG_ENV: &str = "WOBBLESCOPE_CONFIG";
 
+/// Logs to stderr, where systemd's journal picks it up and adds its own timestamp. The level is
+/// `info` unless `RUST_LOG` says otherwise.
+fn init_logging() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .init();
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
+    init_logging();
     match run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("wobblescope: {e}");
+            tracing::error!("{e}");
             ExitCode::FAILURE
         }
     }
