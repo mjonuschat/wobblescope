@@ -110,20 +110,24 @@ impl Storage {
         S: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
     {
         let id = reservation.into_id();
+        // Writing the session takes as long as the disk takes, so it runs without the state lock:
+        // listing and downloading go on meanwhile. The reservation still holds the id and the
+        // space, and nothing can see the session until it is indexed below.
+        let written = write_sealed(&self.inner, &id, meta, source);
         let mut st = self.inner.lock();
-        let result = seal_and_index(&self.inner, &mut st, &id, meta, source);
+        let result = written.and_then(|()| index_sealed(&self.inner, &mut st, &id, meta));
         st.reservations.remove(&id);
         result
     }
 }
 
-fn seal_and_index<S>(
+/// Checks `meta` against the reservation and writes the sealed session to disk. Takes no lock.
+fn write_sealed<S>(
     inner: &Inner,
-    st: &mut State,
     id: &str,
     meta: &SessionMeta,
     source: S,
-) -> Result<Summary, StorageError>
+) -> Result<(), StorageError>
 where
     S: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
 {
@@ -135,7 +139,7 @@ where
     }
     index::created_at_unix(&meta.created_at).map_err(StorageError::BadSession)?;
     write_session(&inner.sessions_dir, meta, source)?;
-    index_sealed(inner, st, id, meta)
+    Ok(())
 }
 
 /// Sizes the sealed session `id`, indexes it and returns its summary.
