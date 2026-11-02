@@ -8,6 +8,9 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 
+use crate::access::policy::{parse_hostname, parse_login_required};
+use crate::access::{AccessState, Policy};
+
 use super::discovery::{RootsError, parse_config_root, parse_configfile};
 use super::rpc::{Notification, Rpc, RpcError};
 use super::status::{KlippyState, MoonrakerState, state_line};
@@ -40,6 +43,19 @@ pub(super) struct Link {
     pub(super) timings: Timings,
     pub(super) publisher: Publisher,
     pub(super) root_report: Option<RootReport>,
+    pub(super) memory: AccessMemory,
+}
+
+/// What the supervisor remembers about access across connections, for logging and for the one
+/// fact that must outlive a connection.
+#[derive(Default)]
+pub(super) struct AccessMemory {
+    /// The last `login_required` read, if any.
+    login_required: Option<bool>,
+    /// The lists and host name last logged.
+    logged: Option<(Vec<String>, Vec<String>, Option<String>)>,
+    /// The reason the policy was last unreadable, so it is logged once.
+    unreadable: Option<String>,
 }
 
 /// What the supervisor tracks about the current connection.
@@ -49,6 +65,10 @@ struct Tracker {
     chips_current: bool,
     /// Counts changes of Klipper's state, so a chip read can tell the state moved under it.
     changes: u64,
+    /// Moonraker's lists as read on this connection, or `None` while they are unread.
+    access: Option<Policy>,
+    /// The printer's host name, once Klipper has reported it.
+    hostname: Option<String>,
 }
 
 impl Link {
@@ -61,6 +81,7 @@ impl Link {
             }
             let failure = self.session(&mut backoff).await;
             self.publisher.set_control(None);
+            self.publish_access(None);
             match failure {
                 Failure::Stop => return,
                 failure => self.publish_failure(&failure),
@@ -130,7 +151,10 @@ impl Link {
             message: None,
             chips_current: false,
             changes: 0,
+            access: None,
+            hostname: None,
         };
+        self.refresh_access(&rpc, &mut tracker).await?;
         let state = klippy_state(&info);
         let message = self.state_message(&rpc, state).await?;
         let mut reread = self.apply(&mut tracker, state, Some(message));
@@ -153,6 +177,7 @@ impl Link {
                     let state = klippy_state(&info);
                     let message = self.state_message(&rpc, state).await?;
                     reread = self.apply(&mut tracker, state, Some(message));
+                    self.refresh_access(&rpc, &mut tracker).await?;
                     if tracker.state == KlippyState::Ready && !tracker.chips_current {
                         reread = true;
                     }
@@ -161,6 +186,145 @@ impl Link {
                 () = self.publisher.status.closed() => return Err(Failure::Stop),
             }
         }
+    }
+
+    /// Reads what decides who may use the daemon, and publishes it when it changed.
+    ///
+    /// `login_required` is read every time, because creating an account changes it without a
+    /// restart. `server.config` is read while the lists are unknown, and the host name until
+    /// one arrives. A Moonraker error or timeout leaves the lists unknown and keeps the
+    /// connection; a broken connection or a refusal fails it.
+    async fn refresh_access(&mut self, rpc: &Rpc, tracker: &mut Tracker) -> Result<(), Failure> {
+        let t = self.timings;
+        let info = self.tolerate(rpc.call("access.info", None, t.request).await)?;
+        let login = info.as_ref().and_then(parse_login_required);
+        if let Some(login) = login {
+            self.note_login(login);
+        }
+        let mut reason = None;
+        match login {
+            None => {
+                tracker.access = None;
+                reason = Some("access.info gave no login_required".to_owned());
+            }
+            Some(login) if tracker.access.is_none() => {
+                let config = self.tolerate(rpc.call("server.config", None, t.configfile).await)?;
+                match config {
+                    None => reason = Some("server.config gave no answer".to_owned()),
+                    Some(config) => {
+                        match Policy::build(&config, login, tracker.hostname.as_deref()) {
+                            Ok(policy) => tracker.access = Some(policy),
+                            Err(e) => reason = Some(format!("server.config: {e}")),
+                        }
+                    }
+                }
+            }
+            Some(login) => {
+                if let Some(policy) = tracker.access.as_mut()
+                    && policy.logins_required() != login
+                {
+                    *policy = policy.with_logins_required(login);
+                }
+            }
+        }
+        if tracker.hostname.is_none() && tracker.access.is_some() {
+            let info = self.tolerate(rpc.call("printer.info", None, t.request).await)?;
+            if let Some(name) = info.as_ref().and_then(parse_hostname) {
+                tracker.hostname = Some(name.to_lowercase());
+                if let Some(policy) = tracker.access.as_mut() {
+                    *policy = policy.with_hostname(&name);
+                }
+            }
+        }
+        self.memory.unreadable = match reason {
+            Some(reason) => {
+                if self.memory.unreadable.as_deref() != Some(reason.as_str()) {
+                    tracing::warn!(
+                        "cannot read Moonraker's access lists ({reason}); only loopback clients \
+                         are admitted until they are read"
+                    );
+                }
+                Some(reason)
+            }
+            None => None,
+        };
+        self.publish_access(tracker.access.as_ref());
+        Ok(())
+    }
+
+    /// An answer, or `None` when Moonraker answered with an error or too slowly. A refusal or a
+    /// broken connection fails.
+    fn tolerate(&self, answer: Result<Value, RpcError>) -> Result<Option<Value>, Failure> {
+        match answer {
+            Ok(value) => Ok(Some(value)),
+            Err(e) if e.is_unauthorized() => Err(self.failure(&e)),
+            Err(RpcError::Timeout | RpcError::Moonraker { .. }) => Ok(None),
+            Err(e) => Err(self.failure(&e)),
+        }
+    }
+
+    /// Logs a change of the login requirement and remembers it.
+    fn note_login(&mut self, login: bool) {
+        if self.memory.login_required != Some(login)
+            && (login || self.memory.login_required.is_some())
+        {
+            if login {
+                tracing::warn!(
+                    "Moonraker requires logins; every request is refused until it does not"
+                );
+            } else {
+                tracing::warn!("Moonraker no longer requires logins");
+            }
+        }
+        self.memory.login_required = Some(login);
+    }
+
+    /// Publishes the access state: the lists when `policy` has them, else unknown with the
+    /// last login requirement, and logs the lists when they changed.
+    fn publish_access(&mut self, policy: Option<&Policy>) {
+        let state = match policy {
+            Some(policy) => {
+                self.log_policy(policy);
+                AccessState::Known(std::sync::Arc::new(policy.clone()))
+            }
+            None => AccessState::Unknown {
+                logins_required: self.memory.login_required == Some(true),
+            },
+        };
+        self.publisher.set_access(state);
+    }
+
+    fn log_policy(&mut self, policy: &Policy) {
+        let key = (
+            policy.trusted_clients().to_vec(),
+            policy.cors_domains().to_vec(),
+            policy.hostname().map(str::to_owned),
+        );
+        if self.memory.logged.as_ref() == Some(&key) {
+            return;
+        }
+        let lists_changed = self
+            .memory
+            .logged
+            .as_ref()
+            .is_none_or(|(trusted, cors, _)| *trusted != key.0 || *cors != key.1);
+        tracing::info!(
+            "Moonraker's access lists: trusted_clients {:?}, cors_domains {:?}, hostname {:?}",
+            key.0,
+            key.1,
+            key.2
+        );
+        if lists_changed {
+            for ignored in policy.ignored() {
+                tracing::warn!(
+                    "ignoring {:?} in Moonraker's {:?}: {}",
+                    ignored.entry,
+                    ignored.list,
+                    ignored.reason
+                );
+            }
+        }
+        self.memory.logged = Some(key);
     }
 
     /// Klipper's message for `state`, asked of Moonraker only for states that have one. A

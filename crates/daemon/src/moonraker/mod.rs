@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use tokio::sync::{oneshot, watch};
 
+use crate::access::AccessState;
 use crate::config::Settings;
 use rpc::Rpc;
 
@@ -74,6 +75,7 @@ pub struct Moonraker {
     chips: watch::Receiver<ChipsSnapshot>,
     chips_writer: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Receiver<Option<Rpc>>,
+    access: watch::Receiver<AccessState>,
     bridge_base: std::sync::Arc<str>,
 }
 
@@ -131,6 +133,18 @@ impl Moonraker {
         self.control.borrow().clone()
     }
 
+    /// What Moonraker's lists currently say about who may use the daemon.
+    #[must_use]
+    pub fn access(&self) -> AccessState {
+        self.access.borrow().clone()
+    }
+
+    /// A receiver that changes whenever the access state does.
+    #[must_use]
+    pub fn watch_access(&self) -> watch::Receiver<AccessState> {
+        self.access.clone()
+    }
+
     /// A receiver that changes whenever Moonraker's or Klipper's state does.
     #[must_use]
     pub fn watch_status(&self) -> watch::Receiver<Status> {
@@ -169,6 +183,7 @@ pub struct Publisher {
     status: watch::Sender<Status>,
     chips: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Sender<Option<Rpc>>,
+    access: watch::Sender<AccessState>,
 }
 
 impl Publisher {
@@ -186,6 +201,17 @@ impl Publisher {
     pub fn set_control(&self, control: Option<Rpc>) {
         self.control.send_replace(control);
     }
+
+    /// Publishes the access state, waking readers only when it differs from the current one.
+    pub fn set_access(&self, access: AccessState) {
+        self.access.send_if_modified(|current| {
+            let changed = *current != access;
+            if changed {
+                *current = access;
+            }
+            changed
+        });
+    }
 }
 
 /// A publisher and the handle that reads it, starting from "connecting" and no chips.
@@ -195,17 +221,20 @@ pub fn channel() -> (Publisher, Moonraker) {
     let (chips_tx, chips) = watch::channel(ChipsSnapshot::default());
     let chips_tx = std::sync::Arc::new(chips_tx);
     let (control_tx, control) = watch::channel(None);
+    let (access_tx, access) = watch::channel(AccessState::default());
     (
         Publisher {
             status: status_tx,
             chips: chips_tx.clone(),
             control: control_tx,
+            access: access_tx,
         },
         Moonraker {
             status,
             chips,
             chips_writer: chips_tx,
             control,
+            access,
             bridge_base: Settings::default().moonraker_bridge_base().into(),
         },
     )
@@ -246,6 +275,7 @@ pub fn spawn(
         timings,
         publisher,
         root_report: report,
+        memory: link::AccessMemory::default(),
     };
     tokio::spawn(link.run());
     (handle, receiver)

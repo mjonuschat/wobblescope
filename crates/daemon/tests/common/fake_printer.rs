@@ -18,6 +18,10 @@ struct State {
     message: String,
     app: Option<String>,
     objects: Map<String, Value>,
+    login_required: bool,
+    /// `config.authorization` in the `server.config` answer; `None` leaves it out.
+    authorization: Option<Value>,
+    printer_info_fails: bool,
 }
 
 /// The printer's current state. Clones share it.
@@ -59,6 +63,11 @@ impl FakePrinter {
                 message: "Printer is ready".to_owned(),
                 app: None,
                 objects,
+                login_required: false,
+                authorization: Some(
+                    fixture("real_server_config.json")["config"]["authorization"].clone(),
+                ),
+                printer_info_fails: false,
             })),
         };
         fake.on(
@@ -75,6 +84,9 @@ impl FakePrinter {
         let p = printer.clone();
         fake.on_fn("printer.info", move |_, _| {
             let s = p.state.lock().unwrap();
+            if s.printer_info_fails {
+                return Script::Error(-32601, "Klippy Host not connected");
+            }
             let mut info = fixture("real_printer_info.json");
             info["state"] = json!(s.klippy_state);
             info["state_message"] = json!(s.message);
@@ -91,7 +103,43 @@ impl FakePrinter {
             "server.files.roots",
             Script::Result(fixture("files_roots.json")),
         );
+        let p = printer.clone();
+        fake.on_fn("server.config", move |_, _| {
+            let s = p.state.lock().unwrap();
+            let mut answer = fixture("real_server_config.json");
+            match &s.authorization {
+                Some(auth) => answer["config"]["authorization"] = auth.clone(),
+                None => {
+                    answer["config"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("authorization");
+                }
+            }
+            Script::Result(answer)
+        });
+        let p = printer.clone();
+        fake.on_fn("access.info", move |_, _| {
+            let mut info = fixture("real_access_info.json");
+            info["login_required"] = json!(p.state.lock().unwrap().login_required);
+            Script::Result(info)
+        });
         printer
+    }
+
+    /// Sets what `access.info` says about logins.
+    pub fn set_login_required(&self, required: bool) {
+        self.state.lock().unwrap().login_required = required;
+    }
+
+    /// Replaces `config.authorization` in the `server.config` answer, or removes it.
+    pub fn set_authorization(&self, authorization: Option<Value>) {
+        self.state.lock().unwrap().authorization = authorization;
+    }
+
+    /// Makes `printer.info` fail, as it does while Klippy is disconnected.
+    pub fn set_printer_info_fails(&self, fails: bool) {
+        self.state.lock().unwrap().printer_info_fails = fails;
     }
 
     fn query(&self, params: &Value) -> Value {
