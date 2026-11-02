@@ -196,6 +196,7 @@ struct Source {
 pub struct Policy {
     source: Source,
     trusted: Vec<Net>,
+    domains: Vec<String>,
     origins: Vec<Regex>,
     hosts: Vec<HostPattern>,
     ignored: Vec<Ignored>,
@@ -263,6 +264,7 @@ impl Policy {
         let mut policy = Self {
             source,
             trusted: Vec::new(),
+            domains: Vec::new(),
             origins: Vec::new(),
             hosts: Vec::new(),
             ignored: Vec::new(),
@@ -289,12 +291,9 @@ impl Policy {
                     &entry,
                     "a network with host bits set, which Moonraker drops",
                 ),
-                Err(NetError::Invalid) if HOSTNAME.is_match(&entry) => self.ignore(
-                    IgnoredList::TrustedClients,
-                    &entry,
-                    "a domain name, which admits nobody because the daemon does not look up \
-                     names",
-                ),
+                Err(NetError::Invalid) if HOSTNAME.is_match(&entry) => {
+                    self.domains.push(entry.to_lowercase());
+                }
                 Err(NetError::Invalid) => self.ignore(
                     IgnoredList::TrustedClients,
                     &entry,
@@ -343,25 +342,49 @@ impl Policy {
         self.trusted.iter().any(|net| net.contains(ip))
     }
 
-    /// Whether `origin` passes as Moonraker's `check_cors` decides, except for the daemon's own
-    /// origin, which the caller compares with `Host`.
+    /// Whether `trusted_clients` lists host names, which a client is matched against by reverse
+    /// lookup of its address.
     #[must_use]
-    pub fn origin_allowed(&self, origin: &str) -> bool {
-        if self.origins.is_empty() {
-            return false;
-        }
-        if self
-            .origins
+    pub fn has_domains(&self) -> bool {
+        !self.domains.is_empty()
+    }
+
+    /// Whether `fqdn`, the name an address resolves to, is a listed domain.
+    #[must_use]
+    pub fn is_trusted_name(&self, fqdn: &str) -> bool {
+        let fqdn = fqdn.to_lowercase();
+        self.domains.contains(&fqdn)
+    }
+
+    /// Whether some `cors_domains` pattern matches all of `origin`.
+    #[must_use]
+    pub fn origin_matches_pattern(&self, origin: &str) -> bool {
+        self.origins
             .iter()
             .any(|re| re.find(origin).is_some_and(|m| m.end() == origin.len()))
-        {
-            return true;
+    }
+
+    /// The address in `origin`'s host, read as Moonraker reads it, when at least one pattern is
+    /// accepted: the origin passes if that address is trusted.
+    #[must_use]
+    pub fn origin_host_ip(&self, origin: &str) -> Option<IpAddr> {
+        if self.origins.is_empty() {
+            return None;
         }
         ORIGIN_HOST
             .captures(origin)
             .and_then(|c| c.get(1))
             .and_then(|m| m.as_str().parse::<IpAddr>().ok())
-            .is_some_and(|ip| self.is_trusted(ip))
+    }
+
+    /// Whether `origin` passes as Moonraker's `check_cors` decides, except for the daemon's own
+    /// origin, which the caller compares with `Host`.
+    #[must_use]
+    pub fn origin_allowed(&self, origin: &str) -> bool {
+        self.origin_matches_pattern(origin)
+            || self
+                .origin_host_ip(origin)
+                .is_some_and(|ip| self.is_trusted(ip))
     }
 
     /// Whether `host` (lowercase, no port, no trailing dot) matches a host part of
@@ -391,6 +414,12 @@ impl Policy {
     #[must_use]
     pub fn trusted_clients(&self) -> &[String] {
         &self.source.trusted_clients
+    }
+
+    /// The host names in `trusted_clients`, lowercase.
+    #[must_use]
+    pub fn trusted_domains(&self) -> &[String] {
+        &self.domains
     }
 
     /// The `cors_domains` entries as Moonraker listed them.

@@ -230,6 +230,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns-lookup"
+version = "4.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "263c0ccfc6b3b6a93e959edad4f985779e76c0b36dbb2e13e3d27c690974adf1"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "socket2",
+ "windows-sys",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1525,6 +1537,7 @@ name = "wobblescope"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "dns-lookup",
  "futures-util",
  "http-body-util",
  "mime_guess",
