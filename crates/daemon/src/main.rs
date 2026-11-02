@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::Parser;
 use wobblescope::api;
+use wobblescope::cli::{Cli, Command};
 use wobblescope::config;
 use wobblescope::moonraker::{self, Timings};
+use wobblescope::setup;
 use wobblescope::startup;
 use wobblescope::storage::default_probe;
 use wobblescope::web;
@@ -24,6 +27,10 @@ fn init_logging() {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let cli = Cli::parse();
+    if let Some(Command::Setup(args)) = cli.command {
+        return setup::run(args).await;
+    }
     init_logging();
     match run().await {
         Ok(()) => ExitCode::SUCCESS,
