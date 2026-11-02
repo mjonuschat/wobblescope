@@ -1,5 +1,6 @@
 //! Who may use the daemon: the policy mirrored from Moonraker's `[authorization]` section.
 
+pub mod client;
 pub mod policy;
 
 use std::sync::Arc;

@@ -1,6 +1,7 @@
 //! The HTTP API under `/api`: JSON in and out, every error the same shape, every storage call
 //! on a blocking thread.
 
+mod access;
 mod error;
 mod live;
 mod origin;
@@ -19,6 +20,7 @@ use axum::http::request::Parts;
 use axum::middleware;
 use axum::routing::{get, post};
 
+pub use access::AccessGuard;
 pub use error::ApiError;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 pub use status::{StatusResponse, StorageState, StorageStatus};
@@ -212,4 +214,10 @@ pub fn mount_capture(
             capture,
         });
     Router::new().nest("/api", api)
+}
+
+/// Wraps a finished app, UI included, so that every request is checked by `guard` before any
+/// route sees it. Serve the result with connect info.
+pub fn guarded(app: Router, guard: AccessGuard) -> Router {
+    app.layer(middleware::from_fn_with_state(guard, access::guard))
 }
