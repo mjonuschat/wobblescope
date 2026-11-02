@@ -103,7 +103,7 @@ pub struct Sim {
 fn config() -> Value {
     json!({
         "adxl345": {"cs_pin": "PA4"},
-        "lis2dw ebb36": {"cs_pin": "ebb36: PA4"},
+        "lis2dw ebb36": {"cs_pin": "ebb36: PA4", "axes_map": "x, z, -y"},
         "resonance_tester": {"accel_chip": "adxl345"},
     })
 }
@@ -127,6 +127,7 @@ impl Sim {
     pub async fn start() -> Self {
         let fake = Arc::new(FakeMoonraker::start().await);
         let printer = FakePrinter::new(&fake, "ready", config());
+        printer.set_field("mcu ebb36", "mcu_version", json!("v0.13.0-820-g0cee841e"));
         printer.set_field("toolhead", "position", json!([0.0, 0.0, 0.0, 0.0]));
         let real = super::fake_printer::fixture("real_settings.json");
         printer.set_settings(real["status"]["configfile"]["settings"].clone());

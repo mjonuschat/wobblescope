@@ -228,3 +228,40 @@ fn a_real_printers_file_roots_give_the_config_root() {
         PathBuf::from("/home/pi/printer_data/config")
     );
 }
+
+#[test]
+fn a_chip_is_wired_to_the_mcu_its_pin_or_i2c_option_names() {
+    let mcu = |section: Value| only_chip(section).mcu;
+    // A pin on another MCU is `<mcu>:<pin>`, with or without a space after the colon.
+    assert_eq!(
+        mcu(json!({"lis2dw ebb36": {"cs_pin": "toolhead:LIS2DW_CS"}})).as_deref(),
+        Some("toolhead")
+    );
+    assert_eq!(
+        mcu(json!({"lis2dw ebb36": {"cs_pin": "ebb36: PA4"}})).as_deref(),
+        Some("ebb36")
+    );
+    // A bare pin is on the main MCU, and so is a chip that names nothing.
+    assert_eq!(
+        mcu(json!({"adxl345": {"cs_pin": "PA4"}})).as_deref(),
+        Some("mcu")
+    );
+    assert_eq!(mcu(json!({"adxl345": {}})).as_deref(), Some("mcu"));
+    assert_eq!(
+        mcu(json!({"lis2dw": {"i2c_mcu": "rp2040"}})).as_deref(),
+        Some("rp2040")
+    );
+    // A Beacon is its own device.
+    assert_eq!(mcu(json!({"beacon": {}})), None);
+}
+
+#[test]
+fn the_axes_map_is_kept_as_configured_without_spaces_or_left_unset() {
+    let map = |section: Value| only_chip(section).axes_map;
+    assert_eq!(
+        map(json!({"adxl345": {"axes_map": "x, z, -y"}})).as_deref(),
+        Some("x,z,-y")
+    );
+    assert_eq!(map(json!({"adxl345": {}})), None);
+    assert_eq!(map(json!({"adxl345": {"axes_map": "  "}})), None);
+}

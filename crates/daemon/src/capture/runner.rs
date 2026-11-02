@@ -278,7 +278,8 @@ impl Run {
             }
         }
         let control = self.control()?;
-        let printer = printer_info(&control).await;
+        let mut mcus: Vec<String> = facts.iter().filter_map(|f| f.mcu.clone()).collect();
+        let printer = printer_info(&control, &mut mcus).await;
         let meta = initial(&self.plan, &self.id, &self.created_at, &facts, printer);
 
         let reservation = self.reservation.take().expect("reserved by pre-flight");
@@ -822,16 +823,56 @@ fn watch_idle(r: Runner, id: String) {
     });
 }
 
-/// The printer's host name and Klipper version, best effort.
-async fn printer_info(control: &Rpc) -> Option<PrinterInfo> {
+/// The printer's host name, Klipper version and the firmware of the MCUs `mcus` names (plus the
+/// main MCU), best effort. A failed call leaves what it would have added empty.
+async fn printer_info(control: &Rpc, mcus: &mut Vec<String>) -> Option<PrinterInfo> {
     let info: Value = control
         .call("printer.info", None, Duration::from_secs(5))
         .await
         .ok()?;
     let text = |key: &str| info.get(key).and_then(Value::as_str).map(str::to_owned);
+    mcus.push("mcu".to_owned());
+    mcus.sort();
+    mcus.dedup();
     Some(PrinterInfo {
         name: text("hostname"),
         klipper_version: text("software_version"),
-        mcu_firmware: Vec::new(),
+        mcu_firmware: mcu_firmware(control, mcus).await,
     })
+}
+
+/// `<mcu>: <version>` for each of `mcus`, as Klipper reports it. The main MCU is `mcu`, another
+/// is `mcu <name>`. An MCU Klipper does not list is left out.
+async fn mcu_firmware(control: &Rpc, mcus: &[String]) -> Vec<String> {
+    let key = |name: &str| {
+        if name == "mcu" {
+            name.to_owned()
+        } else {
+            format!("mcu {name}")
+        }
+    };
+    let objects: serde_json::Map<String, Value> = mcus
+        .iter()
+        .map(|name| (key(name), json!(["mcu_version"])))
+        .collect();
+    let Ok(answer) = control
+        .call(
+            "printer.objects.query",
+            Some(json!({"objects": objects})),
+            Duration::from_secs(5),
+        )
+        .await
+    else {
+        return Vec::new();
+    };
+    mcus.iter()
+        .filter_map(|name| {
+            let version = answer
+                .get("status")?
+                .get(key(name))?
+                .get("mcu_version")?
+                .as_str()?;
+            Some(format!("{name}: {version}"))
+        })
+        .collect()
 }

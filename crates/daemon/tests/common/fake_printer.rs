@@ -47,6 +47,10 @@ impl FakePrinter {
                 "axis_maximum": [301.0, 308.0, 300.0, 0.0],
             }),
         );
+        objects.insert(
+            "mcu".to_owned(),
+            json!({"mcu_version": "v0.13.0-658-gbd09e017"}),
+        );
         objects.insert("print_stats".to_owned(), json!({"state": "standby"}));
         objects.insert("idle_timeout".to_owned(), json!({"state": "Ready"}));
         let printer = Self {

@@ -19,6 +19,8 @@ fn chip(section: &str, chip_type: ChipType, sensor: Option<&str>, rate: Option<f
         sensor: sensor.map(str::to_owned),
         dump_endpoint: "x/dump".to_owned(),
         nominal_rate_hz: rate,
+        mcu: None,
+        axes_map: None,
         availability: Availability::Unchecked,
     }
 }

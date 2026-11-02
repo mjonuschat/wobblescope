@@ -33,6 +33,16 @@ export function MetaPanel({ meta }: { meta: SessionMeta }) {
         {row('Outcome', outcomeText(meta.outcome))}
         {row('Printer', meta.printer?.name ?? 'Not recorded')}
         {meta.printer?.klipper_version && row('Klipper', meta.printer.klipper_version)}
+        {meta.printer &&
+          meta.printer.mcu_firmware.length > 0 &&
+          row(
+            'MCU firmware',
+            <ul>
+              {meta.printer.mcu_firmware.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>,
+          )}
         {row(
           'Probe points',
           meta.probe_points.map((_, i) => pointLabel(i, meta.probe_points)).join(', '),
@@ -60,6 +70,7 @@ export function MetaPanel({ meta }: { meta: SessionMeta }) {
           <tr className="text-left text-muted-foreground">
             <th>Chip</th>
             <th>Type</th>
+            <th>Axes map</th>
             <th>Rate (nominal / observed)</th>
             <th>Health</th>
           </tr>
@@ -69,6 +80,7 @@ export function MetaPanel({ meta }: { meta: SessionMeta }) {
             <tr key={c.name} className="align-top">
               <td>{c.name}</td>
               <td>{c.chip_type ?? '–'}</td>
+              <td>{c.axes_map ?? '–'}</td>
               <td>
                 {c.nominal_rate_hz ?? '–'} / {c.observed_rate_hz?.toFixed(0) ?? '–'} Hz
               </td>
