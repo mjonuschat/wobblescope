@@ -88,9 +88,10 @@ impl Storage {
         meta: &SessionMeta,
     ) -> Result<Summary, StorageError> {
         let id = capture.id();
-        let mut st = self.inner.lock();
         index::created_at_unix(&meta.created_at).map_err(StorageError::BadSession)?;
+        // Sealing writes meta.json and renames the directory, so it runs without the state lock.
         capture.writer.seal(meta)?;
+        let mut st = self.inner.lock();
         st.reservations.remove(id);
         index_sealed(&self.inner, &mut st, id, meta)
     }

@@ -405,3 +405,54 @@ fn a_failed_capture_is_stored_like_any_other() {
     s.store(r, &spec.meta(), source).unwrap();
     assert_eq!(s.get("fail1").unwrap().outcome, OutcomeKind::Failed);
 }
+
+#[test]
+fn listing_and_usage_are_not_blocked_while_a_session_is_being_written() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let storage = open_with(tmp.path(), u64::MAX / 4, 0, probe(u64::MAX / 4));
+    let spec = Spec::new("slow", "2026-11-02T10:00:00Z");
+    let reservation = storage.admit("slow", 1_000).unwrap();
+    let (started_tx, started) = mpsc::channel();
+    let (release_tx, release) = mpsc::channel::<()>();
+
+    // The write stalls inside the source until the test lets it go.
+    let writer = {
+        let storage = storage.clone();
+        std::thread::spawn(move || {
+            let mut first = true;
+            storage.store(reservation, &spec.meta(), move |f| {
+                if first {
+                    first = false;
+                    started_tx.send(()).unwrap();
+                    release.recv().unwrap();
+                }
+                source(f)
+            })
+        })
+    };
+    started.recv_timeout(Duration::from_secs(5)).unwrap();
+
+    // Reads answer while the write is stalled. A blocked lock would hang the thread.
+    let (done_tx, done) = mpsc::channel();
+    let reader = {
+        let storage = storage.clone();
+        std::thread::spawn(move || {
+            let listed = storage.list(&ListFilter::default()).len();
+            let reserved = storage.usage().unwrap().reserved_bytes;
+            done_tx.send((listed, reserved)).unwrap();
+        })
+    };
+    let (listed, reserved) = done
+        .recv_timeout(Duration::from_secs(2))
+        .expect("listing must not wait for the write");
+    assert_eq!((listed, reserved), (0, 1_000));
+
+    release_tx.send(()).unwrap();
+    writer.join().unwrap().unwrap();
+    reader.join().unwrap();
+    assert_eq!(ids(&storage), ["slow"]);
+    assert_eq!(storage.usage().unwrap().reserved_bytes, 0);
+}
