@@ -264,7 +264,7 @@ async fn an_invalid_entry_carries_moonrakers_warnings() {
 async fn a_missing_entry_times_out() {
     let rig = Rig::new().await;
     assert_eq!(rig.client(None).verify().await, Verification::TimedOut);
-    assert!(!rig.client(None).lists_entry().await.unwrap());
+    assert_eq!(rig.client(None).entry().await.unwrap(), None);
 }
 
 #[tokio::test]

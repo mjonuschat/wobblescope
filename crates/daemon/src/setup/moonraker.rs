@@ -503,7 +503,10 @@ impl Moonraker {
     }
 
     /// The update manager's entry for `wobblescope` on a fresh connection, when it has one.
-    async fn entry(&self) -> Result<Option<Verdict>, MoonrakerError> {
+    ///
+    /// # Errors
+    /// A [`MoonrakerError`] when Moonraker cannot be asked.
+    pub async fn entry(&self) -> Result<Option<Verdict>, MoonrakerError> {
         let (rpc, _notes) = self.connect().await?;
         let status = rpc
             .call("machine.update.status", None, self.timings.status_request)
@@ -530,13 +533,5 @@ impl Moonraker {
             }
             tokio::time::sleep(self.timings.poll).await;
         }
-    }
-
-    /// Whether the update manager lists `wobblescope` now.
-    ///
-    /// # Errors
-    /// A [`MoonrakerError`] when Moonraker cannot be asked.
-    pub async fn lists_entry(&self) -> Result<bool, MoonrakerError> {
-        Ok(self.entry().await?.is_some())
     }
 }
