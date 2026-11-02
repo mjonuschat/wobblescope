@@ -10,6 +10,7 @@ use axum::http::{Request, StatusCode};
 use common::{cell, open, request, send};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
+use wobblescope::access::names::Names;
 use wobblescope::access::policy::Net;
 use wobblescope::access::{AccessState, Policy};
 use wobblescope::api::{AccessGuard, guarded, mount};
@@ -524,4 +525,118 @@ async fn the_live_socket_upgrades_for_a_trusted_peer_and_not_for_one_the_policy_
         }
         other => panic!("expected a 403 on the upgrade, got {other:?}"),
     }
+}
+
+/// Names from a table, counting lookups. An address not in the table takes `slow` to answer.
+fn names(table: &[(&str, &str)], lookups: Arc<std::sync::atomic::AtomicUsize>) -> Names {
+    let table: Vec<(std::net::IpAddr, String)> = table
+        .iter()
+        .map(|(ip, name)| (ip.parse().unwrap(), (*name).to_owned()))
+        .collect();
+    Names::with(
+        Arc::new(move |ip| {
+            lookups.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let found = table.iter().find(|(a, _)| *a == ip).map(|(_, n)| n.clone());
+            Box::pin(async move {
+                match found {
+                    Some(name) => name,
+                    None => {
+                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                        String::new()
+                    }
+                }
+            })
+        }),
+        std::time::Duration::from_millis(100),
+        std::time::Duration::from_secs(3600),
+    )
+}
+
+fn domain_policy(cors: Value) -> Policy {
+    Policy::build(
+        &json!({"config": {"authorization": {
+            "trusted_clients": ["10.0.0.0/8", "mac.lan"], "cors_domains": cors}}}),
+        false,
+        None,
+    )
+    .unwrap()
+}
+
+fn named_rig(table: &[(&str, &str)]) -> (Rig, Arc<std::sync::atomic::AtomicUsize>) {
+    let lookups = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut rig = rig(&[], &[]);
+    let guard = AccessGuard::new(rig.moonraker.clone(), Vec::new(), Vec::new())
+        .with_names(names(table, lookups.clone()));
+    let data = tempfile::tempdir().unwrap();
+    let (storage, _) = open(data.path(), 1 << 30);
+    rig.app = guarded(
+        mount(cell(Some(storage)), rig.moonraker.clone()).fallback(|| async { "the web ui" }),
+        guard,
+    );
+    rig._data = data;
+    (rig, lookups)
+}
+
+const MAC: &str = "203.0.113.9";
+
+#[tokio::test]
+async fn a_client_whose_address_resolves_to_a_listed_name_is_admitted_once_and_then_cached() {
+    let (rig, lookups) = named_rig(&[(MAC, "MAC.lan")]);
+    rig.publish(domain_policy(json!(["*.local"])));
+    for _ in 0..2 {
+        let (status, _) = rig.get(MAC, HOST, "/api/status").await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    assert_eq!(lookups.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn an_address_that_resolves_to_another_name_is_refused() {
+    let (rig, _) = named_rig(&[(MAC, "other.lan"), ("203.0.113.10", "x.mac.lan")]);
+    rig.publish(domain_policy(json!(["*.local"])));
+    for peer in [MAC, "203.0.113.10"] {
+        let (status, body) = rig.get(peer, HOST, "/api/status").await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{peer}");
+        assert_eq!(code(&body), "untrusted_client");
+    }
+}
+
+#[tokio::test]
+async fn a_lookup_that_times_out_refuses_and_is_tried_again() {
+    let (rig, lookups) = named_rig(&[]);
+    rig.publish(domain_policy(json!(["*.local"])));
+    for _ in 0..2 {
+        let (status, body) = rig.get(MAC, HOST, "/api/status").await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(code(&body), "untrusted_client");
+    }
+    assert_eq!(lookups.load(std::sync::atomic::Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn an_address_in_the_lists_or_a_list_without_names_never_triggers_a_lookup() {
+    let (rig, lookups) = named_rig(&[(MAC, "mac.lan")]);
+    rig.publish(domain_policy(json!(["*.local"])));
+    let (status, _) = rig.get("10.1.2.3", HOST, "/api/status").await;
+    assert_eq!(status, StatusCode::OK);
+    rig.publish(real_policy());
+    let (status, _) = rig.get(MAC, HOST, "/api/status").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(lookups.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn an_origin_on_an_address_that_resolves_to_a_listed_name_passes() {
+    let (rig, _) = named_rig(&[(MAC, "mac.lan")]);
+    rig.publish(domain_policy(json!(["*.local"])));
+    let origin = format!("http://{MAC}:8080");
+    let (status, _) = rig
+        .ask(
+            "10.1.2.3",
+            "GET",
+            "/api/status",
+            &[("host", HOST), ("origin", &origin)],
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
 }

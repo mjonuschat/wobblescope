@@ -83,13 +83,16 @@ fn a_network_with_host_bits_set_is_dropped_and_listed() {
 }
 
 #[test]
-fn a_domain_entry_trusts_nobody_and_junk_is_listed_as_invalid() {
+fn a_domain_entry_is_kept_for_lookups_and_trusts_no_address_by_itself() {
     let p = trusting(json!(["printer-host.lan", "not a host!"]));
     assert!(!p.is_trusted(ip("192.168.1.5")));
-    let reasons: Vec<_> = p.ignored().iter().map(|i| i.reason.as_str()).collect();
-    assert_eq!(reasons.len(), 2);
-    assert!(reasons[0].contains("domain name"), "{reasons:?}");
-    assert!(reasons[1].contains("neither"), "{reasons:?}");
+    assert!(p.has_domains());
+    assert_eq!(p.trusted_domains(), ["printer-host.lan"]);
+    assert!(p.is_trusted_name("PRINTER-HOST.LAN"));
+    assert!(!p.is_trusted_name("host.lan"));
+    assert!(!p.is_trusted_name("x.printer-host.lan"));
+    assert_eq!(p.ignored().len(), 1);
+    assert!(p.ignored()[0].reason.contains("neither"));
 }
 
 #[test]
