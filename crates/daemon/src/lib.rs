@@ -1,5 +1,6 @@
 //! The Wobblescope daemon: configuration, storage and the embedded web UI.
 
+pub mod access;
 pub mod api;
 pub mod capture;
 pub mod config;
