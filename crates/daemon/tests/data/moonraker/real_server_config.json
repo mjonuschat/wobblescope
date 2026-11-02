@@ -1,0 +1,32 @@
+{
+  "config": {
+    "server": {
+      "host": "0.0.0.0"
+    },
+    "authorization": {
+      "trusted_clients": [
+        "10.0.0.0/8",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "FE80::/10",
+        "::1/128"
+      ],
+      "cors_domains": [
+        "*.local",
+        "*.lan",
+        "*://app.fluidd.xyz",
+        "*://dev-app.fluidd.xyz",
+        "*://my.mainsail.xyz"
+      ]
+    }
+  },
+  "orig": {
+    "authorization": {
+      "trusted_clients": "\n10.0.0.0/8\n127.0.0.0/8\n169.254.0.0/16\n172.16.0.0/12\n192.168.0.0/16\nFE80::/10\n::1/128",
+      "cors_domains": "\n*.local\n*.lan\n*://app.fluidd.xyz\n*://dev-app.fluidd.xyz\n*://my.mainsail.xyz"
+    }
+  },
+  "files": []
+}
