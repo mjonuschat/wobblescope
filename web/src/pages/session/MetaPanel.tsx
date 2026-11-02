@@ -22,8 +22,23 @@ const row = (label: string, value: React.ReactNode) => (
   </div>
 )
 
+/** The recordings whose own segment showed a problem, which the chip's overall health hides. */
+function degradedSegments(meta: SessionMeta) {
+  return meta.segments.flatMap((segment, index) =>
+    segment.files
+      .filter((f) => f.health === 'Degraded')
+      .map((f) => ({
+        key: `${index}-${f.chip}`,
+        where: `Segment ${index + 1} (${segment.axis}, ${pointLabel(segment.point, meta.probe_points)})`,
+        chip: meta.chips[f.chip]?.name ?? `chip ${f.chip}`,
+        notes: f.health_notes,
+      })),
+  )
+}
+
 export function MetaPanel({ meta }: { meta: SessionMeta }) {
   const s = meta.settings
+  const degraded = degradedSegments(meta)
   return (
     <section className="space-y-4 rounded-lg border p-4" aria-label="Session details">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
@@ -94,6 +109,19 @@ export function MetaPanel({ meta }: { meta: SessionMeta }) {
           ))}
         </tbody>
       </table>
+      {degraded.length > 0 && (
+        <div className="space-y-1 text-sm">
+          <h3 className="font-medium">Degraded segments</h3>
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {degraded.map((d) => (
+              <li key={d.key}>
+                {d.where}: {d.chip}
+                {d.notes.length > 0 ? `, ${d.notes.join('; ')}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

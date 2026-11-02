@@ -95,6 +95,8 @@ impl SessionWriter {
                 sample_file: name,
                 sample_count: count,
                 coverage: coverage.clone(),
+                health: None,
+                health_notes: Vec::new(),
             });
         }
         sync_temp_dir(&self.tmp)?;

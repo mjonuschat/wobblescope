@@ -29,6 +29,8 @@ fn file(chip: u32, segment: usize, count: u32) -> SegmentFile {
         sample_file: sample_file_name(chip as usize, segment),
         sample_count: count,
         coverage: Coverage::Complete,
+        health: None,
+        health_notes: Vec::new(),
     }
 }
 
@@ -271,4 +273,28 @@ parity_test! {
     fn the_axis_serializes_as_its_name() {
         assert_eq!(serde_json::to_string(&Axis::X).unwrap(), "\"X\"");
     }
+}
+
+#[test]
+fn per_segment_health_round_trips_and_older_metadata_without_it_still_loads() {
+    use wobblescope_core::eligibility::Health;
+
+    let mut m = capture_meta();
+    m.segments[0].files[0].health = Some(Health::Degraded);
+    m.segments[0].files[0].health_notes = vec!["the chip's errors counter rose by 3".to_owned()];
+    let back = SessionMeta::from_json(&m.to_json().unwrap()).unwrap();
+    assert_eq!(back, m);
+
+    // A session written before the field existed has neither key.
+    let mut value: serde_json::Value = serde_json::from_str(&m.to_json().unwrap()).unwrap();
+    for segment in value["segments"].as_array_mut().unwrap() {
+        for file in segment["files"].as_array_mut().unwrap() {
+            let file = file.as_object_mut().unwrap();
+            file.remove("health");
+            file.remove("health_notes");
+        }
+    }
+    let old = SessionMeta::from_json(&value.to_string()).unwrap();
+    assert_eq!(old.segments[0].files[0].health, None);
+    assert!(old.segments[0].files[0].health_notes.is_empty());
 }

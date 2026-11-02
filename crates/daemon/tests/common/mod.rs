@@ -82,6 +82,8 @@ impl Spec {
                 sample_file: sample_file_name(chip, 0),
                 sample_count: self.samples as u32,
                 coverage: Coverage::Complete,
+                health: None,
+                health_notes: Vec::new(),
             })
             .collect();
         SessionMeta {
