@@ -1,15 +1,19 @@
 //! The daemon's config file: the storage settings and where Moonraker is.
 
 use std::fmt;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use axum::http::Uri;
 use serde::Deserialize;
 
+use crate::access::policy::{Net, NetError};
+
 const MIB: u64 = 1024 * 1024;
 const DEFAULT_CAP_MIB: u64 = 2048;
 const DEFAULT_HEADROOM_MIB: u64 = 256;
 const DEFAULT_MAX_SEGMENT_SECONDS: u32 = 600;
+const DEFAULT_LISTEN: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 7126);
 const DEFAULT_MOONRAKER_URL: &str = "http://127.0.0.1:7125";
 
 /// Why the config could not be used.
@@ -46,6 +50,18 @@ pub enum ConfigError {
         path: PathBuf,
         /// The key.
         key: &'static str,
+        /// What is wrong with it.
+        reason: &'static str,
+    },
+    /// One entry of a list is out of range. The text is the entry, which holds no secret.
+    #[error("invalid config {}: {key} entry {entry:?} {reason}", path.display())]
+    InvalidEntry {
+        /// The config file.
+        path: PathBuf,
+        /// The key.
+        key: &'static str,
+        /// The entry's text.
+        entry: String,
         /// What is wrong with it.
         reason: &'static str,
     },
@@ -96,6 +112,9 @@ struct RawConfig {
     moonraker_url: Option<String>,
     moonraker_api_key: Option<String>,
     max_segment_seconds: Option<u32>,
+    listen: Option<String>,
+    trusted_proxies: Option<Vec<String>>,
+    allowed_hosts: Option<Vec<String>>,
 }
 
 /// The storage settings, with sizes in bytes.
@@ -113,6 +132,13 @@ pub struct Settings {
     pub moonraker_api_key: Option<String>,
     /// The longest one `TEST_RESONANCES` command may be expected to run, in seconds.
     pub max_segment_seconds: u32,
+    /// The address the daemon listens on.
+    pub listen: SocketAddr,
+    /// The addresses and networks whose `X-Forwarded-For` the daemon believes.
+    pub trusted_proxies: Vec<Net>,
+    /// The host names, lowercase, that the `Host` check admits besides the ones Moonraker's
+    /// lists imply.
+    pub allowed_hosts: Vec<String>,
 }
 
 impl Settings {
@@ -153,6 +179,9 @@ impl fmt::Debug for Settings {
             .field("free_space_headroom_bytes", &self.free_space_headroom_bytes)
             .field("moonraker_url", &self.moonraker_url)
             .field("max_segment_seconds", &self.max_segment_seconds)
+            .field("listen", &self.listen)
+            .field("trusted_proxies", &self.trusted_proxies)
+            .field("allowed_hosts", &self.allowed_hosts)
             .field(
                 "moonraker_api_key",
                 &self.moonraker_api_key.as_ref().map(|_| "<redacted>"),
@@ -170,6 +199,9 @@ impl Default for Settings {
             moonraker_url: Uri::from_static(DEFAULT_MOONRAKER_URL),
             moonraker_api_key: None,
             max_segment_seconds: DEFAULT_MAX_SEGMENT_SECONDS,
+            listen: DEFAULT_LISTEN,
+            trusted_proxies: Vec::new(),
+            allowed_hosts: Vec::new(),
         }
     }
 }
@@ -202,6 +234,20 @@ fn moonraker_url(text: &str) -> Result<Uri, &'static str> {
     Ok(uri)
 }
 
+/// A host name for the allowlist: letters, digits, `-` and `.`, lowercased.
+fn allowed_host(text: &str) -> Result<String, &'static str> {
+    if text.is_empty() {
+        return Err("must not be empty");
+    }
+    if !text
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+    {
+        return Err("must be a bare host name: no scheme, port or path");
+    }
+    Ok(text.to_lowercase())
+}
+
 /// Loads the settings from `path`, or returns the defaults when there is no path.
 ///
 /// # Errors
@@ -232,12 +278,48 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
     if raw.moonraker_api_key.as_deref() == Some("") {
         return Err(invalid("moonraker_api_key", "must not be empty"));
     }
+    let entry = |key, entry: &str, reason| ConfigError::InvalidEntry {
+        path: path.to_owned(),
+        key,
+        entry: entry.to_owned(),
+        reason,
+    };
+    let listen = match raw.listen {
+        Some(text) => text.parse().map_err(|_| {
+            invalid(
+                "listen",
+                "must be an IP address and port like 0.0.0.0:7126; a host name is not allowed",
+            )
+        })?,
+        None => DEFAULT_LISTEN,
+    };
+    let mut trusted_proxies = Vec::new();
+    for text in raw.trusted_proxies.iter().flatten() {
+        trusted_proxies.push(Net::parse(text).map_err(|e| {
+            entry(
+                "trusted_proxies",
+                text,
+                match e {
+                    NetError::HostBits => "is a network with host bits set",
+                    NetError::Invalid => "is not an IP address or network",
+                },
+            )
+        })?);
+    }
+    let mut allowed_hosts = Vec::new();
+    for text in raw.allowed_hosts.iter().flatten() {
+        allowed_hosts
+            .push(allowed_host(text).map_err(|reason| entry("allowed_hosts", text, reason))?);
+    }
     let defaults = Settings::default();
     let moonraker_url = match raw.moonraker_url {
         Some(text) => moonraker_url(&text).map_err(|reason| invalid("moonraker_url", reason))?,
         None => defaults.moonraker_url,
     };
     Ok(Settings {
+        listen,
+        trusted_proxies,
+        allowed_hosts,
         moonraker_url,
         moonraker_api_key: raw.moonraker_api_key,
         max_segment_seconds: raw
