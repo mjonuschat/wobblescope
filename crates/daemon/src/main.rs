@@ -8,7 +8,6 @@ use wobblescope::startup;
 use wobblescope::storage::default_probe;
 use wobblescope::web;
 
-const LISTEN_ADDR: &str = "127.0.0.1:7126";
 const CONFIG_ENV: &str = "WOBBLESCOPE_CONFIG";
 
 /// Logs to stderr, where systemd's journal picks it up and adds its own timestamp. The level is
@@ -33,6 +32,33 @@ async fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Says where the daemon listens and what it trusts, before it binds.
+fn log_access(settings: &config::Settings) {
+    let list = |items: Vec<String>| {
+        if items.is_empty() {
+            "none".to_owned()
+        } else {
+            items.join(", ")
+        }
+    };
+    tracing::info!("listening on {}", settings.listen);
+    tracing::info!(
+        "trusted_proxies: {}; allowed_hosts: {}",
+        list(
+            settings
+                .trusted_proxies
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        ),
+        list(settings.allowed_hosts.clone()),
+    );
+    tracing::info!(
+        "only loopback clients are admitted until Moonraker's trusted_clients and cors_domains \
+         are read"
+    );
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -62,9 +88,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     .fallback(web::static_handler);
     let app = api::guarded(
         app,
-        api::AccessGuard::new(moonraker.clone(), Vec::new(), Vec::new()),
+        api::AccessGuard::new(
+            moonraker.clone(),
+            settings.trusted_proxies.clone(),
+            settings.allowed_hosts.clone(),
+        ),
     );
-    let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
+    log_access(&settings);
+    let listener = tokio::net::TcpListener::bind(settings.listen).await?;
     let serve = std::future::IntoFuture::into_future(axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),

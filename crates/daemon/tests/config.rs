@@ -182,3 +182,59 @@ fn max_segment_seconds_defaults_to_600_and_zero_is_refused() {
     );
     refused_naming("max_segment_seconds = 0\n", "max_segment_seconds");
 }
+
+#[test]
+fn the_access_keys_default_to_every_interface_and_empty_lists() {
+    let s = load_text("").unwrap();
+    assert_eq!(s.listen, "0.0.0.0:7126".parse().unwrap());
+    assert!(s.trusted_proxies.is_empty());
+    assert!(s.allowed_hosts.is_empty());
+}
+
+#[test]
+fn the_access_keys_parse_and_host_names_are_lowercased() {
+    let s = load_text(
+        "listen = \"[::]:8080\"\n\
+         trusted_proxies = [\"127.0.0.1\", \"10.0.0.0/8\"]\n\
+         allowed_hosts = [\"Printer.Example.COM\"]\n",
+    )
+    .unwrap();
+    assert_eq!(s.listen, "[::]:8080".parse().unwrap());
+    let proxies: Vec<String> = s.trusted_proxies.iter().map(ToString::to_string).collect();
+    assert_eq!(proxies, ["127.0.0.1", "10.0.0.0/8"]);
+    assert_eq!(s.allowed_hosts, ["printer.example.com"]);
+}
+
+#[test]
+fn a_listen_value_that_is_not_an_address_and_port_is_refused_by_name() {
+    for bad in ["printer.local:7126", "0.0.0.0", "0.0.0.0:99999"] {
+        refused_naming(&format!("listen = \"{bad}\"\n"), "listen");
+    }
+}
+
+#[test]
+fn a_bad_proxy_is_refused_naming_the_key_and_the_entry() {
+    for bad in ["10.0.0.1/8", "proxy.lan"] {
+        let err = load_text(&format!("trusted_proxies = [\"{bad}\"]\n")).unwrap_err();
+        assert!(
+            err.contains("trusted_proxies") && err.contains(bad),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn a_bad_allowed_host_is_refused_naming_the_key_and_the_entry() {
+    for bad in ["http://x", "x:7126", ""] {
+        let err = load_text(&format!("allowed_hosts = [\"{bad}\"]\n")).unwrap_err();
+        assert!(
+            err.contains("allowed_hosts") && err.contains(&format!("{bad:?}")),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn a_misspelled_listen_key_is_still_refused_by_name() {
+    refused_naming("listen_addr = \"0.0.0.0:7126\"\n", "listen_addr");
+}
