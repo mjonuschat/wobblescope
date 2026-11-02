@@ -48,6 +48,15 @@ async fn two_chips_two_axes_one_point_finish_as_a_complete_session() {
     let w0 = meta.segments[0].window.unwrap();
     assert!((w0.start - 101.2).abs() < 1e-6, "{w0:?}");
     assert!(meta.chips.iter().all(|c| c.health == Health::Ok));
+    // The simulated chips deliver 500 and 400 Hz, under half of the 3200 and 1600 Hz nominal.
+    for chip in &meta.chips {
+        assert_eq!(chip.health_notes.len(), 1, "{:?}", chip.health_notes);
+        assert!(
+            chip.health_notes[0].contains("under half"),
+            "{:?}",
+            chip.health_notes
+        );
+    }
     assert_eq!(meta.probe_points.len(), 1);
     assert_eq!(rig.sim.sweeps().len(), 2);
     assert!(rig.sim.sweeps()[0].contains("AXIS=X") && rig.sim.sweeps()[1].contains("AXIS=Y"));
@@ -611,4 +620,14 @@ async fn killing_the_runner_after_segment_one_leaves_a_session_the_next_open_rec
     let (_, meta) = reopened.session(&id).unwrap();
     assert_eq!(meta.segments.len(), 1);
     assert!(matches!(meta.outcome, Outcome::Failed { .. }));
+}
+
+#[test]
+fn a_chip_at_its_nominal_rate_gets_no_slow_rate_note() {
+    use wobblescope::capture::meta::slow_rate_note;
+    assert_eq!(slow_rate_note(Some(1600.0), 1610.0), None);
+    assert_eq!(slow_rate_note(Some(1600.0), 800.0), None);
+    assert_eq!(slow_rate_note(None, 100.0), None);
+    let note = slow_rate_note(Some(1600.0), 394.0).unwrap();
+    assert!(note.contains("394 Hz") && note.contains("1600 Hz") && note.contains("firmware"));
 }

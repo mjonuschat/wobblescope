@@ -15,7 +15,7 @@ use wobblescope_core::eligibility::Coverage;
 use wobblescope_session::meta::{Outcome, PrinterInfo, SegmentMeta, SessionMeta, TimeWindow};
 
 use super::live::{ChipLive, FinishedOutcome, FinishedTest, LiveHub, Phase, TestState};
-use super::meta::{ChipFacts, apply_summaries, initial};
+use super::meta::{ChipFacts, apply_summaries, initial, slow_rate_note};
 use super::position::{PositionError, Timeouts, move_to_point, window_end, window_start};
 use super::preflight::{Started, check_printer, quarantine_duration};
 use super::recorder::{Level, Missing, Recorder};
@@ -272,6 +272,11 @@ impl Run {
             .iter()
             .map(|c| ChipFacts::of(&c.chip, c.observed_rate_hz))
             .collect();
+        for fact in &facts {
+            if let Some(note) = slow_rate_note(fact.nominal_rate_hz, fact.observed_rate_hz) {
+                self.warn(&fact.section, &note);
+            }
+        }
         let control = self.control()?;
         let printer = printer_info(&control).await;
         let meta = initial(&self.plan, &self.id, &self.created_at, &facts, printer);

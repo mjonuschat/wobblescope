@@ -43,6 +43,24 @@ fn type_name(t: ChipType) -> &'static str {
     }
 }
 
+/// A chip delivering under this share of its nominal rate gets a note.
+const SLOW_RATE_SHARE: f64 = 0.5;
+
+/// A note for a chip whose observed sample rate is under half the rate Klipper configures, or
+/// `None`. The usual cause is old MCU firmware: before Klipper's 2025-10-06 fix to
+/// `sensor_lis2dw.c` a `lis2dw` delivered one sample per 2.5 ms, so about 400 Hz of the 1600 Hz
+/// it is set to. The samples are valid but undersampled, so the note names the cause to check.
+#[must_use]
+pub fn slow_rate_note(nominal_hz: Option<f64>, observed_hz: f64) -> Option<String> {
+    let nominal = nominal_hz.filter(|n| n.is_finite() && *n > 0.0)?;
+    (observed_hz < nominal * SLOW_RATE_SHARE).then(|| {
+        format!(
+            "samples arrive at {observed_hz:.0} Hz, under half the {nominal:.0} Hz Klipper \
+             configures; check that the chip's MCU runs current firmware"
+        )
+    })
+}
+
 /// The metadata a capture starts with: no segment yet, chips with unknown health. It becomes the
 /// first journal.
 #[must_use]
@@ -97,6 +115,12 @@ pub fn apply_summaries(meta: &mut SessionMeta, summaries: &[ChipSummary]) {
             .filter(|r| r.is_finite() && *r > 0.0)
         {
             chip.observed_rate_hz = Some(rate);
+        }
+        if let Some(note) = chip
+            .observed_rate_hz
+            .and_then(|rate| slow_rate_note(chip.nominal_rate_hz, rate))
+        {
+            chip.health_notes.push(note);
         }
     }
 }
