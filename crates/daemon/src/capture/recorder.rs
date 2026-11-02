@@ -50,6 +50,9 @@ pub struct ChipSegmentReport {
     pub coverage: Coverage,
     /// Whether this segment shows a problem: counters rose, or a gap sits inside the window.
     pub degraded: bool,
+    /// The segment's health on its own: `Degraded` as above, `Ok` for a chip that reports
+    /// counters, `Unknown` for one that does not.
+    pub health: Health,
     /// What was seen, one line each.
     pub notes: Vec<String>,
     /// The sample rate seen in this segment, in Hz.
@@ -419,9 +422,17 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
     if i.capped {
         notes.push("the segment hit the sample limit and the rest was dropped".to_owned());
     }
+    let health = if degraded {
+        Health::Degraded
+    } else if i.counters_seen {
+        Health::Ok
+    } else {
+        Health::Unknown
+    };
     ChipSegmentReport {
         coverage,
         degraded,
+        health,
         notes,
         observed_rate_hz: interval.map(|d| 1.0 / d),
         capped: i.capped,

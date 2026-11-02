@@ -28,4 +28,18 @@ describe('the session details', () => {
     render(<MetaPanel meta={twoAxisMeta()} />)
     expect(screen.queryByText('MCU firmware')).toBeNull()
   })
+
+  it('names the segments where a chip was degraded, even when its other segments were fine', () => {
+    const meta = twoAxisMeta()
+    meta.segments[1].files[0].health = 'Degraded'
+    meta.segments[1].files[0].health_notes = ["the chip's errors counter rose by 3"]
+    render(<MetaPanel meta={meta} />)
+    expect(screen.getByText('Degraded segments')).toBeTruthy()
+    expect(screen.getByText(/Segment 2 \(Y, .*\): adxl345, the chip's errors counter rose by 3/)).toBeTruthy()
+  })
+
+  it('lists no degraded segment when every recording was fine or unjudged', () => {
+    render(<MetaPanel meta={twoAxisMeta()} />)
+    expect(screen.queryByText('Degraded segments')).toBeNull()
+  })
 })

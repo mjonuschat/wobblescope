@@ -22,6 +22,8 @@ export function twoAxisMeta(id = 's1'): SessionMeta {
     sample_file: `c${chip}-s${segment}.zst`,
     sample_count: 10,
     coverage: 'Complete' as const,
+    health: null,
+    health_notes: [],
   })
   const chip = (name: string) => ({
     name,

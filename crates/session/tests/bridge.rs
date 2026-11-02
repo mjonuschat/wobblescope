@@ -35,6 +35,8 @@ fn entry(chip: u32, segment: usize, count: usize, coverage: Coverage) -> Segment
         sample_file: sample_file_name(chip as usize, segment),
         sample_count: count as u32,
         coverage,
+        health: None,
+        health_notes: Vec::new(),
     }
 }
 

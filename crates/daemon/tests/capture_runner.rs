@@ -639,3 +639,35 @@ fn a_chip_at_its_nominal_rate_gets_no_slow_rate_note() {
     let note = slow_rate_note(Some(1600.0), 394.0).unwrap();
     assert!(note.contains("394 Hz") && note.contains("1600 Hz") && note.contains("firmware"));
 }
+
+#[tokio::test]
+async fn each_segment_file_records_the_health_of_that_segment_alone() {
+    let rig = rig().await;
+    // The lis2dw's error counter rises to 3 during the first segment and stays there.
+    rig.sim.set_counters("ebb36", 3, 0);
+    let plan = test_plan(&CHIPS, &[Axis::X, Axis::Y]);
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+
+    let file = |segment: usize, chip: u32| meta.find_file(chip, segment).unwrap();
+    assert_eq!(file(0, 0).health, Some(Health::Ok));
+    assert_eq!(file(1, 0).health, Some(Health::Ok));
+    assert_eq!(file(0, 1).health, Some(Health::Degraded));
+    assert!(
+        file(0, 1)
+            .health_notes
+            .iter()
+            .any(|n| n.contains("errors counter rose by 3")),
+        "{:?}",
+        file(0, 1).health_notes
+    );
+    // The counter only rose in the first segment, so the second is clean on its own.
+    assert_eq!(file(1, 1).health, Some(Health::Ok));
+    assert!(file(1, 1).health_notes.is_empty());
+    // The chip's overall health is still the worst of its segments.
+    assert_eq!(meta.chips[1].health, Health::Degraded);
+    assert_eq!(meta.chips[0].health, Health::Ok);
+}

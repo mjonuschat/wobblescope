@@ -156,6 +156,13 @@ pub struct SegmentFile {
     pub sample_count: u32,
     /// Whether the recording covers the whole segment.
     pub coverage: Coverage,
+    /// How this recording's capture looked, judged on this segment alone. `None` when the
+    /// capture did not judge it (older sessions, imports); the chip's overall health then stands.
+    #[serde(default)]
+    pub health: Option<Health>,
+    /// What was seen in this segment: counters that rose, gaps in the timestamps.
+    #[serde(default)]
+    pub health_notes: Vec<String>,
 }
 
 /// One (axis, probe point) measurement.

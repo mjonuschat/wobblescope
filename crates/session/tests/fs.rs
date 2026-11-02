@@ -34,6 +34,8 @@ fn meta(id: &str) -> SessionMeta {
         sample_file: sample_file_name(chip as usize, seg),
         sample_count: n,
         coverage: Coverage::Complete,
+        health: None,
+        health_notes: Vec::new(),
     };
     let chip = |name: &str| ChipMeta {
         name: name.to_owned(),
@@ -281,6 +283,8 @@ fn a_file_entry_the_metadata_does_not_list_is_refused() {
         sample_file: "meta.json".to_owned(),
         sample_count: 1,
         coverage: Coverage::Complete,
+        health: None,
+        health_notes: Vec::new(),
     };
     assert!(matches!(
         session.load(&foreign),
@@ -307,6 +311,8 @@ fn open_sample_reads_the_bytes_on_disk_and_refuses_unlisted_entries() {
         sample_file: "meta.json".to_owned(),
         sample_count: 1,
         coverage: Coverage::Complete,
+        health: None,
+        health_notes: Vec::new(),
     };
     assert!(matches!(
         session.open_sample(&foreign),

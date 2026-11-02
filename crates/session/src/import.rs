@@ -94,6 +94,8 @@ pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Importe
                 sample_file: sample_file_name(0, 0),
                 sample_count: n as u32,
                 coverage: Coverage::Complete,
+                health: None,
+                health_notes: Vec::new(),
             }],
         }],
     };

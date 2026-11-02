@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
-use wobblescope_core::eligibility::Coverage;
+use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_session::meta::{Outcome, PrinterInfo, SegmentMeta, SessionMeta, TimeWindow};
 
 use super::live::{ChipLive, FinishedOutcome, FinishedTest, LiveHub, Phase, TestState};
@@ -510,6 +510,7 @@ impl Run {
         let mut recordings: Vec<(u32, RawSamples, Coverage)> = Vec::new();
         let index = self.meta.as_ref().map_or(0, |m| m.segments.len());
         let mut notes: Vec<(String, String)> = Vec::new();
+        let mut judged: Vec<(u32, Health, Vec<String>)> = Vec::new();
         for (chip, (rec, result)) in self.recorders.iter().zip(results).enumerate() {
             match result {
                 Ok(()) => {}
@@ -537,13 +538,14 @@ impl Run {
             if taken.samples.is_empty() {
                 continue;
             }
+            judged.push((chip as u32, taken.report.health, taken.report.notes));
             recordings.push((chip as u32, taken.samples, taken.report.coverage));
         }
         for (chip, note) in notes {
             self.warn(&chip, &note);
         }
         let window = TimeWindow { start, end };
-        self.store_segment(segment, index, recordings, window)
+        self.store_segment(segment, index, recordings, judged, window)
             .await?;
         failure.map_or(Ok(()), Err)
     }
@@ -553,9 +555,10 @@ impl Run {
         segment: &Segment,
         index: usize,
         recordings: Vec<(u32, RawSamples, Coverage)>,
+        judged: Vec<(u32, Health, Vec<String>)>,
         window: TimeWindow,
     ) -> Result<(), Failure> {
-        let files = self
+        let mut files = self
             .with_capture(move |capture| {
                 let refs: Vec<(u32, &RawSamples, Coverage)> = recordings
                     .iter()
@@ -565,6 +568,13 @@ impl Run {
             })
             .await
             .map_err(|e| Failure::certain(format!("disk write failed: {e}")))?;
+        for file in &mut files {
+            if let Some((_, health, notes)) = judged.iter().find(|(chip, _, _)| *chip == file.chip)
+            {
+                file.health = Some(*health);
+                file.health_notes.clone_from(notes);
+            }
+        }
         let meta = self.meta.as_mut().expect("the capture has metadata");
         meta.segments.push(SegmentMeta {
             axis: segment.axis,
@@ -614,9 +624,11 @@ impl Run {
             return;
         }
         let mut recordings = Vec::new();
+        let mut judged = Vec::new();
         for (chip, rec) in self.recorders.iter().enumerate() {
             let taken = rec.take(start, end);
             if taken.samples.t.iter().any(|t| *t >= start) {
+                judged.push((chip as u32, taken.report.health, taken.report.notes));
                 let coverage = Coverage::Incomplete {
                     missing: "the test was interrupted".to_owned(),
                 };
@@ -632,7 +644,7 @@ impl Run {
             .push(format!("segment {} was interrupted", at + 1));
         // A failure to write it leaves the finished segments, which are already journaled.
         let _ = self
-            .store_segment(&segment, at, recordings, TimeWindow { start, end })
+            .store_segment(&segment, at, recordings, judged, TimeWindow { start, end })
             .await;
     }
 
