@@ -14,7 +14,8 @@ const DEFAULT_CAP_MIB: u64 = 2048;
 const DEFAULT_HEADROOM_MIB: u64 = 256;
 const DEFAULT_MAX_SEGMENT_SECONDS: u32 = 600;
 const DEFAULT_LISTEN: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 7126);
-const DEFAULT_MOONRAKER_URL: &str = "http://127.0.0.1:7125";
+/// The Moonraker URL used when the config names none.
+pub const DEFAULT_MOONRAKER_URL: &str = "http://127.0.0.1:7125";
 
 /// Why the config could not be used.
 #[derive(Debug, thiserror::Error)]
@@ -207,7 +208,7 @@ impl Default for Settings {
 }
 
 /// Checks `moonraker_url` and returns it parsed.
-fn moonraker_url(text: &str) -> Result<Uri, &'static str> {
+pub fn moonraker_url(text: &str) -> Result<Uri, &'static str> {
     if text.contains('#') {
         return Err("must not have a fragment");
     }
