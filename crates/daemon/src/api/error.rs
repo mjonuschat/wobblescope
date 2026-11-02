@@ -64,6 +64,14 @@ pub enum ApiError {
     TestNotRunning { message: String },
     /// A write from another origin.
     CrossOrigin { message: String },
+    /// The client's address is not in Moonraker's `trusted_clients`.
+    UntrustedClient { message: String },
+    /// The `Host` of the request is not on the allowlist.
+    HostNotAllowed { message: String },
+    /// Moonraker requires logins, which the daemon cannot check yet.
+    LoginsRequired { message: String },
+    /// The daemon has not read Moonraker's `trusted_clients`, so it admits only loopback.
+    AccessUnavailable { message: String },
     /// Storage is not open yet: the daemon is waiting for Moonraker to report the data directory.
     StorageUnavailable { message: String },
     /// Moonraker cannot answer: not connected, or it answered with an error.
@@ -118,10 +126,13 @@ impl ApiError {
             Self::CapExceeded { .. } | Self::InsufficientDisk { .. } => {
                 StatusCode::INSUFFICIENT_STORAGE
             }
-            Self::CrossOrigin { .. } => StatusCode::FORBIDDEN,
-            Self::StorageUnavailable { .. } | Self::MoonrakerUnavailable { .. } => {
-                StatusCode::SERVICE_UNAVAILABLE
-            }
+            Self::CrossOrigin { .. }
+            | Self::UntrustedClient { .. }
+            | Self::HostNotAllowed { .. }
+            | Self::LoginsRequired { .. } => StatusCode::FORBIDDEN,
+            Self::StorageUnavailable { .. }
+            | Self::MoonrakerUnavailable { .. }
+            | Self::AccessUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

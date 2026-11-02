@@ -60,8 +60,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         capture.clone(),
     )
     .fallback(web::static_handler);
+    let app = api::guarded(
+        app,
+        api::AccessGuard::new(moonraker.clone(), Vec::new(), Vec::new()),
+    );
     let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
-    let serve = std::future::IntoFuture::into_future(axum::serve(listener, app));
+    let serve = std::future::IntoFuture::into_future(axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    ));
     tokio::pin!(serve);
     if let Some(report) = report {
         let coordinator = startup::resolve_storage(
