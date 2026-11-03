@@ -1,10 +1,12 @@
 import type { StatusResponse } from '@/lib/generated/StatusResponse'
 
+import { BUILD_VERSION } from '@/lib/version'
 import type { ApiCall, Reply } from './http'
 import { stubApi } from './http'
 
 /** A daemon with nothing to report: Moonraker connected, Klipper ready, storage open. */
 export const healthyStatus: StatusResponse = {
+  version: BUILD_VERSION,
   moonraker: { state: 'connected', message: null, version: 'v0.9.3' },
   klippy: { state: 'ready', message: null },
   storage: { state: 'ready' },

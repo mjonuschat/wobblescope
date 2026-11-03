@@ -36,6 +36,9 @@ pub struct StorageStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct StatusResponse {
+    /// The daemon's build version. The web app embedded in it carries the same one, so a page
+    /// opened before an update can tell it is stale.
+    pub version: String,
     /// The connection to Moonraker.
     pub moonraker: MoonrakerStatus,
     /// Klipper behind it.
@@ -52,6 +55,7 @@ pub(super) async fn status(State(state): State<ApiState>) -> Json<StatusResponse
         StorageState::Waiting
     };
     Json(StatusResponse {
+        version: env!("CARGO_PKG_VERSION").to_owned(),
         moonraker: status.moonraker,
         klippy: status.klippy,
         storage: StorageStatus { state: storage },

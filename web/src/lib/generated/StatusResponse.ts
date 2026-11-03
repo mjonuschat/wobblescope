@@ -8,6 +8,11 @@ import type { StorageStatus } from "./StorageStatus";
  */
 export type StatusResponse = { 
 /**
+ * The daemon's build version. The web app embedded in it carries the same one, so a page
+ * opened before an update can tell it is stale.
+ */
+version: string, 
+/**
  * The connection to Moonraker.
  */
 moonraker: MoonrakerStatus, 

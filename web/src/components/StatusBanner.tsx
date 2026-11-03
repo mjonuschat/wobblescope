@@ -1,5 +1,6 @@
 import type { KlippyState } from '@/lib/generated/KlippyState'
 import { useStatus } from '@/lib/api/queries'
+import { BUILD_VERSION } from '@/lib/version'
 
 const KLIPPY_WORDS: Record<KlippyState, string> = {
   unknown: "Klipper's state is unknown",
@@ -15,6 +16,8 @@ interface Notice {
   role: 'alert' | 'status'
   text: string
   detail?: string | null
+  /** Offers a reload of the page. */
+  reload?: boolean
 }
 
 /** The banner's content, by the precedence of the status request, Moonraker, then Klipper. */
@@ -24,6 +27,14 @@ function notice(
   if (status.isError) return { role: 'alert', text: status.error.message }
   if (!status.data) return null
   const { moonraker, klippy } = status.data
+  if (status.data.version !== BUILD_VERSION) {
+    return {
+      role: 'alert',
+      text: 'Wobblescope was updated since this page loaded',
+      detail: 'Reload to use the new version.',
+      reload: true,
+    }
+  }
   if (moonraker.state === 'connecting') {
     return { role: 'status', text: 'Connecting to Moonraker' }
   }
@@ -50,6 +61,15 @@ export function StatusBanner() {
     >
       <span className="font-medium">{content.text}</span>
       {content.detail ? <span className="ml-2 opacity-80">{content.detail}</span> : null}
+      {content.reload ? (
+        <button
+          type="button"
+          className="ml-3 rounded border border-amber-600 px-2 py-0.5 hover:bg-amber-900"
+          onClick={() => window.location.reload()}
+        >
+          Reload
+        </button>
+      ) : null}
     </div>
   )
 }
