@@ -34,6 +34,7 @@ async fn a_fresh_daemon_is_connecting_with_waiting_storage_and_no_chips() {
     assert_eq!(
         body,
         json!({
+            "version": env!("CARGO_PKG_VERSION"),
             "moonraker": {"state": "connecting", "message": null, "version": null},
             "klippy": {"state": "unknown", "message": null},
             "storage": {"state": "waiting"},
@@ -72,6 +73,7 @@ async fn the_status_shows_the_published_fields_and_open_storage() {
     assert_eq!(body["klippy"]["state"], "shutdown");
     assert_eq!(body["klippy"]["message"], "Timer too close");
     assert_eq!(body["storage"]["state"], "ready");
+    assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
 }
 
 #[tokio::test]

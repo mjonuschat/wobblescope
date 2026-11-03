@@ -1,9 +1,10 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient, queryKeys } from '@/lib/api/queries'
 import type { StatusResponse } from '@/lib/generated/StatusResponse'
+import { BUILD_VERSION } from '@/lib/version'
 import { healthyStatus, stubApiWithStatus } from '@/test/status'
 
 import { StatusBanner } from './StatusBanner'
@@ -37,6 +38,26 @@ const unreachable: StatusResponse = {
 }
 
 describe('the status banner', () => {
+  it('offers a reload when the daemon runs another build than this page', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    await showing({ ...healthyStatus, version: `${BUILD_VERSION}-newer` })
+    const banner = await screen.findByRole('alert')
+    expect(banner.textContent).toContain('updated')
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer a reload when the builds match', async () => {
+    await showing(healthyStatus)
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+  })
+
+  it('puts the stale page ahead of Moonraker trouble', async () => {
+    await showing({ ...unreachable, version: `${BUILD_VERSION}-newer` })
+    expect(await screen.findByRole('button', { name: 'Reload' })).toBeTruthy()
+  })
+
   it('shows nothing while the first status request is pending', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     renderBanner()
