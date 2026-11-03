@@ -46,6 +46,7 @@ function setup() {
     meta: twoAxisMeta('s1'),
     axis: 'X' as const,
     params: defaultParams,
+    overrides: [] as string[],
     ...over,
   })
   return { worker, fetchSample, createWorker, client, job }
@@ -75,6 +76,13 @@ describe('the analysis client', () => {
     await c
     expect(fetchSample).toHaveBeenCalledTimes(3)
     expect(Object.keys(worker.analyses()[2].files)).toEqual([])
+  })
+
+  it('sends the chips to include along with the request', async () => {
+    const { worker, client, job } = setup()
+    void client.analyze(job({ overrides: ['b'] })).catch(() => {})
+    await flush()
+    expect(worker.analyses()[0].overrides).toEqual(['b'])
   })
 
   it('transfers the fetched buffers to the worker', async () => {

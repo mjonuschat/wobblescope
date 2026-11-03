@@ -13,8 +13,17 @@ import { FitSettingsForm } from './FitSettingsForm'
 import { MetaPanel } from './MetaPanel'
 import { defaultFitParams } from './fit'
 
-function Analysis({ id, meta, axis, params }: { id: string; meta: SessionMeta; axis: Axis; params: FitParams }) {
-  const analysis = useSessionAnalysis({ sessionId: id, meta, axis, params })
+interface AnalysisProps {
+  id: string
+  meta: SessionMeta
+  axis: Axis
+  params: FitParams
+  overrides: string[]
+  onOverridesChange: (overrides: string[]) => void
+}
+
+function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: AnalysisProps) {
+  const analysis = useSessionAnalysis({ sessionId: id, meta, axis, params, overrides })
   if (analysis.isPending) {
     return <p className="text-sm text-muted-foreground">Analysing axis {axis}…</p>
   }
@@ -25,13 +34,19 @@ function Analysis({ id, meta, axis, params }: { id: string; meta: SessionMeta; a
       </p>
     )
   }
-  return <AxisResults result={analysis.data} meta={meta} />
+  return <AxisResults
+      result={analysis.data}
+      meta={meta}
+      overrides={overrides}
+      onOverridesChange={onOverridesChange}
+    />
 }
 
 export function SessionPage({ id }: { id: string }) {
   const session = useSession(id)
   const [selected, setSelected] = useState<Axis | null>(null)
   const [params, setParams] = useState<FitParams>(defaultFitParams)
+  const [overrides, setOverrides] = useState<string[]>([])
 
   if (session.isPending) return <p className="text-sm text-muted-foreground">Loading session…</p>
   if (session.isError) {
@@ -74,7 +89,14 @@ export function SessionPage({ id }: { id: string }) {
             </TabsList>
           </Tabs>
           <FitSettingsForm onApply={setParams} />
-          <Analysis id={id} meta={meta} axis={axis} params={params} />
+          <Analysis
+            id={id}
+            meta={meta}
+            axis={axis}
+            params={params}
+            overrides={overrides}
+            onOverridesChange={setOverrides}
+          />
         </>
       )}
     </div>

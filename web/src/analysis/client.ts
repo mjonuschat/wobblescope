@@ -18,6 +18,8 @@ export interface AnalysisJob {
   meta: SessionMeta
   axis: Axis
   params: FitParams
+  /** Chips to include although their health or coverage would exclude them. */
+  overrides: string[]
 }
 
 /** A queued request that a newer one replaced before it was sent. */
@@ -144,6 +146,7 @@ export function createAnalysisClient({
           meta: job.meta,
           axis: job.axis,
           params: job.params,
+          overrides: job.overrides,
           files,
         },
         buffers,

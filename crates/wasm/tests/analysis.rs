@@ -6,7 +6,7 @@ mod common;
 
 use common::{real, window_markers_x_short};
 use wobblescope_core::RawSamples;
-use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
+use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
 use wobblescope_session::codec::encode_samples;
@@ -109,7 +109,7 @@ parity_test! {
     fn analysis_through_the_binding_equals_direct_analysis() {
         let w = win();
         let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
-        let via = s.analyze(Axis::X, &FitParams::default()).unwrap();
+        let via = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
         let direct = analyze(&direct(&w), &FitParams::default()).unwrap();
         assert_eq!(via, direct);
         assert!(via.worst_case.is_some());
@@ -117,10 +117,25 @@ parity_test! {
 }
 
 parity_test! {
+    fn an_override_brings_an_excluded_chip_into_the_analysis_and_says_so() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Degraded));
+        let without = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
+        assert_eq!(without.eligibility.decisions[1].decision, Decision::Excluded);
+        assert!(without.per_chip[1].recommendation.is_none());
+        let with = s
+            .analyze(Axis::X, &FitParams::default(), &["lis2dw ebb36".to_owned()])
+            .unwrap();
+        assert_eq!(with.eligibility.decisions[1].decision, Decision::Overridden);
+        assert!(with.per_chip[1].recommendation.is_some());
+    }
+}
+
+parity_test! {
     fn an_axis_without_segments_is_an_empty_analysis_not_an_error() {
         let w = win();
         let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
-        let a = s.analyze(Axis::Y, &FitParams::default()).unwrap();
+        let a = s.analyze(Axis::Y, &FitParams::default(), &[]).unwrap();
         assert!(a.per_chip.is_empty());
         assert!(a.worst_case.is_none());
     }
@@ -131,7 +146,7 @@ parity_test! {
         let w = win();
         let mut s = Session::new(two_chip_x_meta(&w, Health::Ok)).unwrap();
         s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
-        let e = s.analyze(Axis::X, &FitParams::default()).unwrap_err().to_string();
+        let e = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap_err().to_string();
         assert!(e.contains("c1-s0.zst"), "{e}");
     }
 }
@@ -144,7 +159,7 @@ parity_test! {
         let mut bytes = encode_samples(&w.ebb).unwrap();
         bytes.truncate(bytes.len() / 2);
         s.add_file("c1-s0.zst", bytes);
-        let e = s.analyze(Axis::X, &FitParams::default()).unwrap_err().to_string();
+        let e = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap_err().to_string();
         assert!(e.contains("truncated") || e.contains("corrupt"), "{e}");
     }
 }
@@ -156,7 +171,7 @@ parity_test! {
         meta.segments[0].files[1].sample_count += 1;
         let expected = meta.segments[0].files[1].sample_count;
         let s = loaded(&w, meta);
-        let e = s.analyze(Axis::X, &FitParams::default()).unwrap_err().to_string();
+        let e = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap_err().to_string();
         assert!(e.contains("c1-s0.zst"), "{e}");
         assert!(e.contains(&expected.to_string()) && e.contains(&w.ebb.len().to_string()), "{e}");
     }
@@ -167,7 +182,7 @@ parity_test! {
         let w = win();
         let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
         let params = FitParams { damping_ratio: Some(1.5), ..FitParams::default() };
-        let e = s.analyze(Axis::X, &params).unwrap_err().to_string();
+        let e = s.analyze(Axis::X, &params, &[]).unwrap_err().to_string();
         assert!(e.contains("damping_ratio"), "{e}");
     }
 }
@@ -176,7 +191,7 @@ parity_test! {
     fn the_snippet_equals_cores_for_the_worst_case() {
         let w = win();
         let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
-        let a = s.analyze(Axis::X, &FitParams::default()).unwrap();
+        let a = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
         let best = a.worst_case.unwrap();
         let snippet = config_snippet(&best, Axis::X);
         assert_eq!(snippet, best.config_snippet(Axis::X));
@@ -205,7 +220,7 @@ mod js {
         s.add_file("c1-s0.zst".to_owned(), encode_samples(&w.ebb).unwrap());
         // Only one setting is given; every other field takes its default.
         let params = js_sys::eval("({ scv: 5, max_smoothing: 0.2 })").unwrap();
-        let out = s.analyze(to_js(&Axis::X), params).unwrap();
+        let out = s.analyze(to_js(&Axis::X), params, None).unwrap();
         let got: Analysis = serde_wasm_bindgen::from_value(out).unwrap();
         let want = analyze(
             &direct(&w),
@@ -228,7 +243,7 @@ mod js {
         s.add_file("c0-s0.zst".to_owned(), encode_samples(&w.adxl).unwrap());
         s.add_file("c1-s0.zst".to_owned(), encode_samples(&w.ebb).unwrap());
         let out = s
-            .analyze(to_js(&Axis::X), to_js(&FitParams::default()))
+            .analyze(to_js(&Axis::X), to_js(&FitParams::default()), None)
             .unwrap();
         let worst = js_sys::Reflect::get(&out, &"worst_case".into()).unwrap();
         assert!(worst.is_null(), "worst_case must be null, not undefined");

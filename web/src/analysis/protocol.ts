@@ -11,6 +11,8 @@ export interface AnalyzeRequest {
   meta: SessionMeta
   axis: Axis
   params: FitParams
+  /** Chips to include although their health or coverage would exclude them. */
+  overrides: string[]
   /** Stored, compressed sample files by `sample_file` name. */
   files: Record<string, ArrayBuffer>
 }

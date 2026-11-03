@@ -20,8 +20,8 @@ class FakeSession implements SessionHandle {
   add_file(name: string, bytes: Uint8Array) {
     this.files.set(name, bytes)
   }
-  analyze(axis: unknown, params: unknown) {
-    this.analyzeCalls.push([axis, params])
+  analyze(axis: unknown, params: unknown, overrides: unknown) {
+    this.analyzeCalls.push([axis, params, overrides])
     return this.run()
   }
   free() {
@@ -51,6 +51,7 @@ function request(over: Partial<AnalyzeRequest> = {}): AnalyzeRequest {
     meta: twoAxisMeta('s1'),
     axis: 'X',
     params: defaultParams,
+    overrides: [],
     files: {},
     ...over,
   }
@@ -59,13 +60,20 @@ function request(over: Partial<AnalyzeRequest> = {}): AnalyzeRequest {
 const bytes = (n: number) => new Uint8Array([n]).buffer
 
 describe('the worker handler', () => {
+  it('passes the chips the user chose to include on to the analysis', async () => {
+    const { module, sessions } = fakeModule()
+    const handle = createHandler(async () => module)
+    await handle(request({ overrides: ['b'] }))
+    expect(sessions[0].analyzeCalls).toEqual([['X', defaultParams, ['b']]])
+  })
+
   it('opens a session from its metadata, adds the files and returns the analysis with snippets', async () => {
     const { module, sessions } = fakeModule()
     const handle = createHandler(async () => module)
     const response = await handle(request({ files: { 'c0-s0.zst': bytes(1), 'c1-s0.zst': bytes(2) } }))
     expect(response).toMatchObject({ type: 'result', id: 1 })
     expect([...sessions[0].files.keys()]).toEqual(['c0-s0.zst', 'c1-s0.zst'])
-    expect(sessions[0].analyzeCalls).toEqual([['X', defaultParams]])
+    expect(sessions[0].analyzeCalls).toEqual([['X', defaultParams, []]])
     const result = (response as { result: { snippets: unknown } }).result
     expect(result.snippets).toEqual({
       worstCase: 'snippet mzv X',

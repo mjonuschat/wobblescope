@@ -41,8 +41,8 @@ export const queryKeys = {
   chips: ['chips'] as const,
   status: ['status'] as const,
   analysesOf: (id: string) => ['analysis', id] as const,
-  analysis: (id: string, axis: Axis, params: FitParams) =>
-    ['analysis', id, axis, params] as const,
+  analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = []) =>
+    ['analysis', id, axis, params, overrides] as const,
 }
 
 /** A daemon answer with a JSON error is final. Anything else may be a blip, so retry it twice. */

@@ -16,7 +16,14 @@ function effectiveSettings(analysis: Analysis) {
   )
 }
 
-export function AxisResults({ result, meta }: { result: AnalysisResult; meta: SessionMeta }) {
+interface Props {
+  result: AnalysisResult
+  meta: SessionMeta
+  overrides: string[]
+  onOverridesChange: (overrides: string[]) => void
+}
+
+export function AxisResults({ result, meta, overrides, onOverridesChange }: Props) {
   const { analysis, snippets } = result
   const settings = effectiveSettings(analysis)
   const maxFreq = settings?.max_freq ?? 200
@@ -34,7 +41,12 @@ export function AxisResults({ result, meta }: { result: AnalysisResult; meta: Se
           listed below.
         </p>
       )}
-      <EligibilityPanel analysis={analysis} probePoints={meta.probe_points} />
+      <EligibilityPanel
+        analysis={analysis}
+        probePoints={meta.probe_points}
+        overrides={overrides}
+        onOverridesChange={onOverridesChange}
+      />
       {analysis.per_chip.map((chip, i) => (
         <ChipResult
           key={chip.chip}

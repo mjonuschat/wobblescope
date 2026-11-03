@@ -35,13 +35,14 @@ function setup() {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
   const meta = twoAxisMeta()
-  const hook = (params = defaultParams) =>
+  const hook = (params = defaultParams, overrides: string[] = []) =>
     renderHook(
-      ({ p }) => useSessionAnalysis({ sessionId: 's1', meta, axis: 'X', params: p, client }),
-      { wrapper, initialProps: { p: params } },
+      ({ p, o }) =>
+        useSessionAnalysis({ sessionId: 's1', meta, axis: 'X', params: p, overrides: o, client }),
+      { wrapper, initialProps: { p: params, o: overrides } },
     )
   const analyses = () => requests.filter((r) => r.type === 'analyze').length
-  return { hook, analyses, fetchSample }
+  return { hook, analyses, fetchSample, requests }
 }
 
 describe('useSessionAnalysis', () => {
@@ -49,7 +50,7 @@ describe('useSessionAnalysis', () => {
     const { hook } = setup()
     const { result, rerender } = hook()
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    rerender({ p: { ...defaultParams, scv: 7 } })
+    rerender({ p: { ...defaultParams, scv: 7 }, o: [] })
     expect(result.current.data).toBeUndefined()
     expect(result.current.isPending).toBe(true)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
@@ -70,10 +71,21 @@ describe('useSessionAnalysis', () => {
     const { hook, analyses } = setup()
     const { result, rerender } = hook()
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    rerender({ p: { ...defaultParams, scv: 7 } })
+    rerender({ p: { ...defaultParams, scv: 7 }, o: [] })
     await waitFor(() => expect(analyses()).toBe(2))
-    rerender({ p: defaultParams })
+    rerender({ p: defaultParams, o: [] })
     await waitFor(() => expect(analyses()).toBe(3))
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  })
+
+  it('analyses again, with the chips named, when the overrides change', async () => {
+    const { hook, analyses, requests } = setup()
+    const { result, rerender } = hook()
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    rerender({ p: defaultParams, o: ['b'] })
+    expect(result.current.data).toBeUndefined()
+    await waitFor(() => expect(analyses()).toBe(2))
+    const last = requests.filter((r) => r.type === 'analyze').at(-1)
+    expect(last).toMatchObject({ overrides: ['b'] })
   })
 })

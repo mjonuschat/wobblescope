@@ -90,6 +90,37 @@ describe('the session view', () => {
     expect(screen.getByRole('region', { name: 'Worst case across all chips' }).textContent).toContain('mzv at 48.2 Hz')
   })
 
+  it('lets the user include an excluded chip, and analyses again with it named', async () => {
+    const a = analysis()
+    a.eligibility.decisions = [
+      { chip: 'a', point: 0, decision: 'Included', reasons: [] },
+      { chip: 'b', point: 0, decision: 'Excluded', reasons: ['degraded capture health'] },
+    ]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    const box = await screen.findByRole('checkbox', { name: /Include b anyway/ })
+    expect((box as HTMLInputElement).checked).toBe(false)
+    expect(screen.queryByRole('checkbox', { name: /Include a anyway/ })).toBeNull()
+    expect(fake.analyze.mock.calls[0][0].overrides).toEqual([])
+    fireEvent.click(box)
+    await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2))
+    expect(fake.analyze.mock.calls[1][0].overrides).toEqual(['b'])
+  })
+
+  it('shows a chip that was included by override as checked', async () => {
+    const a = analysis()
+    a.eligibility.decisions = [
+      { chip: 'a', point: 0, decision: 'Included', reasons: [] },
+      { chip: 'b', point: 0, decision: 'Overridden', reasons: ['degraded capture health'] },
+    ]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, SNIPPET]))
+    serve()
+    renderRoute('/sessions/s1')
+    const box = await screen.findByRole('checkbox', { name: /Include b anyway/ })
+    expect((box as HTMLInputElement).checked).toBe(true)
+  })
+
   it('explains an axis without any eligible dataset and shows no snippet', async () => {
     const a = analysis()
     a.worst_case = null

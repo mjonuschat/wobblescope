@@ -13,7 +13,7 @@ use wobblescope_core::error::CoreError;
 use wobblescope_core::fit::{Axis, FitParams, Recommendation};
 use wobblescope_core::multichip::{Analysis, analyze};
 use wobblescope_session::SessionError;
-use wobblescope_session::bridge::dataset_inputs;
+use wobblescope_session::bridge::{apply_overrides, dataset_inputs};
 use wobblescope_session::codec::decode_samples;
 use wobblescope_session::meta::SessionMeta;
 
@@ -59,12 +59,18 @@ impl Session {
     }
 
     /// Analyses every recording of `axis` with `core`. Files are decoded one at a time for the
-    /// call only.
+    /// call only. The chips named in `overrides` are included even when their health or
+    /// coverage would exclude them; the result's eligibility says so.
     ///
     /// # Errors
     /// A file of the axis that was never added, a damaged file or a sample count that differs
     /// from the metadata, or a [`CoreError`] from the analysis.
-    pub fn analyze(&self, axis: Axis, params: &FitParams) -> Result<Analysis, AnalyzeError> {
+    pub fn analyze(
+        &self,
+        axis: Axis,
+        params: &FitParams,
+        overrides: &[String],
+    ) -> Result<Analysis, AnalyzeError> {
         for file in self
             .meta
             .segments
@@ -76,9 +82,10 @@ impl Session {
                 return Err(AnalyzeError::MissingFile(file.sample_file.clone()));
             }
         }
-        let inputs = dataset_inputs(&self.meta, axis, |file| {
+        let mut inputs = dataset_inputs(&self.meta, axis, |file| {
             decode_samples(&self.files[&file.sample_file])
         })?;
+        apply_overrides(&mut inputs, overrides);
         Ok(analyze(&inputs, params)?)
     }
 }

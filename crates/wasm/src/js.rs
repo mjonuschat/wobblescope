@@ -40,12 +40,18 @@ impl WasmSession {
     }
 
     /// Analyses one axis (`"X"` or `"Y"`). Fit parameters left out take Klipper's defaults.
-    pub fn analyze(&self, axis: JsValue, params: JsValue) -> Result<JsValue, JsError> {
+    /// `overrides` names chips to include although their health or coverage would exclude them.
+    pub fn analyze(
+        &self,
+        axis: JsValue,
+        params: JsValue,
+        overrides: Option<Vec<String>>,
+    ) -> Result<JsValue, JsError> {
         let axis: Axis = from_js("axis", axis)?;
         let params: FitParams = from_js("fit parameters", params)?;
         let analysis = self
             .inner
-            .analyze(axis, &params)
+            .analyze(axis, &params, &overrides.unwrap_or_default())
             .map_err(|e| JsError::new(&e.to_string()))?;
         to_js(&analysis)
     }

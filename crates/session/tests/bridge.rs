@@ -9,7 +9,7 @@ use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
 use wobblescope_session::SessionError;
-use wobblescope_session::bridge::dataset_inputs;
+use wobblescope_session::bridge::{apply_overrides, dataset_inputs};
 use wobblescope_session::codec::{decode_samples, encode_samples};
 use wobblescope_session::meta::{
     ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
@@ -203,6 +203,29 @@ parity_test! {
         let a = analyze(&inputs, &FitParams::default()).unwrap();
         let d = &a.eligibility.decisions[1];
         assert_eq!(d.decision, Decision::Excluded);
+        assert!(d.reasons.contains(&"degraded capture health".to_owned()));
+    }
+}
+
+parity_test! {
+    fn an_override_includes_the_named_chip_and_leaves_the_others_alone() {
+        let w = win();
+        let m = two_chip_x_meta(&w, Coverage::Complete, Health::Degraded);
+        let mut inputs = dataset_inputs(
+            &m,
+            Axis::X,
+            loader(vec![("c0-s0.zst", &w.adxl), ("c1-s0.zst", &w.ebb)]),
+        )
+        .unwrap();
+        apply_overrides(&mut inputs, &["lis2dw ebb36".to_owned(), "no such chip".to_owned()]);
+        assert_eq!(
+            inputs.iter().map(|i| i.include_override).collect::<Vec<_>>(),
+            vec![false, true]
+        );
+        let a = analyze(&inputs, &FitParams::default()).unwrap();
+        assert_eq!(a.eligibility.decisions[0].decision, Decision::Included);
+        let d = &a.eligibility.decisions[1];
+        assert_eq!(d.decision, Decision::Overridden);
         assert!(d.reasons.contains(&"degraded capture health".to_owned()));
     }
 }

@@ -9,7 +9,7 @@ import type { AnalysisResult, WorkerRequest, WorkerResponse } from './protocol'
 /** One session open inside wasm. */
 export interface SessionHandle {
   add_file(name: string, bytes: Uint8Array): void
-  analyze(axis: Axis, params: FitParams): Analysis
+  analyze(axis: Axis, params: FitParams, overrides: string[]): Analysis
   free(): void
 }
 
@@ -47,7 +47,11 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     for (const [name, buffer] of Object.entries(request.files)) {
       current!.handle.add_file(name, new Uint8Array(buffer))
     }
-    const analysis = current!.handle.analyze(request.axis, request.params)
+    const analysis = current!.handle.analyze(
+      request.axis,
+      request.params,
+      request.overrides,
+    )
     const snippet = (r: Recommendation | null) =>
       r ? module.config_snippet(r, request.axis) : null
     const result: AnalysisResult = {
