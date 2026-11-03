@@ -1,0 +1,16 @@
+# cargo-release configuration
+# https://github.com/crate-ci/cargo-release
+#
+# One version for every crate in the workspace, one tag. Pushing the tag starts the Release
+# workflow, which builds the three assets and attaches them to a draft release.
+
+allow-branch = ["main"]
+shared-version = true
+consolidate-commits = true
+sign-commit = false
+sign-tag = false
+push = true
+publish = false
+tag-name = "v{{version}}"
+tag-message = "v{{version}}"
+pre-release-commit-message = "chore(release): Prepare v{{version}}"
