@@ -149,7 +149,6 @@ jobs:
           args: --latest --strip header
         env:
           OUTPUT: CHANGES.md
-          GITHUB_REPO: ${{ github.repository }}
       - name: Create or update the draft release
         env:
           GH_TOKEN: ${{ github.token }}
