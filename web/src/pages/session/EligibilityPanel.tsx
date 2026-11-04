@@ -61,7 +61,7 @@ export function EligibilityPanel({
           />
           <span>
             Include {chip} anyway
-            <span className="text-muted-foreground"> ({reasons.join('; ')}). The result states what was overridden.</span>
+            <span className="text-muted-foreground"> ({reasons.join('; ')})</span>
           </span>
         </label>
       ))}
