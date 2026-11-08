@@ -12,6 +12,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
+use wobblescope_core::numeric::median_rate;
 use wobblescope_session::codec::MAX_SAMPLES;
 
 use super::availability::OpenChip;
@@ -346,16 +347,6 @@ fn rms_without_mean(samples: &RawSamples) -> [f64; 3] {
     [rms(&samples.x), rms(&samples.y), rms(&samples.z)]
 }
 
-/// The median of the differences between consecutive timestamps.
-fn median_interval(t: &[f64]) -> Option<f64> {
-    if t.len() < 3 {
-        return None;
-    }
-    let mut steps: Vec<f64> = t.windows(2).map(|w| w[1] - w[0]).collect();
-    steps.sort_by(f64::total_cmp);
-    Some(steps[steps.len() / 2])
-}
-
 fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentReport {
     let mut notes = Vec::new();
     let mut degraded = false;
@@ -375,8 +366,8 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
         }
     }
 
-    let interval = median_interval(&samples.t);
-    if let Some(interval) = interval {
+    let rate = median_rate(&samples.t);
+    if let Some(interval) = rate.map(|r| 1.0 / r) {
         let limit = interval * GAP_FACTOR;
         for pair in samples.t.windows(2) {
             let (a, b) = (pair[0], pair[1]);
@@ -434,7 +425,7 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
         degraded,
         health,
         notes,
-        observed_rate_hz: interval.map(|d| 1.0 / d),
+        observed_rate_hz: rate,
         capped: i.capped,
     }
 }

@@ -107,8 +107,9 @@ parity_test! {
         assert_eq!(m.chips[0].name, "lis2dw ebb36");
         assert_eq!(m.chips[0].health, Health::Unknown);
         assert!(m.chips[0].chip_type.is_none() && m.chips[0].nominal_rate_hz.is_none());
-        let span = imp.samples.t[2] - imp.samples.t[0];
-        assert_eq!(m.chips[0].observed_rate_hz, Some(2.0 / span));
+        let step = imp.samples.t[1] - imp.samples.t[0];
+        let rate = m.chips[0].observed_rate_hz.unwrap();
+        assert!((rate - 1.0 / step).abs() < 1e-6 * rate, "{rate}");
         assert_eq!(m.outcome, Outcome::Complete);
         assert_eq!(m.segments.len(), 1);
         assert_eq!(m.segments[0].axis, Axis::X);
@@ -121,6 +122,24 @@ parity_test! {
         );
         assert!(m.notes.iter().any(|n| n.contains("probe point is unknown")));
         assert_eq!(m.probe_points[0].position, None);
+    }
+}
+
+parity_test! {
+    fn the_observed_rate_is_the_median_interval_not_the_span() {
+        // 3200 Hz rows with one 50 ms hole: the span-based rate would be about 2.6 kHz.
+        let mut text = String::new();
+        let mut t = 100.0;
+        for i in 0..1000 {
+            if i == 500 {
+                t += 0.05;
+            }
+            text.push_str(&format!("{t:.6},1.0,2.0,3.0\n"));
+            t += 1.0 / 3200.0;
+        }
+        let imp = import_klipper_csv(&text, &request("c")).unwrap();
+        let rate = imp.meta.chips[0].observed_rate_hz.unwrap();
+        assert!((rate - 3200.0).abs() < 16.0, "{rate}");
     }
 }
 

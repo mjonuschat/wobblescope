@@ -6,7 +6,7 @@ use common::normalized;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
 use wobblescope_core::fit::{FitParams, find_best_shaper, fit_shaper};
 use wobblescope_core::multichip::{analyze, summed_psd};
-use wobblescope_core::numeric::{arange, interp};
+use wobblescope_core::numeric::{arange, interp, median_rate};
 use wobblescope_core::score::{estimate_shaper, find_max_accel, shaper_smoothing};
 use wobblescope_core::shaper::{Impulses, builtin};
 use wobblescope_core::{CalibrationData, CoreError, RawSamples};
@@ -131,6 +131,18 @@ parity_test! {
         assert!(interp(&[1.0], &[0.0, 1.0], &[0.0]).iter().all(|v| v.is_nan()));
         assert!(arange(0.0, 1e300, 1e-3).is_empty());
         assert!(arange(0.0, f64::INFINITY, 1.0).is_empty());
+    }
+}
+
+parity_test! {
+    fn median_rate_needs_one_positive_step_and_ignores_out_of_order_ones() {
+        assert_eq!(median_rate(&[]), None);
+        assert_eq!(median_rate(&[1.0]), None);
+        assert_eq!(median_rate(&[1.0, 1.0, 1.0]), None);
+        assert_eq!(median_rate(&[0.0, 0.5]), Some(2.0));
+        // A repeated sample and a backward step leave the steady 100 Hz rate.
+        let t = [0.0, 0.01, 0.02, 0.02, 0.03, 0.025, 0.04, 0.05];
+        assert!((median_rate(&t).unwrap() - 100.0).abs() < 1e-9);
     }
 }
 

@@ -3,6 +3,7 @@
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
+use wobblescope_core::numeric::median_rate;
 
 use crate::SessionError;
 use crate::codec::MAX_SAMPLES;
@@ -54,7 +55,6 @@ pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Importe
     if n < 2 {
         return Err(SessionError::CsvTooShort { found: n });
     }
-    let span = samples.t[n - 1] - samples.t[0];
     let mut notes = Vec::new();
     if request.point.is_none() {
         notes.push("The probe point is unknown: Klipper's raw CSV does not record it.".to_owned());
@@ -79,7 +79,7 @@ pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Importe
             name: request.chip_name.clone(),
             chip_type: None,
             nominal_rate_hz: None,
-            observed_rate_hz: Some((n - 1) as f64 / span),
+            observed_rate_hz: median_rate(&samples.t),
             axes_map: None,
             mounting: None,
             health: Health::Unknown,

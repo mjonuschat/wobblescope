@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use time::OffsetDateTime;
+use wobblescope_core::numeric::median_rate;
 
 use crate::moonraker::Moonraker;
 use crate::moonraker::bridge::{Batch, Bridge, BridgeError, Event};
@@ -116,20 +117,10 @@ async fn prove(url: String, chip: &Chip, timeout: Duration) -> ChipOutcome {
 /// The sample rate from timestamps that must be finite and strictly increasing, or `None`.
 #[must_use]
 pub fn rate_from_times(times: &[f64]) -> Option<f64> {
-    if times.len() < 2 || times.iter().any(|t| !t.is_finite()) {
+    if times.iter().any(|t| !t.is_finite()) || times.windows(2).any(|w| w[1] <= w[0]) {
         return None;
     }
-    let mut steps: Vec<f64> = Vec::with_capacity(times.len() - 1);
-    for pair in times.windows(2) {
-        let step = pair[1] - pair[0];
-        if step <= 0.0 {
-            return None;
-        }
-        steps.push(step);
-    }
-    steps.sort_by(f64::total_cmp);
-    let median = steps[steps.len() / 2];
-    Some(1.0 / median)
+    median_rate(times)
 }
 
 /// The availability a finished check leaves on a chip.
