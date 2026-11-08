@@ -638,6 +638,11 @@ fn a_chip_at_its_nominal_rate_gets_no_slow_rate_note() {
     assert_eq!(slow_rate_note(None, 100.0), None);
     let note = slow_rate_note(Some(1600.0), 394.0).unwrap();
     assert!(note.contains("394 Hz") && note.contains("1600 Hz") && note.contains("firmware"));
+    // The capture's note is the reason the analysis gives when it excludes the chip.
+    assert_eq!(
+        Some(note),
+        wobblescope_session::meta::undersampled_note(Some(1600.0), Some(394.0))
+    );
 }
 
 #[tokio::test]

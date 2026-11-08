@@ -199,7 +199,7 @@ async fn a_counter_that_was_already_high_and_stays_is_ok() {
 }
 
 #[tokio::test]
-async fn a_ten_millisecond_hole_is_degraded_and_half_a_millisecond_of_jitter_is_not() {
+async fn a_ten_millisecond_hole_is_degraded_and_jitter_that_keeps_the_order_is_not() {
     let fake = FakeMoonraker::start().await;
     let rec = recorder(&fake).await;
     rec.begin_segment();
@@ -207,8 +207,8 @@ async fn a_ten_millisecond_hole_is_degraded_and_half_a_millisecond_of_jitter_is_
     let mut rows: Vec<[f64; 4]> = (0..3200)
         .map(|k| [20.0 + k as f64 * step, 0.0, 0.0, 9800.0])
         .collect();
-    // Jitter well under the limit: shift one sample by half a millisecond.
-    rows[500][0] += 0.0005;
+    // Jitter well under the limit that keeps the samples in order.
+    rows[500][0] += 0.0002;
     for r in &mut rows[1600..] {
         r[0] += 0.010;
     }
@@ -228,6 +228,72 @@ async fn a_ten_millisecond_hole_is_degraded_and_half_a_millisecond_of_jitter_is_
         .collect();
     assert_eq!(gaps.len(), 1, "{gaps:?}");
     assert!(gaps[0].contains("ms"), "{}", gaps[0]);
+}
+
+/// Pushes one second of samples at `RATE` from `from`, with `edit` applied to the rows first,
+/// and waits until the recorder has seen the last one.
+async fn push_edited(
+    fake: &FakeMoonraker,
+    rec: &Recorder,
+    from: f64,
+    edit: impl FnOnce(&mut Vec<[f64; 4]>),
+) {
+    let step = 1.0 / RATE;
+    let mut rows: Vec<[f64; 4]> = (0..3200)
+        .map(|k| [from + k as f64 * step, 0.0, 0.0, 9800.0])
+        .collect();
+    edit(&mut rows);
+    fake.bridge().push("adxl345", &rows, Some((0, 0)));
+    let last = rows.iter().map(|r| r[0]).fold(f64::NEG_INFINITY, f64::max);
+    eventually("the data", DEADLINE, || {
+        rec.last_timestamp().is_some_and(|t| t >= last - 1e-9)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_repeated_timestamp_inside_the_window_is_degraded_naming_it() {
+    let fake = FakeMoonraker::start().await;
+    let rec = recorder(&fake).await;
+    rec.begin_segment();
+    let mut repeated = 0.0;
+    push_edited(&fake, &rec, 20.0, |rows| {
+        rows[1000][0] = rows[999][0];
+        repeated = rows[999][0];
+    })
+    .await;
+    let taken = rec.take(20.1, 20.9);
+    assert!(taken.report.degraded, "{:?}", taken.report.notes);
+    assert_eq!(taken.report.health, Health::Degraded);
+    let order: Vec<&String> = taken
+        .report
+        .notes
+        .iter()
+        .filter(|n| n.contains("backwards"))
+        .collect();
+    assert_eq!(order.len(), 1, "{:?}", taken.report.notes);
+    assert!(
+        order[0].contains("1 time") && order[0].contains(&format!("{repeated:.3}")),
+        "{}",
+        order[0]
+    );
+    assert_eq!(rec.summary().health, Health::Degraded);
+}
+
+#[tokio::test]
+async fn a_backward_step_before_the_window_still_degrades_the_segment() {
+    let fake = FakeMoonraker::start().await;
+    let rec = recorder(&fake).await;
+    rec.begin_segment();
+    push_edited(&fake, &rec, 20.0, |rows| rows.swap(100, 101)).await;
+    let taken = rec.take(20.5, 20.9);
+    assert!(taken.report.degraded, "{:?}", taken.report.notes);
+    assert!(taken.report.notes.iter().any(|n| n.contains("backwards")));
+    assert!(
+        taken.report.notes.iter().all(|n| !n.contains("gap")),
+        "{:?}",
+        taken.report.notes
+    );
 }
 
 #[tokio::test]

@@ -26,6 +26,9 @@ use super::fake_printer::FakePrinter;
 
 pub const DEADLINE: Duration = Duration::from_secs(10);
 
+/// The print time the simulation starts at, and the first sample of every chip.
+const START_T: f64 = 100.0;
+
 /// The two chips of the simulated printer: config section, sensor and rate.
 pub const CHIPS: [(&str, &str, f64); 2] = [
     ("adxl345", "adxl345", 500.0),
@@ -73,7 +76,8 @@ struct State {
     /// The print-time clock.
     t: f64,
     /// Sample time the chips have delivered up to.
-    fed: f64,
+    /// The timestamp of the next sample each sensor delivers.
+    fed: HashMap<String, f64>,
     silent: Vec<String>,
     sweep_seconds: f64,
     offset: [f64; 3],
@@ -132,8 +136,8 @@ impl Sim {
         let real = super::fake_printer::fixture("real_settings.json");
         printer.set_settings(real["status"]["configfile"]["settings"].clone());
         let state = Arc::new(Mutex::new(State {
-            t: 100.0,
-            fed: 100.0,
+            t: START_T,
+            fed: HashMap::new(),
             silent: vec![],
             sweep_seconds: 2.0,
             offset: [0.0; 3],
@@ -262,7 +266,8 @@ impl Sim {
             .set_field("toolhead", "estimated_print_time", json!(t));
     }
 
-    /// Delivers samples from `fed` up to `to` on every sensor that is not silenced.
+    /// Delivers samples up to `to` on every sensor that is not silenced, each continuing where
+    /// its last batch ended.
     fn advance(&self, s: &mut State, to: f64) {
         for (_, sensor, rate) in CHIPS {
             if s.silent.iter().any(|x| x == sensor) {
@@ -270,7 +275,7 @@ impl Sim {
             }
             let counters = s.counters.get(sensor).copied().unwrap_or((0, 0));
             let step = 1.0 / rate;
-            let mut at = s.fed;
+            let mut at = s.fed.get(sensor).copied().unwrap_or(START_T);
             while at < to {
                 let rows: Vec<[f64; 4]> = (0..50)
                     .map(|k| {
@@ -281,8 +286,9 @@ impl Sim {
                 at += 50.0 * step;
                 self.bridge().push(sensor, &rows, Some(counters));
             }
+            // A batch can run past `to`; the next one continues after it, as a real chip does.
+            s.fed.insert((*sensor).to_owned(), at);
         }
-        s.fed = s.fed.max(to);
     }
 
     fn apply_rules(&self, s: &mut State, now: When) {

@@ -366,6 +366,19 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
         }
     }
 
+    // The whole buffer, not just the window: the analysis refuses a recording whose timestamps
+    // repeat or go backwards anywhere, before the window is cut.
+    let mut backward = samples.t.windows(2).filter(|w| w[1] <= w[0]);
+    if let Some(first) = backward.next() {
+        let count = 1 + backward.count();
+        degraded = true;
+        notes.push(format!(
+            "timestamps repeat or go backwards {count} time{}, first at t={:.3} s",
+            if count == 1 { "" } else { "s" },
+            first[0]
+        ));
+    }
+
     let rate = median_rate(&samples.t);
     if let Some(interval) = rate.map(|r| 1.0 / r) {
         let limit = interval * GAP_FACTOR;

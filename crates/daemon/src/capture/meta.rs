@@ -3,6 +3,7 @@
 use wobblescope_core::eligibility::Health;
 use wobblescope_session::meta::{
     ChipMeta, FORMAT_VERSION, Outcome, PrinterInfo, ProbePoint, SessionMeta, Source, TimeDomain,
+    undersampled_note,
 };
 
 use super::recorder::ChipSummary;
@@ -49,22 +50,12 @@ fn type_name(t: ChipType) -> &'static str {
     }
 }
 
-/// A chip delivering under this share of its nominal rate gets a note.
-const SLOW_RATE_SHARE: f64 = 0.5;
-
 /// A note for a chip whose observed sample rate is under half the rate Klipper configures, or
-/// `None`. The usual cause is old MCU firmware: before Klipper's 2025-10-06 fix to
-/// `sensor_lis2dw.c` a `lis2dw` delivered one sample per 2.5 ms, so about 400 Hz of the 1600 Hz
-/// it is set to. The samples are valid but undersampled, so the note names the cause to check.
+/// `None`. The session crate owns the rule and the wording, so the note recorded here is the
+/// reason the analysis gives when it excludes the chip.
 #[must_use]
 pub fn slow_rate_note(nominal_hz: Option<f64>, observed_hz: f64) -> Option<String> {
-    let nominal = nominal_hz.filter(|n| n.is_finite() && *n > 0.0)?;
-    (observed_hz < nominal * SLOW_RATE_SHARE).then(|| {
-        format!(
-            "samples arrive at {observed_hz:.0} Hz, under half the {nominal:.0} Hz Klipper \
-             configures; check that the chip's MCU runs current firmware"
-        )
-    })
+    undersampled_note(nominal_hz, Some(observed_hz))
 }
 
 /// The metadata a capture starts with: no segment yet, chips with unknown health. It becomes the
