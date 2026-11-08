@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::CORE_VERSION;
 use crate::eligibility::{DatasetInput, Eligibility, Health, select_eligible};
 use crate::error::CoreError;
-use crate::fit::{FREQ_STEP, FitParams, Recommendation, find_best_shaper};
+use crate::fit::{
+    FREQ_STEP, FitParams, Recommendation, check_dataset, find_best_shaper, validate_params,
+};
 use crate::numeric::{arange, interp};
 use crate::psd::{CalibrationData, MAX_FREQ};
 
@@ -48,7 +50,7 @@ pub fn summed_psd(data: &[CalibrationData], max_freq: f64) -> Option<SummedPsd> 
     })
 }
 
-/// An input that could not be turned into a PSD and was not eligible anyway.
+/// An input that could not be processed and was not eligible anyway.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct DatasetFailure {
@@ -73,7 +75,8 @@ pub struct ChipAnalysis {
     /// For inputs analysed with a time `window`, the sample index range kept, keyed by probe
     /// point.
     pub windows: Vec<(usize, std::ops::Range<usize>)>,
-    /// Recommendation from the chip's eligible datasets; `None` when it has none.
+    /// Recommendation from the chip's eligible datasets that could be analysed; `None` when it
+    /// has none.
     pub recommendation: Option<Recommendation>,
 }
 
@@ -83,9 +86,10 @@ pub struct ChipAnalysis {
 pub struct Analysis {
     /// One entry per chip, in order of first appearance.
     pub per_chip: Vec<ChipAnalysis>,
-    /// Recommendation over every eligible dataset of every chip; `None` when none is eligible.
+    /// Recommendation over every eligible dataset of every chip that could be analysed; `None`
+    /// when there is none.
     pub worst_case: Option<Recommendation>,
-    /// Summed PSD of the eligible datasets, for display only.
+    /// Summed PSD of the same datasets as `worst_case`, for display only.
     pub summed: Option<SummedPsd>,
     /// Ineligible inputs that could not be processed; shown, never analysed around.
     pub failures: Vec<DatasetFailure>,
@@ -105,41 +109,62 @@ fn worse(a: Health, b: Health) -> Health {
 }
 
 /// Analyses all inputs: a normalised PSD for each, a recommendation per chip, a worst-case
-/// recommendation over all eligible datasets, and the display-only summed PSD.
+/// recommendation over all usable eligible datasets, and the display-only summed PSD.
 ///
-/// Inputs with a `window` are cut to it first. An eligible input that cannot be
-/// processed is an error; an ineligible one is listed in `failures` and does not block the rest.
+/// Inputs with a `window` are cut to it first. An eligible input that cannot be analysed (its
+/// samples did not load, its PSD cannot be built, or the fit would reject it) is left out of
+/// every fit and the summed PSD, and its decision says why in `dropped`. An ineligible input
+/// that cannot be processed is listed in `failures`. Neither blocks the rest.
 ///
 /// # Errors
-/// Any [`CoreError`] from building a PSD or from fitting.
+/// [`CoreError::InvalidParameter`] for invalid fit parameters, and any other [`CoreError`] a
+/// fit returns for the usable datasets.
 pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, CoreError> {
-    let (eligible, eligibility) = select_eligible(inputs);
+    validate_params(params)?;
+    let (eligible, mut eligibility) = select_eligible(inputs);
 
     let mut psds: Vec<Option<CalibrationData>> = Vec::with_capacity(inputs.len());
     let mut windows: Vec<Option<std::ops::Range<usize>>> = vec![None; inputs.len()];
+    let mut usable: Vec<usize> = Vec::with_capacity(eligible.len());
     let mut failures = Vec::new();
     for (i, input) in inputs.iter().enumerate() {
         let name = format!("{}#{}", input.chip, input.point);
-        let built = (|| {
-            let mut cd = if let Some(w) = &input.window {
-                let kept = input.samples.window(w.clone())?;
-                let samples = input.samples.slice(kept.clone());
-                windows[i] = Some(kept);
-                CalibrationData::from_samples(&name, &samples)?
-            } else {
-                CalibrationData::from_samples(&name, &input.samples)?
-            };
-            cd.normalize_to_frequencies();
-            Ok::<_, CoreError>(cd)
-        })();
+        let built = match &input.load_error {
+            Some(message) => Err(message.clone()),
+            None => (|| {
+                let mut cd = if let Some(w) = &input.window {
+                    let kept = input.samples.window(w.clone())?;
+                    let samples = input.samples.slice(kept.clone());
+                    windows[i] = Some(kept);
+                    CalibrationData::from_samples(&name, &samples)?
+                } else {
+                    CalibrationData::from_samples(&name, &input.samples)?
+                };
+                cd.normalize_to_frequencies();
+                Ok::<_, CoreError>(cd)
+            })()
+            .map_err(|e| e.to_string()),
+        };
+        let is_eligible = eligible.contains(&i);
         match built {
-            Ok(cd) => psds.push(Some(cd)),
-            Err(e) if eligible.contains(&i) => return Err(e),
-            Err(e) => {
+            Ok(cd) => {
+                if is_eligible {
+                    match check_dataset(&cd, params) {
+                        Ok(()) => usable.push(i),
+                        Err(e) => eligibility.decisions[i].dropped = Some(e.to_string()),
+                    }
+                }
+                psds.push(Some(cd));
+            }
+            Err(error) if is_eligible => {
+                eligibility.decisions[i].dropped = Some(error);
+                psds.push(None);
+            }
+            Err(error) => {
                 failures.push(DatasetFailure {
                     chip: input.chip.clone(),
                     point: input.point,
-                    error: e.to_string(),
+                    error,
                 });
                 psds.push(None);
             }
@@ -162,7 +187,7 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
             .fold(Health::Ok, |h, &i| worse(h, inputs[i].health));
         let chosen: Vec<CalibrationData> = idx
             .iter()
-            .filter(|i| eligible.contains(i))
+            .filter(|i| usable.contains(i))
             .filter_map(|&i| psds[i].clone())
             .collect();
         let recommendation = if chosen.is_empty() {
@@ -185,7 +210,7 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
         });
     }
 
-    let chosen: Vec<CalibrationData> = eligible.iter().filter_map(|&i| psds[i].clone()).collect();
+    let chosen: Vec<CalibrationData> = usable.iter().filter_map(|&i| psds[i].clone()).collect();
     let (worst_case, summed) = if chosen.is_empty() {
         (None, None)
     } else {

@@ -94,6 +94,8 @@ fn direct(w: &Win) -> Vec<DatasetInput> {
         coverage: Coverage::Complete,
         include_override: false,
         window: Some(w.window.clone()),
+        exclusions: Vec::new(),
+        load_error: None,
     };
     vec![input("adxl345", &w.adxl), input("lis2dw ebb36", &w.ebb)]
 }

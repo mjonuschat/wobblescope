@@ -48,6 +48,8 @@ where
                 coverage: file.coverage.clone(),
                 include_override: false,
                 window: segment.window.map(|w| w.start..w.end),
+                exclusions: Vec::new(),
+                load_error: None,
             });
         }
     }

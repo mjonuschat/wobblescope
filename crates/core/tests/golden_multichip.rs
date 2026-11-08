@@ -15,6 +15,8 @@ fn input(chip: &str, health: Health) -> DatasetInput {
         coverage: Coverage::Complete,
         include_override: false,
         window: None,
+        exclusions: Vec::new(),
+        load_error: None,
     }
 }
 
@@ -69,6 +71,8 @@ fn real_input(chip: &str, axis: &str) -> DatasetInput {
         coverage: Coverage::Complete,
         include_override: false,
         window: None,
+        exclusions: Vec::new(),
+        load_error: None,
     }
 }
 

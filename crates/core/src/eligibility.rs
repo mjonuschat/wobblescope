@@ -48,6 +48,12 @@ pub struct DatasetInput {
     /// timestamps, which is Klipper's `print_time`). `None` keeps
     /// every sample.
     pub window: Option<std::ops::Range<f64>>,
+    /// Further reasons, decided by the caller, that exclude the input unless overridden; they
+    /// are listed with the decision like degraded health or incomplete coverage.
+    pub exclusions: Vec<String>,
+    /// Why the caller could not load the samples, if it could not. The input is then treated
+    /// like one whose PSD cannot be built, with this message as the reason.
+    pub load_error: Option<String>,
 }
 
 /// How a dataset was treated.
@@ -74,6 +80,10 @@ pub struct DatasetDecision {
     pub decision: Decision,
     /// Human-readable reasons (warnings for included datasets).
     pub reasons: Vec<String>,
+    /// For an included or overridden input that could not be analysed, why: it was left out of
+    /// every fit and the summed PSD.
+    #[serde(default)]
+    pub dropped: Option<String>,
 }
 
 /// Decisions for all inputs, in input order.
@@ -84,8 +94,8 @@ pub struct Eligibility {
     pub decisions: Vec<DatasetDecision>,
 }
 
-/// Decides which inputs are eligible: health not `Degraded` and coverage complete, or the
-/// override. Returns the eligible input indices and the decision log.
+/// Decides which inputs are eligible: health not `Degraded`, coverage complete and no caller
+/// exclusion, or the override. Returns the eligible input indices and the decision log.
 pub fn select_eligible(inputs: &[DatasetInput]) -> (Vec<usize>, Eligibility) {
     let mut eligible = Vec::new();
     let mut decisions = Vec::new();
@@ -97,6 +107,7 @@ pub fn select_eligible(inputs: &[DatasetInput]) -> (Vec<usize>, Eligibility) {
         if let Coverage::Incomplete { missing } = &input.coverage {
             blockers.push(format!("incomplete coverage: {missing}"));
         }
+        blockers.extend(input.exclusions.iter().cloned());
         let mut reasons = blockers.clone();
         if input.health == Health::Unknown {
             reasons.push("unknown capture health".to_owned());
@@ -114,6 +125,7 @@ pub fn select_eligible(inputs: &[DatasetInput]) -> (Vec<usize>, Eligibility) {
             point: input.point,
             decision,
             reasons,
+            dropped: None,
         });
     }
     (eligible, Eligibility { decisions })

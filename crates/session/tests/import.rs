@@ -75,6 +75,8 @@ parity_test! {
             coverage: Coverage::Complete,
             include_override: false,
             window: None,
+            exclusions: Vec::new(),
+            load_error: None,
         }];
         let params = FitParams::default();
         assert_eq!(

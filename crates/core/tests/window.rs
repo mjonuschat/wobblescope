@@ -17,6 +17,8 @@ fn input(samples: RawSamples, window: Option<std::ops::Range<f64>>) -> DatasetIn
         coverage: Coverage::Complete,
         include_override: false,
         window,
+        exclusions: Vec::new(),
+        load_error: None,
     }
 }
 
@@ -52,8 +54,10 @@ parity_test! {
 parity_test! {
     fn a_window_outside_the_data_is_too_few_samples_not_a_panic() {
         let s = load_csv("chip_b");
-        let r = analyze(&[input(s, Some(1.0e6..2.0e6))], &FitParams::default());
-        assert!(matches!(r, Err(CoreError::TooFewSamples { have: 0, .. })), "{r:?}");
+        let a = analyze(&[input(s, Some(1.0e6..2.0e6))], &FitParams::default()).unwrap();
+        assert!(a.worst_case.is_none());
+        let dropped = a.eligibility.decisions[0].dropped.as_deref().unwrap_or_default();
+        assert!(dropped.contains("too few samples: have 0"), "{dropped}");
     }
 }
 

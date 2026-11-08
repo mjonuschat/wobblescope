@@ -3,7 +3,7 @@ mod common;
 
 use common::load_csv;
 use common::normalized;
-use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
+use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{FitParams, find_best_shaper, fit_shaper};
 use wobblescope_core::multichip::{analyze, summed_psd};
 use wobblescope_core::numeric::{arange, interp, median_rate};
@@ -20,6 +20,8 @@ fn input(chip: &str, health: Health, samples: RawSamples) -> DatasetInput {
         coverage: Coverage::Complete,
         include_override: false,
         window: None,
+        exclusions: Vec::new(),
+        load_error: None,
     }
 }
 
@@ -68,15 +70,123 @@ parity_test! {
 }
 
 parity_test! {
-    fn unprocessable_eligible_capture_is_an_error_not_silently_dropped() {
-        let r = analyze(
+    fn an_unprocessable_eligible_capture_is_dropped_and_the_rest_analysed() {
+        let good = load_csv("chip_b");
+        let a = analyze(
             &[
-                input("good", Health::Ok, load_csv("chip_b")),
+                input("good", Health::Ok, good.clone()),
                 input("dead", Health::Ok, RawSamples::default()),
             ],
             &FitParams::default(),
-        );
-        assert!(matches!(r, Err(CoreError::TooFewSamples { have: 0, .. })));
+        )
+        .unwrap();
+        let alone = analyze(&[input("good", Health::Ok, good)], &FitParams::default()).unwrap();
+        assert_eq!(a.worst_case, alone.worst_case);
+        let dead = &a.eligibility.decisions[1];
+        assert_eq!(dead.decision, Decision::Included);
+        assert!(dead.dropped.as_deref().is_some_and(|m| m.contains("too few samples")), "{dead:?}");
+        assert!(a.failures.is_empty());
+        assert!(a.per_chip[1].recommendation.is_none());
+    }
+}
+
+parity_test! {
+    fn backward_timestamps_drop_the_recording_not_the_axis() {
+        let mut bad = load_csv("chip_a");
+        bad.t.swap(1000, 1001);
+        let a = analyze(
+            &[input("a", Health::Ok, bad), input("b", Health::Ok, load_csv("chip_b"))],
+            &FitParams::default(),
+        )
+        .unwrap();
+        let alone = analyze(&[input("b", Health::Ok, load_csv("chip_b"))], &FitParams::default())
+            .unwrap();
+        assert_eq!(a.worst_case, alone.worst_case);
+        assert_eq!(a.summed, alone.summed);
+        assert!(a.eligibility.decisions[0].dropped.is_some());
+        assert!(a.eligibility.decisions[1].dropped.is_none());
+        assert!(a.per_chip[1].recommendation.is_some());
+    }
+}
+
+parity_test! {
+    fn an_overridden_recording_that_cannot_be_analysed_is_dropped() {
+        let mut bad = load_csv("chip_a");
+        bad.t[2000] = bad.t[1999];
+        let mut a_in = input("a", Health::Degraded, bad);
+        a_in.include_override = true;
+        let a = analyze(
+            &[a_in, input("b", Health::Ok, load_csv("chip_b"))],
+            &FitParams::default(),
+        )
+        .unwrap();
+        let alone = analyze(&[input("b", Health::Ok, load_csv("chip_b"))], &FitParams::default())
+            .unwrap();
+        assert_eq!(a.eligibility.decisions[0].decision, Decision::Overridden);
+        assert!(a.eligibility.decisions[0].dropped.is_some());
+        assert_eq!(a.per_chip[1].recommendation, alone.per_chip[0].recommendation);
+    }
+}
+
+parity_test! {
+    fn a_flat_eligible_recording_is_dropped_by_the_fit_check() {
+        let mut flat = load_csv("chip_a");
+        for column in [&mut flat.x, &mut flat.y, &mut flat.z] {
+            column.iter_mut().for_each(|v| *v = 0.0);
+        }
+        let a = analyze(
+            &[input("flat", Health::Ok, flat), input("b", Health::Ok, load_csv("chip_b"))],
+            &FitParams::default(),
+        )
+        .unwrap();
+        assert!(a.eligibility.decisions[0].dropped.is_some());
+        assert!(!a.per_chip[0].datasets.is_empty(), "the flat PSD is still drawn");
+        assert!(a.per_chip[1].recommendation.is_some());
+        assert!(a.worst_case.is_some());
+    }
+}
+
+parity_test! {
+    fn the_only_eligible_recording_dropped_leaves_no_recommendation() {
+        let a = analyze(
+            &[
+                input("dead", Health::Ok, RawSamples::default()),
+                input("shown", Health::Degraded, load_csv("chip_b")),
+            ],
+            &FitParams::default(),
+        )
+        .unwrap();
+        assert!(a.worst_case.is_none());
+        assert!(a.summed.is_none());
+        assert!(a.eligibility.decisions[0].dropped.is_some());
+        assert!(!a.per_chip[1].datasets.is_empty(), "the ineligible PSD is still drawn");
+    }
+}
+
+parity_test! {
+    fn a_load_failure_is_dropped_when_eligible_and_listed_when_not() {
+        let mut eligible = input("e", Health::Ok, RawSamples::default());
+        eligible.load_error = Some("checksum mismatch".to_owned());
+        let mut ineligible = input("i", Health::Degraded, RawSamples::default());
+        ineligible.load_error = Some("truncated".to_owned());
+        let a = analyze(
+            &[eligible, ineligible, input("b", Health::Ok, load_csv("chip_b"))],
+            &FitParams::default(),
+        )
+        .unwrap();
+        assert_eq!(a.eligibility.decisions[0].dropped.as_deref(), Some("checksum mismatch"));
+        assert_eq!(a.failures.len(), 1);
+        assert_eq!(a.failures[0].chip, "i");
+        assert_eq!(a.failures[0].error, "truncated");
+        assert!(a.worst_case.is_some());
+    }
+}
+
+parity_test! {
+    fn invalid_fit_parameters_still_fail_the_analysis() {
+        let bad = FitParams { scv: -1.0, ..FitParams::default() };
+        let r = analyze(&[input("b", Health::Ok, load_csv("chip_b"))], &bad);
+        assert!(matches!(r, Err(CoreError::InvalidParameter(_))));
     }
 }
 

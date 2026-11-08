@@ -15,6 +15,8 @@ fn input(chip: &str, point: usize, health: Health, coverage: Coverage) -> Datase
         coverage,
         include_override: false,
         window: None,
+        exclusions: Vec::new(),
+        load_error: None,
     }
 }
 
@@ -111,5 +113,21 @@ parity_test! {
         .unwrap();
         assert_eq!(analysis.per_chip[0].health, Health::Degraded);
         assert_eq!(analysis.per_chip[0].datasets.len(), 3);
+    }
+}
+
+parity_test! {
+    fn an_exclusion_reason_excludes_a_healthy_input_and_the_override_includes_it() {
+        let mut d = input("lis", 0, Health::Ok, Coverage::Complete);
+        d.exclusions.push("undersampled".to_owned());
+        let (eligible, e) = select_eligible(std::slice::from_ref(&d));
+        assert!(eligible.is_empty());
+        assert_eq!(e.decisions[0].decision, Decision::Excluded);
+        assert_eq!(e.decisions[0].reasons, vec!["undersampled"]);
+        d.include_override = true;
+        let (eligible, e) = select_eligible(&[d]);
+        assert_eq!(eligible, vec![0]);
+        assert_eq!(e.decisions[0].decision, Decision::Overridden);
+        assert_eq!(e.decisions[0].reasons, vec!["undersampled"]);
     }
 }

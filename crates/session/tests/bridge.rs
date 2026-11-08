@@ -115,6 +115,8 @@ fn direct(w: &Win, coverage: Coverage, ebb_health: Health) -> Vec<DatasetInput> 
         coverage,
         include_override: false,
         window: Some(w.window.clone()),
+        exclusions: Vec::new(),
+        load_error: None,
     };
     vec![
         input("adxl345", &w.adxl, Health::Ok, Coverage::Complete),

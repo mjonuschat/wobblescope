@@ -149,7 +149,7 @@ fn invalid(what: &str, v: impl std::fmt::Debug) -> CoreError {
     CoreError::InvalidParameter(format!("{what} = {v:?}"))
 }
 
-fn validate_params(p: &FitParams) -> Result<(), CoreError> {
+pub(crate) fn validate_params(p: &FitParams) -> Result<(), CoreError> {
     let non_negative = |v: f64| v.is_finite() && v >= 0.0;
     let ratio = |v: f64| v.is_finite() && (0.0..1.0).contains(&v);
     if !non_negative(p.scv) {
@@ -223,6 +223,45 @@ fn test_freqs_of(shaper: &dyn Shaper) -> Vec<f64> {
 fn effective_max_freq(params: &FitParams, test_freqs: &[f64]) -> f64 {
     let top = test_freqs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     or_default(params.max_freq, |f| *f == 0.0, MAX_FREQ).max(top)
+}
+
+fn shaper_names(params: &FitParams) -> Vec<String> {
+    match &params.shapers {
+        Some(s) if !s.is_empty() => s.clone(),
+        _ => AUTOTUNE_SHAPERS.iter().map(|s| (*s).to_owned()).collect(),
+    }
+}
+
+/// Checks that [`fit_shaper`] would accept `d` as one of its datasets under `params`: the
+/// per-dataset checks it applies, and positive power at or below the lowest `max_freq` any
+/// evaluated shaper uses. `params` are assumed valid; the fit reports parameter errors itself.
+///
+/// # Errors
+/// [`CoreError::InvalidParameter`] for a malformed dataset or a negative PSD value, and
+/// [`CoreError::FlatSignal`] when no bin the fit reads has power.
+pub fn check_dataset(d: &CalibrationData, params: &FitParams) -> Result<(), CoreError> {
+    validate_dataset(d)?;
+    if d.psd_sum.iter().any(|p| *p < 0.0) {
+        return Err(CoreError::InvalidParameter(format!(
+            "dataset {:?}: negative PSD values",
+            d.name
+        )));
+    }
+    let max_freq = shaper_names(params)
+        .iter()
+        .filter_map(|name| builtin(name))
+        .map(|shaper| effective_max_freq(params, &test_freqs_of(shaper)))
+        .fold(f64::INFINITY, f64::min);
+    let powered = d
+        .freq_bins
+        .iter()
+        .zip(&d.psd_sum)
+        .any(|(f, p)| *f <= max_freq && *p > 0.0);
+    if powered {
+        Ok(())
+    } else {
+        Err(CoreError::FlatSignal)
+    }
 }
 
 /// Fits one shaper over `data` (expected to be normalised, one element per dataset).
@@ -358,10 +397,7 @@ pub fn find_best_shaper(
     params: &FitParams,
 ) -> Result<Recommendation, CoreError> {
     validate_params(params)?;
-    let names: Vec<String> = match &params.shapers {
-        Some(s) if !s.is_empty() => s.clone(),
-        _ => AUTOTUNE_SHAPERS.iter().map(|s| (*s).to_owned()).collect(),
-    };
+    let names = shaper_names(params);
     let mut best: Option<CalibrationResult> = None;
     let mut all: Vec<CalibrationResult> = Vec::new();
     let mut max_freq_used = f64::NEG_INFINITY;
