@@ -29,7 +29,7 @@ pub struct CalibrationData {
     pub psd_z: Vec<f64>,
     /// X+Y+Z PSD.
     pub psd_sum: Vec<f64>,
-    normalized: bool,
+    pub(crate) normalized: bool,
 }
 
 /// Modified Bessel function of the first kind, order 0, by its power series.

@@ -410,13 +410,14 @@ pub fn fit_shaper(
 /// worst case across all of them.
 ///
 /// # Errors
-/// [`CoreError::UnknownShaper`] for a name that is not a built-in, plus the errors of
-/// [`fit_shaper`].
+/// [`CoreError::UnknownShaper`] for a name that is not a built-in, [`CoreError::ShaperInit`]
+/// for a shaper that cannot be built with the damping ratio, plus the errors of [`fit_shaper`].
 pub fn find_best_shaper(
     data: &[CalibrationData],
     params: &FitParams,
 ) -> Result<Recommendation, CoreError> {
     validate_params(params)?;
+    validate_shapers(params)?;
     let names = shaper_names(params);
     let mut best: Option<CalibrationResult> = None;
     let mut all: Vec<CalibrationResult> = Vec::new();
@@ -424,7 +425,6 @@ pub fn find_best_shaper(
 
     for name in &names {
         let shaper = builtin(name).ok_or_else(|| CoreError::UnknownShaper(name.clone()))?;
-        shaper.impulses(shaper.min_freq(), DEFAULT_DAMPING_RATIO)?;
         max_freq_used = max_freq_used.max(effective_max_freq(params, &test_freqs_of(shaper)));
 
         let mut fit = fit_shaper(shaper, data, params)?;
@@ -479,4 +479,45 @@ pub fn find_best_shaper(
         },
         core_version: CORE_VERSION.to_owned(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A normalised PSD on a 1 Hz grid to 400 Hz with power only above `from` Hz.
+    fn powered_above(from: f64) -> CalibrationData {
+        let freq_bins: Vec<f64> = (0..=400).map(f64::from).collect();
+        let psd_sum: Vec<f64> = freq_bins
+            .iter()
+            .map(|f| if *f > from { 1.0 } else { 0.0 })
+            .collect();
+        CalibrationData {
+            name: "high".to_owned(),
+            psd_x: psd_sum.clone(),
+            psd_y: vec![0.0; freq_bins.len()],
+            psd_z: vec![0.0; freq_bins.len()],
+            psd_sum,
+            freq_bins,
+            normalized: true,
+        }
+    }
+
+    #[test]
+    fn power_only_above_the_fit_range_is_a_flat_signal_for_the_fit() {
+        let params = FitParams::default();
+        let max_freq = lowest_fit_max_freq(&params);
+        let d = powered_above(max_freq + 10.0);
+        assert_eq!(check_dataset(&d, max_freq), Err(CoreError::FlatSignal));
+        assert_eq!(check_dataset(&d, f64::INFINITY), Ok(()));
+        // The fit refuses it the same way, so analyze must drop it before fitting.
+        let zv = builtin("zv").expect("built-in");
+        assert_eq!(fit_shaper(zv, &[d], &params), Err(CoreError::FlatSignal));
+    }
+
+    #[test]
+    fn power_inside_the_fit_range_passes_the_check() {
+        let max_freq = lowest_fit_max_freq(&FitParams::default());
+        assert_eq!(check_dataset(&powered_above(50.0), max_freq), Ok(()));
+    }
 }
