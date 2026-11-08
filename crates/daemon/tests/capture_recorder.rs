@@ -227,6 +227,11 @@ async fn a_ten_millisecond_hole_is_degraded_and_jitter_that_keeps_the_order_is_n
         .collect();
     assert_eq!(gaps.len(), 1, "{gaps:?}");
     assert!(gaps[0].contains("ms"), "{}", gaps[0]);
+    assert!(
+        taken.report.notes.iter().all(|n| !n.contains("backwards")),
+        "{:?}",
+        taken.report.notes
+    );
 }
 
 /// Pushes one second of samples at `RATE` from `from`, with `edit` applied to the rows first,

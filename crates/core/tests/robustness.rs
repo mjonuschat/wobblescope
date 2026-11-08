@@ -129,6 +129,22 @@ parity_test! {
 }
 
 parity_test! {
+    fn a_dropped_point_leaves_the_chip_fitted_from_its_other_point() {
+        let mut kept = input("a", Health::Ok, load_csv("chip_a"));
+        kept.point = 0;
+        let mut dead = input("a", Health::Ok, RawSamples::default());
+        dead.point = 1;
+        let both = analyze(&[kept.clone(), dead], &FitParams::default()).unwrap();
+        let alone = analyze(&[kept], &FitParams::default()).unwrap();
+        assert!(both.eligibility.decisions[0].dropped.is_none());
+        assert!(both.eligibility.decisions[1].dropped.is_some());
+        assert!(both.per_chip[0].recommendation.is_some());
+        assert_eq!(both.per_chip[0].recommendation, alone.per_chip[0].recommendation);
+        assert_eq!(both.worst_case, alone.worst_case);
+    }
+}
+
+parity_test! {
     fn a_recording_whose_psd_overflows_is_dropped_by_the_fit_check() {
         let mut huge = load_csv("chip_a");
         huge.x.iter_mut().for_each(|v| *v *= 1e200);
