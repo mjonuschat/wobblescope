@@ -12,10 +12,12 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
-use wobblescope_session::meta::{Outcome, PrinterInfo, SegmentMeta, SessionMeta, TimeWindow};
+use wobblescope_session::meta::{
+    Outcome, PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
+};
 
 use super::live::{ChipLive, FinishedOutcome, FinishedTest, LiveHub, Phase, TestState};
-use super::meta::{ChipFacts, apply_summaries, initial, slow_rate_note};
+use super::meta::{ChipFacts, apply_summaries, initial};
 use super::position::{PositionError, Timeouts, move_to_point, window_end, window_start};
 use super::preflight::{Started, check_printer, quarantine_duration};
 use super::recorder::{Level, Missing, Recorder};
@@ -273,7 +275,8 @@ impl Run {
             .map(|c| ChipFacts::of(&c.chip, c.observed_rate_hz))
             .collect();
         for fact in &facts {
-            if let Some(note) = slow_rate_note(fact.nominal_rate_hz, fact.observed_rate_hz) {
+            if let Some(note) = undersampled_note(fact.nominal_rate_hz, Some(fact.observed_rate_hz))
+            {
                 self.warn(&fact.section, &note);
             }
         }

@@ -207,7 +207,6 @@ async fn a_ten_millisecond_hole_is_degraded_and_jitter_that_keeps_the_order_is_n
     let mut rows: Vec<[f64; 4]> = (0..3200)
         .map(|k| [20.0 + k as f64 * step, 0.0, 0.0, 9800.0])
         .collect();
-    // Jitter well under the limit that keeps the samples in order.
     rows[500][0] += 0.0002;
     for r in &mut rows[1600..] {
         r[0] += 0.010;

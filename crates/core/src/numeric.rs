@@ -31,8 +31,9 @@ pub fn median_rate(t: &[f64]) -> Option<f64> {
     if steps.is_empty() {
         return None;
     }
-    steps.sort_by(f64::total_cmp);
-    let rate = 1.0 / steps[steps.len() / 2];
+    let mid = steps.len() / 2;
+    let (_, median, _) = steps.select_nth_unstable_by(mid, f64::total_cmp);
+    let rate = 1.0 / *median;
     rate.is_finite().then_some(rate)
 }
 

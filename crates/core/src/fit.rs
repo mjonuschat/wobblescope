@@ -232,14 +232,23 @@ fn shaper_names(params: &FitParams) -> Vec<String> {
     }
 }
 
-/// Checks that [`fit_shaper`] would accept `d` as one of its datasets under `params`: the
-/// per-dataset checks it applies, and positive power at or below the lowest `max_freq` any
-/// evaluated shaper uses. `params` are assumed valid; the fit reports parameter errors itself.
+/// The lowest `max_freq` any shaper evaluated under `params` reads the PSD up to; the input of
+/// [`check_dataset`]. `params` are assumed valid.
+pub(crate) fn lowest_fit_max_freq(params: &FitParams) -> f64 {
+    shaper_names(params)
+        .iter()
+        .filter_map(|name| builtin(name))
+        .map(|shaper| effective_max_freq(params, &test_freqs_of(shaper)))
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// Checks that [`fit_shaper`] would accept `d` as one of its datasets: the per-dataset checks it
+/// applies, and positive power at or below `max_freq`, from [`lowest_fit_max_freq`].
 ///
 /// # Errors
 /// [`CoreError::InvalidParameter`] for a malformed dataset or a negative PSD value, and
 /// [`CoreError::FlatSignal`] when no bin the fit reads has power.
-pub fn check_dataset(d: &CalibrationData, params: &FitParams) -> Result<(), CoreError> {
+pub(crate) fn check_dataset(d: &CalibrationData, max_freq: f64) -> Result<(), CoreError> {
     validate_dataset(d)?;
     if d.psd_sum.iter().any(|p| *p < 0.0) {
         return Err(CoreError::InvalidParameter(format!(
@@ -247,11 +256,6 @@ pub fn check_dataset(d: &CalibrationData, params: &FitParams) -> Result<(), Core
             d.name
         )));
     }
-    let max_freq = shaper_names(params)
-        .iter()
-        .filter_map(|name| builtin(name))
-        .map(|shaper| effective_max_freq(params, &test_freqs_of(shaper)))
-        .fold(f64::INFINITY, f64::min);
     let powered = d
         .freq_bins
         .iter()

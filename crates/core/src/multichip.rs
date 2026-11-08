@@ -6,7 +6,8 @@ use crate::CORE_VERSION;
 use crate::eligibility::{DatasetInput, Eligibility, Health, select_eligible};
 use crate::error::CoreError;
 use crate::fit::{
-    FREQ_STEP, FitParams, Recommendation, check_dataset, find_best_shaper, validate_params,
+    FREQ_STEP, FitParams, Recommendation, check_dataset, find_best_shaper, lowest_fit_max_freq,
+    validate_params,
 };
 use crate::numeric::{arange, interp};
 use crate::psd::{CalibrationData, MAX_FREQ};
@@ -122,6 +123,7 @@ fn worse(a: Health, b: Health) -> Health {
 pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, CoreError> {
     validate_params(params)?;
     let (eligible, mut eligibility) = select_eligible(inputs);
+    let fit_max_freq = lowest_fit_max_freq(params);
 
     let mut psds: Vec<Option<CalibrationData>> = Vec::with_capacity(inputs.len());
     let mut windows: Vec<Option<std::ops::Range<usize>>> = vec![None; inputs.len()];
@@ -149,7 +151,7 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
         match built {
             Ok(cd) => {
                 if is_eligible {
-                    match check_dataset(&cd, params) {
+                    match check_dataset(&cd, fit_max_freq) {
                         Ok(()) => usable.push(i),
                         Err(e) => eligibility.decisions[i].dropped = Some(e.to_string()),
                     }

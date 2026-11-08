@@ -183,10 +183,15 @@ parity_test! {
 }
 
 parity_test! {
-    fn invalid_fit_parameters_still_fail_the_analysis() {
+    fn invalid_fit_parameters_fail_the_analysis_even_with_nothing_to_fit() {
         let bad = FitParams { scv: -1.0, ..FitParams::default() };
-        let r = analyze(&[input("b", Health::Ok, load_csv("chip_b"))], &bad);
-        assert!(matches!(r, Err(CoreError::InvalidParameter(_))));
+        for inputs in [
+            vec![input("x", Health::Degraded, load_csv("chip_b"))],
+            vec![input("dead", Health::Ok, RawSamples::default())],
+        ] {
+            let r = analyze(&inputs, &bad);
+            assert!(matches!(r, Err(CoreError::InvalidParameter(_))), "{r:?}");
+        }
     }
 }
 
@@ -250,7 +255,6 @@ parity_test! {
         assert_eq!(median_rate(&[1.0]), None);
         assert_eq!(median_rate(&[1.0, 1.0, 1.0]), None);
         assert_eq!(median_rate(&[0.0, 0.5]), Some(2.0));
-        // A repeated sample and a backward step leave the steady 100 Hz rate.
         let t = [0.0, 0.01, 0.02, 0.02, 0.03, 0.025, 0.04, 0.05];
         assert!((median_rate(&t).unwrap() - 100.0).abs() < 1e-9);
     }

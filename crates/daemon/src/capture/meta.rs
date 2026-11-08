@@ -50,14 +50,6 @@ fn type_name(t: ChipType) -> &'static str {
     }
 }
 
-/// A note for a chip whose observed sample rate is under half the rate Klipper configures, or
-/// `None`. The session crate owns the rule and the wording, so the note recorded here is the
-/// reason the analysis gives when it excludes the chip.
-#[must_use]
-pub fn slow_rate_note(nominal_hz: Option<f64>, observed_hz: f64) -> Option<String> {
-    undersampled_note(nominal_hz, Some(observed_hz))
-}
-
 /// The metadata a capture starts with: no segment yet, chips with unknown health. It becomes the
 /// first journal.
 #[must_use]
@@ -113,10 +105,7 @@ pub fn apply_summaries(meta: &mut SessionMeta, summaries: &[ChipSummary]) {
         {
             chip.observed_rate_hz = Some(rate);
         }
-        if let Some(note) = chip
-            .observed_rate_hz
-            .and_then(|rate| slow_rate_note(chip.nominal_rate_hz, rate))
-        {
+        if let Some(note) = undersampled_note(chip.nominal_rate_hz, chip.observed_rate_hz) {
             chip.health_notes.push(note);
         }
     }

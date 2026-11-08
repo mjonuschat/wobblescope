@@ -75,9 +75,7 @@ pub enum Sweep {
 struct State {
     /// The print-time clock.
     t: f64,
-    /// Sample time the chips have delivered up to.
-    /// The timestamp of the next sample each sensor delivers.
-    fed: HashMap<String, f64>,
+    next_sample_at: HashMap<String, f64>,
     silent: Vec<String>,
     sweep_seconds: f64,
     offset: [f64; 3],
@@ -137,7 +135,7 @@ impl Sim {
         printer.set_settings(real["status"]["configfile"]["settings"].clone());
         let state = Arc::new(Mutex::new(State {
             t: START_T,
-            fed: HashMap::new(),
+            next_sample_at: HashMap::new(),
             silent: vec![],
             sweep_seconds: 2.0,
             offset: [0.0; 3],
@@ -275,7 +273,7 @@ impl Sim {
             }
             let counters = s.counters.get(sensor).copied().unwrap_or((0, 0));
             let step = 1.0 / rate;
-            let mut at = s.fed.get(sensor).copied().unwrap_or(START_T);
+            let mut at = s.next_sample_at.get(sensor).copied().unwrap_or(START_T);
             while at < to {
                 let rows: Vec<[f64; 4]> = (0..50)
                     .map(|k| {
@@ -287,7 +285,7 @@ impl Sim {
                 self.bridge().push(sensor, &rows, Some(counters));
             }
             // A batch can run past `to`; the next one continues after it, as a real chip does.
-            s.fed.insert((*sensor).to_owned(), at);
+            s.next_sample_at.insert((*sensor).to_owned(), at);
         }
     }
 

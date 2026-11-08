@@ -129,7 +129,6 @@ parity_test! {
 
 parity_test! {
     fn the_observed_rate_is_the_median_interval_not_the_span() {
-        // 3200 Hz rows with one 50 ms hole: the span-based rate would be about 2.6 kHz.
         let mut text = String::new();
         let mut t = 100.0;
         for i in 0..1000 {
