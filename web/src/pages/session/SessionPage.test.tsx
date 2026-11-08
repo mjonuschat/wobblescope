@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnalysisResult } from '@/analysis/protocol'
 import type { Analysis } from '@/lib/generated/Analysis'
-import { analysis, recommendation, twoAxisMeta } from '@/test/fixtures'
+import { analysis, decision, recommendation, twoAxisMeta } from '@/test/fixtures'
 import { stubApiWithStatus as stubApi } from '@/test/status'
 import { renderRoute } from '@/test/render'
 import { summary } from '@/test/summaries'
@@ -46,7 +46,7 @@ describe('the session view', () => {
     const a = analysis()
     a.per_chip = [{ ...a.per_chip[0], chip: 'adxl345' }]
     a.eligibility.decisions = [
-      { chip: 'adxl345', point: 0, decision: 'Included', reasons: ['unknown capture health'] },
+      decision('adxl345', 'Included', ['unknown capture health']),
     ]
     fake.analyze.mockResolvedValue(result(a, [SNIPPET]))
     const writeText = vi.fn().mockResolvedValue(undefined)
@@ -78,8 +78,8 @@ describe('the session view', () => {
   it('covers AE4: a degraded chip is drawn, has no recommendation, and the worst case comes from the other chip', async () => {
     const a = analysis()
     a.eligibility.decisions = [
-      { chip: 'a', point: 0, decision: 'Included', reasons: [] },
-      { chip: 'b', point: 0, decision: 'Excluded', reasons: ['degraded capture health'] },
+      decision('a', 'Included'),
+      decision('b', 'Excluded', ['degraded capture health']),
     ]
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
     serve()
@@ -93,8 +93,8 @@ describe('the session view', () => {
   it('lets the user include an excluded chip, and analyses again with it named', async () => {
     const a = analysis()
     a.eligibility.decisions = [
-      { chip: 'a', point: 0, decision: 'Included', reasons: [] },
-      { chip: 'b', point: 0, decision: 'Excluded', reasons: ['degraded capture health'] },
+      decision('a', 'Included'),
+      decision('b', 'Excluded', ['degraded capture health']),
     ]
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
     serve()
@@ -111,8 +111,8 @@ describe('the session view', () => {
   it('shows a chip that was included by override as checked', async () => {
     const a = analysis()
     a.eligibility.decisions = [
-      { chip: 'a', point: 0, decision: 'Included', reasons: [] },
-      { chip: 'b', point: 0, decision: 'Overridden', reasons: ['degraded capture health'] },
+      decision('a', 'Included'),
+      decision('b', 'Overridden', ['degraded capture health']),
     ]
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, SNIPPET]))
     serve()
@@ -126,15 +126,114 @@ describe('the session view', () => {
     a.worst_case = null
     a.per_chip = a.per_chip.map((c) => ({ ...c, recommendation: null }))
     a.eligibility.decisions = [
-      { chip: 'a', point: 0, decision: 'Excluded', reasons: ['degraded capture health'] },
-      { chip: 'b', point: 0, decision: 'Excluded', reasons: ['incomplete coverage: tail'] },
+      decision('a', 'Excluded', ['degraded capture health']),
+      decision('b', 'Excluded', ['incomplete coverage: tail']),
     ]
     fake.analyze.mockResolvedValue(result(a, [null, null]))
     serve()
     renderRoute('/sessions/s1')
-    expect(await screen.findByText(/none of its recordings is eligible/)).toBeTruthy()
+    expect(await screen.findByText(/none of its recordings could be used/)).toBeTruthy()
     expect(screen.getAllByText(/incomplete coverage: tail/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/shaper_type_x/)).toBeNull()
+  })
+
+  it('covers AE1: a dropped recording is a warning and the other chip\u2019s results stay', async () => {
+    const a = analysis()
+    a.eligibility.decisions = [
+      decision('a', 'Included'),
+      decision('b', 'Included', [], 'timestamps are not finite and strictly increasing'),
+    ]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    const panel = await screen.findByRole('region', { name: 'Capture health and eligibility' })
+    expect(panel.textContent).toContain(
+      'included, but could not be analysed: timestamps are not finite and strictly increasing',
+    )
+    expect(screen.getByRole('region', { name: 'Chip b' }).textContent).toContain(
+      'No recommendation for this chip: timestamps are not finite and strictly increasing',
+    )
+    expect(screen.getByRole('region', { name: 'Worst case across all chips' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: /Include b anyway/ })).toBeNull()
+  })
+
+  it('covers AE2: when the only eligible recording is dropped the axis has no recommendation and says why', async () => {
+    const a = analysis()
+    a.worst_case = null
+    a.summed = null
+    a.per_chip = a.per_chip.map((c) => ({ ...c, recommendation: null }))
+    a.eligibility.decisions = [
+      decision('a', 'Included', [], 'too few samples: have 0, need more than 1'),
+      decision('b', 'Excluded', ['degraded capture health']),
+    ]
+    fake.analyze.mockResolvedValue(result(a, [null, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    expect(await screen.findByText(/none of its recordings could be used/)).toBeTruthy()
+    expect(screen.getAllByText(/too few samples: have 0/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: 'Chip b' }).querySelector('[role="img"]')).toBeTruthy()
+  })
+
+  it('covers AE6: an undersampled chip can be included anyway', async () => {
+    const reason =
+      "samples arrive at 395 Hz, under half the 1600 Hz Klipper configures; check that the chip's MCU runs current firmware"
+    const a = analysis()
+    a.eligibility.decisions = [decision('a', 'Included'), decision('b', 'Excluded', [reason])]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
+    serve()
+    renderRoute('/sessions/s1')
+    const box = await screen.findByRole('checkbox', { name: /Include b anyway/ })
+    expect(box.closest('label')!.textContent).toContain('395 Hz')
+    fireEvent.click(box)
+    await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2))
+    expect(fake.analyze.mock.calls[1][0].overrides).toEqual(['b'])
+  })
+
+  it('keeps the override box checked for an overridden chip that was dropped, and unticking removes it', async () => {
+    const excluded = analysis()
+    excluded.eligibility.decisions = [
+      decision('a', 'Included'),
+      decision('b', 'Excluded', ['degraded capture health']),
+    ]
+    const dropped = analysis()
+    dropped.eligibility.decisions = [
+      decision('a', 'Included'),
+      decision('b', 'Overridden', ['degraded capture health'], 'flat signal: no vibration power to analyse'),
+    ]
+    fake.analyze.mockImplementation(async (job: { overrides: string[] }) =>
+      result(job.overrides.includes('b') ? dropped : excluded, [SNIPPET, null]),
+    )
+    serve()
+    renderRoute('/sessions/s1')
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Include b anyway/ }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('region', { name: 'Capture health and eligibility' }).textContent,
+      ).toContain(
+        'included by override (degraded capture health), but could not be analysed: flat signal',
+      ),
+    )
+    const box = screen.getByRole('checkbox', { name: /Include b anyway/ })
+    expect((box as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(box)
+    await waitFor(() => expect(fake.analyze.mock.calls.at(-1)![0].overrides).toEqual([]))
+    await waitFor(() =>
+      expect((screen.getByRole('checkbox', { name: /Include b anyway/ }) as HTMLInputElement).checked).toBe(false),
+    )
+  })
+
+  it('shows the chip\u2019s health on this axis, not its health over the whole test', async () => {
+    const a = analysis()
+    a.per_chip = [{ ...a.per_chip[0], chip: 'adxl345', health: 'Ok' }]
+    a.eligibility.decisions = [decision('adxl345', 'Included')]
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET]))
+    const meta = twoAxisMeta()
+    meta.chips = meta.chips.map((c) => ({ ...c, health: 'Degraded' }))
+    serve(meta)
+    renderRoute('/sessions/s1')
+    const chip = await screen.findByRole('region', { name: 'Chip adxl345' })
+    expect(chip.textContent).toContain('Ok')
+    expect(chip.textContent).not.toContain('Degraded')
   })
 
   it('shows an analysis error while the metadata stays visible', async () => {

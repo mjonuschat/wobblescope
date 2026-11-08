@@ -44,6 +44,9 @@ export function EligibilityPanel({
                 ({d.reasons.join('; ')})
               </span>
             )}
+            {d.dropped !== null && (
+              <span className="text-amber-400">, but could not be analysed: {d.dropped}</span>
+            )}
           </li>
         ))}
       </ul>

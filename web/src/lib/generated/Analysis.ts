@@ -14,11 +14,12 @@ export type Analysis = {
  */
 per_chip: Array<ChipAnalysis>, 
 /**
- * Recommendation over every eligible dataset of every chip; `None` when none is eligible.
+ * Recommendation over every eligible dataset of every chip that could be analysed; `None`
+ * when there is none.
  */
 worst_case: Recommendation | null, 
 /**
- * Summed PSD of the eligible datasets, for display only.
+ * Summed PSD of the same datasets as `worst_case`, for display only.
  */
 summed: SummedPsd | null, 
 /**

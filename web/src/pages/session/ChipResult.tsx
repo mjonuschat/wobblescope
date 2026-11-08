@@ -20,8 +20,10 @@ interface Props {
 export function ChipResult({ chip, snippet, probePoints, maxFreq, decisions }: Props) {
   const rec = chip.recommendation
   const reasons = decisions
-    .filter((d) => d.chip === chip.chip && d.decision === 'Excluded')
-    .flatMap((d) => d.reasons)
+    .filter((d) => d.chip === chip.chip)
+    .flatMap((d) =>
+      d.decision === 'Excluded' ? d.reasons : d.dropped !== null ? [d.dropped] : [],
+    )
   const option = psdOption({ chip, recommendation: rec, probePoints, maxFreq })
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label={`Chip ${chip.chip}`}>

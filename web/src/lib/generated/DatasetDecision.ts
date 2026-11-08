@@ -20,4 +20,9 @@ decision: Decision,
 /**
  * Human-readable reasons (warnings for included datasets).
  */
-reasons: Array<string>, };
+reasons: Array<string>, 
+/**
+ * For an included or overridden input that could not be analysed, why: it was left out of
+ * every fit and the summed PSD.
+ */
+dropped: string | null, };

@@ -37,7 +37,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         />
       ) : (
         <p role="status" className="rounded-lg border p-4 text-sm">
-          No recommendation for this axis: none of its recordings is eligible. The reasons are
+          No recommendation for this axis: none of its recordings could be used. The reasons are
           listed below.
         </p>
       )}

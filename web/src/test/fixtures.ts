@@ -1,4 +1,6 @@
 import type { Analysis } from '@/lib/generated/Analysis'
+import type { DatasetDecision } from '@/lib/generated/DatasetDecision'
+import type { Decision } from '@/lib/generated/Decision'
 import type { CalibrationResult } from '@/lib/generated/CalibrationResult'
 import type { FitParams } from '@/lib/generated/FitParams'
 import type { FitSettings } from '@/lib/generated/FitSettings'
@@ -87,6 +89,16 @@ export function recommendation(best = candidate('mzv', 48.2)): Recommendation {
     settings,
     core_version: '0.1.0',
   }
+}
+
+/** One eligibility decision for point 0; `dropped` is set for a recording that could not be analysed. */
+export function decision(
+  chip: string,
+  decision: Decision,
+  reasons: string[] = [],
+  dropped: string | null = null,
+): DatasetDecision {
+  return { chip, point: 0, decision, reasons, dropped }
 }
 
 /** Chip `a` has a recommendation, chip `b` has none. */

@@ -25,6 +25,7 @@ datasets: Array<[number, CalibrationData]>,
  */
 windows: Array<[number, { start: number, end: number, }]>, 
 /**
- * Recommendation from the chip's eligible datasets; `None` when it has none.
+ * Recommendation from the chip's eligible datasets that could be analysed; `None` when it
+ * has none.
  */
 recommendation: Recommendation | null, };
