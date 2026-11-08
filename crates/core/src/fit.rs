@@ -232,6 +232,21 @@ fn shaper_names(params: &FitParams) -> Vec<String> {
     }
 }
 
+/// Checks that every shaper `params` selects exists and can be built with the damping ratio the
+/// fit uses, so settings the fit would refuse fail even when no dataset reaches the fit.
+/// `params` are assumed to have passed [`validate_params`].
+///
+/// # Errors
+/// [`CoreError::UnknownShaper`] or [`CoreError::ShaperInit`].
+pub(crate) fn validate_shapers(params: &FitParams) -> Result<(), CoreError> {
+    let damping_ratio = damping_of(params);
+    for name in shaper_names(params) {
+        let shaper = builtin(&name).ok_or(CoreError::UnknownShaper(name))?;
+        shaper.impulses(shaper.min_freq(), damping_ratio)?;
+    }
+    Ok(())
+}
+
 /// The lowest `max_freq` any shaper evaluated under `params` reads the PSD up to; the input of
 /// [`check_dataset`]. `params` are assumed valid.
 pub(crate) fn lowest_fit_max_freq(params: &FitParams) -> f64 {
@@ -242,8 +257,9 @@ pub(crate) fn lowest_fit_max_freq(params: &FitParams) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
-/// Checks that [`fit_shaper`] would accept `d` as one of its datasets: the per-dataset checks it
-/// applies, and positive power at or below `max_freq`, from [`lowest_fit_max_freq`].
+/// Checks that `d` can be one of [`fit_shaper`]'s datasets: well formed, no negative values, and
+/// positive power at or below `max_freq`. The fit runs it on every dataset; `analyze` runs it with
+/// [`lowest_fit_max_freq`] to drop a recording before it can fail a fit.
 ///
 /// # Errors
 /// [`CoreError::InvalidParameter`] for a malformed dataset or a negative PSD value, and
@@ -285,13 +301,13 @@ pub fn fit_shaper(
     if data.is_empty() {
         return Err(CoreError::TooFewSamples { have: 0, need: 1 });
     }
-    for d in data {
-        validate_dataset(d)?;
-    }
     let damping_ratio = damping_of(params);
     let test_ratios = test_ratios_of(params);
     let test_freqs = test_freqs_of(shaper);
     let max_freq = effective_max_freq(params, &test_freqs);
+    for d in data {
+        check_dataset(d, max_freq)?;
+    }
 
     let mut min_freq = max_freq;
     for d in data {

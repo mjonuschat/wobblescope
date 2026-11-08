@@ -129,6 +129,23 @@ parity_test! {
 }
 
 parity_test! {
+    fn a_recording_whose_psd_overflows_is_dropped_by_the_fit_check() {
+        let mut huge = load_csv("chip_a");
+        huge.x.iter_mut().for_each(|v| *v *= 1e200);
+        let a = analyze(
+            &[input("huge", Health::Ok, huge), input("b", Health::Ok, load_csv("chip_b"))],
+            &FitParams::default(),
+        )
+        .unwrap();
+        let alone = analyze(&[input("b", Health::Ok, load_csv("chip_b"))], &FitParams::default())
+            .unwrap();
+        let dropped = a.eligibility.decisions[0].dropped.as_deref().unwrap_or_default();
+        assert!(dropped.contains("non-finite"), "{dropped}");
+        assert_eq!(a.worst_case, alone.worst_case);
+    }
+}
+
+parity_test! {
     fn a_flat_eligible_recording_is_dropped_by_the_fit_check() {
         let mut flat = load_csv("chip_a");
         for column in [&mut flat.x, &mut flat.y, &mut flat.z] {
@@ -192,6 +209,21 @@ parity_test! {
             let r = analyze(&inputs, &bad);
             assert!(matches!(r, Err(CoreError::InvalidParameter(_))), "{r:?}");
         }
+    }
+}
+
+parity_test! {
+    fn shaper_settings_the_fit_would_refuse_fail_even_with_nothing_to_fit() {
+        let dead = [input("dead", Health::Ok, RawSamples::default())];
+        let unknown = FitParams { shapers: Some(vec!["bogus".to_owned()]), ..FitParams::default() };
+        let r = analyze(&dead, &unknown);
+        assert!(matches!(r, Err(CoreError::UnknownShaper(_))), "{r:?}");
+        // 0.5 is a valid ratio, but EI and the hump shapers refuse it.
+        let damping = FitParams { damping_ratio: Some(0.5), ..FitParams::default() };
+        let r = analyze(&dead, &damping);
+        assert!(matches!(r, Err(CoreError::ShaperInit(_))), "{r:?}");
+        let fine = analyze(&dead, &FitParams { shapers: Some(vec!["zv".to_owned()]), ..damping });
+        assert!(fine.is_ok(), "{fine:?}");
     }
 }
 

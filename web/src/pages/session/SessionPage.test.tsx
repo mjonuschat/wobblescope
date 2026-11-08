@@ -213,6 +213,9 @@ describe('the session view', () => {
         'included by override (degraded capture health), but could not be analysed: flat signal',
       ),
     )
+    expect(screen.getByRole('region', { name: 'Chip b' }).textContent).toContain(
+      'No recommendation for this chip: flat signal: no vibration power to analyse',
+    )
     const box = screen.getByRole('checkbox', { name: /Include b anyway/ })
     expect((box as HTMLInputElement).checked).toBe(true)
     fireEvent.click(box)

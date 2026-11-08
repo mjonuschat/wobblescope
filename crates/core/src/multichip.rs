@@ -7,7 +7,7 @@ use crate::eligibility::{DatasetInput, Eligibility, Health, select_eligible};
 use crate::error::CoreError;
 use crate::fit::{
     FREQ_STEP, FitParams, Recommendation, check_dataset, find_best_shaper, lowest_fit_max_freq,
-    validate_params,
+    validate_params, validate_shapers,
 };
 use crate::numeric::{arange, interp};
 use crate::psd::{CalibrationData, MAX_FREQ};
@@ -118,10 +118,12 @@ fn worse(a: Health, b: Health) -> Health {
 /// that cannot be processed is listed in `failures`. Neither blocks the rest.
 ///
 /// # Errors
-/// [`CoreError::InvalidParameter`] for invalid fit parameters, and any other [`CoreError`] a
-/// fit returns for the usable datasets.
+/// [`CoreError::InvalidParameter`], [`CoreError::UnknownShaper`] or [`CoreError::ShaperInit`] for
+/// fit settings the fit would refuse, and any other [`CoreError`] a fit returns for the usable
+/// datasets.
 pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, CoreError> {
     validate_params(params)?;
+    validate_shapers(params)?;
     let (eligible, mut eligibility) = select_eligible(inputs);
     let fit_max_freq = lowest_fit_max_freq(params);
 
