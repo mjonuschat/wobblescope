@@ -246,6 +246,25 @@ pub fn sample_file_name(chip: usize, segment: usize) -> String {
     format!("c{chip}-s{segment}.zst")
 }
 
+/// A chip delivering under this share of its nominal rate is undersampled.
+pub const UNDERSAMPLED_SHARE: f64 = 0.5;
+
+/// Why a chip's samples are suspect when its observed rate is under [`UNDERSAMPLED_SHARE`] of
+/// its nominal rate, or `None` when it is not, or either rate is unknown. The usual cause is old
+/// MCU firmware: before Klipper's 2025-10-06 fix to `sensor_lis2dw.c` a `lis2dw` delivered one
+/// sample per 2.5 ms, about 400 Hz of the 1600 Hz it is set to. Samples dropped that way are not
+/// filtered first, so vibration above the delivered rate can fold into the analysed band.
+pub fn undersampled_note(nominal_hz: Option<f64>, observed_hz: Option<f64>) -> Option<String> {
+    let nominal = nominal_hz.filter(|n| positive_finite(*n))?;
+    let observed = observed_hz.filter(|o| o.is_finite())?;
+    (observed < nominal * UNDERSAMPLED_SHARE).then(|| {
+        format!(
+            "samples arrive at {observed:.0} Hz, under half the {nominal:.0} Hz Klipper \
+             configures; check that the chip's MCU runs current firmware"
+        )
+    })
+}
+
 fn positive_finite(v: f64) -> bool {
     v.is_finite() && v > 0.0
 }

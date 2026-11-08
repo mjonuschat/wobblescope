@@ -25,7 +25,7 @@ pub enum AnalyzeError {
     /// A sample file the axis needs was never added.
     #[error("sample file {0} is not loaded")]
     MissingFile(String),
-    /// The metadata, a sample file or a count was refused by the session crate.
+    /// The metadata was refused by the session crate.
     #[error(transparent)]
     Session(#[from] SessionError),
     /// `core` refused the data or the fit parameters.
@@ -60,11 +60,12 @@ impl Session {
 
     /// Analyses every recording of `axis` with `core`. Files are decoded one at a time for the
     /// call only. The chips named in `overrides` are included even when their health or
-    /// coverage would exclude them; the result's eligibility says so.
+    /// coverage would exclude them; the result's eligibility says so. A damaged file, or one
+    /// holding a different number of samples than the metadata records, is reported in the
+    /// result as dropped or failed rather than stopping the analysis.
     ///
     /// # Errors
-    /// A file of the axis that was never added, a damaged file or a sample count that differs
-    /// from the metadata, or a [`CoreError`] from the analysis.
+    /// A file of the axis that was never added, or a [`CoreError`] from the analysis.
     pub fn analyze(
         &self,
         axis: Axis,

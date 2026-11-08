@@ -154,28 +154,33 @@ parity_test! {
 }
 
 parity_test! {
-    fn truncated_bytes_carry_the_session_crates_message() {
+    fn truncated_bytes_drop_the_recording_with_the_session_crates_message() {
         let w = win();
         let mut s = Session::new(two_chip_x_meta(&w, Health::Ok)).unwrap();
         s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
         let mut bytes = encode_samples(&w.ebb).unwrap();
         bytes.truncate(bytes.len() / 2);
         s.add_file("c1-s0.zst", bytes);
-        let e = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap_err().to_string();
+        let a = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
+        let e = a.eligibility.decisions[1].dropped.clone().unwrap_or_default();
         assert!(e.contains("truncated") || e.contains("corrupt"), "{e}");
+        assert!(a.per_chip[0].recommendation.is_some());
+        assert!(a.worst_case.is_some());
     }
 }
 
 parity_test! {
-    fn a_sample_count_that_differs_from_the_metadata_names_the_file_and_both_counts() {
+    fn a_sample_count_that_differs_from_the_metadata_drops_the_recording_naming_both_counts() {
         let w = win();
         let mut meta = two_chip_x_meta(&w, Health::Ok);
         meta.segments[0].files[1].sample_count += 1;
         let expected = meta.segments[0].files[1].sample_count;
         let s = loaded(&w, meta);
-        let e = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap_err().to_string();
+        let a = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
+        let e = a.eligibility.decisions[1].dropped.clone().unwrap_or_default();
         assert!(e.contains("c1-s0.zst"), "{e}");
         assert!(e.contains(&expected.to_string()) && e.contains(&w.ebb.len().to_string()), "{e}");
+        assert!(a.worst_case.is_some());
     }
 }
 

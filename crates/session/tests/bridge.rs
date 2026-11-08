@@ -233,7 +233,7 @@ parity_test! {
 }
 
 parity_test! {
-    fn a_loaded_length_that_differs_from_the_recorded_count_is_an_error() {
+    fn a_loaded_length_that_differs_from_the_recorded_count_drops_the_recording() {
         let m = meta(
             vec![chip("a", Health::Ok)],
             vec![SegmentMeta {
@@ -244,20 +244,131 @@ parity_test! {
             }],
         );
         let short = RawSamples { t: vec![0.0; 999], x: vec![0.0; 999], y: vec![0.0; 999], z: vec![0.0; 999] };
-        let err = dataset_inputs(&m, Axis::X, |_| Ok(short.clone())).unwrap_err();
-        assert!(matches!(
-            err,
-            SessionError::SampleCountMismatch { expected: 1000, found: 999, .. }
-        ));
+        let inputs = dataset_inputs(&m, Axis::X, |_| Ok(short.clone())).unwrap();
+        let message = inputs[0].load_error.as_deref().unwrap();
+        assert!(message.contains("1000") && message.contains("999"), "{message}");
+        assert!(inputs[0].samples.is_empty());
     }
 }
 
 parity_test! {
-    fn a_loader_error_is_returned_unchanged() {
+    fn a_file_that_fails_to_load_is_dropped_and_the_other_chip_analysed() {
         let w = win();
         let m = two_chip_x_meta(&w, Coverage::Complete, Health::Ok);
-        let err = dataset_inputs(&m, Axis::X, |_| Err(SessionError::Truncated)).unwrap_err();
-        assert!(matches!(err, SessionError::Truncated));
+        let mut good = loader(vec![("c0-s0.zst", &w.adxl)]);
+        let inputs = dataset_inputs(&m, Axis::X, |f| {
+            if f.sample_file == "c1-s0.zst" { Err(SessionError::Truncated) } else { good(f) }
+        })
+        .unwrap();
+        assert_eq!(inputs[1].load_error.as_deref(), Some(SessionError::Truncated.to_string().as_str()));
+        let a = analyze(&inputs, &FitParams::default()).unwrap();
+        assert!(a.eligibility.decisions[1].dropped.is_some());
+        assert!(a.per_chip[0].recommendation.is_some());
+        assert!(a.worst_case.is_some());
+    }
+}
+
+parity_test! {
+    fn a_metadata_rule_violation_still_fails() {
+        let w = win();
+        let mut m = two_chip_x_meta(&w, Coverage::Complete, Health::Ok);
+        m.segments[0].point = 7;
+        assert!(dataset_inputs(&m, Axis::X, |_| Ok(RawSamples::default())).is_err());
+    }
+}
+
+/// One chip recorded on X and on Y at the same point, each file with its own stored health.
+fn two_axis_meta(
+    w: &Win,
+    chip_health: Health,
+    x: Option<Health>,
+    y: Option<Health>,
+) -> SessionMeta {
+    let window = Some(TimeWindow {
+        start: w.window.start,
+        end: w.window.end,
+    });
+    let file = |segment, health| SegmentFile {
+        health,
+        ..entry(0, segment, w.adxl.len(), Coverage::Complete)
+    };
+    meta(
+        vec![chip("adxl345", chip_health)],
+        vec![
+            SegmentMeta {
+                axis: Axis::X,
+                point: 0,
+                window,
+                files: vec![file(0, x)],
+            },
+            SegmentMeta {
+                axis: Axis::Y,
+                point: 0,
+                window,
+                files: vec![file(1, y)],
+            },
+        ],
+    )
+}
+
+parity_test! {
+    fn each_recording_is_judged_by_its_own_stored_health() {
+        let w = win();
+        let m = two_axis_meta(&w, Health::Degraded, Some(Health::Degraded), Some(Health::Ok));
+        let load = || loader(vec![("c0-s0.zst", &w.adxl), ("c0-s1.zst", &w.adxl)]);
+        let y = analyze(&dataset_inputs(&m, Axis::Y, load()).unwrap(), &FitParams::default()).unwrap();
+        assert_eq!(y.eligibility.decisions[0].decision, Decision::Included);
+        assert_eq!(y.per_chip[0].health, Health::Ok);
+        assert!(y.worst_case.is_some());
+        let x = analyze(&dataset_inputs(&m, Axis::X, load()).unwrap(), &FitParams::default()).unwrap();
+        assert_eq!(x.eligibility.decisions[0].decision, Decision::Excluded);
+        assert_eq!(x.per_chip[0].health, Health::Degraded);
+    }
+}
+
+parity_test! {
+    fn a_recording_without_stored_health_takes_its_chips() {
+        let w = win();
+        let m = two_axis_meta(&w, Health::Unknown, None, None);
+        let inputs = dataset_inputs(&m, Axis::X, loader(vec![("c0-s0.zst", &w.adxl)])).unwrap();
+        assert_eq!(inputs[0].health, Health::Unknown);
+    }
+}
+
+fn rated(nominal: Option<f64>, observed: Option<f64>) -> SessionMeta {
+    let w = win();
+    let mut m = two_chip_x_meta(&w, Coverage::Complete, Health::Ok);
+    m.chips[1].nominal_rate_hz = nominal;
+    m.chips[1].observed_rate_hz = observed;
+    m
+}
+
+parity_test! {
+    fn an_undersampled_chip_is_excluded_and_the_override_includes_it() {
+        let w = win();
+        let m = rated(Some(1600.0), Some(395.0));
+        let load = || loader(vec![("c0-s0.zst", &w.adxl), ("c1-s0.zst", &w.ebb)]);
+        let mut inputs = dataset_inputs(&m, Axis::X, load()).unwrap();
+        let a = analyze(&inputs, &FitParams::default()).unwrap();
+        let d = &a.eligibility.decisions[1];
+        assert_eq!(d.decision, Decision::Excluded);
+        let reason = d.reasons.join("; ");
+        assert!(reason.contains("395 Hz") && reason.contains("1600 Hz") && reason.contains("firmware"), "{reason}");
+        apply_overrides(&mut inputs, &["lis2dw ebb36".to_owned()]);
+        let a = analyze(&inputs, &FitParams::default()).unwrap();
+        assert_eq!(a.eligibility.decisions[1].decision, Decision::Overridden);
+        let both = analyze(&direct(&w, Coverage::Complete, Health::Ok), &FitParams::default()).unwrap();
+        assert_eq!(a.worst_case, both.worst_case);
+    }
+}
+
+parity_test! {
+    fn no_undersampling_rule_without_both_rates_or_at_exactly_half() {
+        let w = win();
+        for m in [rated(None, Some(395.0)), rated(Some(1600.0), None), rated(Some(1600.0), Some(800.0))] {
+            let inputs = dataset_inputs(&m, Axis::X, loader(vec![("c0-s0.zst", &w.adxl), ("c1-s0.zst", &w.ebb)])).unwrap();
+            assert!(inputs[1].exclusions.is_empty(), "{:?}", m.chips[1]);
+        }
     }
 }
 
