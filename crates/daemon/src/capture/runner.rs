@@ -16,6 +16,7 @@ use wobblescope_session::meta::{
     PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
 };
 
+use super::availability::OpenChip;
 use super::live::{ChipLive, FinishedTest, LiveHub, Phase, TestState};
 use super::meta::{ChipFacts, initial};
 use super::position::{PositionError, Timeouts, move_to_point, window_end, window_start};
@@ -27,6 +28,7 @@ use super::slot::{SlotPermit, TestSlot};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
 use crate::moonraker::status::{KlippyState, Status};
+use crate::storage::Reservation;
 use crate::storage::capture::Capture;
 use crate::storage::{Storage, StorageError, run_blocking};
 
@@ -103,10 +105,10 @@ impl Runner {
     /// Runs `job` on its own task.
     #[must_use]
     pub fn spawn(&self, job: Job) -> JoinHandle<()> {
-        let run = Run::new(self.clone(), job);
+        let (run, setup) = Run::new(self.clone(), job);
         // Named before the task is polled, so a stop right after the 202 finds the test.
         run.permit.begin(&run.id);
-        tokio::spawn(run.run())
+        tokio::spawn(run.run(setup))
     }
 }
 
@@ -188,27 +190,63 @@ impl SegmentOutcome {
     }
 }
 
+/// What only the start of a test needs. `execute` consumes it.
+struct Setup {
+    reservation: Reservation,
+    chips: Vec<OpenChip>,
+    levels_tx: mpsc::UnboundedSender<Level>,
+}
+
+/// The session on disk once the capture has begun. The capture is lent to a blocking thread while
+/// a write runs, and is `None` only then or after that thread failed.
+struct Stored {
+    capture: Option<Capture>,
+    meta: SessionMeta,
+}
+
+/// What the live socket shows about the chips: signal levels arrive from the recorders and
+/// warnings from the runner.
+struct Progress {
+    levels: mpsc::UnboundedReceiver<Level>,
+    chips: Vec<ChipLive>,
+}
+
+impl Progress {
+    /// The chips as they are now, with the levels that arrived since the last call.
+    fn snapshot(&mut self) -> Vec<ChipLive> {
+        while let Ok(level) = self.levels.try_recv() {
+            if let Some(chip) = self.chips.iter_mut().find(|c| c.chip == level.chip) {
+                chip.level = Some(level.rms);
+            }
+        }
+        self.chips.clone()
+    }
+
+    fn warn(&mut self, chip: &str, note: &str) {
+        if let Some(c) = self.chips.iter_mut().find(|c| c.chip == chip)
+            && !c.warnings.iter().any(|w| w == note)
+        {
+            c.warnings.push(note.to_owned());
+        }
+    }
+}
+
 struct Run {
     r: Runner,
     plan: TestPlan,
     id: String,
     created_at: String,
     permit: SlotPermit,
-    chips: Vec<crate::capture::availability::OpenChip>,
-    reservation: Option<crate::storage::Reservation>,
     recorders: Vec<Recorder>,
-    levels: mpsc::UnboundedReceiver<Level>,
-    levels_tx: Option<mpsc::UnboundedSender<Level>>,
-    chip_live: Vec<ChipLive>,
-    capture: Option<Capture>,
-    meta: Option<SessionMeta>,
+    progress: Progress,
+    stored: Option<Stored>,
     current: Option<Current>,
     incomplete: Vec<String>,
     status: watch::Receiver<Status>,
 }
 
 impl Run {
-    fn new(r: Runner, job: Job) -> Self {
+    fn new(r: Runner, job: Job) -> (Self, Setup) {
         let Job {
             started,
             plan,
@@ -216,7 +254,7 @@ impl Run {
         } = job;
         let (levels_tx, levels) = mpsc::unbounded_channel();
         let status = r.moonraker.watch_status();
-        let chip_live = started
+        let chips = started
             .chips
             .iter()
             .map(|c| ChipLive {
@@ -225,39 +263,35 @@ impl Run {
                 warnings: Vec::new(),
             })
             .collect();
-        Self {
+        let run = Self {
             r,
             plan,
             id: started.id,
             created_at: started.created_at,
             permit,
-            chips: started.chips,
-            reservation: Some(started.reservation),
             recorders: Vec::new(),
-            levels,
-            levels_tx: Some(levels_tx),
-            chip_live,
-            capture: None,
-            meta: None,
+            progress: Progress { levels, chips },
+            stored: None,
             current: None,
             incomplete: Vec::new(),
             status,
-        }
+        };
+        let setup = Setup {
+            reservation: started.reservation,
+            chips: started.chips,
+            levels_tx,
+        };
+        (run, setup)
     }
 
-    async fn run(mut self) {
-        let result = self.execute().await;
+    async fn run(mut self, setup: Setup) {
+        let result = self.execute(setup).await;
         self.finish(result).await;
     }
 
     // ---- publishing ----
 
     fn publish(&mut self, phase: Phase) {
-        while let Ok(level) = self.levels.try_recv() {
-            if let Some(chip) = self.chip_live.iter_mut().find(|c| c.chip == level.chip) {
-                chip.level = Some(level.rms);
-            }
-        }
         let segment = self
             .current
             .as_ref()
@@ -271,24 +305,24 @@ impl Run {
             position: segment.map(|(_, s)| s.position),
             expected_segment_seconds: self.plan.segment_seconds,
             elapsed_seconds: segment.map_or(0.0, |(c, _)| c.began.elapsed().as_secs_f64()),
-            chips: self.chip_live.clone(),
+            chips: self.progress.snapshot(),
         };
         self.r.hub.update(|s| s.test = Some(state));
     }
 
     fn warn(&mut self, chip: &str, note: &str) {
-        if let Some(c) = self.chip_live.iter_mut().find(|c| c.chip == chip)
-            && !c.warnings.iter().any(|w| w == note)
-        {
-            c.warnings.push(note.to_owned());
-        }
+        self.progress.warn(chip, note);
     }
 
     // ---- the test ----
 
-    async fn execute(&mut self) -> Result<(), Failure> {
-        let facts: Vec<ChipFacts> = self
-            .chips
+    async fn execute(&mut self, setup: Setup) -> Result<(), Failure> {
+        let Setup {
+            reservation,
+            chips,
+            levels_tx,
+        } = setup;
+        let facts: Vec<ChipFacts> = chips
             .iter()
             .map(|c| ChipFacts::of(&c.chip, c.observed_rate_hz))
             .collect();
@@ -303,19 +337,20 @@ impl Run {
         let printer = printer_info(&control, &mut mcus).await;
         let meta = initial(&self.plan, &self.id, &self.created_at, &facts, printer);
 
-        let reservation = self.reservation.take().expect("reserved by pre-flight");
         let storage = self.r.storage.clone();
         let begin_meta = meta.clone();
         let capture = run_blocking(move || storage.begin_capture(reservation, &begin_meta))
             .await
             .map_err(Failure::certain)?
             .map_err(|e| Failure::certain(format!("cannot start the session: {e}")))?;
-        self.capture = Some(capture);
-        self.meta = Some(meta);
+        self.stored = Some(Stored {
+            capture: Some(capture),
+            meta,
+        });
 
-        let tx = self.levels_tx.take();
-        for open in std::mem::take(&mut self.chips) {
-            self.recorders.push(Recorder::spawn(open, tx.clone()));
+        for open in chips {
+            self.recorders
+                .push(Recorder::spawn(open, Some(levels_tx.clone())));
         }
 
         for index in 0..self.plan.segments.len() {
@@ -528,7 +563,7 @@ impl Run {
         let results = futures_util::future::join_all(waits).await;
         let mut failure = None;
         let mut outcome = SegmentOutcome::default();
-        let index = self.meta.as_ref().map_or(0, |m| m.segments.len());
+        let index = self.segments_stored();
         let mut notes: Vec<(String, String)> = Vec::new();
         for (chip, (rec, result)) in self.recorders.iter().zip(results).enumerate() {
             match result {
@@ -593,14 +628,16 @@ impl Run {
                 file.health_notes.clone_from(notes);
             }
         }
-        let meta = self.meta.as_mut().expect("the capture has metadata");
-        meta.segments.push(SegmentMeta {
+        let Some(stored) = self.stored.as_mut() else {
+            return Err(Failure::certain("the capture is not open"));
+        };
+        stored.meta.segments.push(SegmentMeta {
             axis: segment.axis,
             point: segment.point as u32,
             window: Some(window),
             files,
         });
-        let journal = meta.clone();
+        let journal = stored.meta.clone();
         self.with_capture(move |capture| capture.journal(&journal))
             .await
             .map_err(|e| Failure::certain(format!("disk write failed: {e}")))
@@ -612,8 +649,9 @@ impl Run {
         f: impl FnOnce(&mut Capture) -> Result<T, StorageError> + Send + 'static,
     ) -> Result<T, StorageError> {
         let mut capture = self
-            .capture
-            .take()
+            .stored
+            .as_mut()
+            .and_then(|stored| stored.capture.take())
             .ok_or_else(|| StorageError::BadSession("the capture is not open".to_owned()))?;
         let (capture, result) = run_blocking(move || {
             let result = f(&mut capture);
@@ -621,8 +659,14 @@ impl Run {
         })
         .await
         .map_err(StorageError::BadSession)?;
-        self.capture = Some(capture);
+        if let Some(stored) = self.stored.as_mut() {
+            stored.capture = Some(capture);
+        }
         result
+    }
+
+    fn segments_stored(&self) -> usize {
+        self.stored.as_ref().map_or(0, |s| s.meta.segments.len())
     }
 
     // ---- the end ----
@@ -655,7 +699,7 @@ impl Run {
             return;
         }
         let segment = self.plan.segments[index];
-        let at = self.meta.as_ref().map_or(0, |m| m.segments.len());
+        let at = self.segments_stored();
         self.incomplete
             .push(format!("segment {} was interrupted", at + 1));
         // A failure to write it leaves the finished segments, which are already journaled.
@@ -712,13 +756,11 @@ impl Run {
         let summaries: Vec<_> = self.recorders.iter().map(Recorder::summary).collect();
         // Closing the bridges comes before sealing, so the chips stop streaming at once.
         self.recorders.clear();
-        self.chips.clear();
 
         let reason = failure.as_ref().map(|f| f.reason.clone());
-        let segments = self.meta.as_ref().map_or(0, |m| m.segments.len());
-        let capture = self.capture.take();
-        let finished = match self.meta.take() {
-            Some(meta) if segments > 0 => {
+        let segments = self.segments_stored();
+        let finished = match self.stored.take() {
+            Some(Stored { capture, meta }) if segments > 0 => {
                 let sealing = Sealing {
                     id: self.id.clone(),
                     meta,
@@ -728,7 +770,10 @@ impl Run {
                 };
                 seal(&self.r.storage, capture, sealing).await
             }
-            _ => abandon(&self.r.storage, &self.id, capture, reason).await,
+            other => {
+                let capture = other.and_then(|stored| stored.capture);
+                abandon(&self.r.storage, &self.id, capture, reason).await
+            }
         };
         self.end(finished, failure.is_some_and(|f| f.uncertain));
     }
