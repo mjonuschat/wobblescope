@@ -103,6 +103,8 @@ impl Runner {
     #[must_use]
     pub fn spawn(&self, job: Job) -> JoinHandle<()> {
         let run = Run::new(self.clone(), job);
+        // Named before the task is polled, so a stop right after the 202 finds the test.
+        run.permit.begin(&run.id);
         tokio::spawn(run.run())
     }
 }
@@ -227,7 +229,6 @@ impl Run {
     }
 
     async fn run(mut self) {
-        self.permit.begin(&self.id);
         let result = self.execute().await;
         self.finish(result).await;
     }
