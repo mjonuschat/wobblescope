@@ -5,7 +5,7 @@
 //! the window end and takes the segment with [`Recorder::take`]. Between segments nothing is
 //! kept. Dropping a recorder closes its connection.
 
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::sync::{mpsc, watch};
@@ -16,6 +16,7 @@ use wobblescope_core::numeric::median_rate;
 use wobblescope_session::codec::MAX_SAMPLES;
 
 use super::availability::OpenChip;
+use crate::lock::lock;
 use crate::moonraker::bridge::{Batch, Bridge, Event};
 use crate::moonraker::chips::ChipType;
 
@@ -112,10 +113,6 @@ struct Shared {
     inner: Mutex<Inner>,
     progress: watch::Sender<Progress>,
     levels: Option<mpsc::UnboundedSender<Level>>,
-}
-
-fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
-    inner.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// A running recorder for one chip.

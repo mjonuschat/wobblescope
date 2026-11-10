@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 use wobblescope_session::SessionError;
@@ -25,6 +25,18 @@ use wobblescope_session::meta::SessionMeta;
 use wobblescope_session::writer::{Recovery, recover_unsealed};
 
 pub use admission::Reservation;
+
+/// Runs `f` on a blocking thread. The error is the message for a task that panicked or was
+/// cancelled.
+pub(crate) async fn run_blocking<T, F>(f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("the storage task failed: {e}"))
+}
 use index::{Index, ListFilter, Skipped, Summary};
 use pins::{Pins, PinsError};
 
@@ -199,7 +211,7 @@ struct Inner {
 
 impl Inner {
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock::lock(&self.state)
     }
 }
 

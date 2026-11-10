@@ -4,8 +4,10 @@
 //! runner: it reads the current test from here, sets the stop flag and calls Moonraker itself.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use crate::lock::lock;
 
 #[derive(Default)]
 struct State {
@@ -22,10 +24,6 @@ struct State {
 #[derive(Clone, Default)]
 pub struct TestSlot {
     state: Arc<Mutex<State>>,
-}
-
-fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
-    state.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The right to run a test. Dropping it frees the slot.

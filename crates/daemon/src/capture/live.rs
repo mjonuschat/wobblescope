@@ -2,11 +2,13 @@
 //! the current snapshot and broadcasts every change, so a new subscriber starts from the
 //! snapshot and a slow one is given a fresh snapshot instead of a closed socket.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tokio::sync::broadcast;
 use wobblescope_core::fit::Axis;
+
+use crate::lock::lock;
 
 /// How many changes a subscriber may lag behind before it is given a fresh snapshot.
 const BROADCAST_CAPACITY: usize = 256;
@@ -131,23 +133,20 @@ impl LiveHub {
     /// The current snapshot.
     #[must_use]
     pub fn snapshot(&self) -> LiveSnapshot {
-        self.current
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+        lock(&self.current).clone()
     }
 
     /// The current snapshot and a receiver of every change after it.
     #[must_use]
     pub fn subscribe(&self) -> (LiveSnapshot, broadcast::Receiver<LiveSnapshot>) {
-        let current = self.current.lock().unwrap_or_else(PoisonError::into_inner);
+        let current = lock(&self.current);
         let rx = self.changes.subscribe();
         (current.clone(), rx)
     }
 
     /// Changes the snapshot with `f` and broadcasts the result when it changed.
     pub fn update(&self, f: impl FnOnce(&mut LiveSnapshot)) {
-        let mut current = self.current.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut current = lock(&self.current);
         let before = current.clone();
         f(&mut current);
         if *current != before {

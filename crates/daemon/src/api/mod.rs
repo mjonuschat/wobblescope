@@ -145,9 +145,9 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, ApiError> + Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
+    crate::storage::run_blocking(f)
         .await
-        .map_err(|e| ApiError::internal(format!("storage task failed: {e}")))?
+        .map_err(ApiError::internal)?
 }
 
 async fn not_found() -> ApiError {

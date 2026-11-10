@@ -27,7 +27,7 @@ use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
 use crate::moonraker::status::{KlippyState, Status};
 use crate::storage::capture::Capture;
-use crate::storage::{Storage, StorageError};
+use crate::storage::{Storage, StorageError, run_blocking};
 
 /// The seconds added to `max_segment_seconds` for the sweep call's own timeout.
 const SWEEP_TIMEOUT_MARGIN_SECONDS: u64 = 60;
@@ -289,11 +289,10 @@ impl Run {
         let reservation = self.reservation.take().expect("reserved by pre-flight");
         let storage = self.r.storage.clone();
         let begin_meta = meta.clone();
-        let capture =
-            tokio::task::spawn_blocking(move || storage.begin_capture(reservation, &begin_meta))
-                .await
-                .map_err(|e| Failure::certain(format!("the storage task failed: {e}")))?
-                .map_err(|e| Failure::certain(format!("cannot start the session: {e}")))?;
+        let capture = run_blocking(move || storage.begin_capture(reservation, &begin_meta))
+            .await
+            .map_err(Failure::certain)?
+            .map_err(|e| Failure::certain(format!("cannot start the session: {e}")))?;
         self.capture = Some(capture);
         self.meta = Some(meta);
 
@@ -601,12 +600,12 @@ impl Run {
             .capture
             .take()
             .ok_or_else(|| StorageError::BadSession("the capture is not open".to_owned()))?;
-        let (capture, result) = tokio::task::spawn_blocking(move || {
+        let (capture, result) = run_blocking(move || {
             let result = f(&mut capture);
             (capture, result)
         })
         .await
-        .map_err(|e| StorageError::BadSession(format!("the storage task failed: {e}")))?;
+        .map_err(StorageError::BadSession)?;
         self.capture = Some(capture);
         result
     }
@@ -707,7 +706,7 @@ impl Run {
         let finished = if segments == 0 {
             if let Some(capture) = self.capture.take() {
                 let storage = self.r.storage.clone();
-                let _ = tokio::task::spawn_blocking(move || storage.abandon_capture(capture)).await;
+                let _ = run_blocking(move || storage.abandon_capture(capture)).await;
             }
             FinishedTest {
                 id: self.id.clone(),
@@ -762,7 +761,7 @@ impl Run {
             );
         };
         let storage = self.r.storage.clone();
-        let sealed = tokio::task::spawn_blocking(move || {
+        let sealed = run_blocking(move || {
             let result = storage.seal_capture(&capture, &meta);
             // The capture drops here, releasing its reservation either way.
             result.map(|summary| summary.id)
@@ -785,7 +784,7 @@ impl Run {
             ),
             Err(e) => finished(
                 FinishedOutcome::Failed,
-                Some(format!("could not seal: the storage task failed: {e}")),
+                Some(format!("could not seal: {e}")),
                 None,
             ),
         }
