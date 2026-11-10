@@ -265,6 +265,9 @@ impl ResultFile {
             if !is_allowed_name(&name) {
                 return Err(ResultError::Format(format!("unexpected entry {name}")));
             }
+            if entry.is_symlink() {
+                return Err(ResultError::Format(format!("{name} is a symlink")));
+            }
             if entry.compression() != CompressionMethod::Stored || entry.encrypted() {
                 return Err(ResultError::Format(format!("{name} is not a stored entry")));
             }

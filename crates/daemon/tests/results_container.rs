@@ -309,3 +309,57 @@ fn refuses_a_sample_count_that_differs_from_the_metadata() {
     let error = verify_error(with_first_sample(frame(199, true)));
     assert!(matches!(error, ResultError::Corrupt(_)), "{error:?}");
 }
+
+#[test]
+fn refuses_a_symlink_entry() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("link.zip");
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Stored)
+        .last_modified_time(DateTime::DEFAULT);
+    let mut zip = ZipWriter::new(fs::File::create(&path).unwrap());
+    zip.add_symlink("samples/c0-s0.zst", "/etc/passwd", options)
+        .unwrap();
+    zip.start_file("result.json", options).unwrap();
+    zip.write_all(&serde_json::to_vec(&record(BTreeMap::new())).unwrap())
+        .unwrap();
+    zip.finish().unwrap();
+    assert!(is_format(ResultFile::open(&path)));
+}
+
+#[test]
+fn refuses_zip64() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("big.zip");
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Stored)
+        .last_modified_time(DateTime::DEFAULT)
+        .large_file(true);
+    let mut zip = ZipWriter::new(fs::File::create(&path).unwrap());
+    zip.start_file("meta.json", options).unwrap();
+    zip.write_all(&meta_bytes()).unwrap();
+    zip.start_file("result.json", options).unwrap();
+    zip.write_all(&serde_json::to_vec(&record(BTreeMap::new())).unwrap())
+        .unwrap();
+    zip.finish().unwrap();
+    assert!(is_format(ResultFile::open(&path)));
+}
+
+#[test]
+fn refuses_an_absolute_path() {
+    let dir = TempDir::new().unwrap();
+    let mut entries = good_entries();
+    entries.push(("xsamples/c2-s0.zst", vec![1]));
+    let path = hostile(dir.path(), &entries);
+    replace_all(&path, b"xsamples/c2-s0.zst", b"/samples/c2-s0.zst");
+    assert!(is_format(ResultFile::open(&path)));
+}
+
+#[test]
+fn refuses_a_name_outside_the_allowlist() {
+    let dir = TempDir::new().unwrap();
+    let mut entries = good_entries();
+    entries.push(("notes.txt", vec![1]));
+    let path = hostile(dir.path(), &entries);
+    assert!(is_format(ResultFile::open(&path)));
+}
