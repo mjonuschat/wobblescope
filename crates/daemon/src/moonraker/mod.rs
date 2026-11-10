@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::sync::{oneshot, watch};
 
 use crate::access::AccessState;
+use crate::access::watcher::AccessWatcher;
 use crate::config::Settings;
 use rpc::Rpc;
 
@@ -275,7 +276,7 @@ pub fn spawn(
         timings,
         publisher,
         root_report: report,
-        memory: link::AccessMemory::default(),
+        access: AccessWatcher::default(),
     };
     tokio::spawn(link.run());
     (handle, receiver)

@@ -3,6 +3,7 @@
 pub mod client;
 pub mod names;
 pub mod policy;
+pub mod watcher;
 
 use std::sync::Arc;
 
