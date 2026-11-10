@@ -170,8 +170,7 @@ impl Link {
         }
     }
 
-    /// Lets the access watcher read Moonraker's lists; a refusal or a broken connection fails the
-    /// connection.
+    /// A refusal or a broken connection while reading access fails the connection.
     async fn refresh_access(&mut self, rpc: &Rpc) -> Result<(), Failure> {
         self.access
             .refresh(rpc, &self.timings, &self.publisher)

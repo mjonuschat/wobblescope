@@ -1,4 +1,4 @@
-//! How a test ends on disk: sealing the capture, or abandoning it when no segment finished.
+//! How a test ends on disk. A capture is sealed, or abandoned when no segment finished.
 
 use wobblescope_session::meta::{Outcome, SessionMeta};
 
@@ -29,14 +29,11 @@ pub(super) async fn abandon(
     }
 }
 
-/// What a test hands the sealer.
 pub(super) struct Sealing {
     pub id: String,
     pub meta: SessionMeta,
     pub summaries: Vec<ChipSummary>,
-    /// Why the test failed, if it did.
     pub reason: Option<String>,
-    /// The chips and segments whose data is incomplete.
     pub incomplete: Vec<String>,
 }
 

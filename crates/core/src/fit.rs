@@ -117,7 +117,7 @@ pub struct ShaperFit {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Recommendation {
     /// Frequency grid of every result's `vals`. A shaper whose search range ends lower has fewer
-    /// values; its grid is the first `vals.len()` bins.
+    /// values. Its grid is the first `vals.len()` bins.
     pub freq_bins: Vec<f64>,
     /// The recommended shaper.
     pub best: CalibrationResult,
@@ -320,7 +320,7 @@ fn normalised(data: &[CalibrationData]) -> Cow<'_, [CalibrationData]> {
 /// Fits one shaper over `data`, one element per dataset. A dataset that is not normalised yet is
 /// normalised first.
 ///
-/// Returns the grid and the results: the selected result first, then every candidate in
+/// Returns the grid and the results. The selected result comes first, then every candidate in
 /// descending-frequency order.
 ///
 /// # Errors

@@ -172,8 +172,7 @@ struct Current {
     began: Instant,
 }
 
-/// What the chips delivered for one segment, ready to store: each chip's samples and coverage,
-/// and the health and notes the recorder judged them with.
+/// What the chips delivered for one segment, ready to store.
 #[derive(Default)]
 struct SegmentOutcome {
     recordings: Vec<(u32, RawSamples, Coverage)>,

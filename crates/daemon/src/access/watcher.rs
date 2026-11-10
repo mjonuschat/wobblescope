@@ -15,13 +15,9 @@ use crate::moonraker::{Publisher, Timings};
 /// the one fact that must outlive a connection.
 #[derive(Default)]
 pub struct AccessWatcher {
-    /// Moonraker's lists as read on this connection, or `None` while they are unread.
     policy: Option<Policy>,
-    /// The printer's host name, once Klipper has reported it.
     hostname: Option<String>,
-    /// The last `login_required` read, if any.
     login_required: Option<bool>,
-    /// The lists and host name last logged.
     logged: Option<(Vec<String>, Vec<String>, Option<String>)>,
     /// The reason the policy was last unreadable, so it is logged once.
     unreadable: Option<String>,
@@ -110,7 +106,6 @@ impl AccessWatcher {
         Ok(())
     }
 
-    /// Logs a change of the login requirement and remembers it.
     fn note_login(&mut self, login: bool) {
         if self.login_required != Some(login) && (login || self.login_required.is_some()) {
             if login {
@@ -124,8 +119,8 @@ impl AccessWatcher {
         self.login_required = Some(login);
     }
 
-    /// Publishes the access state: the lists when they are read, else unknown with the last
-    /// login requirement, and logs the lists when they changed.
+    /// Publishes the lists when they are read, else unknown with the last login requirement. Logs
+    /// the lists when they changed.
     fn publish(&mut self, publisher: &Publisher) {
         let state = match self.policy.clone() {
             Some(policy) => {

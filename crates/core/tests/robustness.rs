@@ -373,7 +373,7 @@ parity_test! {
 
 parity_test! {
     fn fit_rejects_a_request_whose_retained_results_exceed_the_memory_budget() {
-        // Each candidate keeps one array on the 0.2 Hz grid; 12 kHz is just over 256 MiB for ZV.
+        // Each candidate keeps one array on the 0.2 Hz grid. 12 kHz is just over 256 MiB for ZV.
         let p = FitParams { max_freq: Some(12000.0), ..FitParams::default() };
         let r = find_best_shaper(&[normalized("chip_b")], &p);
         assert!(matches!(r, Err(CoreError::InvalidParameter(_))), "{r:?}");
