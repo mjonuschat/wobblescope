@@ -8,6 +8,7 @@ pub mod preflight;
 pub mod recorder;
 pub mod request;
 pub mod runner;
+mod seal;
 pub mod session_id;
 pub mod slot;
 

@@ -13,15 +13,16 @@ use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_session::meta::{
-    Outcome, PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
+    PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
 };
 
-use super::live::{ChipLive, FinishedOutcome, FinishedTest, LiveHub, Phase, TestState};
-use super::meta::{ChipFacts, apply_summaries, initial};
+use super::live::{ChipLive, FinishedTest, LiveHub, Phase, TestState};
+use super::meta::{ChipFacts, initial};
 use super::position::{PositionError, Timeouts, move_to_point, window_end, window_start};
 use super::preflight::{Started, check_printer, quarantine_duration};
-use super::recorder::{Level, Missing, Recorder};
+use super::recorder::{Level, Missing, Recorder, Taken};
 use super::request::{Segment, TestPlan};
+use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
@@ -169,6 +170,23 @@ struct Current {
     /// The window start, once the positioning is proven.
     start: Option<f64>,
     began: Instant,
+}
+
+/// What the chips delivered for one segment, ready to store: each chip's samples and coverage,
+/// and the health and notes the recorder judged them with.
+#[derive(Default)]
+struct SegmentOutcome {
+    recordings: Vec<(u32, RawSamples, Coverage)>,
+    judged: Vec<(u32, Health, Vec<String>)>,
+}
+
+impl SegmentOutcome {
+    fn add(&mut self, chip: usize, taken: Taken, coverage: Coverage) {
+        let chip = chip as u32;
+        self.judged
+            .push((chip, taken.report.health, taken.report.notes));
+        self.recordings.push((chip, taken.samples, coverage));
+    }
 }
 
 struct Run {
@@ -510,10 +528,9 @@ impl Run {
             .map(|r| r.wait_past(end, self.r.timings.drain));
         let results = futures_util::future::join_all(waits).await;
         let mut failure = None;
-        let mut recordings: Vec<(u32, RawSamples, Coverage)> = Vec::new();
+        let mut outcome = SegmentOutcome::default();
         let index = self.meta.as_ref().map_or(0, |m| m.segments.len());
         let mut notes: Vec<(String, String)> = Vec::new();
-        let mut judged: Vec<(u32, Health, Vec<String>)> = Vec::new();
         for (chip, (rec, result)) in self.recorders.iter().zip(results).enumerate() {
             match result {
                 Ok(()) => {}
@@ -541,15 +558,14 @@ impl Run {
             if taken.samples.is_empty() {
                 continue;
             }
-            judged.push((chip as u32, taken.report.health, taken.report.notes));
-            recordings.push((chip as u32, taken.samples, taken.report.coverage));
+            let coverage = taken.report.coverage.clone();
+            outcome.add(chip, taken, coverage);
         }
         for (chip, note) in notes {
             self.warn(&chip, &note);
         }
         let window = TimeWindow { start, end };
-        self.store_segment(segment, index, recordings, judged, window)
-            .await?;
+        self.store_segment(segment, index, outcome, window).await?;
         failure.map_or(Ok(()), Err)
     }
 
@@ -557,10 +573,10 @@ impl Run {
         &mut self,
         segment: &Segment,
         index: usize,
-        recordings: Vec<(u32, RawSamples, Coverage)>,
-        judged: Vec<(u32, Health, Vec<String>)>,
+        outcome: SegmentOutcome,
         window: TimeWindow,
     ) -> Result<(), Failure> {
+        let SegmentOutcome { recordings, judged } = outcome;
         let mut files = self
             .with_capture(move |capture| {
                 let refs: Vec<(u32, &RawSamples, Coverage)> = recordings
@@ -626,19 +642,17 @@ impl Run {
         if !end.is_finite() || end <= start {
             return;
         }
-        let mut recordings = Vec::new();
-        let mut judged = Vec::new();
+        let mut outcome = SegmentOutcome::default();
         for (chip, rec) in self.recorders.iter().enumerate() {
             let taken = rec.take(start, end);
             if taken.samples.t.iter().any(|t| *t >= start) {
-                judged.push((chip as u32, taken.report.health, taken.report.notes));
                 let coverage = Coverage::Incomplete {
                     missing: "the test was interrupted".to_owned(),
                 };
-                recordings.push((chip as u32, taken.samples, coverage));
+                outcome.add(chip, taken, coverage);
             }
         }
-        if recordings.is_empty() {
+        if outcome.recordings.is_empty() {
             return;
         }
         let segment = self.plan.segments[index];
@@ -647,7 +661,7 @@ impl Run {
             .push(format!("segment {} was interrupted", at + 1));
         // A failure to write it leaves the finished segments, which are already journaled.
         let _ = self
-            .store_segment(&segment, at, recordings, judged, TimeWindow { start, end })
+            .store_segment(&segment, at, outcome, TimeWindow { start, end })
             .await;
     }
 
@@ -703,91 +717,21 @@ impl Run {
 
         let reason = failure.as_ref().map(|f| f.reason.clone());
         let segments = self.meta.as_ref().map_or(0, |m| m.segments.len());
-        let finished = if segments == 0 {
-            if let Some(capture) = self.capture.take() {
-                let storage = self.r.storage.clone();
-                let _ = run_blocking(move || storage.abandon_capture(capture)).await;
+        let capture = self.capture.take();
+        let finished = match self.meta.take() {
+            Some(meta) if segments > 0 => {
+                let sealing = Sealing {
+                    id: self.id.clone(),
+                    meta,
+                    summaries,
+                    reason,
+                    incomplete: std::mem::take(&mut self.incomplete),
+                };
+                seal(&self.r.storage, capture, sealing).await
             }
-            FinishedTest {
-                id: self.id.clone(),
-                outcome: FinishedOutcome::NoSession,
-                reason: Some(reason.unwrap_or_else(|| "no segment finished".to_owned())),
-                session_id: None,
-                motion_uncertain: false,
-            }
-        } else {
-            self.seal(summaries, reason).await
+            _ => abandon(&self.r.storage, &self.id, capture, reason).await,
         };
         self.end(finished, failure.is_some_and(|f| f.uncertain));
-    }
-
-    async fn seal(
-        &mut self,
-        summaries: Vec<super::recorder::ChipSummary>,
-        reason: Option<String>,
-    ) -> FinishedTest {
-        let mut meta = self.meta.take().expect("segments imply metadata");
-        apply_summaries(&mut meta, &summaries);
-        let (outcome, kind) = match &reason {
-            Some(r) => {
-                meta.notes.push(r.clone());
-                (
-                    Outcome::Failed { reason: r.clone() },
-                    FinishedOutcome::Failed,
-                )
-            }
-            None if !self.incomplete.is_empty() => (
-                Outcome::Incomplete {
-                    reason: self.incomplete.join("; "),
-                },
-                FinishedOutcome::Incomplete,
-            ),
-            None => (Outcome::Complete, FinishedOutcome::Complete),
-        };
-        meta.notes.extend(self.incomplete.iter().cloned());
-        meta.outcome = outcome;
-        let finished = |kind, reason: Option<String>, session: Option<String>| FinishedTest {
-            id: self.id.clone(),
-            outcome: kind,
-            reason,
-            session_id: session,
-            motion_uncertain: false,
-        };
-        let Some(capture) = self.capture.take() else {
-            return finished(
-                FinishedOutcome::Failed,
-                Some("could not seal: the capture is not open".to_owned()),
-                None,
-            );
-        };
-        let storage = self.r.storage.clone();
-        let sealed = run_blocking(move || {
-            let result = storage.seal_capture(&capture, &meta);
-            // The capture drops here, releasing its reservation either way.
-            result.map(|summary| summary.id)
-        })
-        .await;
-        match sealed {
-            Ok(Ok(id)) => finished(
-                kind,
-                reason.or_else(|| {
-                    (kind == FinishedOutcome::Incomplete).then(|| self.incomplete.join("; "))
-                }),
-                Some(id),
-            ),
-            Ok(Err(e)) => finished(
-                FinishedOutcome::Failed,
-                Some(format!(
-                    "could not seal: {e}; the next daemon start recovers the finished segments"
-                )),
-                None,
-            ),
-            Err(e) => finished(
-                FinishedOutcome::Failed,
-                Some(format!("could not seal: {e}")),
-                None,
-            ),
-        }
     }
 
     /// Publishes the end, starts the quarantine after a command of unknown outcome and frees the
