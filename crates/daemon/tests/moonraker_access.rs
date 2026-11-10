@@ -215,3 +215,29 @@ async fn polls_with_unchanged_answers_wake_nobody() {
     assert!(!rx.has_changed().unwrap());
     assert_eq!(fake.requests_for("server.config").len(), 1);
 }
+
+#[tokio::test]
+async fn the_policy_goes_unknown_at_once_when_the_link_drops_the_connection_during_a_refresh() {
+    let fake = FakeMoonraker::start().await;
+    FakePrinter::new(&fake, "ready", chips());
+    let timings = Timings {
+        request: ms(3000),
+        ..fast()
+    };
+    let (m, _) = spawn(&settings(&fake), timings, false);
+    until("a policy", || known(&m)).await;
+    let before = fake.requests_for("access.info").len();
+    fake.on(
+        "access.info",
+        Script::after(ms(2500), Script::Result(json!({"login_required": false}))),
+    );
+    until("a refresh waiting", || {
+        fake.requests_for("access.info").len() > before
+    })
+    .await;
+    let started = std::time::Instant::now();
+    // The link's own poll fails, so it drops the connection while the refresh is still waiting.
+    fake.on("server.info", Script::error(-32601, "unavailable"));
+    until("the policy unknown", || !known(&m)).await;
+    assert!(started.elapsed() < ms(1500), "{:?}", started.elapsed());
+}

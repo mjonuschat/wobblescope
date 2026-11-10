@@ -40,7 +40,8 @@ impl AccessWatcher {
         self.policy.is_some() && self.hostname.is_some()
     }
 
-    /// Reads what decides who may use the daemon, and publishes it when it changed.
+    /// Reads what decides who may use the daemon. The caller publishes it with
+    /// [`publish`](Self::publish), once it knows the connection it read on is still current.
     ///
     /// `login_required` is read every time, because creating an account changes it without a
     /// restart. `server.config` is read while the lists are unknown, and the host name until
@@ -49,12 +50,7 @@ impl AccessWatcher {
     ///
     /// # Errors
     /// A refusal or a broken connection.
-    async fn refresh(
-        &mut self,
-        rpc: &Rpc,
-        timings: &Timings,
-        sink: &watch::Sender<AccessState>,
-    ) -> Result<(), RpcError> {
+    async fn refresh(&mut self, rpc: &Rpc, timings: &Timings) -> Result<(), RpcError> {
         let info = tolerate(rpc.call("access.info", None, timings.request).await)?;
         let login = info.as_ref().and_then(parse_login_required);
         if let Some(login) = login {
@@ -105,7 +101,6 @@ impl AccessWatcher {
             }
             None => None,
         };
-        self.publish(sink);
         Ok(())
     }
 
@@ -189,12 +184,27 @@ pub async fn run(
             }
         };
         loop {
-            if let Err(e) = watcher.refresh(&rpc, &timings, &sink).await {
-                tracing::debug!("cannot read Moonraker's access settings: {e}");
-                if e.is_unauthorized() {
-                    let _ = refused.send(());
+            // A connection that changes while the refresh waits discards it, so an answer read on
+            // the old connection is never published.
+            let refreshed = tokio::select! {
+                result = watcher.refresh(&rpc, &timings) => result,
+                changed = control.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    break;
                 }
-                watcher.clear(&sink);
+            };
+            match refreshed {
+                Err(e) => {
+                    tracing::debug!("cannot read Moonraker's access settings: {e}");
+                    if e.is_unauthorized() {
+                        let _ = refused.send(());
+                    }
+                    watcher.clear(&sink);
+                }
+                Ok(()) if control.has_changed().unwrap_or(true) => break,
+                Ok(()) => watcher.publish(&sink),
             }
             let wait = if watcher.settled() {
                 timings.poll_ready

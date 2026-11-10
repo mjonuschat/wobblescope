@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::access::AccessState;
 use crate::access;
+use crate::access::AccessState;
 use crate::config::Settings;
 use rpc::Rpc;
 
@@ -199,7 +199,24 @@ impl Publisher {
     }
 
     /// Publishes the control connection, or `None` when there is none.
+    ///
+    /// Losing the connection also turns the access state unknown, at once and keeping the last
+    /// login requirement, so no policy read on it stays in force.
     pub fn set_control(&self, control: Option<Rpc>) {
+        if control.is_none() {
+            self.access.send_if_modified(|current| {
+                let logins_required = match current {
+                    AccessState::Known(policy) => policy.logins_required(),
+                    AccessState::Unknown { logins_required } => *logins_required,
+                };
+                let unknown = AccessState::Unknown { logins_required };
+                let changed = *current != unknown;
+                if changed {
+                    *current = unknown;
+                }
+                changed
+            });
+        }
         self.control.send_replace(control);
     }
 

@@ -8,7 +8,6 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 
-
 use super::discovery::{RootsError, parse_config_root, parse_configfile};
 use super::rpc::{Notification, Rpc, RpcError};
 use super::status::{KlippyState, MoonrakerState, state_line};
