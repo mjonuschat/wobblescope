@@ -6,7 +6,7 @@ use common::normalized;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{FitParams, find_best_shaper, fit_shaper};
 use wobblescope_core::multichip::{analyze, summed_psd};
-use wobblescope_core::numeric::{arange, interp, median_rate};
+use wobblescope_core::numeric::{arange, interp, median_rate, strictly_increasing};
 use wobblescope_core::score::{estimate_shaper, find_max_accel, shaper_smoothing};
 use wobblescope_core::shaper::{Impulses, builtin};
 use wobblescope_core::{CalibrationData, CoreError, RawSamples};
@@ -294,6 +294,18 @@ parity_test! {
         assert!(interp(&[1.0], &[0.0, 1.0], &[0.0]).iter().all(|v| v.is_nan()));
         assert!(arange(0.0, 1e300, 1e-3).is_empty());
         assert!(arange(0.0, f64::INFINITY, 1.0).is_empty());
+    }
+}
+
+parity_test! {
+    fn strictly_increasing_refuses_repeats_backward_steps_and_non_finite_times() {
+        assert!(strictly_increasing(&[]));
+        assert!(strictly_increasing(&[1.0]));
+        assert!(strictly_increasing(&[0.0, 0.5, 1.0]));
+        assert!(!strictly_increasing(&[0.0, 0.0]));
+        assert!(!strictly_increasing(&[0.0, 1.0, 0.5]));
+        assert!(!strictly_increasing(&[0.0, f64::NAN]));
+        assert!(!strictly_increasing(&[0.0, f64::INFINITY]));
     }
 }
 

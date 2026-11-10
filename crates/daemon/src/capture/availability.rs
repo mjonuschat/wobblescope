@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use time::OffsetDateTime;
-use wobblescope_core::numeric::median_rate;
+use wobblescope_core::numeric::{median_rate, strictly_increasing};
 
 use crate::moonraker::Moonraker;
 use crate::moonraker::bridge::{Batch, Bridge, BridgeError, Event};
@@ -117,7 +117,7 @@ async fn prove(url: String, chip: &Chip, timeout: Duration) -> ChipOutcome {
 /// The sample rate from timestamps that must be finite and strictly increasing, or `None`.
 #[must_use]
 pub fn rate_from_times(times: &[f64]) -> Option<f64> {
-    if times.iter().any(|t| !t.is_finite()) || times.windows(2).any(|w| w[1] <= w[0]) {
+    if !strictly_increasing(times) {
         return None;
     }
     median_rate(times)

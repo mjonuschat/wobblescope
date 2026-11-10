@@ -18,6 +18,12 @@ pub fn arange(start: f64, stop: f64, step: f64) -> Vec<f64> {
         .collect()
 }
 
+/// Whether every timestamp is finite and each is greater than the one before. An empty or
+/// one-element slice qualifies.
+pub fn strictly_increasing(t: &[f64]) -> bool {
+    t.iter().all(|v| v.is_finite()) && t.windows(2).all(|w| w[1] > w[0])
+}
+
 /// Sample rate in Hz from timestamps in seconds: one over the median of the positive intervals
 /// between consecutive samples. Repeated or backward steps are ignored, so one out-of-order
 /// sample does not change the answer; gaps barely move it. `None` when no positive interval

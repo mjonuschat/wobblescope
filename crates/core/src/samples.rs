@@ -1,6 +1,7 @@
 //! Raw accelerometer samples.
 
 use crate::error::CoreError;
+use crate::numeric::strictly_increasing;
 
 /// Timestamped three-axis samples. All columns have the same length.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -49,7 +50,7 @@ impl RawSamples {
         if !(range.start.is_finite() && range.end.is_finite() && range.start < range.end) {
             return Err(CoreError::InvalidTimestamps);
         }
-        if self.t.iter().any(|v| !v.is_finite()) || self.t.windows(2).any(|w| w[1] <= w[0]) {
+        if !strictly_increasing(&self.t) {
             return Err(CoreError::InvalidTimestamps);
         }
         let start = self.t.partition_point(|&t| t < range.start);

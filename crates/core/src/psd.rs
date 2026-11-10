@@ -4,6 +4,7 @@ use realfft::RealFftPlanner;
 use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
+use crate::numeric::strictly_increasing;
 use crate::samples::RawSamples;
 
 /// Lowest frequency of interest; low-frequency suppression is relative to it.
@@ -105,7 +106,7 @@ impl CalibrationData {
         if n == 0 {
             return Err(CoreError::TooFewSamples { have: 0, need: 1 });
         }
-        if s.t.iter().any(|v| !v.is_finite()) || s.t.windows(2).any(|w| w[1] <= w[0]) || n < 2 {
+        if !strictly_increasing(&s.t) || n < 2 {
             return Err(CoreError::InvalidTimestamps);
         }
         if [&s.x, &s.y, &s.z]
