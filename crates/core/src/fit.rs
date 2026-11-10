@@ -87,8 +87,11 @@ pub struct CalibrationResult {
     pub freq_bins: Vec<f64>,
     /// Worst-case shaper response over all datasets and test damping ratios.
     pub vals: Vec<f64>,
-    /// Remaining vibrations as a fraction.
+    /// Remaining vibrations as a fraction. The largest of `dataset_vibrs`.
     pub vibrs: f64,
+    /// Remaining vibrations of each dataset on its own, worst over the test damping ratios, in
+    /// the order the datasets were given.
+    pub dataset_vibrs: Vec<f64>,
     /// Estimated corner smoothing in mm.
     pub smoothing: f64,
     /// Combined score; lower is better.
@@ -345,20 +348,24 @@ pub fn fit_shaper(
 
         let mut vibrations_max = 0.0_f64;
         let mut per_dataset: Vec<(Vec<f64>, Vec<f64>)> = Vec::new();
+        let mut dataset_vibrs: Vec<f64> = Vec::with_capacity(data.len());
         for d in data {
             let keep = d.freq_bins.iter().take_while(|f| **f <= max_freq).count();
             let bins = &d.freq_bins[..keep];
             let psd = &d.psd_sum[..keep];
             let mut vals_max = vec![0.0_f64; bins.len()];
+            let mut own_max = 0.0_f64;
             for &dr in &test_ratios {
                 let (vibrations, vals) = remaining_vibrations(&imp, dr, bins, psd)?;
                 for (m, v) in vals_max.iter_mut().zip(&vals) {
                     *m = m.max(*v);
                 }
+                own_max = own_max.max(vibrations);
                 if vibrations > vibrations_max {
                     vibrations_max = vibrations;
                 }
             }
+            dataset_vibrs.push(own_max);
             per_dataset.push((bins.to_vec(), vals_max));
         }
         let score = smoothing * (vibrations_max.powf(1.5) + vibrations_max * 0.2 + 0.01);
@@ -375,6 +382,7 @@ pub fn fit_shaper(
             freq_bins: grid,
             vals,
             vibrs: vibrations_max,
+            dataset_vibrs,
             smoothing,
             score,
             max_accel,

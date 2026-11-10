@@ -63,6 +63,19 @@ pub struct DatasetFailure {
     pub error: String,
 }
 
+/// The remaining vibrations of one dataset at the worst-case recommendation's shaper.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct DatasetVibration {
+    /// Chip name.
+    pub chip: String,
+    /// Probe point index.
+    pub point: usize,
+    /// Remaining vibrations as a fraction, worst over the test damping ratios. The largest one
+    /// across the datasets is the worst-case recommendation's `vibrs`.
+    pub vibrs: f64,
+}
+
 /// Analysis of one chip.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -90,6 +103,9 @@ pub struct Analysis {
     /// Recommendation over every eligible dataset of every chip that could be analysed; `None`
     /// when there is none.
     pub worst_case: Option<Recommendation>,
+    /// Each dataset behind `worst_case`, with its own remaining vibrations at the recommended
+    /// shaper. Empty when there is no `worst_case`.
+    pub worst_case_vibrations: Vec<DatasetVibration>,
     /// Summed PSD of the same datasets as `worst_case`, for display only.
     pub summed: Option<SummedPsd>,
     /// Ineligible inputs that could not be processed; shown, never analysed around.
@@ -225,9 +241,25 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
         )
     };
 
+    let worst_case_vibrations = worst_case
+        .as_ref()
+        .map(|w| {
+            usable
+                .iter()
+                .zip(&w.best.dataset_vibrs)
+                .map(|(&i, &vibrs)| DatasetVibration {
+                    chip: inputs[i].chip.clone(),
+                    point: inputs[i].point,
+                    vibrs,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(Analysis {
         per_chip,
         worst_case,
+        worst_case_vibrations,
         summed,
         failures,
         eligibility,

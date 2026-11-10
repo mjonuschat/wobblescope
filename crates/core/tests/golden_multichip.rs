@@ -29,6 +29,23 @@ parity_test! {
 }
 
 parity_test! {
+    fn worst_case_vibrations_name_the_dataset_that_sets_the_answer() {
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &FitParams::default())
+            .unwrap();
+        let vibrations = &a.worst_case_vibrations;
+        let names: Vec<_> = vibrations.iter().map(|v| (v.chip.as_str(), v.point)).collect();
+        assert_eq!(names, [("chip_a", 0), ("chip_b", 0)]);
+        let largest = vibrations.iter().map(|v| v.vibrs).fold(0.0, f64::max);
+        assert_eq!(largest, a.worst_case.as_ref().unwrap().best.vibrs);
+
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Degraded)], &FitParams::default())
+            .unwrap();
+        assert_eq!(a.worst_case_vibrations.len(), 1);
+        assert_eq!(a.worst_case_vibrations[0].chip, "chip_a");
+    }
+}
+
+parity_test! {
     fn per_chip_recommendations_match_single_file_runs() {
         let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &FitParams::default())
             .unwrap();

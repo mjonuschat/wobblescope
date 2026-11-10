@@ -21,9 +21,14 @@ freq_bins: Array<number>,
  */
 vals: Array<number>, 
 /**
- * Remaining vibrations as a fraction.
+ * Remaining vibrations as a fraction. The largest of `dataset_vibrs`.
  */
 vibrs: number, 
+/**
+ * Remaining vibrations of each dataset on its own, worst over the test damping ratios, in
+ * the order the datasets were given.
+ */
+dataset_vibrs: Array<number>, 
 /**
  * Estimated corner smoothing in mm.
  */
