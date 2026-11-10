@@ -27,4 +27,8 @@ axis_limits: AxisLimits | null,
 /**
  * A test point in the middle of X and Y at a low Z, when the limits are known.
  */
-default_point: [number, number, number] | null, };
+default_point: [number, number, number] | null, 
+/**
+ * Seconds a segment takes besides the sweep, which the form adds to its estimate.
+ */
+segment_overhead_seconds: number, };

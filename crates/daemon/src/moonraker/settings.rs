@@ -89,6 +89,8 @@ pub struct PrinterSettings {
     pub axis_limits: Option<AxisLimits>,
     /// A test point in the middle of X and Y at a low Z, when the limits are known.
     pub default_point: Option<[f64; 3]>,
+    /// Seconds a segment takes besides the sweep, which the form adds to its estimate.
+    pub segment_overhead_seconds: f64,
 }
 
 /// Why an answer could not be turned into settings.
@@ -162,6 +164,7 @@ pub fn parse_settings(query: &Value, info: &Value) -> Result<PrinterSettings, Se
         settings,
         axis_limits,
         default_point,
+        segment_overhead_seconds: crate::capture::request::SEGMENT_OVERHEAD_SECONDS,
     })
 }
 

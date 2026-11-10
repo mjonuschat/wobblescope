@@ -135,6 +135,7 @@ async fn the_endpoint_answers_with_the_printers_values() {
     assert_eq!(body["default_mode"], "Sweep");
     assert_eq!(body["settings"]["accel_per_hz"]["value"], 60.0);
     assert_eq!(body["default_point"], json!([150.5, 154.0, 20.0]));
+    assert_eq!(body["segment_overhead_seconds"], json!(15.0));
 }
 
 #[tokio::test]

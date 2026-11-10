@@ -30,6 +30,7 @@ export function printerSettings(overrides: Partial<PrinterSettings['settings']> 
       z: { min: -2, max: 300 },
     },
     default_point: [150.5, 154, 20],
+    segment_overhead_seconds: 15,
   }
 }
 

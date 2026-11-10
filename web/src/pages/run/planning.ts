@@ -14,9 +14,6 @@ export const OVERRIDE_FIELDS = [
 
 export type OverrideKey = (typeof OVERRIDE_FIELDS)[number]['key']
 
-/** Seconds a segment needs besides the sweep: the move, the pause and the tail. */
-const SEGMENT_OVERHEAD_SECONDS = 15
-
 /** A number typed into a field, `undefined` when it is empty and `NaN` when it is not a number. */
 export function parseNumber(text: string): number | undefined {
   const trimmed = text.trim()
@@ -43,7 +40,7 @@ export function segmentSeconds(
   const end = effective(settings, overrides, 'freq_end')
   const rate = effective(settings, overrides, 'hz_per_sec')
   if (start === null || end === null || rate === null || rate <= 0) return null
-  return (end - start) / rate + SEGMENT_OVERHEAD_SECONDS
+  return (end - start) / rate + settings.segment_overhead_seconds
 }
 
 /** A duration as minutes and seconds, such as `7 min` or `45 s`. */
