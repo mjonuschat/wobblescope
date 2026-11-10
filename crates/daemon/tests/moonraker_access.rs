@@ -185,7 +185,7 @@ async fn an_unauthorized_config_read_is_the_unauthorized_status_with_no_policy()
 }
 
 #[tokio::test]
-async fn a_slow_chip_read_delays_a_login_change_only_until_it_ends() {
+async fn a_slow_chip_read_does_not_delay_a_login_change() {
     let fake = FakeMoonraker::start().await;
     let printer = FakePrinter::new(&fake, "ready", chips());
     let answer = json!({"eventtime": 1.0, "status": {"configfile": {"config": chips()}}});
@@ -196,9 +196,9 @@ async fn a_slow_chip_read_delays_a_login_change_only_until_it_ends() {
     let (m, _) = spawn(&settings(&fake), fast(), false);
     until("a policy", || known(&m)).await;
     printer.set_login_required(true);
-    tokio::time::sleep(ms(100)).await;
-    assert_eq!(logins_required(&m), Some(false));
-    until("logins required", || logins_required(&m) == Some(true)).await;
+    // The access task polls on its own, so the 400 ms chip read does not hold the change back.
+    tokio::time::sleep(ms(150)).await;
+    assert_eq!(logins_required(&m), Some(true));
 }
 
 #[tokio::test]

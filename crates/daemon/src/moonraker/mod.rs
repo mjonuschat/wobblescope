@@ -3,10 +3,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::access::AccessState;
-use crate::access::watcher::AccessWatcher;
+use crate::access;
 use crate::config::Settings;
 use rpc::Rpc;
 
@@ -184,7 +184,7 @@ pub struct Publisher {
     status: watch::Sender<Status>,
     chips: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Sender<Option<Rpc>>,
-    access: watch::Sender<AccessState>,
+    access: std::sync::Arc<watch::Sender<AccessState>>,
 }
 
 impl Publisher {
@@ -205,14 +205,19 @@ impl Publisher {
 
     /// Publishes the access state, waking readers only when it differs from the current one.
     pub fn set_access(&self, access: AccessState) {
-        self.access.send_if_modified(|current| {
-            let changed = *current != access;
-            if changed {
-                *current = access;
-            }
-            changed
-        });
+        publish_access(&self.access, access);
     }
+}
+
+/// Publishes `access` through `sender`, waking readers only when it differs from the current one.
+pub(crate) fn publish_access(sender: &watch::Sender<AccessState>, access: AccessState) {
+    sender.send_if_modified(|current| {
+        let changed = *current != access;
+        if changed {
+            *current = access;
+        }
+        changed
+    });
 }
 
 /// A publisher and the handle that reads it, starting from "connecting" and no chips.
@@ -223,6 +228,7 @@ pub fn channel() -> (Publisher, Moonraker) {
     let chips_tx = std::sync::Arc::new(chips_tx);
     let (control_tx, control) = watch::channel(None);
     let (access_tx, access) = watch::channel(AccessState::default());
+    let access_tx = std::sync::Arc::new(access_tx);
     (
         Publisher {
             status: status_tx,
@@ -258,6 +264,8 @@ pub fn spawn(
     want_config_root: bool,
 ) -> (Moonraker, Option<ConfigRootReport>) {
     let (publisher, mut handle) = channel();
+    let access_sender = publisher.access.clone();
+    let (refused_tx, refused) = mpsc::unbounded_channel();
     handle.bridge_base = settings.moonraker_bridge_base().into();
     let (report, receiver) = if want_config_root {
         let (tx, rx) = oneshot::channel();
@@ -276,8 +284,14 @@ pub fn spawn(
         timings,
         publisher,
         root_report: report,
-        access: AccessWatcher::default(),
+        refused,
     };
+    tokio::spawn(access::watcher::run(
+        handle.control.clone(),
+        access_sender,
+        timings,
+        refused_tx,
+    ));
     tokio::spawn(link.run());
     (handle, receiver)
 }

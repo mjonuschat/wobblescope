@@ -1,15 +1,18 @@
 //! Reads what decides who may use the daemon from Moonraker, and publishes it.
 //!
-//! The supervisor in [`crate::moonraker`] owns the connection and calls [`AccessWatcher::refresh`]
-//! on it. The watcher keeps the policy of the current connection and what it needs to log each
-//! change once.
+//! One task follows the control connection that [`crate::moonraker`] publishes. It reads the
+//! lists on each new connection and again on a timer, publishes them, and publishes them as
+//! unknown when the connection goes. It never touches the connection's supervision.
+
+use std::sync::Arc;
 
 use serde_json::Value;
+use tokio::sync::{mpsc, watch};
 
 use super::policy::{parse_hostname, parse_login_required};
 use super::{AccessState, Policy};
 use crate::moonraker::rpc::{Rpc, RpcError};
-use crate::moonraker::{Publisher, Timings};
+use crate::moonraker::{Timings, publish_access};
 
 /// The lists read from Moonraker, and what is remembered across connections for logging and for
 /// the one fact that must outlive a connection.
@@ -24,17 +27,17 @@ pub struct AccessWatcher {
 }
 
 impl AccessWatcher {
-    /// Forgets what the last connection read. What outlives a connection stays.
-    pub fn start_connection(&mut self) {
+    /// Forgets what the last connection read and publishes the access state as unknown, with the
+    /// last login requirement. What outlives a connection stays.
+    fn clear(&mut self, sink: &watch::Sender<AccessState>) {
         self.policy = None;
         self.hostname = None;
+        self.publish(sink);
     }
 
-    /// Publishes the access state as unknown, with the last login requirement.
-    pub fn clear(&mut self, publisher: &Publisher) {
-        self.policy = None;
-        self.hostname = None;
-        self.publish(publisher);
+    /// Whether the lists and the host name are both read, so the slow poll is enough.
+    fn settled(&self) -> bool {
+        self.policy.is_some() && self.hostname.is_some()
     }
 
     /// Reads what decides who may use the daemon, and publishes it when it changed.
@@ -46,11 +49,11 @@ impl AccessWatcher {
     ///
     /// # Errors
     /// A refusal or a broken connection.
-    pub async fn refresh(
+    async fn refresh(
         &mut self,
         rpc: &Rpc,
         timings: &Timings,
-        publisher: &Publisher,
+        sink: &watch::Sender<AccessState>,
     ) -> Result<(), RpcError> {
         let info = tolerate(rpc.call("access.info", None, timings.request).await)?;
         let login = info.as_ref().and_then(parse_login_required);
@@ -102,7 +105,7 @@ impl AccessWatcher {
             }
             None => None,
         };
-        self.publish(publisher);
+        self.publish(sink);
         Ok(())
     }
 
@@ -121,7 +124,7 @@ impl AccessWatcher {
 
     /// Publishes the lists when they are read, else unknown with the last login requirement. Logs
     /// the lists when they changed.
-    fn publish(&mut self, publisher: &Publisher) {
+    fn publish(&mut self, sink: &watch::Sender<AccessState>) {
         let state = match self.policy.clone() {
             Some(policy) => {
                 self.log_policy(&policy);
@@ -131,7 +134,7 @@ impl AccessWatcher {
                 logins_required: self.login_required == Some(true),
             },
         };
-        publisher.set_access(state);
+        publish_access(sink, state);
     }
 
     fn log_policy(&mut self, policy: &Policy) {
@@ -164,6 +167,51 @@ impl AccessWatcher {
             }
         }
         self.logged = Some(key);
+    }
+}
+
+/// Runs until the supervisor that publishes `control` is gone. Moonraker refusing an access call
+/// is sent on `refused`, so the supervisor can report that it refused the daemon.
+pub async fn run(
+    mut control: watch::Receiver<Option<Rpc>>,
+    sink: Arc<watch::Sender<AccessState>>,
+    timings: Timings,
+    refused: mpsc::UnboundedSender<()>,
+) {
+    let mut watcher = AccessWatcher::default();
+    loop {
+        let rpc = loop {
+            if let Some(rpc) = control.borrow_and_update().clone() {
+                break rpc;
+            }
+            if control.changed().await.is_err() {
+                return;
+            }
+        };
+        loop {
+            if let Err(e) = watcher.refresh(&rpc, &timings, &sink).await {
+                tracing::debug!("cannot read Moonraker's access settings: {e}");
+                if e.is_unauthorized() {
+                    let _ = refused.send(());
+                }
+                watcher.clear(&sink);
+            }
+            let wait = if watcher.settled() {
+                timings.poll_ready
+            } else {
+                timings.poll_not_ready
+            };
+            tokio::select! {
+                () = tokio::time::sleep(wait) => {}
+                changed = control.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    break;
+                }
+            }
+        }
+        watcher.clear(&sink);
     }
 }
 

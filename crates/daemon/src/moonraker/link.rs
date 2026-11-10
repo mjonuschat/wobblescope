@@ -8,7 +8,6 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 
-use crate::access::watcher::AccessWatcher;
 
 use super::discovery::{RootsError, parse_config_root, parse_configfile};
 use super::rpc::{Notification, Rpc, RpcError};
@@ -42,7 +41,8 @@ pub(super) struct Link {
     pub(super) timings: Timings,
     pub(super) publisher: Publisher,
     pub(super) root_report: Option<RootReport>,
-    pub(super) access: AccessWatcher,
+    /// Sent by the access task when Moonraker refused one of its calls.
+    pub(super) refused: mpsc::UnboundedReceiver<()>,
 }
 
 /// What the supervisor tracks about the current connection.
@@ -64,7 +64,6 @@ impl Link {
             }
             let failure = self.session(&mut backoff).await;
             self.publisher.set_control(None);
-            self.access.clear(&self.publisher);
             match failure {
                 Failure::Stop => return,
                 failure => self.publish_failure(&failure),
@@ -118,6 +117,8 @@ impl Link {
             .and_then(Value::as_str)
             .map(str::to_owned);
         self.publish_connected(version);
+        // A refusal seen on an earlier connection says nothing about this one.
+        while self.refused.try_recv().is_ok() {}
         self.publisher.set_control(Some(rpc.clone()));
 
         if self.root_report.is_some() {
@@ -135,8 +136,6 @@ impl Link {
             chips_current: false,
             changes: 0,
         };
-        self.access.start_connection();
-        self.refresh_access(&rpc).await?;
         let state = klippy_state(&info);
         let message = self.state_message(&rpc, state).await?;
         let mut reread = self.apply(&mut tracker, state, Some(message));
@@ -159,23 +158,15 @@ impl Link {
                     let state = klippy_state(&info);
                     let message = self.state_message(&rpc, state).await?;
                     reread = self.apply(&mut tracker, state, Some(message));
-                    self.refresh_access(&rpc).await?;
                     if tracker.state == KlippyState::Ready && !tracker.chips_current {
                         reread = true;
                     }
                     next_poll = Instant::now() + poll_interval(&t, tracker.state);
                 }
+                Some(()) = self.refused.recv() => return Err(Failure::Unauthorized),
                 () = self.publisher.status.closed() => return Err(Failure::Stop),
             }
         }
-    }
-
-    /// A refusal or a broken connection while reading access fails the connection.
-    async fn refresh_access(&mut self, rpc: &Rpc) -> Result<(), Failure> {
-        self.access
-            .refresh(rpc, &self.timings, &self.publisher)
-            .await
-            .map_err(|e| self.failure(&e))
     }
 
     /// Klipper's message for `state`, asked of Moonraker only for states that have one. A
