@@ -1,4 +1,5 @@
 import type { FitParams } from '@/lib/generated/FitParams'
+import { parseNumber } from '@/lib/parse'
 
 /** Klipper's own fit: square corner velocity 5 mm/s and every other setting left to `core`. */
 export const defaultFitParams: FitParams = {
@@ -28,12 +29,7 @@ export const defaultDraft: FitDraft = {
 
 export type DraftResult = { params: FitParams } | { invalid: keyof FitDraft }
 
-function number(text: string): number | null {
-  const trimmed = text.trim()
-  if (trimmed === '') return null
-  const value = Number(trimmed)
-  return Number.isFinite(value) ? value : Number.NaN
-}
+const number = (text: string): number | null => parseNumber(text) ?? null
 
 /** Turns the form text into fit parameters: an empty field is the default, text that is not a number is refused. */
 export function draftToParams(draft: FitDraft): DraftResult {

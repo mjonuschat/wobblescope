@@ -9,12 +9,12 @@ import type { Axis } from '@/lib/generated/Axis'
 import type { CheckFailure } from '@/lib/generated/CheckFailure'
 import type { Mode } from '@/lib/generated/Mode'
 import type { PrinterSettings } from '@/lib/generated/PrinterSettings'
+import { parseNumber } from '@/lib/parse'
 
 import {
   OVERRIDE_FIELDS,
   type OverrideKey,
   formatDuration,
-  parseNumber,
   segmentSeconds,
 } from './planning'
 
