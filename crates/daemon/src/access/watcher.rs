@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, watch};
 use super::policy::{parse_hostname, parse_login_required};
 use super::{AccessState, Policy};
 use crate::moonraker::rpc::{Rpc, RpcError};
-use crate::moonraker::{Timings, publish_access};
+use crate::moonraker::{Timings, publish_access_if};
 
 /// The lists read from Moonraker, and what is remembered across connections for logging and for
 /// the one fact that must outlive a connection.
@@ -32,7 +32,7 @@ impl AccessWatcher {
     fn clear(&mut self, sink: &watch::Sender<AccessState>) {
         self.policy = None;
         self.hostname = None;
-        self.publish(sink);
+        self.publish(sink, || true);
     }
 
     /// Whether the lists and the host name are both read, so the slow poll is enough.
@@ -119,7 +119,7 @@ impl AccessWatcher {
 
     /// Publishes the lists when they are read, else unknown with the last login requirement. Logs
     /// the lists when they changed.
-    fn publish(&mut self, sink: &watch::Sender<AccessState>) {
+    fn publish(&mut self, sink: &watch::Sender<AccessState>, still_current: impl FnOnce() -> bool) {
         let state = match self.policy.clone() {
             Some(policy) => {
                 self.log_policy(&policy);
@@ -129,7 +129,7 @@ impl AccessWatcher {
                 logins_required: self.login_required == Some(true),
             },
         };
-        publish_access(sink, state);
+        publish_access_if(sink, state, still_current);
     }
 
     fn log_policy(&mut self, policy: &Policy) {
@@ -203,8 +203,7 @@ pub async fn run(
                     }
                     watcher.clear(&sink);
                 }
-                Ok(()) if control.has_changed().unwrap_or(true) => break,
-                Ok(()) => watcher.publish(&sink),
+                Ok(()) => watcher.publish(&sink, || !control.has_changed().unwrap_or(true)),
             }
             let wait = if watcher.settled() {
                 timings.poll_ready

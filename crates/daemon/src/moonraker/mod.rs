@@ -203,7 +203,10 @@ impl Publisher {
     /// Losing the connection also turns the access state unknown, at once and keeping the last
     /// login requirement, so no policy read on it stays in force.
     pub fn set_control(&self, control: Option<Rpc>) {
-        if control.is_none() {
+        let lost = control.is_none();
+        // First, so that a publish checking the connection under the access lock sees the change.
+        self.control.send_replace(control);
+        if lost {
             self.access.send_if_modified(|current| {
                 let logins_required = match current {
                     AccessState::Known(policy) => policy.logins_required(),
@@ -217,7 +220,6 @@ impl Publisher {
                 changed
             });
         }
-        self.control.send_replace(control);
     }
 
     /// Publishes the access state, waking readers only when it differs from the current one.
@@ -228,7 +230,22 @@ impl Publisher {
 
 /// Publishes `access` through `sender`, waking readers only when it differs from the current one.
 pub(crate) fn publish_access(sender: &watch::Sender<AccessState>, access: AccessState) {
+    publish_access_if(sender, access, || true);
+}
+
+/// Like [`publish_access`], but publishes nothing unless `still_current` says so. The check runs
+/// while the sender is locked, so a caller that checks its connection there cannot publish after
+/// [`Publisher::set_control`] has dropped it: that call replaces the connection first and
+/// takes this lock second.
+pub(crate) fn publish_access_if(
+    sender: &watch::Sender<AccessState>,
+    access: AccessState,
+    still_current: impl FnOnce() -> bool,
+) {
     sender.send_if_modified(|current| {
+        if !still_current() {
+            return false;
+        }
         let changed = *current != access;
         if changed {
             *current = access;
@@ -311,4 +328,21 @@ pub fn spawn(
     ));
     tokio::spawn(link.run());
     (handle, receiver)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_publish_whose_guard_fails_changes_nothing() {
+        let (tx, rx) = watch::channel(AccessState::default());
+        let known = AccessState::Unknown {
+            logins_required: true,
+        };
+        publish_access_if(&tx, known.clone(), || false);
+        assert_eq!(*rx.borrow(), AccessState::default());
+        publish_access_if(&tx, known.clone(), || true);
+        assert_eq!(*rx.borrow(), known);
+    }
 }
