@@ -3,7 +3,7 @@
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
-use wobblescope_core::numeric::median_rate;
+use wobblescope_core::numeric::{median_rate, strictly_increasing};
 
 use crate::SessionError;
 use crate::codec::MAX_SAMPLES;
@@ -140,7 +140,10 @@ fn parse_rows(text: &str) -> Result<RawSamples, SessionError> {
             }
             *slot = x;
         }
-        if s.t.last().is_some_and(|&prev| v[0] <= prev) {
+        if s.t
+            .last()
+            .is_some_and(|&prev| !strictly_increasing(&[prev, v[0]]))
+        {
             return Err(row_error(line, "timestamp does not increase"));
         }
         if s.len() == MAX_SAMPLES {
