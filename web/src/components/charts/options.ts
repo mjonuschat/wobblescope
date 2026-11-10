@@ -12,7 +12,8 @@ export function pointLabel(index: number, probePoints: ProbePoint[]): string {
   return position ? `(${position.join(', ')})` : `point ${index}`
 }
 
-const zip = (xs: number[], ys: number[]) => xs.map((x, i) => [x, ys[i]])
+/** Pairs each value with its bin. `xs` may be longer than `ys`: a shaper whose range ends lower has fewer values. */
+const zip = (xs: number[], ys: number[]) => ys.map((y, i) => [xs[i], y])
 
 const text = '#d4d4d4'
 
@@ -69,6 +70,7 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
       data: [{ xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: text } }],
     }
   }
+  const grid = recommendation?.freq_bins ?? []
   for (const candidate of recommendation?.all ?? []) {
     series.push({
       name: `${candidate.name} ${formatHz(candidate.freq)} Hz`,
@@ -76,7 +78,7 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
       yAxisIndex: 1,
       showSymbol: false,
       lineStyle: { type: 'dashed' },
-      data: zip(candidate.freq_bins, candidate.vals),
+      data: zip(grid, candidate.vals),
     })
   }
   return {

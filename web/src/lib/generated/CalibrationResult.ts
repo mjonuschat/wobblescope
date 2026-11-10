@@ -13,11 +13,9 @@ name: string,
  */
 freq: number, 
 /**
- * Frequency grid of `vals`.
- */
-freq_bins: Array<number>, 
-/**
- * Worst-case shaper response over all datasets and test damping ratios.
+ * Worst-case shaper response over all datasets and test damping ratios, on the first
+ * `vals.len()` bins of the grid the fit returns (`ShaperFit::freq_bins`,
+ * `Recommendation::freq_bins`).
  */
 vals: Array<number>, 
 /**

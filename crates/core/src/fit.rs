@@ -85,9 +85,9 @@ pub struct CalibrationResult {
     pub name: String,
     /// Shaper frequency in Hz.
     pub freq: f64,
-    /// Frequency grid of `vals`.
-    pub freq_bins: Vec<f64>,
-    /// Worst-case shaper response over all datasets and test damping ratios.
+    /// Worst-case shaper response over all datasets and test damping ratios, on the first
+    /// `vals.len()` bins of the grid the fit returns (`ShaperFit::freq_bins`,
+    /// `Recommendation::freq_bins`).
     pub vals: Vec<f64>,
     /// Remaining vibrations as a fraction. The largest of `dataset_vibrs`.
     pub vibrs: f64,
@@ -103,10 +103,22 @@ pub struct CalibrationResult {
     pub max_accel: f64,
 }
 
+/// What [`fit_shaper`] returns for one shaper.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShaperFit {
+    /// The frequency grid every result's `vals` is on.
+    pub freq_bins: Vec<f64>,
+    /// The selected result first, then every candidate in descending-frequency order.
+    pub results: Vec<CalibrationResult>,
+}
+
 /// The outcome of a shaper search.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Recommendation {
+    /// Frequency grid of every result's `vals`. A shaper whose search range ends lower has fewer
+    /// values; its grid is the first `vals.len()` bins.
+    pub freq_bins: Vec<f64>,
     /// The recommended shaper.
     pub best: CalibrationResult,
     /// The fitted result of every evaluated shaper, in evaluation order.
@@ -142,8 +154,8 @@ impl Recommendation {
     }
 }
 
-/// Most memory one shaper fit may retain for its candidates' `freq_bins` and `vals` arrays
-/// (every candidate keeps two arrays on the 0.2 Hz grid). Keeps a large `max_freq` from
+/// Most memory one shaper fit may retain for its candidates' `vals` arrays and the grid (every
+/// candidate keeps one array on the 0.2 Hz grid). Keeps a large `max_freq` from
 /// exhausting memory, notably in 32-bit wasm32.
 const MAX_RETAINED_BYTES: usize = 256 << 20;
 
@@ -308,7 +320,8 @@ fn normalised(data: &[CalibrationData]) -> Cow<'_, [CalibrationData]> {
 /// Fits one shaper over `data`, one element per dataset. A dataset that is not normalised yet is
 /// normalised first.
 ///
-/// Returns the selected result first, then every candidate in descending-frequency order.
+/// Returns the grid and the results: the selected result first, then every candidate in
+/// descending-frequency order.
 ///
 /// # Errors
 /// [`CoreError::InvalidParameter`] for malformed parameters, [`CoreError::FlatSignal`] for a
@@ -318,7 +331,7 @@ pub fn fit_shaper(
     shaper: &dyn Shaper,
     data: &[CalibrationData],
     params: &FitParams,
-) -> Result<Vec<CalibrationResult>, CoreError> {
+) -> Result<ShaperFit, CoreError> {
     validate_params(params)?;
     if data.is_empty() {
         return Err(CoreError::TooFewSamples { have: 0, need: 1 });
@@ -338,9 +351,9 @@ pub fn fit_shaper(
     }
 
     let grid_len = ((max_freq - min_freq) / FREQ_STEP).ceil().max(0.0);
-    // One more result than candidates: the selected one is returned first, as a clone.
-    let retained =
-        (test_freqs.len() + 1) as f64 * grid_len * 2.0 * std::mem::size_of::<f64>() as f64;
+    // One more result than candidates (the selected one is returned first, as a clone), and the
+    // grid itself.
+    let retained = (test_freqs.len() + 2) as f64 * grid_len * std::mem::size_of::<f64>() as f64;
     if retained > MAX_RETAINED_BYTES as f64 {
         return Err(CoreError::InvalidParameter(format!(
             "max_freq = {max_freq} would retain about {:.0} MiB of candidate results \
@@ -363,7 +376,10 @@ pub fn fit_shaper(
         {
             let mut out = vec![results[b].clone()];
             out.extend(results);
-            return Ok(out);
+            return Ok(ShaperFit {
+                freq_bins: grid,
+                results: out,
+            });
         }
         let max_accel = find_max_accel(&imp, params.scv);
 
@@ -399,7 +415,6 @@ pub fn fit_shaper(
         results.push(CalibrationResult {
             name: shaper.name().to_owned(),
             freq: test_freq,
-            freq_bins: grid.clone(),
             vals,
             vibrs: vibrations_max,
             dataset_vibrs,
@@ -429,7 +444,10 @@ pub fn fit_shaper(
     }
     let mut out = vec![results[selected].clone()];
     out.extend(results);
-    Ok(out)
+    Ok(ShaperFit {
+        freq_bins: grid,
+        results: out,
+    })
 }
 
 /// Fits every requested shaper and picks the recommended one, as Klipper's `find_best_shaper`.
@@ -451,12 +469,20 @@ pub fn find_best_shaper(
     let mut best: Option<CalibrationResult> = None;
     let mut all: Vec<CalibrationResult> = Vec::new();
     let mut max_freq_used = f64::NEG_INFINITY;
+    let mut freq_bins: Vec<f64> = Vec::new();
 
     for name in &names {
         let shaper = builtin(name).ok_or_else(|| CoreError::UnknownShaper(name.clone()))?;
         max_freq_used = max_freq_used.max(effective_max_freq(params, &test_freqs_of(shaper)));
 
-        let mut fit = fit_shaper(shaper, data, params)?;
+        let ShaperFit {
+            freq_bins: grid,
+            results: mut fit,
+        } = fit_shaper(shaper, data, params)?;
+        // Every shaper's grid starts at the same bin, so the longest holds the others.
+        if grid.len() > freq_bins.len() {
+            freq_bins = grid;
+        }
         let mut shaper_res = fit.remove(0);
         let results = fit;
 
@@ -494,6 +520,7 @@ pub fn find_best_shaper(
     }
 
     Ok(Recommendation {
+        freq_bins,
         best,
         all,
         settings: FitSettings {

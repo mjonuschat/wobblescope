@@ -21,7 +21,7 @@ per_chip: Array<ChipAnalysis>,
 worst_case: Recommendation | null, 
 /**
  * Each dataset behind `worst_case`, with its own remaining vibrations at the recommended
- * shaper; empty when there is no `worst_case`.
+ * shaper. Empty when there is no `worst_case`.
  */
 worst_case_vibrations: Array<DatasetVibration>, 
 /**

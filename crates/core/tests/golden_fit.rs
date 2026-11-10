@@ -23,7 +23,7 @@ parity_test! {
             let data: Vec<_> = case.inputs.iter().map(|i| normalized(stem(i))).collect();
             for (shaper_name, entry) in &case.fit {
                 let shaper = builtin(shaper_name).unwrap();
-                let got = fit_shaper(shaper, &data, &fit_params(&case.params)).unwrap();
+                let got = fit_shaper(shaper, &data, &fit_params(&case.params)).unwrap().results;
                 assert_eq!(got.len(), entry.candidates.len() + 1, "{name} {shaper_name}");
                 assert_result(&format!("{name} {shaper_name} selected"), &got[0], &entry.selected);
                 for (i, (g, w)) in got[1..].iter().zip(&entry.candidates).enumerate() {
@@ -43,7 +43,11 @@ parity_test! {
                 let label = format!("{name} {}", got.name);
                 close(&format!("{label} freq"), got.freq, want.freq);
                 close(&format!("{label} score"), got.score, want.score);
-                assert_close(&format!("{label} freq_bins"), &got.freq_bins, &want.freq_bins);
+                assert_close(
+                    &format!("{label} freq_bins"),
+                    &rec.freq_bins[..got.vals.len()],
+                    &want.freq_bins,
+                );
                 assert_close(&format!("{label} vals"), &got.vals, &want.vals);
             }
         }
@@ -131,6 +135,21 @@ parity_test! {
 }
 
 parity_test! {
+    fn every_shapers_values_lie_on_a_prefix_of_the_recommendations_grid() {
+        for max_freq in [None, Some(100.0), Some(149.9)] {
+            let params = FitParams { max_freq, ..FitParams::default() };
+            let rec = find_best_shaper(&[normalized("chip_a")], &params).unwrap();
+            assert!(rec.freq_bins.windows(2).all(|w| w[1] > w[0]));
+            for r in rec.all.iter().chain([&rec.best]) {
+                assert!(!r.vals.is_empty() && r.vals.len() <= rec.freq_bins.len(), "{} {max_freq:?}", r.name);
+            }
+            let longest = rec.all.iter().map(|r| r.vals.len()).max().unwrap();
+            assert_eq!(longest, rec.freq_bins.len(), "{max_freq:?}");
+        }
+    }
+}
+
+parity_test! {
     fn flat_psd_yields_flat_signal_error() {
         let mut data = normalized("chip_b");
         data.psd_sum = vec![0.0; data.psd_sum.len()];
@@ -165,7 +184,9 @@ fn recommendation_check_fails_when_best_metrics_are_wrong() {
 fn near_tie_recommendation() -> (Recommendation, Case) {
     let (mut rec, case) = recommend("chip_a");
     let shaper = builtin(&case.best.name).unwrap();
-    let cands = fit_shaper(shaper, &[normalized("chip_a")], &fit_params(&case.params)).unwrap();
+    let cands = fit_shaper(shaper, &[normalized("chip_a")], &fit_params(&case.params))
+        .unwrap()
+        .results;
     let alt = cands
         .into_iter()
         .skip(1)

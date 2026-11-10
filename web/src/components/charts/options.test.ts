@@ -56,6 +56,29 @@ describe('psdOption', () => {
   })
 })
 
+describe('psdOption shaper curves', () => {
+  it('plots each shaper on the recommendation grid, up to its own last value', () => {
+    const short = candidate('zv', 55, { vals: [0.9, 0.5] })
+    const rec = { ...recommendation(), all: [short, candidate('mzv', 48.2)] }
+    const option = psdOption({
+      chip: analysis().per_chip[0],
+      recommendation: rec,
+      probePoints: [{ position: null }],
+      maxFreq: 200,
+    })
+    const curves = series(option).filter((s) => s.yAxisIndex === 1) as unknown as { data: number[][] }[]
+    expect(curves[0].data).toEqual([
+      [5, 0.9],
+      [5.2, 0.5],
+    ])
+    expect(curves[1].data).toEqual([
+      [5, 0.9],
+      [5.2, 0.5],
+      [5.4, 0.1],
+    ])
+  })
+})
+
 describe('pointLabel', () => {
   it('names a point by its position, or by its number when the position is unknown', () => {
     const points = [{ position: null }, { position: [100, 100, 20] as [number, number, number] }]

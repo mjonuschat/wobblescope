@@ -7,6 +7,11 @@ import type { FitSettings } from "./FitSettings";
  */
 export type Recommendation = { 
 /**
+ * Frequency grid of every result's `vals`. A shaper whose search range ends lower has fewer
+ * values; its grid is the first `vals.len()` bins.
+ */
+freq_bins: Array<number>, 
+/**
  * The recommended shaper.
  */
 best: CalibrationResult, 

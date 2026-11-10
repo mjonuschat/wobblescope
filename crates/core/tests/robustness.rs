@@ -373,8 +373,8 @@ parity_test! {
 
 parity_test! {
     fn fit_rejects_a_request_whose_retained_results_exceed_the_memory_budget() {
-        // Each candidate keeps two arrays on the 0.2 Hz grid; 6 kHz is just over 256 MiB for ZV.
-        let p = FitParams { max_freq: Some(6000.0), ..FitParams::default() };
+        // Each candidate keeps one array on the 0.2 Hz grid; 12 kHz is just over 256 MiB for ZV.
+        let p = FitParams { max_freq: Some(12000.0), ..FitParams::default() };
         let r = find_best_shaper(&[normalized("chip_b")], &p);
         assert!(matches!(r, Err(CoreError::InvalidParameter(_))), "{r:?}");
         let ok = FitParams { max_freq: Some(1000.0), ..FitParams::default() };
@@ -469,9 +469,10 @@ parity_test! {
 
 parity_test! {
     fn memory_budget_counts_the_selected_results_clone() {
-        // ZV: 645 candidates on a 26000-bin grid is 268.3 MB (under 256 MiB = 268.4 MB), but the
-        // returned vector holds a 646th, cloned result, which takes it to 268.7 MB.
-        let p = FitParams { max_freq: Some(5200.0), ..FitParams::default() };
+        // ZV: 645 candidates on a 51900-bin grid is 267.8 MB and the cloned selected result makes
+        // 646 arrays, 268.2 MB, both under 256 MiB = 268.4 MB. The grid is the 647th array and
+        // takes it to 268.6 MB, so the request is refused only when both are counted.
+        let p = FitParams { max_freq: Some(10380.0), ..FitParams::default() };
         let r = find_best_shaper(&[normalized("chip_b")], &p);
         assert!(matches!(r, Err(CoreError::InvalidParameter(_))), "{:?}", r.map(|_| ()));
     }

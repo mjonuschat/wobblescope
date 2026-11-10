@@ -72,7 +72,6 @@ export function candidate(name: string, freq: number, over: Partial<CalibrationR
   return {
     name,
     freq,
-    freq_bins: [5, 5.2, 5.4],
     vals: [0.9, 0.5, 0.1],
     vibrs: 0.032,
     dataset_vibrs: [0.032],
@@ -85,6 +84,7 @@ export function candidate(name: string, freq: number, over: Partial<CalibrationR
 
 export function recommendation(best = candidate('mzv', 48.2)): Recommendation {
   return {
+    freq_bins: [5, 5.2, 5.4],
     best,
     all: [candidate('zv', 55), best],
     settings,
