@@ -350,6 +350,7 @@ pub fn fit_shaper(
         )));
     }
 
+    let grid = arange(min_freq, max_freq, FREQ_STEP);
     let mut best: Option<usize> = None;
     let mut results: Vec<CalibrationResult> = Vec::new();
     for &test_freq in test_freqs.iter().rev() {
@@ -389,7 +390,6 @@ pub fn fit_shaper(
             per_dataset.push((bins.to_vec(), vals_max));
         }
         let score = smoothing * (vibrations_max.powf(1.5) + vibrations_max * 0.2 + 0.01);
-        let grid = arange(min_freq, max_freq, FREQ_STEP);
         let mut vals = vec![0.0_f64; grid.len()];
         for (bins, v) in &per_dataset {
             for (m, x) in vals.iter_mut().zip(interp(&grid, bins, v)) {
@@ -399,7 +399,7 @@ pub fn fit_shaper(
         results.push(CalibrationResult {
             name: shaper.name().to_owned(),
             freq: test_freq,
-            freq_bins: grid,
+            freq_bins: grid.clone(),
             vals,
             vibrs: vibrations_max,
             dataset_vibrs,

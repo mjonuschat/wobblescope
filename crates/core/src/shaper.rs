@@ -1,6 +1,7 @@
 //! Built-in input shapers as impulse sequences, ported from Klipper's `shaper_defs.py`.
 
 use std::f64::consts::PI;
+use std::sync::OnceLock;
 
 use crate::error::CoreError;
 
@@ -145,9 +146,23 @@ fn mzv_coeffs(n: usize, t: f64) -> Result<(Vec<f64>, Vec<f64>), CoreError> {
     Ok((a, times))
 }
 
+const MZV_N: usize = 3;
+const MZV_T: f64 = 0.75;
+
+/// The MZV coefficients for [`MZV_N`] and [`MZV_T`], the only values the shaper uses, solved on
+/// first use.
+fn mzv_base() -> Result<(Vec<f64>, Vec<f64>), CoreError> {
+    static BASE: OnceLock<Option<(Vec<f64>, Vec<f64>)>> = OnceLock::new();
+    BASE.get_or_init(|| mzv_coeffs(MZV_N, MZV_T).ok())
+        .clone()
+        .ok_or_else(|| {
+            CoreError::ShaperInit(format!("ill-formed shaper with n={MZV_N}, t={MZV_T}"))
+        })
+}
+
 fn mzv(freq: f64, dr: f64) -> Built {
-    let (n, t) = (3usize, 0.75);
-    let (mut a, mut times) = mzv_coeffs(n, t)?;
+    let (n, t) = (MZV_N, MZV_T);
+    let (mut a, mut times) = mzv_base()?;
     let nf = n as f64;
     let df = (1.0 - dr * dr).sqrt();
     let k = (-2.0 * t * dr * PI / ((nf - 1.0) * df)).exp();
