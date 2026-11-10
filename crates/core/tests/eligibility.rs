@@ -131,3 +131,22 @@ parity_test! {
         assert_eq!(e.decisions[0].reasons, vec!["undersampled"]);
     }
 }
+
+#[test]
+fn health_is_judged_from_what_was_seen_and_the_worse_of_two_wins() {
+    assert_eq!(Health::judged(true, true), Health::Degraded);
+    assert_eq!(Health::judged(true, false), Health::Degraded);
+    assert_eq!(Health::judged(false, true), Health::Ok);
+    assert_eq!(Health::judged(false, false), Health::Unknown);
+
+    let all = [Health::Ok, Health::Unknown, Health::Degraded];
+    for a in all {
+        assert_eq!(a.worse(a), a);
+        assert_eq!(a.worse(Health::Ok), a);
+        assert_eq!(a.worse(Health::Degraded), Health::Degraded);
+        for b in all {
+            assert_eq!(a.worse(b), b.worse(a));
+        }
+    }
+    assert_eq!(Health::Unknown.worse(Health::Ok), Health::Unknown);
+}

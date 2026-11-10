@@ -263,13 +263,7 @@ impl Recorder {
     #[must_use]
     pub fn summary(&self) -> ChipSummary {
         let i = lock(&self.shared.inner);
-        let health = if i.degraded {
-            Health::Degraded
-        } else if i.counters_seen {
-            Health::Ok
-        } else {
-            Health::Unknown
-        };
+        let health = Health::judged(i.degraded, i.counters_seen);
         let mut rates = i.rates.clone();
         rates.sort_by(f64::total_cmp);
         ChipSummary {
@@ -423,13 +417,7 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
     if i.capped {
         notes.push("the segment hit the sample limit and the rest was dropped".to_owned());
     }
-    let health = if degraded {
-        Health::Degraded
-    } else if i.counters_seen {
-        Health::Ok
-    } else {
-        Health::Unknown
-    };
+    let health = Health::judged(degraded, i.counters_seen);
     ChipSegmentReport {
         coverage,
         degraded,

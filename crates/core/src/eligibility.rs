@@ -16,6 +16,36 @@ pub enum Health {
     Unknown,
 }
 
+impl Health {
+    /// The health a capture earns: `Degraded` when a problem was seen, else `Ok` when the chip
+    /// reports counters that could have shown one, else `Unknown`.
+    #[must_use]
+    pub fn judged(degraded: bool, counters_seen: bool) -> Self {
+        if degraded {
+            Self::Degraded
+        } else if counters_seen {
+            Self::Ok
+        } else {
+            Self::Unknown
+        }
+    }
+
+    /// The lower of two healths: `Degraded` beats `Unknown`, which beats `Ok`.
+    #[must_use]
+    pub fn worse(self, other: Self) -> Self {
+        let rank = |h| match h {
+            Self::Ok => 0,
+            Self::Unknown => 1,
+            Self::Degraded => 2,
+        };
+        if rank(other) > rank(self) {
+            other
+        } else {
+            self
+        }
+    }
+}
+
 /// Whether the capture covers the whole segment window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

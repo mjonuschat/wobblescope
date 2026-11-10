@@ -116,15 +116,6 @@ pub struct Analysis {
     pub core_version: String,
 }
 
-fn worse(a: Health, b: Health) -> Health {
-    let rank = |h| match h {
-        Health::Ok => 0,
-        Health::Unknown => 1,
-        Health::Degraded => 2,
-    };
-    if rank(b) > rank(a) { b } else { a }
-}
-
 /// Analyses all inputs: a normalised PSD for each, a recommendation per chip, a worst-case
 /// recommendation over all usable eligible datasets, and the display-only summed PSD.
 ///
@@ -204,7 +195,7 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
             .collect();
         let health = idx
             .iter()
-            .fold(Health::Ok, |h, &i| worse(h, inputs[i].health));
+            .fold(Health::Ok, |h, &i| h.worse(inputs[i].health));
         let chosen: Vec<CalibrationData> = idx
             .iter()
             .filter(|i| usable.contains(i))
