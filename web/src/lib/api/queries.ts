@@ -106,6 +106,7 @@ export function useRecoverStorage() {
   const queryClient = useQueryClient();
   const { data, dataUpdatedAt } = useStatus();
   const ready = data?.storage.state === "ready";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dataUpdatedAt re-runs the effect once per status answer
   useEffect(() => {
     if (!ready) return;
     // Each failed query is fetched again once per status answer, so a daemon that says "ready"

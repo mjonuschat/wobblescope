@@ -186,6 +186,7 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
       <fieldset className="space-y-2">
         <legend className="text-lg font-semibold">Test points</legend>
         {points.map((row, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
           <div key={i} className="flex items-end gap-2">
             {(["x", "y", "z"] as const).map((axis) => (
               <div key={axis} className="space-y-1">

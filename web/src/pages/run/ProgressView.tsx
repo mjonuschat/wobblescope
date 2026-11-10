@@ -61,6 +61,7 @@ function LevelBar({ chip }: { chip: ChipLive }) {
         <span>{chip.chip}</span>
         <span className="text-muted-foreground">{chip.level ? `${peak.toFixed(0)} mm/s²` : "no signal yet"}</span>
       </div>
+      {/* biome-ignore lint/a11y/useSemanticElements: a styled bar; <meter> cannot be styled to match */}
       <div
         role="meter"
         aria-label={`${chip.chip} signal level`}

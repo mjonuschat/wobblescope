@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ export function SessionsPage() {
   const pin = usePinSession();
   const filtered = Object.values(filters).some((v) => v !== undefined);
 
-  let body;
+  let body: ReactNode;
   if (isWaiting(list.error)) {
     body = (
       <p className="rounded-lg border p-4 text-sm">

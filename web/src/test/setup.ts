@@ -7,5 +7,7 @@ window.scrollTo = () => {};
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  document.head.querySelectorAll("base").forEach((b) => b.remove());
+  document.head.querySelectorAll("base").forEach((b) => {
+    b.remove();
+  });
 });

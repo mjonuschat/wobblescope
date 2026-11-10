@@ -21,6 +21,12 @@
       "preset": "recommended"
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"],
+      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    }
+  ],
   "assist": {
     "enabled": false
   }
