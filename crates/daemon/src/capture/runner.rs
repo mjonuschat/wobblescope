@@ -174,7 +174,6 @@ struct Current {
     began: Instant,
 }
 
-/// What the chips delivered for one segment, ready to store.
 #[derive(Default)]
 struct SegmentOutcome {
     recordings: Vec<(u32, RawSamples, Coverage)>,
@@ -204,7 +203,7 @@ struct Stored {
     meta: SessionMeta,
 }
 
-/// What the live socket shows about the chips: signal levels arrive from the recorders and
+/// What the live socket shows about the chips. Signal levels come from the recorders and
 /// warnings from the runner.
 struct Progress {
     levels: mpsc::UnboundedReceiver<Level>,
@@ -212,7 +211,6 @@ struct Progress {
 }
 
 impl Progress {
-    /// The chips as they are now, with the levels that arrived since the last call.
     fn snapshot(&mut self) -> Vec<ChipLive> {
         while let Ok(level) = self.levels.try_recv() {
             if let Some(chip) = self.chips.iter_mut().find(|c| c.chip == level.chip) {

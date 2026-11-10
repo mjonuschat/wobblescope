@@ -235,7 +235,7 @@ pub(crate) fn publish_access(sender: &watch::Sender<AccessState>, access: Access
 
 /// Like [`publish_access`], but publishes nothing unless `still_current` says so. The check runs
 /// while the sender is locked, so a caller that checks its connection there cannot publish after
-/// [`Publisher::set_control`] has dropped it: that call replaces the connection first and
+/// [`Publisher::set_control`] has dropped it. That call replaces the connection first and
 /// takes this lock second.
 pub(crate) fn publish_access_if(
     sender: &watch::Sender<AccessState>,

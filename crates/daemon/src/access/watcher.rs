@@ -123,7 +123,7 @@ impl AccessWatcher {
         let state = match self.policy.clone() {
             Some(policy) => {
                 self.log_policy(&policy);
-                AccessState::Known(std::sync::Arc::new(policy))
+                AccessState::Known(Arc::new(policy))
             }
             None => AccessState::Unknown {
                 logins_required: self.login_required == Some(true),

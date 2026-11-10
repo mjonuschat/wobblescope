@@ -43,21 +43,20 @@ pub fn median_rate(t: &[f64]) -> Option<f64> {
     rate.is_finite().then_some(rate)
 }
 
-/// Where one query point falls in `xp`.
 #[derive(Debug, Clone, Copy)]
 enum Place {
     /// The query is NaN, so the result is too.
     Nan,
-    /// Below the first bin: the first value.
+    /// Below the first bin. The result is the first value.
     Low,
-    /// At or above the last bin: the last value.
+    /// At or above the last bin. The result is the last value.
     High,
     /// Between bins `j` and `j + 1`, `dv` above the first and `dx` apart.
     Between { j: usize, dv: f64, dx: f64 },
 }
 
-/// `numpy.interp` split in two: the bracketing of `x` in `xp` is found once, and [`apply`](Self::apply)
-/// interpolates any `fp` on those bins. A plan is reused when the same `x` and `xp` meet many `fp`.
+/// `numpy.interp` split in two. The bracketing of `x` in `xp` is found once, and
+/// [`apply`](Self::apply) interpolates any `fp` on those bins, so one plan serves many `fp`.
 #[derive(Debug, Clone)]
 pub struct InterpPlan {
     places: Vec<Place>,
@@ -67,7 +66,6 @@ pub struct InterpPlan {
 }
 
 impl InterpPlan {
-    /// Brackets each of `x` in `xp`.
     pub fn new(x: &[f64], xp: &[f64]) -> Self {
         if xp.is_empty() || !strictly_increasing(xp) {
             return Self {
