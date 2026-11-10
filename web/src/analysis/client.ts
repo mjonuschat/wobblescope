@@ -76,6 +76,7 @@ export function createAnalysisClient({
 }: Options): AnalysisClient {
   let worker: WorkerLike | null = null
   let heldSession: string | null = null
+  let heldCreatedAt: string | null = null
   let held = new Set<string>()
   let nextId = 1
   const pending = new Map<
@@ -118,7 +119,8 @@ export function createAnalysisClient({
   async function run({ job, signal }: Queued): Promise<AnalysisResult> {
     if (signal?.aborted) throw abortError()
     const target = ensureWorker()
-    const alreadyHeld = heldSession === job.sessionId ? held : new Set<string>()
+    const sameSession = heldSession === job.sessionId && heldCreatedAt === job.meta.created_at
+    const alreadyHeld = sameSession ? held : new Set<string>()
     const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name))
     const buffers = await Promise.all(
       missing.map((f) => fetchSample(job.sessionId, f.chip, f.segment, signal)),
@@ -126,8 +128,9 @@ export function createAnalysisClient({
     if (signal?.aborted) throw abortError()
     // The worker failed to load while the files were downloading, so nothing can answer.
     if (worker !== target) throw new Error('The analysis module failed to load')
-    if (heldSession !== job.sessionId) {
+    if (!sameSession) {
       heldSession = job.sessionId
+      heldCreatedAt = job.meta.created_at
       held = new Set()
     }
     for (const f of missing) held.add(f.name)

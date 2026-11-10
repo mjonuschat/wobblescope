@@ -219,7 +219,7 @@ describe('the session view', () => {
     const box = screen.getByRole('checkbox', { name: /Include b anyway/ })
     expect((box as HTMLInputElement).checked).toBe(true)
     fireEvent.click(box)
-    await waitFor(() => expect(fake.analyze.mock.calls.at(-1)![0].overrides).toEqual([]))
+    // Back to the earlier key, whose result is cached, so there is no new analysis to wait for.
     await waitFor(() =>
       expect((screen.getByRole('checkbox', { name: /Include b anyway/ }) as HTMLInputElement).checked).toBe(false),
     )

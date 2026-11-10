@@ -41,8 +41,14 @@ export const queryKeys = {
   chips: ['chips'] as const,
   status: ['status'] as const,
   analysesOf: (id: string) => ['analysis', id] as const,
-  analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = []) =>
-    ['analysis', id, axis, params, overrides] as const,
+  /** `createdAt` tells a session written again under the same id from the one analysed before. */
+  analysis: (
+    id: string,
+    axis: Axis,
+    params: FitParams,
+    overrides: string[] = [],
+    createdAt = '',
+  ) => ['analysis', id, axis, params, overrides, createdAt] as const,
 }
 
 /** A daemon answer with a JSON error is final. Anything else may be a blip, so retry it twice. */

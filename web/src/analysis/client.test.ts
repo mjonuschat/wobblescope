@@ -178,6 +178,22 @@ describe('the analysis client', () => {
     await expect(result).rejects.toThrow('bad data')
   })
 
+  it('sends the files again for the same id with another creation time', async () => {
+    const { worker, fetchSample, client, job } = setup()
+    const first = client.analyze(job())
+    await flush()
+    worker.answer(worker.analyses()[0].id)
+    await first
+
+    const newer = { ...twoAxisMeta('s1'), created_at: '2026-11-01T00:00:00Z' }
+    const second = client.analyze(job({ meta: newer }))
+    await flush()
+    worker.answer(worker.analyses()[1].id)
+    await second
+    expect(fetchSample).toHaveBeenCalledTimes(4)
+    expect(Object.keys(worker.analyses()[1].files).length).toBe(2)
+  })
+
   it('refetches the files after the worker answers with an error', async () => {
     const { worker, fetchSample, client, job } = setup()
     const first = client.analyze(job())

@@ -10,6 +10,12 @@ import { getAnalysisClient, type AnalysisClient } from './client'
 
 const NO_OVERRIDES: string[] = []
 
+/**
+ * How long a result stays after nothing shows it. A re-run takes about 0.3 s in the worker and
+ * a result holds under 1 MB, so a few minutes keep a tab switch instant at a small cost.
+ */
+const CACHE_MS = 5 * 60_000
+
 interface Args {
   sessionId: string
   /** `SessionDetail.meta`; the analysis waits until it is there. */
@@ -22,9 +28,9 @@ interface Args {
 }
 
 /**
- * The analysis of one axis under given fit parameters. It runs again each time the view opens
- * or the parameters change, and keeps nothing once nothing shows it (the sample bytes stay in
- * the worker, so a re-run costs no download).
+ * The analysis of one axis under given fit parameters. A result is kept for a few minutes after
+ * the view closes, so reopening it or going back to earlier parameters does not run the fit
+ * again. Deleting a session drops its results.
  */
 export function useSessionAnalysis({
   sessionId,
@@ -35,12 +41,13 @@ export function useSessionAnalysis({
   client = getAnalysisClient(),
 }: Args) {
   return useQuery({
-    queryKey: queryKeys.analysis(sessionId, axis ?? 'X', params, overrides),
+    queryKey: queryKeys.analysis(sessionId, axis ?? 'X', params, overrides, meta?.created_at),
     queryFn: ({ signal }) =>
       client.analyze({ sessionId, meta: meta!, axis: axis!, params, overrides }, signal),
     enabled: meta !== undefined && axis !== null,
-    gcTime: 0,
-    staleTime: 0,
+    gcTime: CACHE_MS,
+    // The answer depends only on the key, so a cached result never goes stale.
+    staleTime: Infinity,
     // A failed analysis is deterministic, so only a download that may have hit a blip is retried.
     retry: (count, error) => error instanceof ApiClientError && shouldRetry(count, error),
   })

@@ -30,7 +30,7 @@ function describe(error: unknown): string {
  */
 export function createHandler(loadModule: () => Promise<WasmModule>) {
   let loading: Promise<WasmModule> | null = null
-  let current: { sessionId: string; handle: SessionHandle } | null = null
+  let current: { sessionId: string; createdAt: string; handle: SessionHandle } | null = null
 
   function release() {
     current?.handle.free()
@@ -40,9 +40,17 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
   async function analyze(request: Extract<WorkerRequest, { type: 'analyze' }>) {
     loading ??= loadModule()
     const module = await loading
-    if (current?.sessionId !== request.sessionId) {
+    // A session written again under the same id has a new creation time and other files.
+    if (
+      current?.sessionId !== request.sessionId ||
+      current.createdAt !== request.meta.created_at
+    ) {
       release()
-      current = { sessionId: request.sessionId, handle: new module.WasmSession(request.meta) }
+      current = {
+        sessionId: request.sessionId,
+        createdAt: request.meta.created_at,
+        handle: new module.WasmSession(request.meta),
+      }
     }
     for (const [name, buffer] of Object.entries(request.files)) {
       current!.handle.add_file(name, new Uint8Array(buffer))

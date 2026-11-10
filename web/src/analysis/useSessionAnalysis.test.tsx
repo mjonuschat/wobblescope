@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createQueryClient } from '@/lib/api/queries'
+import { createQueryClient, queryKeys } from '@/lib/api/queries'
 import { analysis, defaultParams, twoAxisMeta } from '@/test/fixtures'
 
 import { createAnalysisClient, type WorkerLike } from './client'
@@ -34,15 +34,16 @@ function setup() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
-  const meta = twoAxisMeta()
-  const hook = (params = defaultParams, overrides: string[] = []) =>
-    renderHook(
+  const hook = (params = defaultParams, overrides: string[] = [], createdAt?: string) => {
+    const meta = { ...twoAxisMeta(), ...(createdAt ? { created_at: createdAt } : {}) }
+    return renderHook(
       ({ p, o }) =>
         useSessionAnalysis({ sessionId: 's1', meta, axis: 'X', params: p, overrides: o, client }),
       { wrapper, initialProps: { p: params, o: overrides } },
     )
+  }
   const analyses = () => requests.filter((r) => r.type === 'analyze').length
-  return { hook, analyses, fetchSample, requests }
+  return { hook, analyses, fetchSample, requests, queryClient }
 }
 
 describe('useSessionAnalysis', () => {
@@ -56,26 +57,48 @@ describe('useSessionAnalysis', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
   })
 
-  it('analyses again on a new mount without fetching a sample file', async () => {
+  it('serves a new mount from the cache without analysing or fetching again', async () => {
     const { hook, analyses, fetchSample } = setup()
     const first = hook()
     await waitFor(() => expect(first.result.current.isSuccess).toBe(true))
     first.unmount()
     const second = hook()
     await waitFor(() => expect(second.result.current.isSuccess).toBe(true))
-    expect(analyses()).toBe(2)
+    expect(analyses()).toBe(1)
     expect(fetchSample).toHaveBeenCalledTimes(2) // The first mount's two X files only.
   })
 
-  it('analyses again when the parameters go back to the first ones', async () => {
+  it('serves earlier parameters from the cache when they come back', async () => {
     const { hook, analyses } = setup()
     const { result, rerender } = hook()
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     rerender({ p: { ...defaultParams, scv: 7 }, o: [] })
     await waitFor(() => expect(analyses()).toBe(2))
-    rerender({ p: defaultParams, o: [] })
-    await waitFor(() => expect(analyses()).toBe(3))
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    rerender({ p: defaultParams, o: [] })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(analyses()).toBe(2)
+  })
+
+  it('analyses again once the session\u2019s results were dropped', async () => {
+    const { hook, analyses, queryClient } = setup()
+    const first = hook()
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true))
+    first.unmount()
+    queryClient.removeQueries({ queryKey: queryKeys.analysesOf('s1') })
+    const second = hook()
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true))
+    expect(analyses()).toBe(2)
+  })
+
+  it('analyses again for a session written again under the same id', async () => {
+    const { hook, analyses } = setup()
+    const first = hook()
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true))
+    first.unmount()
+    const second = hook(defaultParams, [], '2026-11-01T00:00:00Z')
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true))
+    expect(analyses()).toBe(2)
   })
 
   it('analyses again, with the chips named, when the overrides change', async () => {

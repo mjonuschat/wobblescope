@@ -60,6 +60,18 @@ function request(over: Partial<AnalyzeRequest> = {}): AnalyzeRequest {
 const bytes = (n: number) => new Uint8Array([n]).buffer
 
 describe('the worker handler', () => {
+  it('opens a new session when the same id comes back with another creation time', async () => {
+    const { module, sessions } = fakeModule()
+    const handle = createHandler(async () => module)
+    const newer = { ...twoAxisMeta('s1'), created_at: '2026-11-01T00:00:00Z' }
+    await handle(request({ files: { 'c0-s0.zst': bytes(1) } }))
+    await handle(request({ id: 2, meta: newer, files: { 'c0-s0.zst': bytes(2) } }))
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0].freed).toBe(true)
+    expect(sessions[1].meta.created_at).toBe('2026-11-01T00:00:00Z')
+    expect([...sessions[1].files.get('c0-s0.zst')!]).toEqual([2])
+  })
+
   it('passes the chips the user chose to include on to the analysis', async () => {
     const { module, sessions } = fakeModule()
     const handle = createHandler(async () => module)
