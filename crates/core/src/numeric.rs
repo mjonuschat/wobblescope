@@ -43,31 +43,91 @@ pub fn median_rate(t: &[f64]) -> Option<f64> {
     rate.is_finite().then_some(rate)
 }
 
+/// Where one query point falls in `xp`.
+#[derive(Debug, Clone, Copy)]
+enum Place {
+    /// The query is NaN, so the result is too.
+    Nan,
+    /// Below the first bin: the first value.
+    Low,
+    /// At or above the last bin: the last value.
+    High,
+    /// Between bins `j` and `j + 1`, `dv` above the first and `dx` apart.
+    Between { j: usize, dv: f64, dx: f64 },
+}
+
+/// `numpy.interp` split in two: the bracketing of `x` in `xp` is found once, and [`apply`](Self::apply)
+/// interpolates any `fp` on those bins. A plan is reused when the same `x` and `xp` meet many `fp`.
+#[derive(Debug, Clone)]
+pub struct InterpPlan {
+    places: Vec<Place>,
+    xp_len: usize,
+    /// `xp` is empty or not finite and strictly increasing, so every result is NaN.
+    invalid: bool,
+}
+
+impl InterpPlan {
+    /// Brackets each of `x` in `xp`.
+    pub fn new(x: &[f64], xp: &[f64]) -> Self {
+        if xp.is_empty() || !strictly_increasing(xp) {
+            return Self {
+                places: vec![Place::Nan; x.len()],
+                xp_len: xp.len(),
+                invalid: true,
+            };
+        }
+        let last = xp.len() - 1;
+        let places = x
+            .iter()
+            .map(|&v| {
+                if v.is_nan() {
+                    Place::Nan
+                } else if v < xp[0] {
+                    Place::Low
+                } else if v >= xp[last] {
+                    Place::High
+                } else {
+                    let j = xp.partition_point(|&p| p <= v) - 1;
+                    Place::Between {
+                        j,
+                        dv: v - xp[j],
+                        dx: xp[j + 1] - xp[j],
+                    }
+                }
+            })
+            .collect();
+        Self {
+            places,
+            xp_len: xp.len(),
+            invalid: false,
+        }
+    }
+
+    /// The values `fp` takes at the planned points. Every result is NaN when `xp` was invalid or
+    /// `fp` differs in length from it.
+    pub fn apply(&self, fp: &[f64]) -> Vec<f64> {
+        if self.invalid || fp.len() != self.xp_len {
+            return vec![f64::NAN; self.places.len()];
+        }
+        let last = fp.len() - 1;
+        self.places
+            .iter()
+            .map(|place| match *place {
+                Place::Nan => f64::NAN,
+                Place::Low => fp[0],
+                Place::High => fp[last],
+                Place::Between { j, dv, dx } => {
+                    let slope = (fp[j + 1] - fp[j]) / dx;
+                    slope * dv + fp[j]
+                }
+            })
+            .collect()
+    }
+}
+
 /// `numpy.interp`: piecewise-linear interpolation of `(xp, fp)` at `x`, clamped outside `xp`.
 /// If `xp` is empty, differs in length from `fp`, or is not finite and strictly increasing, every
 /// result is NaN.
 pub fn interp(x: &[f64], xp: &[f64], fp: &[f64]) -> Vec<f64> {
-    if xp.is_empty()
-        || xp.len() != fp.len()
-        || xp.iter().any(|v| !v.is_finite())
-        || xp.windows(2).any(|w| w[1] <= w[0])
-    {
-        return vec![f64::NAN; x.len()];
-    }
-    let last = xp.len() - 1;
-    x.iter()
-        .map(|&v| {
-            if v.is_nan() {
-                v
-            } else if v < xp[0] {
-                fp[0]
-            } else if v >= xp[last] {
-                fp[last]
-            } else {
-                let j = xp.partition_point(|&p| p <= v) - 1;
-                let slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
-                slope * (v - xp[j]) + fp[j]
-            }
-        })
-        .collect()
+    InterpPlan::new(x, xp).apply(fp)
 }

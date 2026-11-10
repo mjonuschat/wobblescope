@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
 use crate::error::CoreError;
-use crate::numeric::{arange, interp};
+use crate::numeric::{InterpPlan, arange};
 use crate::psd::{CalibrationData, MAX_FREQ};
 use crate::score::{find_max_accel, remaining_vibrations, shaper_smoothing};
 use crate::shaper::{AUTOTUNE_SHAPERS, DEFAULT_DAMPING_RATIO, Shaper, builtin};
@@ -364,6 +364,17 @@ pub fn fit_shaper(
     }
 
     let grid = arange(min_freq, max_freq, FREQ_STEP);
+    // The bins each dataset is read on, and where the grid falls in them, do not depend on the
+    // candidate.
+    let kept: Vec<usize> = data
+        .iter()
+        .map(|d| d.freq_bins.iter().take_while(|f| **f <= max_freq).count())
+        .collect();
+    let plans: Vec<InterpPlan> = data
+        .iter()
+        .zip(&kept)
+        .map(|(d, &keep)| InterpPlan::new(&grid, &d.freq_bins[..keep]))
+        .collect();
     let mut best: Option<usize> = None;
     let mut results: Vec<CalibrationResult> = Vec::new();
     for &test_freq in test_freqs.iter().rev() {
@@ -384,10 +395,9 @@ pub fn fit_shaper(
         let max_accel = find_max_accel(&imp, params.scv);
 
         let mut vibrations_max = 0.0_f64;
-        let mut per_dataset: Vec<(Vec<f64>, Vec<f64>)> = Vec::new();
+        let mut per_dataset: Vec<Vec<f64>> = Vec::with_capacity(data.len());
         let mut dataset_vibrs: Vec<f64> = Vec::with_capacity(data.len());
-        for d in data {
-            let keep = d.freq_bins.iter().take_while(|f| **f <= max_freq).count();
+        for (d, &keep) in data.iter().zip(&kept) {
             let bins = &d.freq_bins[..keep];
             let psd = &d.psd_sum[..keep];
             let mut vals_max = vec![0.0_f64; bins.len()];
@@ -403,12 +413,12 @@ pub fn fit_shaper(
                 }
             }
             dataset_vibrs.push(own_max);
-            per_dataset.push((bins.to_vec(), vals_max));
+            per_dataset.push(vals_max);
         }
         let score = smoothing * (vibrations_max.powf(1.5) + vibrations_max * 0.2 + 0.01);
         let mut vals = vec![0.0_f64; grid.len()];
-        for (bins, v) in &per_dataset {
-            for (m, x) in vals.iter_mut().zip(interp(&grid, bins, v)) {
+        for (plan, v) in plans.iter().zip(&per_dataset) {
+            for (m, x) in vals.iter_mut().zip(plan.apply(v)) {
                 *m = m.max(x);
             }
         }
