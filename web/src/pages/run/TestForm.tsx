@@ -1,135 +1,124 @@
-import { useState } from 'react'
+import { useState } from "react";
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ApiClientError } from '@/lib/api/client'
-import { useStartTest } from '@/lib/api/queries'
-import type { Axis } from '@/lib/generated/Axis'
-import type { CheckFailure } from '@/lib/generated/CheckFailure'
-import type { Mode } from '@/lib/generated/Mode'
-import type { PrinterSettings } from '@/lib/generated/PrinterSettings'
-import { parseNumber } from '@/lib/parse'
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ApiClientError } from "@/lib/api/client";
+import { useStartTest } from "@/lib/api/queries";
+import type { Axis } from "@/lib/generated/Axis";
+import type { CheckFailure } from "@/lib/generated/CheckFailure";
+import type { Mode } from "@/lib/generated/Mode";
+import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
+import { parseNumber } from "@/lib/parse";
 
-import {
-  OVERRIDE_FIELDS,
-  type OverrideKey,
-  formatDuration,
-  segmentSeconds,
-} from './planning'
+import { OVERRIDE_FIELDS, type OverrideKey, formatDuration, segmentSeconds } from "./planning";
 
 /** The consequence of the emergency stop, shown before a test starts. */
 export const STOP_CONSEQUENCE =
-  'Emergency stop puts Klipper into shutdown. You will need a FIRMWARE_RESTART afterwards.'
+  "Emergency stop puts Klipper into shutdown. You will need a FIRMWARE_RESTART afterwards.";
 
 interface PointRow {
-  x: string
-  y: string
-  z: string
+  x: string;
+  y: string;
+  z: string;
 }
 
 interface Props {
-  settings: PrinterSettings
+  settings: PrinterSettings;
   /** The chips that will record. */
-  chips: string[]
+  chips: string[];
   /** Why a test cannot start now, or `null`. */
-  blocked: string | null
+  blocked: string | null;
   /** Called with the new test's id after the daemon accepted the test. */
-  onStarted: (id: string) => void
+  onStarted: (id: string) => void;
 }
 
 function rowFrom(point: [number, number, number] | null): PointRow {
-  return point
-    ? { x: String(point[0]), y: String(point[1]), z: String(point[2]) }
-    : { x: '', y: '', z: '' }
+  return point ? { x: String(point[0]), y: String(point[1]), z: String(point[2]) } : { x: "", y: "", z: "" };
 }
 
 /** The daemon names the field it refuses as a `field: reason` prefix. */
 function fieldOf(message: string): { field: string; text: string } | null {
-  const match = /^([a-z_]+): (.*)$/s.exec(message)
-  return match ? { field: match[1], text: match[2] } : null
+  const match = /^([a-z_]+): (.*)$/s.exec(message);
+  return match ? { field: match[1], text: match[2] } : null;
 }
 
 function FieldError({ name, text }: { name: string; text: string | undefined }) {
-  if (!text) return null
+  if (!text) return null;
   return (
     <p id={`error-${name}`} role="alert" className="text-sm text-destructive">
       {text}
     </p>
-  )
+  );
 }
 
 /** The run form: axes, mode, overrides, points, and the start button. */
 export function TestForm({ settings, chips, blocked, onStarted }: Props) {
-  const start = useStartTest()
-  const [axes, setAxes] = useState<Axis[]>(['X', 'Y'])
-  const [chosenMode, setChosenMode] = useState<Mode | null>(null)
-  const [texts, setTexts] = useState<Partial<Record<OverrideKey, string>>>({})
-  const [points, setPoints] = useState<PointRow[]>(() => [rowFrom(settings.default_point)])
-  const mode = chosenMode ?? settings.default_mode
+  const start = useStartTest();
+  const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
+  const [chosenMode, setChosenMode] = useState<Mode | null>(null);
+  const [texts, setTexts] = useState<Partial<Record<OverrideKey, string>>>({});
+  const [points, setPoints] = useState<PointRow[]>(() => [rowFrom(settings.default_point)]);
+  const mode = chosenMode ?? settings.default_mode;
 
-  const overrides: Partial<Record<OverrideKey, number>> = {}
-  const typos: Partial<Record<OverrideKey, string>> = {}
+  const overrides: Partial<Record<OverrideKey, number>> = {};
+  const typos: Partial<Record<OverrideKey, string>> = {};
   for (const { key } of OVERRIDE_FIELDS) {
-    const value = parseNumber(texts[key] ?? '')
-    if (value === undefined) continue
-    if (Number.isNaN(value)) typos[key] = 'Enter a number.'
-    else overrides[key] = value
+    const value = parseNumber(texts[key] ?? "");
+    if (value === undefined) continue;
+    if (Number.isNaN(value)) typos[key] = "Enter a number.";
+    else overrides[key] = value;
   }
-  const sweepOnly = (key: OverrideKey) =>
-    mode === 'Pulse' && (key === 'sweeping_accel' || key === 'sweeping_period')
+  const sweepOnly = (key: OverrideKey) => mode === "Pulse" && (key === "sweeping_accel" || key === "sweeping_period");
 
-  const parsedPoints = points.map((p) => [parseNumber(p.x), parseNumber(p.y), parseNumber(p.z)])
+  const parsedPoints = points.map((p) => [parseNumber(p.x), parseNumber(p.y), parseNumber(p.z)]);
   const pointsValid =
-    parsedPoints.length > 0 &&
-    parsedPoints.every((p) => p.every((v) => v !== undefined && !Number.isNaN(v)))
+    parsedPoints.length > 0 && parsedPoints.every((p) => p.every((v) => v !== undefined && !Number.isNaN(v)));
   const missing = OVERRIDE_FIELDS.filter(
     ({ key }) => settings.settings[key].needed && settings.settings[key].value === null && overrides[key] === undefined,
-  )
+  );
 
-  const seconds = segmentSeconds(settings, overrides)
-  const segmentCount = points.length * axes.length
+  const seconds = segmentSeconds(settings, overrides);
+  const segmentCount = points.length * axes.length;
 
-  let problem = blocked
-  if (!problem && chips.length === 0) problem = 'Choose at least one chip.'
-  if (!problem && axes.length === 0) problem = 'Choose at least one axis.'
-  if (!problem && !pointsValid) problem = 'Give every test point an X, Y and Z.'
+  let problem = blocked;
+  if (!problem && chips.length === 0) problem = "Choose at least one chip.";
+  if (!problem && axes.length === 0) problem = "Choose at least one axis.";
+  if (!problem && !pointsValid) problem = "Give every test point an X, Y and Z.";
   if (!problem && missing.length > 0) {
-    problem = `Set ${missing.map((m) => m.label.toLowerCase()).join(', ')}: the printer does not report it.`
+    problem = `Set ${missing.map((m) => m.label.toLowerCase()).join(", ")}: the printer does not report it.`;
   }
-  if (!problem && Object.keys(typos).length > 0) problem = 'Fix the settings that are not numbers.'
+  if (!problem && Object.keys(typos).length > 0) problem = "Fix the settings that are not numbers.";
 
-  const error = start.error
-  const body = error instanceof ApiClientError ? error.body : null
-  const named = body?.error === 'invalid_request' ? fieldOf(body.message) : null
-  const failures: CheckFailure[] = body?.error === 'preflight_failed' ? body.failures : []
+  const error = start.error;
+  const body = error instanceof ApiClientError ? error.body : null;
+  const named = body?.error === "invalid_request" ? fieldOf(body.message) : null;
+  const failures: CheckFailure[] = body?.error === "preflight_failed" ? body.failures : [];
   const general =
     error && !named && failures.length === 0
       ? error.message
-      : named && !['chips', 'axes', 'points', ...OVERRIDE_FIELDS.map((f) => f.key)].includes(named.field)
+      : named && !["chips", "axes", "points", ...OVERRIDE_FIELDS.map((f) => f.key)].includes(named.field)
         ? `${named.field}: ${named.text}`
-        : null
-  const errorFor = (field: string) => (named?.field === field ? named.text : undefined)
+        : null;
+  const errorFor = (field: string) => (named?.field === field ? named.text : undefined);
 
   function toggleAxis(axis: Axis) {
-    setAxes((old) => (old.includes(axis) ? old.filter((a) => a !== axis) : [...old, axis]))
+    setAxes((old) => (old.includes(axis) ? old.filter((a) => a !== axis) : [...old, axis]));
   }
 
   function submit(event: React.FormEvent) {
-    event.preventDefault()
-    if (problem || start.isPending) return
+    event.preventDefault();
+    if (problem || start.isPending) return;
     start.mutate(
       {
         chips,
         axes,
         mode,
-        overrides: Object.fromEntries(
-          Object.entries(overrides).filter(([key]) => !sweepOnly(key as OverrideKey)),
-        ),
+        overrides: Object.fromEntries(Object.entries(overrides).filter(([key]) => !sweepOnly(key as OverrideKey))),
         points: parsedPoints.map((p) => p as [number, number, number]),
       },
       { onSuccess: (started) => onStarted(started.id) },
-    )
+    );
   }
 
   return (
@@ -137,36 +126,27 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
       <fieldset className="space-y-2">
         <legend className="text-lg font-semibold">Axes</legend>
         <div className="flex gap-4">
-          {(['X', 'Y'] as const).map((axis) => (
+          {(["X", "Y"] as const).map((axis) => (
             <label key={axis} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={axes.includes(axis)}
-                onChange={() => toggleAxis(axis)}
-              />
+              <input type="checkbox" checked={axes.includes(axis)} onChange={() => toggleAxis(axis)} />
               {axis}
             </label>
           ))}
         </div>
-        <FieldError name="axes" text={errorFor('axes')} />
+        <FieldError name="axes" text={errorFor("axes")} />
       </fieldset>
 
       <fieldset className="space-y-2">
         <legend className="text-lg font-semibold">Mode</legend>
         <div className="flex gap-4">
-          {(['Pulse', 'Sweep'] as const).map((m) => (
+          {(["Pulse", "Sweep"] as const).map((m) => (
             <label key={m} className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="mode"
-                checked={mode === m}
-                onChange={() => setChosenMode(m)}
-              />
+              <input type="radio" name="mode" checked={mode === m} onChange={() => setChosenMode(m)} />
               {m}
             </label>
           ))}
         </div>
-        <FieldError name="mode" text={errorFor('mode')} />
+        <FieldError name="mode" text={errorFor("mode")} />
       </fieldset>
 
       <fieldset className="space-y-3">
@@ -176,25 +156,20 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
         </p>
         <div className="grid grid-cols-2 gap-4">
           {OVERRIDE_FIELDS.map(({ key, label, unit }) => {
-            const setting = settings.settings[key]
-            const required = setting.needed && setting.value === null
+            const setting = settings.settings[key];
+            const required = setting.needed && setting.value === null;
             const placeholder =
-              setting.value !== null
-                ? String(setting.value)
-                : required
-                  ? 'required'
-                  : 'printer default'
+              setting.value !== null ? String(setting.value) : required ? "required" : "printer default";
             return (
               <div key={key} className="space-y-1">
                 <Label htmlFor={`override-${key}`}>
-                  {label} ({unit})
-                  {required ? ' *' : ''}
+                  {label} ({unit}){required ? " *" : ""}
                 </Label>
                 <Input
                   id={`override-${key}`}
                   inputMode="decimal"
                   placeholder={placeholder}
-                  value={texts[key] ?? ''}
+                  value={texts[key] ?? ""}
                   disabled={sweepOnly(key) || !setting.overridable}
                   aria-required={required}
                   aria-invalid={Boolean(typos[key] ?? errorFor(key))}
@@ -203,7 +178,7 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
                 />
                 <FieldError name={key} text={typos[key] ?? errorFor(key)} />
               </div>
-            )
+            );
           })}
         </div>
       </fieldset>
@@ -212,7 +187,7 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
         <legend className="text-lg font-semibold">Test points</legend>
         {points.map((row, i) => (
           <div key={i} className="flex items-end gap-2">
-            {(['x', 'y', 'z'] as const).map((axis) => (
+            {(["x", "y", "z"] as const).map((axis) => (
               <div key={axis} className="space-y-1">
                 <Label htmlFor={`point-${i}-${axis}`}>
                   Point {i + 1} {axis.toUpperCase()} (mm)
@@ -223,9 +198,7 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
                   className="w-28"
                   value={row[axis]}
                   onChange={(e) =>
-                    setPoints((old) =>
-                      old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)),
-                    )
+                    setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
                   }
                 />
               </div>
@@ -240,7 +213,7 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
             </Button>
           </div>
         ))}
-        <FieldError name="points" text={errorFor('points')} />
+        <FieldError name="points" text={errorFor("points")} />
         <Button
           type="button"
           variant="outline"
@@ -252,13 +225,11 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
 
       <div className="space-y-2">
         <p className="text-sm">
-          {segmentCount} {segmentCount === 1 ? 'segment' : 'segments'}
-          {seconds !== null && segmentCount > 0
-            ? ` · about ${formatDuration(seconds * segmentCount)}`
-            : ''}
+          {segmentCount} {segmentCount === 1 ? "segment" : "segments"}
+          {seconds !== null && segmentCount > 0 ? ` · about ${formatDuration(seconds * segmentCount)}` : ""}
         </p>
         <p className="text-sm text-muted-foreground">{STOP_CONSEQUENCE}</p>
-        <FieldError name="chips" text={errorFor('chips')} />
+        <FieldError name="chips" text={errorFor("chips")} />
         {general && (
           <p role="alert" className="text-sm text-destructive">
             {general}
@@ -276,9 +247,9 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
         )}
         {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
         <Button type="submit" disabled={problem !== null || start.isPending}>
-          {start.isPending ? 'Checking printer…' : 'Start test'}
+          {start.isPending ? "Checking printer…" : "Start test"}
         </Button>
       </div>
     </form>
-  )
+  );
 }

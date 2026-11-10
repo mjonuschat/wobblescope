@@ -1,54 +1,49 @@
-import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { useSessionAnalysis } from '@/analysis/useSessionAnalysis'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useSession } from '@/lib/api/queries'
-import type { Axis } from '@/lib/generated/Axis'
-import type { FitParams } from '@/lib/generated/FitParams'
-import type { SessionMeta } from '@/lib/generated/SessionMeta'
+import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSession } from "@/lib/api/queries";
+import type { Axis } from "@/lib/generated/Axis";
+import type { FitParams } from "@/lib/generated/FitParams";
+import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
-import { AxisResults } from './AxisResults'
-import { FitSettingsForm } from './FitSettingsForm'
-import { MetaPanel } from './MetaPanel'
-import { defaultFitParams } from './fit'
+import { AxisResults } from "./AxisResults";
+import { FitSettingsForm } from "./FitSettingsForm";
+import { MetaPanel } from "./MetaPanel";
+import { defaultFitParams } from "./fit";
 
 interface AnalysisProps {
-  id: string
-  meta: SessionMeta
-  axis: Axis
-  params: FitParams
-  overrides: string[]
-  onOverridesChange: (overrides: string[]) => void
+  id: string;
+  meta: SessionMeta;
+  axis: Axis;
+  params: FitParams;
+  overrides: string[];
+  onOverridesChange: (overrides: string[]) => void;
 }
 
 function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: AnalysisProps) {
-  const analysis = useSessionAnalysis({ sessionId: id, meta, axis, params, overrides })
+  const analysis = useSessionAnalysis({ sessionId: id, meta, axis, params, overrides });
   if (analysis.isPending) {
-    return <p className="text-sm text-muted-foreground">Analysing axis {axis}…</p>
+    return <p className="text-sm text-muted-foreground">Analysing axis {axis}…</p>;
   }
   if (analysis.isError) {
     return (
       <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
         The analysis failed: {analysis.error.message}
       </p>
-    )
+    );
   }
-  return <AxisResults
-      result={analysis.data}
-      meta={meta}
-      overrides={overrides}
-      onOverridesChange={onOverridesChange}
-    />
+  return <AxisResults result={analysis.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
 }
 
 export function SessionPage({ id }: { id: string }) {
-  const session = useSession(id)
-  const [selected, setSelected] = useState<Axis | null>(null)
-  const [params, setParams] = useState<FitParams>(defaultFitParams)
-  const [overrides, setOverrides] = useState<string[]>([])
+  const session = useSession(id);
+  const [selected, setSelected] = useState<Axis | null>(null);
+  const [params, setParams] = useState<FitParams>(defaultFitParams);
+  const [overrides, setOverrides] = useState<string[]>([]);
 
-  if (session.isPending) return <p className="text-sm text-muted-foreground">Loading session…</p>
+  if (session.isPending) return <p className="text-sm text-muted-foreground">Loading session…</p>;
   if (session.isError) {
     return (
       <div className="space-y-2">
@@ -59,12 +54,12 @@ export function SessionPage({ id }: { id: string }) {
           Back to sessions
         </Link>
       </div>
-    )
+    );
   }
 
-  const { meta } = session.data
-  const axes = [...new Set(meta.segments.map((s) => s.axis))]
-  const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null)
+  const { meta } = session.data;
+  const axes = [...new Set(meta.segments.map((s) => s.axis))];
+  const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
 
   return (
     <div className="space-y-6">
@@ -100,5 +95,5 @@ export function SessionPage({ id }: { id: string }) {
         </>
       )}
     </div>
-  )
+  );
 }

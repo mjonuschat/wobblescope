@@ -1,50 +1,42 @@
-import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { ApiClientError } from '@/lib/api/client'
-import type { SessionFilters as Filters } from '@/lib/api/endpoints'
-import { usePinSession, useSessions, useStorage } from '@/lib/api/queries'
-import { formatBytes, formatTime } from '@/lib/format'
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ApiClientError } from "@/lib/api/client";
+import type { SessionFilters as Filters } from "@/lib/api/endpoints";
+import { usePinSession, useSessions, useStorage } from "@/lib/api/queries";
+import { formatBytes, formatTime } from "@/lib/format";
 
-import { DeleteSessionDialog } from './DeleteSessionDialog'
-import { ImportDialog } from './ImportDialog'
-import { SessionFilters } from './SessionFilters'
-import { StorageUsage } from './StorageUsage'
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
+import { ImportDialog } from "./ImportDialog";
+import { SessionFilters } from "./SessionFilters";
+import { StorageUsage } from "./StorageUsage";
 
 function isWaiting(error: unknown): boolean {
-  return error instanceof ApiClientError && error.code === 'storage_unavailable'
+  return error instanceof ApiClientError && error.code === "storage_unavailable";
 }
 
 export function SessionsPage() {
-  const [filters, setFilters] = useState<Filters>({})
-  const [importing, setImporting] = useState(false)
-  const [deleting, setDeleting] = useState<string | null>(null)
-  const list = useSessions(filters)
-  const all = useSessions({})
-  const storage = useStorage()
-  const pin = usePinSession()
-  const filtered = Object.values(filters).some((v) => v !== undefined)
+  const [filters, setFilters] = useState<Filters>({});
+  const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const list = useSessions(filters);
+  const all = useSessions({});
+  const storage = useStorage();
+  const pin = usePinSession();
+  const filtered = Object.values(filters).some((v) => v !== undefined);
 
-  let body
+  let body;
   if (isWaiting(list.error)) {
     body = (
       <p className="rounded-lg border p-4 text-sm">
-        The daemon is waiting for Moonraker to report where to store sessions. They appear here
-        once it does.
+        The daemon is waiting for Moonraker to report where to store sessions. They appear here once it does.
       </p>
-    )
+    );
   } else if (list.isPending) {
-    body = <p className="text-sm text-muted-foreground">Loading sessions…</p>
+    body = <p className="text-sm text-muted-foreground">Loading sessions…</p>;
   } else if (list.isError) {
     body = (
       <div role="alert" className="space-y-2 text-sm">
@@ -53,7 +45,7 @@ export function SessionsPage() {
           Retry
         </Button>
       </div>
-    )
+    );
   } else if (list.data.sessions.length === 0) {
     body = filtered ? (
       <p className="text-sm text-muted-foreground">No sessions match these filters.</p>
@@ -64,7 +56,7 @@ export function SessionsPage() {
           Import a CSV
         </Button>
       </div>
-    )
+    );
   } else {
     body = (
       <Table>
@@ -81,7 +73,7 @@ export function SessionsPage() {
         </TableHeader>
         <TableBody>
           {list.data.sessions.map((s) => {
-            const pinning = pin.isPending && pin.variables?.id === s.id
+            const pinning = pin.isPending && pin.variables?.id === s.id;
             return (
               <TableRow key={s.id}>
                 <TableCell>
@@ -95,9 +87,9 @@ export function SessionsPage() {
                     </div>
                   )}
                 </TableCell>
-                <TableCell>{s.source === 'CsvImport' ? 'CSV import' : 'Capture'}</TableCell>
-                <TableCell>{s.mode ?? '–'}</TableCell>
-                <TableCell>{s.chips.join(', ')}</TableCell>
+                <TableCell>{s.source === "CsvImport" ? "CSV import" : "Capture"}</TableCell>
+                <TableCell>{s.mode ?? "–"}</TableCell>
+                <TableCell>{s.chips.join(", ")}</TableCell>
                 <TableCell>{s.outcome}</TableCell>
                 <TableCell>
                   {formatBytes(s.size_bytes)} {s.pinned && <Badge>Pinned</Badge>}
@@ -109,18 +101,18 @@ export function SessionsPage() {
                     disabled={pinning}
                     onClick={() => pin.mutate({ id: s.id, pinned: !s.pinned })}
                   >
-                    {s.pinned ? 'Unpin' : 'Pin'}
+                    {s.pinned ? "Unpin" : "Pin"}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setDeleting(s.id)}>
                     Delete
                   </Button>
                 </TableCell>
               </TableRow>
-            )
+            );
           })}
         </TableBody>
       </Table>
-    )
+    );
   }
 
   return (
@@ -137,5 +129,5 @@ export function SessionsPage() {
       <ImportDialog open={importing} onOpenChange={setImporting} />
       <DeleteSessionDialog sessionId={deleting} onClose={() => setDeleting(null)} />
     </div>
-  )
+  );
 }

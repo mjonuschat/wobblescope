@@ -1,20 +1,20 @@
-import type { SessionFilters as Filters } from '@/lib/api/endpoints'
-import type { Summary } from '@/lib/generated/Summary'
-import { Label } from '@/components/ui/label'
+import type { SessionFilters as Filters } from "@/lib/api/endpoints";
+import type { Summary } from "@/lib/generated/Summary";
+import { Label } from "@/components/ui/label";
 
 const selectClass =
-  'h-8 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring'
+  "h-8 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring";
 
 interface Props {
-  filters: Filters
-  onChange: (filters: Filters) => void
+  filters: Filters;
+  onChange: (filters: Filters) => void;
   /** The unfiltered list, which supplies the chip and printer choices. */
-  all: Summary[]
+  all: Summary[];
 }
 
 export function SessionFilters({ filters, onChange, all }: Props) {
-  const chips = [...new Set(all.flatMap((s) => s.chips))].sort()
-  const printers = [...new Set(all.flatMap((s) => (s.printer ? [s.printer] : [])))].sort()
+  const chips = [...new Set(all.flatMap((s) => s.chips))].sort();
+  const printers = [...new Set(all.flatMap((s) => (s.printer ? [s.printer] : [])))].sort();
   return (
     <div className="flex flex-wrap gap-4">
       <div className="flex flex-col gap-1">
@@ -22,7 +22,7 @@ export function SessionFilters({ filters, onChange, all }: Props) {
         <select
           id="filter-chip"
           className={selectClass}
-          value={filters.chip ?? ''}
+          value={filters.chip ?? ""}
           onChange={(e) => onChange({ ...filters, chip: e.target.value || undefined })}
         >
           <option value="">All chips</option>
@@ -36,7 +36,7 @@ export function SessionFilters({ filters, onChange, all }: Props) {
         <select
           id="filter-printer"
           className={selectClass}
-          value={filters.printer ?? ''}
+          value={filters.printer ?? ""}
           onChange={(e) => onChange({ ...filters, printer: e.target.value || undefined })}
         >
           <option value="">All printers</option>
@@ -50,9 +50,9 @@ export function SessionFilters({ filters, onChange, all }: Props) {
         <select
           id="filter-pinned"
           className={selectClass}
-          value={filters.pinned === undefined ? '' : String(filters.pinned)}
+          value={filters.pinned === undefined ? "" : String(filters.pinned)}
           onChange={(e) =>
-            onChange({ ...filters, pinned: e.target.value === '' ? undefined : e.target.value === 'true' })
+            onChange({ ...filters, pinned: e.target.value === "" ? undefined : e.target.value === "true" })
           }
         >
           <option value="">All sessions</option>
@@ -61,5 +61,5 @@ export function SessionFilters({ filters, onChange, all }: Props) {
         </select>
       </div>
     </div>
-  )
+  );
 }

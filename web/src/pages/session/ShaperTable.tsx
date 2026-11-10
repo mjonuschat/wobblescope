@@ -1,16 +1,9 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { formatAccel, formatHz } from '@/lib/format'
-import type { Recommendation } from '@/lib/generated/Recommendation'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatAccel, formatHz } from "@/lib/format";
+import type { Recommendation } from "@/lib/generated/Recommendation";
 
 export function ShaperTable({ recommendation }: { recommendation: Recommendation }) {
-  const { best, all } = recommendation
+  const { best, all } = recommendation;
   return (
     <Table>
       <TableHeader>
@@ -25,9 +18,13 @@ export function ShaperTable({ recommendation }: { recommendation: Recommendation
       </TableHeader>
       <TableBody>
         {all.map((c) => {
-          const isBest = c.name === best.name && c.freq === best.freq
+          const isBest = c.name === best.name && c.freq === best.freq;
           return (
-            <TableRow key={`${c.name}-${c.freq}`} data-best={isBest} className={isBest ? 'bg-muted font-medium' : undefined}>
+            <TableRow
+              key={`${c.name}-${c.freq}`}
+              data-best={isBest}
+              className={isBest ? "bg-muted font-medium" : undefined}
+            >
               <TableCell>{c.name}</TableCell>
               <TableCell>{formatHz(c.freq)} Hz</TableCell>
               <TableCell>{(c.vibrs * 100).toFixed(1)}%</TableCell>
@@ -35,9 +32,9 @@ export function ShaperTable({ recommendation }: { recommendation: Recommendation
               <TableCell>{formatAccel(c.max_accel)}</TableCell>
               <TableCell>{c.score.toFixed(3)}</TableCell>
             </TableRow>
-          )
+          );
         })}
       </TableBody>
     </Table>
-  )
+  );
 }

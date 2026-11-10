@@ -1,18 +1,18 @@
-import { pointLabel } from '@/components/charts/options'
-import type { Analysis } from '@/lib/generated/Analysis'
-import type { ProbePoint } from '@/lib/generated/ProbePoint'
+import { pointLabel } from "@/components/charts/options";
+import type { Analysis } from "@/lib/generated/Analysis";
+import type { ProbePoint } from "@/lib/generated/ProbePoint";
 
 /** The chips with a dataset that health or coverage excludes, or that an override includes. */
 function overridable(analysis: Analysis) {
-  const chips = new Map<string, { overridden: boolean; reasons: string[] }>()
+  const chips = new Map<string, { overridden: boolean; reasons: string[] }>();
   for (const d of analysis.eligibility.decisions) {
-    if (d.decision === 'Included') continue
-    const entry = chips.get(d.chip) ?? { overridden: false, reasons: [] }
-    entry.overridden ||= d.decision === 'Overridden'
-    for (const reason of d.reasons) if (!entry.reasons.includes(reason)) entry.reasons.push(reason)
-    chips.set(d.chip, entry)
+    if (d.decision === "Included") continue;
+    const entry = chips.get(d.chip) ?? { overridden: false, reasons: [] };
+    entry.overridden ||= d.decision === "Overridden";
+    for (const reason of d.reasons) if (!entry.reasons.includes(reason)) entry.reasons.push(reason);
+    chips.set(d.chip, entry);
   }
-  return chips
+  return chips;
 }
 
 export function EligibilityPanel({
@@ -21,13 +21,13 @@ export function EligibilityPanel({
   overrides,
   onOverridesChange,
 }: {
-  analysis: Analysis
-  probePoints: ProbePoint[]
-  overrides: string[]
-  onOverridesChange: (overrides: string[]) => void
+  analysis: Analysis;
+  probePoints: ProbePoint[];
+  overrides: string[];
+  onOverridesChange: (overrides: string[]) => void;
 }) {
-  const { decisions } = analysis.eligibility
-  if (decisions.length === 0 && analysis.failures.length === 0) return null
+  const { decisions } = analysis.eligibility;
+  if (decisions.length === 0 && analysis.failures.length === 0) return null;
   return (
     <section className="space-y-2 rounded-lg border p-4" aria-label="Capture health and eligibility">
       <h2 className="font-medium">Capture health and eligibility</h2>
@@ -37,16 +37,15 @@ export function EligibilityPanel({
             <span className="font-medium">
               {d.chip} at {pointLabel(d.point, probePoints)}
             </span>
-            : {d.decision === 'Excluded' ? 'excluded' : d.decision === 'Overridden' ? 'included by override' : 'included'}
+            :{" "}
+            {d.decision === "Excluded" ? "excluded" : d.decision === "Overridden" ? "included by override" : "included"}
             {d.reasons.length > 0 && (
-              <span className={d.decision === 'Excluded' ? 'text-destructive' : 'text-amber-400'}>
-                {' '}
-                ({d.reasons.join('; ')})
+              <span className={d.decision === "Excluded" ? "text-destructive" : "text-amber-400"}>
+                {" "}
+                ({d.reasons.join("; ")})
               </span>
             )}
-            {d.dropped !== null && (
-              <span className="text-amber-400">, but could not be analysed: {d.dropped}</span>
-            )}
+            {d.dropped !== null && <span className="text-amber-400">, but could not be analysed: {d.dropped}</span>}
           </li>
         ))}
       </ul>
@@ -57,14 +56,12 @@ export function EligibilityPanel({
             className="mt-1"
             checked={overridden}
             onChange={(e) =>
-              onOverridesChange(
-                e.target.checked ? [...overrides, chip] : overrides.filter((c) => c !== chip),
-              )
+              onOverridesChange(e.target.checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
             }
           />
           <span>
             Include {chip} anyway
-            <span className="text-muted-foreground"> ({reasons.join('; ')})</span>
+            <span className="text-muted-foreground"> ({reasons.join("; ")})</span>
           </span>
         </label>
       ))}
@@ -78,5 +75,5 @@ export function EligibilityPanel({
         </ul>
       )}
     </section>
-  )
+  );
 }

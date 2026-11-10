@@ -1,82 +1,78 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
-import { ApiClientError } from '@/lib/api/client'
-import { queryKeys, useChips, useCheckChips, useSettings, useStatus } from '@/lib/api/queries'
+import { ApiClientError } from "@/lib/api/client";
+import { queryKeys, useChips, useCheckChips, useSettings, useStatus } from "@/lib/api/queries";
 
-import { ChipsPanel } from './ChipsPanel'
-import { ProgressView, ResultView, StartingView } from './ProgressView'
-import { TestForm } from './TestForm'
-import { useLive } from './useLive'
+import { ChipsPanel } from "./ChipsPanel";
+import { ProgressView, ResultView, StartingView } from "./ProgressView";
+import { TestForm } from "./TestForm";
+import { useLive } from "./useLive";
 
 /** The Run test screen: the chips panel and the test form. */
 export function RunPage() {
-  const status = useStatus()
-  const settings = useSettings()
-  const chips = useChips()
-  const check = useCheckChips()
-  const live = useLive()
-  const [chosen, setChosen] = useState<string[] | null>(null)
+  const status = useStatus();
+  const settings = useSettings();
+  const chips = useChips();
+  const check = useCheckChips();
+  const live = useLive();
+  const [chosen, setChosen] = useState<string[] | null>(null);
   // The test the form just started, until the live socket names it.
-  const [startedId, setStartedId] = useState<string | null>(null)
+  const [startedId, setStartedId] = useState<string | null>(null);
   // The finished test whose result the user has dismissed.
-  const [dismissed, setDismissed] = useState<string | null>(null)
+  const [dismissed, setDismissed] = useState<string | null>(null);
 
-  const klippyReady =
-    status.data?.moonraker.state === 'connected' && status.data.klippy.state === 'ready'
-  const notReady = klippyReady ? null : 'Klipper is not ready.'
+  const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
+  const notReady = klippyReady ? null : "Klipper is not ready.";
 
   // A JSON error is never retried, so a page opened while Moonraker or Klipper was still
   // starting would keep its error or its empty chip list. Read both again when the printer
   // becomes ready.
-  const queryClient = useQueryClient()
-  const wasReady = useRef<boolean | null>(null)
+  const queryClient = useQueryClient();
+  const wasReady = useRef<boolean | null>(null);
   useEffect(() => {
-    if (status.data === undefined) return
+    if (status.data === undefined) return;
     if (klippyReady && wasReady.current === false) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.chips })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.chips });
     }
-    wasReady.current = klippyReady
-  }, [klippyReady, status.data, queryClient])
+    wasReady.current = klippyReady;
+  }, [klippyReady, status.data, queryClient]);
 
-  const chipList = chips.data
+  const chipList = chips.data;
   const selected =
     chosen ??
     (chipList ? [...new Set([...chipList.defaults.x, ...chipList.defaults.y])] : []).filter(
-      (section) =>
-        chipList?.chips.find((c) => c.section === section)?.availability.state !== 'unavailable',
-    )
+      (section) => chipList?.chips.find((c) => c.section === section)?.availability.state !== "unavailable",
+    );
 
   function toggle(section: string) {
     setChosen((old) => {
-      const current = old ?? selected
-      return current.includes(section)
-        ? current.filter((s) => s !== section)
-        : [...current, section]
-    })
+      const current = old ?? selected;
+      return current.includes(section) ? current.filter((s) => s !== section) : [...current, section];
+    });
   }
 
   // A chip that turned unavailable cannot record, so it drops out of the selection.
   const usable = selected.filter(
-    (s) => chipList?.chips.find((c) => c.section === s)?.availability.state !== 'unavailable',
-  )
+    (s) => chipList?.chips.find((c) => c.section === s)?.availability.state !== "unavailable",
+  );
 
-  if (live.test) return <ProgressView test={live.test} connected={live.connected} />
-  const finished = live.last
+  if (live.test) return <ProgressView test={live.test} connected={live.connected} />;
+  const finished = live.last;
   if (startedId && finished?.id !== startedId) {
-    return <StartingView id={startedId} connected={live.connected} />
+    return <StartingView id={startedId} connected={live.connected} />;
   }
   if (finished && finished.id !== dismissed) {
     return (
       <ResultView
         last={finished}
         onNewTest={() => {
-          setDismissed(finished.id)
-          setStartedId(null)
+          setDismissed(finished.id);
+          setStartedId(null);
         }}
       />
-    )
+    );
   }
 
   return (
@@ -100,7 +96,7 @@ export function RunPage() {
       )}
       {check.isError && (
         <p role="alert" className="text-sm text-destructive">
-          {check.error instanceof ApiClientError ? check.error.message : 'The chip check failed.'}
+          {check.error instanceof ApiClientError ? check.error.message : "The chip check failed."}
         </p>
       )}
       {settings.isPending && <p className="text-sm text-muted-foreground">Reading settings…</p>}
@@ -110,13 +106,8 @@ export function RunPage() {
         </p>
       )}
       {settings.data && (
-        <TestForm
-          settings={settings.data}
-          chips={usable}
-          blocked={notReady}
-          onStarted={setStartedId}
-        />
+        <TestForm settings={settings.data} chips={usable} blocked={notReady} onStarted={setStartedId} />
       )}
     </div>
-  )
+  );
 }

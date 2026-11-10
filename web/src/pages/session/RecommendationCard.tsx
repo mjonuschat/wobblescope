@@ -1,18 +1,18 @@
-import { formatAccel, formatHz } from '@/lib/format'
-import type { DatasetVibration } from '@/lib/generated/DatasetVibration'
-import type { ProbePoint } from '@/lib/generated/ProbePoint'
-import type { Recommendation } from '@/lib/generated/Recommendation'
-import { pointLabel } from '@/components/charts/options'
+import { formatAccel, formatHz } from "@/lib/format";
+import type { DatasetVibration } from "@/lib/generated/DatasetVibration";
+import type { ProbePoint } from "@/lib/generated/ProbePoint";
+import type { Recommendation } from "@/lib/generated/Recommendation";
+import { pointLabel } from "@/components/charts/options";
 
-import { CopyButton } from './CopyButton'
+import { CopyButton } from "./CopyButton";
 
 interface Props {
-  title: string
-  recommendation: Recommendation
+  title: string;
+  recommendation: Recommendation;
   /** The `[input_shaper]` lines `core` produced for this recommendation. */
-  snippet: string | null
-  datasetVibrations?: DatasetVibration[]
-  probePoints?: ProbePoint[]
+  snippet: string | null;
+  datasetVibrations?: DatasetVibration[];
+  probePoints?: ProbePoint[];
 }
 
 export function RecommendationCard({
@@ -22,9 +22,9 @@ export function RecommendationCard({
   datasetVibrations = [],
   probePoints = [],
 }: Props) {
-  const { best } = recommendation
-  const largest = Math.max(0, ...datasetVibrations.map((v) => v.vibrs))
-  const multiplePoints = new Set(datasetVibrations.map((v) => v.point)).size > 1
+  const { best } = recommendation;
+  const largest = Math.max(0, ...datasetVibrations.map((v) => v.vibrs));
+  const multiplePoints = new Set(datasetVibrations.map((v) => v.point)).size > 1;
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label={title}>
       <h2 className="font-medium">{title}</h2>
@@ -57,11 +57,11 @@ export function RecommendationCard({
               <li
                 key={`${v.chip}-${v.point}`}
                 data-limiting={v.vibrs === largest}
-                className={v.vibrs === largest ? 'font-medium' : undefined}
+                className={v.vibrs === largest ? "font-medium" : undefined}
               >
                 {v.chip}
                 {multiplePoints && ` ${pointLabel(v.point, probePoints)}`}: {(v.vibrs * 100).toFixed(1)}%
-                {v.vibrs === largest && ' (sets the worst case)'}
+                {v.vibrs === largest && " (sets the worst case)"}
               </li>
             ))}
           </ul>
@@ -77,5 +77,5 @@ export function RecommendationCard({
         </div>
       )}
     </section>
-  )
+  );
 }

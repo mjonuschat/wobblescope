@@ -1,10 +1,10 @@
-import { formatBytes } from '@/lib/format'
-import type { Usage } from '@/lib/generated/Usage'
+import { formatBytes } from "@/lib/format";
+import type { Usage } from "@/lib/generated/Usage";
 
 export function StorageUsage({ usage }: { usage: Usage }) {
-  const committed = usage.used_bytes + usage.reserved_bytes
-  const percent = usage.cap_bytes > 0 ? Math.min(100, (committed / usage.cap_bytes) * 100) : 0
-  const pinned = usage.cap_bytes > 0 ? Math.min(100, (usage.pinned_bytes / usage.cap_bytes) * 100) : 0
+  const committed = usage.used_bytes + usage.reserved_bytes;
+  const percent = usage.cap_bytes > 0 ? Math.min(100, (committed / usage.cap_bytes) * 100) : 0;
+  const pinned = usage.cap_bytes > 0 ? Math.min(100, (usage.pinned_bytes / usage.cap_bytes) * 100) : 0;
   return (
     <section aria-label="Storage use" className="space-y-2 rounded-lg border p-4">
       <div className="flex items-baseline justify-between text-sm">
@@ -42,5 +42,5 @@ export function StorageUsage({ usage }: { usage: Usage }) {
         </div>
       </dl>
     </section>
-  )
+  );
 }

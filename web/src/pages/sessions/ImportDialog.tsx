@@ -1,7 +1,7 @@
-import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,38 +9,38 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ApiClientError } from '@/lib/api/client'
-import { useChips, useImportCsv } from '@/lib/api/queries'
-import { formatBytes } from '@/lib/format'
-import type { Axis } from '@/lib/generated/Axis'
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ApiClientError } from "@/lib/api/client";
+import { useChips, useImportCsv } from "@/lib/api/queries";
+import { formatBytes } from "@/lib/format";
+import type { Axis } from "@/lib/generated/Axis";
 
 /** The select entry that reveals the typed field. */
-const OTHER = '__other__'
+const OTHER = "__other__";
 
 /** The daemon refuses a larger body, so the browser does not send one. */
-export const MAX_IMPORT_BYTES = 64 * 1024 * 1024
+export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
 
 function describe(error: Error): string {
-  if (!(error instanceof ApiClientError) || !error.body) return error.message
-  const body = error.body
+  if (!(error instanceof ApiClientError) || !error.body) return error.message;
+  const body = error.body;
   switch (body.error) {
-    case 'busy':
-      return `Another import is running. Try again in a moment. ${body.message}`
-    case 'cap_exceeded':
-      return `${body.message} The import needs ${formatBytes(body.need)} and the cap is ${formatBytes(body.cap)}.`
-    case 'insufficient_disk':
-      return `${body.message} The import needs ${formatBytes(body.need)} and ${formatBytes(body.available)} is free.`
+    case "busy":
+      return `Another import is running. Try again in a moment. ${body.message}`;
+    case "cap_exceeded":
+      return `${body.message} The import needs ${formatBytes(body.need)} and the cap is ${formatBytes(body.cap)}.`;
+    case "insufficient_disk":
+      return `${body.message} The import needs ${formatBytes(body.need)} and ${formatBytes(body.available)} is free.`;
     default:
-      return body.message
+      return body.message;
   }
 }
 
 interface Props {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 /** The dialog's content is only mounted while it is open, so closing it clears the form. */
@@ -51,45 +51,45 @@ export function ImportDialog({ open, onOpenChange }: Props) {
         <ImportForm onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function ImportForm({ onDone }: { onDone: () => void }) {
-  const navigate = useNavigate()
-  const importCsv = useImportCsv()
-  const [file, setFile] = useState<File | null>(null)
-  const chips = useChips()
-  const known = chips.data?.known ? chips.data.chips.map((c) => c.section) : []
+  const navigate = useNavigate();
+  const importCsv = useImportCsv();
+  const [file, setFile] = useState<File | null>(null);
+  const chips = useChips();
+  const known = chips.data?.known ? chips.data.chips.map((c) => c.section) : [];
   // With known chips the user picks one, or "Other…" to type a name. Without them only the
   // text field shows, as before.
-  const [choice, setChoice] = useState('')
-  const [typed, setTyped] = useState('')
-  const typing = known.length === 0 || choice === OTHER
-  const chip = typing ? typed : choice
-  const [axis, setAxis] = useState<Axis | ''>('')
-  const [point, setPoint] = useState('')
-  const [problem, setProblem] = useState<{ field: 'file' | 'chip'; text: string } | null>(null)
+  const [choice, setChoice] = useState("");
+  const [typed, setTyped] = useState("");
+  const typing = known.length === 0 || choice === OTHER;
+  const chip = typing ? typed : choice;
+  const [axis, setAxis] = useState<Axis | "">("");
+  const [point, setPoint] = useState("");
+  const [problem, setProblem] = useState<{ field: "file" | "chip"; text: string } | null>(null);
 
   function submit(event: React.FormEvent) {
-    event.preventDefault()
-    if (!chip.trim()) return setProblem({ field: 'chip', text: 'Enter the chip name.' })
-    if (!file) return setProblem({ field: 'file', text: 'Choose a CSV file.' })
+    event.preventDefault();
+    if (!chip.trim()) return setProblem({ field: "chip", text: "Enter the chip name." });
+    if (!file) return setProblem({ field: "file", text: "Choose a CSV file." });
     if (file.size > MAX_IMPORT_BYTES) {
       return setProblem({
-        field: 'file',
+        field: "file",
         text: `This file is ${formatBytes(file.size)}. The limit is ${formatBytes(MAX_IMPORT_BYTES)}.`,
-      })
+      });
     }
-    setProblem(null)
+    setProblem(null);
     importCsv.mutate(
       { file, chip: chip.trim(), axis, point: point.trim() },
       {
         onSuccess: (summary) => {
-          onDone()
-          void navigate({ to: '/sessions/$id', params: { id: summary.id } })
+          onDone();
+          void navigate({ to: "/sessions/$id", params: { id: summary.id } });
         },
       },
-    )
+    );
   }
 
   return (
@@ -106,7 +106,7 @@ function ImportForm({ onDone }: { onDone: () => void }) {
           id="import-file"
           type="file"
           accept=".csv,text/csv"
-          aria-invalid={problem?.field === 'file'}
+          aria-invalid={problem?.field === "file"}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
       </div>
@@ -117,7 +117,7 @@ function ImportForm({ onDone }: { onDone: () => void }) {
             id="import-chip-select"
             className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
             value={choice}
-            aria-invalid={problem?.field === 'chip' && !typing}
+            aria-invalid={problem?.field === "chip" && !typing}
             onChange={(e) => setChoice(e.target.value)}
           >
             <option value="">Choose a chip</option>
@@ -137,7 +137,7 @@ function ImportForm({ onDone }: { onDone: () => void }) {
             id="import-chip"
             placeholder="adxl345"
             value={typed}
-            aria-invalid={problem?.field === 'chip'}
+            aria-invalid={problem?.field === "chip"}
             onChange={(e) => setTyped(e.target.value)}
           />
         </div>
@@ -149,7 +149,7 @@ function ImportForm({ onDone }: { onDone: () => void }) {
             id="import-axis"
             className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
             value={axis}
-            onChange={(e) => setAxis(e.target.value as Axis | '')}
+            onChange={(e) => setAxis(e.target.value as Axis | "")}
           >
             <option value="">From the file name</option>
             <option value="X">X</option>
@@ -178,9 +178,9 @@ function ImportForm({ onDone }: { onDone: () => void }) {
       )}
       <DialogFooter>
         <Button type="submit" disabled={importCsv.isPending}>
-          {importCsv.isPending ? 'Importing…' : 'Import'}
+          {importCsv.isPending ? "Importing…" : "Import"}
         </Button>
       </DialogFooter>
     </form>
-  )
+  );
 }

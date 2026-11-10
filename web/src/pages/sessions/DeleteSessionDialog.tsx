@@ -7,21 +7,21 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { useDeleteSession } from '@/lib/api/queries'
+} from "@/components/ui/alert-dialog";
+import { useDeleteSession } from "@/lib/api/queries";
 
 interface Props {
   /** The id to delete, or null while the dialog is closed. */
-  sessionId: string | null
-  onClose: () => void
+  sessionId: string | null;
+  onClose: () => void;
 }
 
 export function DeleteSessionDialog({ sessionId, onClose }: Props) {
-  const remove = useDeleteSession()
+  const remove = useDeleteSession();
   const close = () => {
-    remove.reset()
-    onClose()
-  }
+    remove.reset();
+    onClose();
+  };
   return (
     <AlertDialog open={sessionId !== null} onOpenChange={(open) => !open && close()}>
       <AlertDialogContent>
@@ -48,5 +48,5 @@ export function DeleteSessionDialog({ sessionId, onClose }: Props) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
+  );
 }

@@ -1,49 +1,38 @@
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import type { Availability } from '@/lib/generated/Availability'
-import type { ChipsSnapshot } from '@/lib/generated/ChipsSnapshot'
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { Availability } from "@/lib/generated/Availability";
+import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 
 interface Props {
-  chips: ChipsSnapshot
+  chips: ChipsSnapshot;
   /** The chips that will record. */
-  selected: string[]
-  onToggle: (section: string) => void
-  onCheck: () => void
-  checking: boolean
+  selected: string[];
+  onToggle: (section: string) => void;
+  onCheck: () => void;
+  checking: boolean;
   /** Why a check cannot run now, or `null`. */
-  checkBlocked: string | null
+  checkBlocked: string | null;
 }
 
 function AvailabilityCell({ availability }: { availability: Availability }) {
   switch (availability.state) {
-    case 'unchecked':
-      return <Badge variant="outline">unchecked</Badge>
-    case 'available':
-      return (
-        <Badge variant="secondary">
-          available · {Math.round(availability.observed_rate_hz)} Hz
-        </Badge>
-      )
-    case 'unavailable':
+    case "unchecked":
+      return <Badge variant="outline">unchecked</Badge>;
+    case "available":
+      return <Badge variant="secondary">available · {Math.round(availability.observed_rate_hz)} Hz</Badge>;
+    case "unavailable":
       return (
         <div className="space-y-1">
           <Badge variant="destructive">unavailable</Badge>
           <p className="text-xs text-muted-foreground">{availability.reason}</p>
         </div>
-      )
+      );
   }
 }
 
 function names(list: string[]): string {
-  return list.length > 0 ? list.join(', ') : 'none'
+  return list.length > 0 ? list.join(", ") : "none";
 }
 
 /** The configured chips with their availability, the defaults and the sections left out. */
@@ -61,14 +50,12 @@ export function ChipsPanel({ chips, selected, onToggle, onCheck, checking, check
           disabled={checking || checkBlocked !== null}
           title={checkBlocked ?? undefined}
         >
-          {checking ? 'Checking chips…' : 'Check chips'}
+          {checking ? "Checking chips…" : "Check chips"}
         </Button>
       </div>
       {checkBlocked && <p className="text-sm text-muted-foreground">{checkBlocked}</p>}
       {!chips.known && (
-        <p className="text-sm text-muted-foreground">
-          The daemon has not read the chip list from Klipper yet.
-        </p>
+        <p className="text-sm text-muted-foreground">The daemon has not read the chip list from Klipper yet.</p>
       )}
       {chips.known && !chips.current && (
         <p className="text-sm text-muted-foreground">
@@ -94,15 +81,13 @@ export function ChipsPanel({ chips, selected, onToggle, onCheck, checking, check
                     type="checkbox"
                     aria-label={`Use ${chip.section}`}
                     checked={selected.includes(chip.section)}
-                    disabled={chip.availability.state === 'unavailable'}
+                    disabled={chip.availability.state === "unavailable"}
                     onChange={() => onToggle(chip.section)}
                   />
                 </TableCell>
                 <TableCell>{chip.section}</TableCell>
                 <TableCell>{chip.chip_type}</TableCell>
-                <TableCell>
-                  {chip.nominal_rate_hz === null ? '—' : `${chip.nominal_rate_hz} Hz`}
-                </TableCell>
+                <TableCell>{chip.nominal_rate_hz === null ? "—" : `${chip.nominal_rate_hz} Hz`}</TableCell>
                 <TableCell>
                   <AvailabilityCell availability={chip.availability} />
                 </TableCell>
@@ -132,5 +117,5 @@ export function ChipsPanel({ chips, selected, onToggle, onCheck, checking, check
         </div>
       )}
     </section>
-  )
+  );
 }

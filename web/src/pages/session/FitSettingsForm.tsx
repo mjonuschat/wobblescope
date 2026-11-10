@@ -1,31 +1,31 @@
-import { useState } from 'react'
+import { useState } from "react";
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import type { FitParams } from '@/lib/generated/FitParams'
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { FitParams } from "@/lib/generated/FitParams";
 
-import { type FitDraft, defaultDraft, defaultFitParams, draftToParams } from './fit'
+import { type FitDraft, defaultDraft, defaultFitParams, draftToParams } from "./fit";
 
 const FIELDS: { key: keyof FitDraft; label: string; hint: string }[] = [
-  { key: 'scv', label: 'Square corner velocity (mm/s)', hint: 'Used to estimate smoothing.' },
-  { key: 'damping_ratio', label: 'Damping ratio', hint: 'Empty uses 0.1.' },
-  { key: 'max_smoothing', label: 'Smoothing limit (mm)', hint: 'Empty means no limit.' },
-  { key: 'max_vibrations', label: 'Vibration limit (fraction)', hint: 'Empty uses the default.' },
-]
+  { key: "scv", label: "Square corner velocity (mm/s)", hint: "Used to estimate smoothing." },
+  { key: "damping_ratio", label: "Damping ratio", hint: "Empty uses 0.1." },
+  { key: "max_smoothing", label: "Smoothing limit (mm)", hint: "Empty means no limit." },
+  { key: "max_vibrations", label: "Vibration limit (fraction)", hint: "Empty uses the default." },
+];
 
 /** Fit settings for this view only; nothing here is saved. */
 export function FitSettingsForm({ onApply }: { onApply: (params: FitParams) => void }) {
-  const [draft, setDraft] = useState<FitDraft>(defaultDraft)
-  const result = draftToParams(draft)
-  const invalid = 'invalid' in result ? result.invalid : null
+  const [draft, setDraft] = useState<FitDraft>(defaultDraft);
+  const result = draftToParams(draft);
+  const invalid = "invalid" in result ? result.invalid : null;
 
   return (
     <form
       className="space-y-3 rounded-lg border p-4"
       onSubmit={(event) => {
-        event.preventDefault()
-        if ('params' in result) onApply(result.params)
+        event.preventDefault();
+        if ("params" in result) onApply(result.params);
       }}
     >
       <h2 className="font-medium">Fit settings</h2>
@@ -53,13 +53,13 @@ export function FitSettingsForm({ onApply }: { onApply: (params: FitParams) => v
           type="button"
           variant="outline"
           onClick={() => {
-            setDraft(defaultDraft)
-            onApply(defaultFitParams)
+            setDraft(defaultDraft);
+            onApply(defaultFitParams);
           }}
         >
           Reset
         </Button>
       </div>
     </form>
-  )
+  );
 }

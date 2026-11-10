@@ -1,39 +1,39 @@
-import type { EChartsCoreOption } from 'echarts/core'
+import type { EChartsCoreOption } from "echarts/core";
 
-import { formatHz } from '@/lib/format'
-import type { ChipAnalysis } from '@/lib/generated/ChipAnalysis'
-import type { ProbePoint } from '@/lib/generated/ProbePoint'
-import type { Recommendation } from '@/lib/generated/Recommendation'
-import type { SummedPsd } from '@/lib/generated/SummedPsd'
+import { formatHz } from "@/lib/format";
+import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
+import type { ProbePoint } from "@/lib/generated/ProbePoint";
+import type { Recommendation } from "@/lib/generated/Recommendation";
+import type { SummedPsd } from "@/lib/generated/SummedPsd";
 
 /** Where a probe point is, or its number when its position is not known. */
 export function pointLabel(index: number, probePoints: ProbePoint[]): string {
-  const position = probePoints[index]?.position
-  return position ? `(${position.join(', ')})` : `point ${index}`
+  const position = probePoints[index]?.position;
+  return position ? `(${position.join(", ")})` : `point ${index}`;
 }
 
 /** Pairs each value with its bin. `xs` may be longer than `ys`: a shaper whose range ends lower has fewer values. */
-const zip = (xs: number[], ys: number[]) => ys.map((y, i) => [xs[i], y])
+const zip = (xs: number[], ys: number[]) => ys.map((y, i) => [xs[i], y]);
 
-const text = '#d4d4d4'
+const text = "#d4d4d4";
 
 function base(title: string, maxFreq: number): EChartsCoreOption {
   return {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     textStyle: { color: text },
     title: { text: title, textStyle: { color: text, fontSize: 14 } },
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: "axis" },
     grid: { top: 80, left: 64, right: 64, bottom: 40 },
-    xAxis: { type: 'value', name: 'Hz', min: 0, max: maxFreq },
-  }
+    xAxis: { type: "value", name: "Hz", min: 0, max: maxFreq },
+  };
 }
 
 interface PsdInput {
-  chip: ChipAnalysis
-  recommendation: Recommendation | null
-  probePoints: ProbePoint[]
+  chip: ChipAnalysis;
+  recommendation: Recommendation | null;
+  probePoints: ProbePoint[];
   /** The largest frequency the fit considered, in Hz. */
-  maxFreq: number
+  maxFreq: number;
 }
 
 /**
@@ -42,68 +42,68 @@ interface PsdInput {
  * frequency marked. Every curve is `core`'s array as returned.
  */
 export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInput): EChartsCoreOption {
-  const series: Record<string, unknown>[] = []
-  const selected: Record<string, boolean> = {}
+  const series: Record<string, unknown>[] = [];
+  const selected: Record<string, boolean> = {};
   for (const [point, data] of chip.datasets) {
-    const label = pointLabel(point, probePoints)
+    const label = pointLabel(point, probePoints);
     series.push({
       name: `${label} total`,
-      type: 'line',
+      type: "line",
       showSymbol: false,
       data: zip(data.freq_bins, data.psd_sum),
-    })
+    });
     for (const [axis, values] of [
-      ['X', data.psd_x],
-      ['Y', data.psd_y],
-      ['Z', data.psd_z],
+      ["X", data.psd_x],
+      ["Y", data.psd_y],
+      ["Z", data.psd_z],
     ] as const) {
-      const name = `${label} ${axis}`
-      selected[name] = false
-      series.push({ name, type: 'line', showSymbol: false, data: zip(data.freq_bins, values) })
+      const name = `${label} ${axis}`;
+      selected[name] = false;
+      series.push({ name, type: "line", showSymbol: false, data: zip(data.freq_bins, values) });
     }
   }
   if (recommendation && series.length > 0) {
-    const { best } = recommendation
+    const { best } = recommendation;
     series[0].markLine = {
       silent: true,
-      symbol: 'none',
+      symbol: "none",
       data: [{ xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: text } }],
-    }
+    };
   }
-  const grid = recommendation?.freq_bins ?? []
+  const grid = recommendation?.freq_bins ?? [];
   for (const candidate of recommendation?.all ?? []) {
     series.push({
       name: `${candidate.name} ${formatHz(candidate.freq)} Hz`,
-      type: 'line',
+      type: "line",
       yAxisIndex: 1,
       showSymbol: false,
-      lineStyle: { type: 'dashed' },
+      lineStyle: { type: "dashed" },
       data: zip(grid, candidate.vals),
-    })
+    });
   }
   return {
     ...base(`${chip.chip}: PSD and shaper response`, maxFreq),
-    legend: { type: 'scroll', top: 28, selected, textStyle: { color: text } },
+    legend: { type: "scroll", top: 28, selected, textStyle: { color: text } },
     yAxis: [
-      { type: 'value', name: 'Frequency-normalised PSD' },
-      { type: 'value', name: 'Shaper response', min: 0, max: 1, splitLine: { show: false } },
+      { type: "value", name: "Frequency-normalised PSD" },
+      { type: "value", name: "Shaper response", min: 0, max: 1, splitLine: { show: false } },
     ],
     series,
-  }
+  };
 }
 
 /** The sum of the eligible chips' PSDs. It is for looking at; no recommendation comes from it. */
 export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
   return {
-    ...base('Summed PSD (display only)', maxFreq),
-    yAxis: { type: 'value', name: 'Frequency-normalised PSD' },
+    ...base("Summed PSD (display only)", maxFreq),
+    yAxis: { type: "value", name: "Frequency-normalised PSD" },
     series: [
       {
-        name: 'Summed PSD',
-        type: 'line',
+        name: "Summed PSD",
+        type: "line",
         showSymbol: false,
         data: zip(summed.freq_bins, summed.psd),
       },
     ],
-  }
+  };
 }
