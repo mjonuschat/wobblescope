@@ -17,6 +17,11 @@ export function formatHz(hz: number): string {
   return hz.toFixed(1)
 }
 
+/** A maximum acceleration to the nearest 100 mm/s², as Klipper reports it. The figure rests on a smoothing heuristic and has no finer precision. */
+export function formatAccel(accel: number): string {
+  return `${Math.round(accel / 100) * 100} mm/s²`
+}
+
 /** An RFC 3339 time in the viewer's locale. */
 export function formatTime(iso: string): string {
   const date = new Date(iso)

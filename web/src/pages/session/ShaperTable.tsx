@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatHz } from '@/lib/format'
+import { formatAccel, formatHz } from '@/lib/format'
 import type { Recommendation } from '@/lib/generated/Recommendation'
 
 export function ShaperTable({ recommendation }: { recommendation: Recommendation }) {
@@ -32,7 +32,7 @@ export function ShaperTable({ recommendation }: { recommendation: Recommendation
               <TableCell>{formatHz(c.freq)} Hz</TableCell>
               <TableCell>{(c.vibrs * 100).toFixed(1)}%</TableCell>
               <TableCell>{c.smoothing.toFixed(3)} mm</TableCell>
-              <TableCell>{Math.round(c.max_accel)} mm/s²</TableCell>
+              <TableCell>{formatAccel(c.max_accel)}</TableCell>
               <TableCell>{c.score.toFixed(3)}</TableCell>
             </TableRow>
           )

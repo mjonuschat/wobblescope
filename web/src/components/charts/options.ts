@@ -83,7 +83,7 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
     ...base(`${chip.chip}: PSD and shaper response`, maxFreq),
     legend: { type: 'scroll', top: 28, selected, textStyle: { color: text } },
     yAxis: [
-      { type: 'value', name: 'PSD' },
+      { type: 'value', name: 'Frequency-normalised PSD' },
       { type: 'value', name: 'Shaper response', min: 0, max: 1, splitLine: { show: false } },
     ],
     series,
@@ -94,7 +94,7 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
 export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
   return {
     ...base('Summed PSD (display only)', maxFreq),
-    yAxis: { type: 'value', name: 'PSD' },
+    yAxis: { type: 'value', name: 'Frequency-normalised PSD' },
     series: [
       {
         name: 'Summed PSD',

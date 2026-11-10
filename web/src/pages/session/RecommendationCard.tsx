@@ -1,5 +1,8 @@
-import { formatHz } from '@/lib/format'
+import { formatAccel, formatHz } from '@/lib/format'
+import type { DatasetVibration } from '@/lib/generated/DatasetVibration'
+import type { ProbePoint } from '@/lib/generated/ProbePoint'
 import type { Recommendation } from '@/lib/generated/Recommendation'
+import { pointLabel } from '@/components/charts/options'
 
 import { CopyButton } from './CopyButton'
 
@@ -8,10 +11,20 @@ interface Props {
   recommendation: Recommendation
   /** The `[input_shaper]` lines `core` produced for this recommendation. */
   snippet: string | null
+  datasetVibrations?: DatasetVibration[]
+  probePoints?: ProbePoint[]
 }
 
-export function RecommendationCard({ title, recommendation, snippet }: Props) {
+export function RecommendationCard({
+  title,
+  recommendation,
+  snippet,
+  datasetVibrations = [],
+  probePoints = [],
+}: Props) {
   const { best } = recommendation
+  const largest = Math.max(0, ...datasetVibrations.map((v) => v.vibrs))
+  const multiplePoints = new Set(datasetVibrations.map((v) => v.point)).size > 1
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label={title}>
       <h2 className="font-medium">{title}</h2>
@@ -29,13 +42,31 @@ export function RecommendationCard({ title, recommendation, snippet }: Props) {
         </div>
         <div>
           <dt className="text-muted-foreground">Max acceleration</dt>
-          <dd>{Math.round(best.max_accel)} mm/s²</dd>
+          <dd>{formatAccel(best.max_accel)}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Score</dt>
           <dd>{best.score.toFixed(3)}</dd>
         </div>
       </dl>
+      {datasetVibrations.length > 1 && (
+        <div className="space-y-1 text-sm">
+          <h3 className="text-muted-foreground">Remaining vibrations by chip</h3>
+          <ul>
+            {datasetVibrations.map((v) => (
+              <li
+                key={`${v.chip}-${v.point}`}
+                data-limiting={v.vibrs === largest}
+                className={v.vibrs === largest ? 'font-medium' : undefined}
+              >
+                {v.chip}
+                {multiplePoints && ` ${pointLabel(v.point, probePoints)}`}: {(v.vibrs * 100).toFixed(1)}%
+                {v.vibrs === largest && ' (sets the worst case)'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         Max acceleration is a smoothing-based recommendation, not a machine limit.
       </p>

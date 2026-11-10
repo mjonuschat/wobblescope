@@ -34,6 +34,8 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
           title="Worst case across all chips"
           recommendation={analysis.worst_case}
           snippet={snippets.worstCase}
+          datasetVibrations={analysis.worst_case_vibrations}
+          probePoints={meta.probe_points}
         />
       ) : (
         <p role="status" className="rounded-lg border p-4 text-sm">
@@ -61,7 +63,10 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         <section className="space-y-2 rounded-lg border p-4" aria-label="Summed PSD">
           <EChart option={summedOption(analysis.summed, maxFreq)} label="Summed PSD of the eligible chips, for display only" />
           <p className="text-xs text-muted-foreground">
-            The sum is for looking at. No recommendation comes from it.
+            The sum is for looking at. No recommendation comes from it. Like every spectrum on this
+            page it is frequency-normalised (divided by frequency plus 0.1 Hz, damped below 10 Hz),
+            as in Klipper's graphs, so its values are not raw PSD and chips of different
+            sensitivity add up unevenly.
           </p>
         </section>
       )}
