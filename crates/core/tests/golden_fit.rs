@@ -115,6 +115,22 @@ parity_test! {
 }
 
 parity_test! {
+    fn a_dataset_that_is_not_normalised_is_normalised_before_the_fit() {
+        let raw = wobblescope_core::CalibrationData::from_samples("chip_b", &common::load_csv("chip_b")).unwrap();
+        assert!(!raw.is_normalized());
+        let params = FitParams::default();
+        let from_raw = find_best_shaper(std::slice::from_ref(&raw), &params).unwrap();
+        let from_normalised = find_best_shaper(&[normalized("chip_b")], &params).unwrap();
+        assert_eq!(from_raw, from_normalised);
+        let shaper = builtin("mzv").unwrap();
+        assert_eq!(
+            fit_shaper(shaper, &[raw], &params).unwrap(),
+            fit_shaper(shaper, &[normalized("chip_b")], &params).unwrap()
+        );
+    }
+}
+
+parity_test! {
     fn flat_psd_yields_flat_signal_error() {
         let mut data = normalized("chip_b");
         data.psd_sum = vec![0.0; data.psd_sum.len()];

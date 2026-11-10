@@ -1,6 +1,8 @@
 //! Shaper fitting and recommendation, ported from Klipper's `fit_shaper` and
 //! `find_best_shaper` (parity mode: damping fixed, frequency searched in 0.2 Hz steps).
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
@@ -287,7 +289,24 @@ pub(crate) fn check_dataset(d: &CalibrationData, max_freq: f64) -> Result<(), Co
     }
 }
 
-/// Fits one shaper over `data` (expected to be normalised, one element per dataset).
+/// `data` with every dataset normalised to frequencies. Datasets that already are are borrowed.
+fn normalised(data: &[CalibrationData]) -> Cow<'_, [CalibrationData]> {
+    if data.iter().all(CalibrationData::is_normalized) {
+        return Cow::Borrowed(data);
+    }
+    Cow::Owned(
+        data.iter()
+            .cloned()
+            .map(|mut d| {
+                d.normalize_to_frequencies();
+                d
+            })
+            .collect(),
+    )
+}
+
+/// Fits one shaper over `data`, one element per dataset. A dataset that is not normalised yet is
+/// normalised first.
 ///
 /// Returns the selected result first, then every candidate in descending-frequency order.
 ///
@@ -304,6 +323,7 @@ pub fn fit_shaper(
     if data.is_empty() {
         return Err(CoreError::TooFewSamples { have: 0, need: 1 });
     }
+    let data = &*normalised(data);
     let damping_ratio = damping_of(params);
     let test_ratios = test_ratios_of(params);
     let test_freqs = test_freqs_of(shaper);
@@ -426,6 +446,7 @@ pub fn find_best_shaper(
 ) -> Result<Recommendation, CoreError> {
     validate_params(params)?;
     validate_shapers(params)?;
+    let data = &*normalised(data);
     let names = shaper_names(params);
     let mut best: Option<CalibrationResult> = None;
     let mut all: Vec<CalibrationResult> = Vec::new();
