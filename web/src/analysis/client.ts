@@ -90,6 +90,12 @@ export function createAnalysisClient({
     const created = createWorker()
     created.onmessage = (event) => {
       const response = event.data
+      if (response.type === 'error') {
+        // The worker may have stopped before storing this request's files, even when the
+        // request was aborted and nobody waits for the answer.
+        heldSession = null
+        held = new Set()
+      }
       const entry = pending.get(response.id)
       if (!entry) return // A late answer to a request nobody waits for.
       pending.delete(response.id)
@@ -134,6 +140,9 @@ export function createAnalysisClient({
         'abort',
         () => {
           pending.delete(id)
+          // The files were posted, but the worker may fail before storing them.
+          heldSession = null
+          held = new Set()
           reject(abortError())
         },
         { once: true },

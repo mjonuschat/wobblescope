@@ -178,6 +178,52 @@ describe('the analysis client', () => {
     await expect(result).rejects.toThrow('bad data')
   })
 
+  it('refetches the files after the worker answers with an error', async () => {
+    const { worker, fetchSample, client, job } = setup()
+    const first = client.analyze(job())
+    await flush()
+    worker.onmessage?.({
+      data: { type: 'error', id: worker.analyses()[0].id, message: 'bad meta' },
+    } as MessageEvent<WorkerResponse>)
+    await expect(first).rejects.toThrow('bad meta')
+
+    void client.analyze(job()).catch(() => {})
+    await flush()
+    expect(fetchSample).toHaveBeenCalledTimes(4)
+    expect(Object.keys(worker.analyses()[1].files).length).toBe(2)
+  })
+
+  it('refetches the files when the worker errors after the request was aborted', async () => {
+    const { worker, fetchSample, client, job } = setup()
+    const controller = new AbortController()
+    const first = client.analyze(job(), controller.signal)
+    await flush()
+    controller.abort()
+    await expect(first).rejects.toThrow()
+    worker.onmessage?.({
+      data: { type: 'error', id: worker.analyses()[0].id, message: 'bad meta' },
+    } as MessageEvent<WorkerResponse>)
+
+    void client.analyze(job()).catch(() => {})
+    await flush()
+    expect(fetchSample).toHaveBeenCalledTimes(4)
+    expect(Object.keys(worker.analyses()[1].files).length).toBe(2)
+  })
+
+  it('refetches the files for a retry that starts before the aborted request answers', async () => {
+    const { worker, fetchSample, client, job } = setup()
+    const controller = new AbortController()
+    const first = client.analyze(job(), controller.signal)
+    await flush()
+    controller.abort()
+    await expect(first).rejects.toThrow()
+
+    void client.analyze(job()).catch(() => {})
+    await flush()
+    expect(fetchSample).toHaveBeenCalledTimes(4)
+    expect(Object.keys(worker.analyses()[1].files).length).toBe(2)
+  })
+
   it('settles when the worker fails to load during the downloads, and serves the next request', async () => {
     const { worker, fetchSample, createWorker, client, job } = setup()
     let finish: (buffer: ArrayBuffer) => void = () => {}
