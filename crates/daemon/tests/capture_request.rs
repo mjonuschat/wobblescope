@@ -116,7 +116,16 @@ fn sweep_mode_records_its_sweeping_settings_and_sends_none_by_default() {
 
 #[test]
 fn a_chip_name_with_a_quote_or_a_newline_is_refused() {
-    for bad in ["bad\"name", "a\nTURN_OFF_HEATERS", "a,b", ""] {
+    for bad in [
+        "bad\"name",
+        "a\nTURN_OFF_HEATERS",
+        "a,b",
+        "",
+        "it's",
+        "a#b",
+        "a;b",
+        "a\\b",
+    ] {
         let mut r = request();
         r.chips = vec![bad.to_owned()];
         assert!(refused(&r, &printer()).starts_with("chips:"), "{bad:?}");

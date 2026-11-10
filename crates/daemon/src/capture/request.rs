@@ -322,7 +322,11 @@ fn check_chips(chips: &[String]) -> Result<(), RequestError> {
         return refuse("chips", "choose at least one chip");
     }
     for (i, chip) in chips.iter().enumerate() {
-        if chip.is_empty() || chip.chars().any(|c| c.is_control() || c == '"' || c == ',') {
+        // Klipper splits the command line at `;` and `#`, then runs `shlex` in posix mode, where
+        // quotes and backslashes are syntax.
+        let unsafe_char =
+            |c: char| c.is_control() || matches!(c, '"' | '\'' | '\\' | ',' | '#' | ';');
+        if chip.is_empty() || chip.chars().any(unsafe_char) {
             return refuse(
                 "chips",
                 format!("chip {chip:?} is not a config section name"),
