@@ -21,7 +21,7 @@ interface Props {
 }
 
 const DEFAULT_MAX_CHIPS = 4
-const DEFAULT_WINDOW_SECONDS = 2
+const DEFAULT_WINDOW_SECONDS = 1
 
 /** The Stream page: live signals and spectra of up to a few chips, read only. */
 export function StreamPage({ createWorker }: Props) {

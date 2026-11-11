@@ -220,6 +220,16 @@ describe('the stream page', () => {
     expect(chartProps().chips[0].spectrum.psd_sum).toEqual([7, 7, 7])
   })
 
+  it('starts with a one second spectrum window', async () => {
+    open()
+    await connect()
+    pick('a1')
+    server(streamHeader('a1', 0))
+    const configure = worker.posted.find((m) => (m as { type: string }).type === 'configure')
+    expect(configure).toMatchObject({ chip: 'a1', windowSeconds: 1 })
+    expect((screen.getByLabelText('Spectrum window') as HTMLSelectElement).value).toBe('1')
+  })
+
   it('stops feeding the worker while paused and keeps the socket', async () => {
     open()
     await connect()
