@@ -31,6 +31,7 @@ import {
   saveResult,
   startTest,
   stopPrinter,
+  stopTest,
 } from "./endpoints";
 
 export const queryKeys = {
@@ -246,6 +247,15 @@ export function useStopPrinter() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.status });
       void queryClient.invalidateQueries({ queryKey: queryKeys.printer });
     },
+  });
+}
+
+/** The emergency stop of one hold. Klipper shuts down, so the status is read again. */
+export function useStopTest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => stopTest(id),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.status }),
   });
 }
 

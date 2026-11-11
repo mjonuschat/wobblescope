@@ -127,6 +127,13 @@ describe("the stream page", () => {
     expect(sent()).toEqual([{ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 10 }]);
   });
 
+  it("has the held excitation panel, which opens no socket until a hold starts", async () => {
+    open();
+    await connect();
+    expect(screen.getByRole("region", { name: "Held Excitation" })).toBeTruthy();
+    expect(FakeSocket.instances).toHaveLength(1);
+  });
+
   it("offers no chip before Hello arrives, then subscribes with the Hello defaults", async () => {
     open();
     act(() => socket().open());

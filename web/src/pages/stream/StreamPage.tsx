@@ -18,9 +18,11 @@ import { ChipPicker } from "./ChipPicker";
 import { ConsoleCard } from "./ConsoleCard";
 import { DisplaySettings, PauseButton, type Range } from "./DisplaySettings";
 import { HealthBadge } from "./HealthBadge";
+import { HoldPanel } from "./HoldPanel";
 import { SignalStrips } from "./SignalStrips";
 import { Spectrogram } from "./Spectrogram";
 import { SpectrumChart } from "./SpectrumChart";
+import { useHold } from "./useHold";
 import { useSignalBuffers } from "./useSignalBuffers";
 
 interface Props {
@@ -31,9 +33,10 @@ interface Props {
 const DEFAULT_MAX_CHIPS = 4;
 const DEFAULT_WINDOW_SECONDS = 1;
 
-/** The Live View page shows live signals and spectra of up to a few chips. It is read only. */
+/** The Live View page shows live signals and spectra of up to a few chips, and can hold the printer at a frequency. */
 export function StreamPage({ createWorker }: Props) {
   const stream = useStream();
+  const hold = useHold();
   const chipList = useChips().data;
   const { hello, chips: streams } = stream.state;
   const { subscribe } = stream;
@@ -145,6 +148,7 @@ export function StreamPage({ createWorker }: Props) {
           />
         </Panel>
       )}
+      <HoldPanel hold={hold} frequencyOfInterest={null} />
       {chipList && !hello && <Waiting>Waiting for the daemon's defaults.</Waiting>}
       {hello && chipList && chipList.chips.length > 0 && selected.length === 0 && (
         <Card>
