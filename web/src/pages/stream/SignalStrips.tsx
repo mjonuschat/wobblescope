@@ -23,19 +23,33 @@ const HEIGHT = 90;
 /** The trail never shows more buffers than this. */
 const MAX_TRAIL = 200;
 
-/** The largest absolute value of the buffers, or 0 when there are none. */
+function mean(values: Float32Array): number {
+  if (values.length === 0) return 0;
+  let sum = 0;
+  for (const value of values) sum += value;
+  return sum / values.length;
+}
+
+/** The largest absolute deviation from each buffer's own mean, or 0 when there are none. */
 function peak(buffers: Float32Array[]): number {
   let max = 0;
-  for (const buffer of buffers) for (const value of buffer) max = Math.max(max, Math.abs(value));
+  for (const buffer of buffers) {
+    const center = mean(buffer);
+    for (const value of buffer) max = Math.max(max, Math.abs(value - center));
+  }
   return max;
 }
 
-/** Draws the samples across the full canvas width. */
+/**
+ * Draws the samples across the full canvas width, minus their own mean so the DC offset (gravity,
+ * sensor bias) does not hide the vibration. Each trail buffer uses its own mean to stay centred.
+ */
 function line(context: CanvasRenderingContext2D, values: Float32Array, scale: number) {
+  const center = mean(values);
   const step = WIDTH / Math.max(values.length - 1, 1);
   context.beginPath();
   values.forEach((value, i) => {
-    const y = HEIGHT / 2 - (value / scale) * (HEIGHT / 2);
+    const y = HEIGHT / 2 - ((value - center) / scale) * (HEIGHT / 2);
     if (i === 0) context.moveTo(0, y);
     else context.lineTo(i * step, y);
   });
@@ -107,18 +121,22 @@ export function SignalStrips({ chips, paused }: Props) {
             </div>
           </div>
           {AXES.map((axis) => (
-            <canvas
-              key={axis}
-              width={WIDTH}
-              height={HEIGHT}
-              role="img"
-              aria-label={`${chip} ${axis.toUpperCase()} signal`}
-              className="w-full rounded-md border bg-background"
-              ref={(element) => {
-                if (element) canvases.current.set(`${chip}/${axis}`, element);
-                else canvases.current.delete(`${chip}/${axis}`);
-              }}
-            />
+            <div key={axis} className="relative">
+              <canvas
+                width={WIDTH}
+                height={HEIGHT}
+                role="img"
+                aria-label={`${chip} ${axis.toUpperCase()} signal`}
+                className="w-full rounded-md border bg-background"
+                ref={(element) => {
+                  if (element) canvases.current.set(`${chip}/${axis}`, element);
+                  else canvases.current.delete(`${chip}/${axis}`);
+                }}
+              />
+              <span className="pointer-events-none absolute top-1 left-2 text-xs text-muted-foreground">
+                {axis.toUpperCase()}
+              </span>
+            </div>
           ))}
         </section>
       ))}

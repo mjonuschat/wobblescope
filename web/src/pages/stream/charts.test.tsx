@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Spectrum } from "@/lib/generated/Spectrum";
@@ -76,6 +76,45 @@ describe("SignalStrips", () => {
     fireEvent.change(screen.getByLabelText("a scale"), { target: { value: "10" } });
     expect(lineYs()[0]).not.toBe(auto);
     expect(lineYs()[0]).toBeCloseTo(45 - (1 / 10) * 45);
+  });
+
+  it("centres a line with a large constant offset on the canvas middle", () => {
+    const offset = Float32Array.from({ length: 64 }, (_, i) => 9800 + 5 * Math.sin(i / 4));
+    const biased = signal(1);
+    biased.x = offset;
+    biased.trail.x = [Float32Array.from(offset, (v) => v + 3)];
+    render(<SignalStrips chips={[{ chip: "a", color: "#fff", signal: biased }]} paused={false} />);
+    const ys = calls.filter(([n]) => n === "lineTo").map((c) => c[2] as number);
+    // x axis: the trail (63 lineTo) then the solid line (63 lineTo)
+    for (const lineYs of [ys.slice(0, 63), ys.slice(63, 126)]) {
+      expect(Math.min(...lineYs)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...lineYs)).toBeLessThanOrEqual(90);
+      expect(lineYs.reduce((a, b) => a + b, 0) / lineYs.length).toBeGreaterThan(35);
+      expect(lineYs.reduce((a, b) => a + b, 0) / lineYs.length).toBeLessThan(55);
+    }
+  });
+
+  it("scales the deviation from the mean with a manual scale", () => {
+    const biased = signal(0);
+    biased.x = Float32Array.from([9800, 9810, 9790]);
+    render(<SignalStrips chips={[{ chip: "a", color: "#fff", signal: biased }]} paused={false} />);
+    calls = [];
+    fireEvent.change(screen.getByLabelText("a scale"), { target: { value: "20" } });
+    const ys = calls.filter(([n]) => n === "lineTo").map((c) => c[2] as number);
+    expect(ys[0]).toBeCloseTo(45 - (10 / 20) * 45);
+    expect(ys[1]).toBeCloseTo(45 + (10 / 20) * 45);
+  });
+
+  it("labels the X, Y and Z strips of each chip", () => {
+    const chips = [
+      { chip: "a", color: "#fff", signal: signal(0) },
+      { chip: "b", color: "#000", signal: signal(0) },
+    ];
+    render(<SignalStrips chips={chips} paused={false} />);
+    for (const chip of ["a", "b"]) {
+      const region = within(screen.getByRole("region", { name: `${chip} signal` }));
+      for (const axis of ["X", "Y", "Z"]) expect(region.getByText(axis)).toBeTruthy();
+    }
   });
 
   it("draws each trail buffer across the full width, whatever its length", () => {
