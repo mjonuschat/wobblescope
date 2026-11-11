@@ -29,7 +29,7 @@ const pages: Page[] = [
   { to: "/", label: "Printer", icon: PrinterIcon },
   {
     to: "/run/shaper",
-    label: "Run Test",
+    label: "Measure",
     icon: FlaskConicalIcon,
     children: [{ to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon }],
   },
