@@ -22,8 +22,11 @@ export function formatAccel(accel: number): string {
   return `${Math.round(accel / 100) * 100} mm/s²`;
 }
 
-/** An RFC 3339 time in the viewer's locale. */
+/** An RFC 3339 time as `YYYY-MM-DD HH:MM:SS` on a 24 hour clock, in the viewer's time zone. */
 export function formatTime(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return iso;
+  const two = (n: number) => String(n).padStart(2, "0");
+  const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+  return `${day} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
 }

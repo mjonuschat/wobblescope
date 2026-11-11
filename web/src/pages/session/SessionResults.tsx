@@ -12,28 +12,33 @@ import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
 import { baselineFor } from "./fit";
 
-interface AnalysisProps {
-  id: string;
-  meta: SessionMeta;
+type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
+
+/** The analysis of the chosen axis: a wait, the reason it failed, or the results. */
+function AnalysisView({
+  query,
+  axis,
+  meta,
+  overrides,
+  onOverridesChange,
+}: {
+  query: AnalysisQuery;
   axis: Axis;
-  params: FitParams;
+  meta: SessionMeta;
   overrides: string[];
   onOverridesChange: (overrides: string[]) => void;
-}
-
-function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: AnalysisProps) {
-  const analysis = useSessionAnalysis({ sessionId: id, meta, axis, params, overrides });
-  if (analysis.isPending) {
+}) {
+  if (query.isPending) {
     return <p className="text-sm text-muted-foreground">Analysing axis {axis}…</p>;
   }
-  if (analysis.isError) {
+  if (query.isError) {
     return (
       <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
-        The analysis failed: {analysis.error.message}
+        The analysis failed: {query.error.message}
       </p>
     );
   }
-  return <AxisResults result={analysis.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
+  return <AxisResults result={query.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
 }
 
 /**
@@ -43,11 +48,6 @@ function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: Anal
  */
 export function SessionResults({ id }: { id: string }) {
   const session = useSession(id);
-  const [selected, setSelected] = useState<Axis | null>(null);
-  // The settings the user applied. Until they do, the fit starts from what the session recorded.
-  const [applied, setApplied] = useState<FitParams | null>(null);
-  const [overrides, setOverrides] = useState<string[]>([]);
-
   if (session.isPending) return <p className="text-sm text-muted-foreground">Loading session…</p>;
   if (session.isError) {
     return (
@@ -56,11 +56,19 @@ export function SessionResults({ id }: { id: string }) {
       </p>
     );
   }
+  return <Loaded id={id} meta={session.data.meta} />;
+}
 
-  const { meta } = session.data;
+function Loaded({ id, meta }: { id: string; meta: SessionMeta }) {
+  const [selected, setSelected] = useState<Axis | null>(null);
+  // The settings the user applied. Until they do, the fit starts from what the session recorded.
+  const [applied, setApplied] = useState<FitParams | null>(null);
+  const [overrides, setOverrides] = useState<string[]>([]);
+
   const axes = [...new Set(meta.segments.map((s) => s.axis))];
   const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
   const baseline = baselineFor(meta, axis ?? "X");
+  const query = useSessionAnalysis({ sessionId: id, meta, axis, params: applied ?? baseline.params, overrides });
 
   return (
     <div className="space-y-4">
@@ -77,14 +85,7 @@ export function SessionResults({ id }: { id: string }) {
               ))}
             </TabsList>
           </Tabs>
-          <Analysis
-            id={id}
-            meta={meta}
-            axis={axis}
-            params={applied ?? baseline.params}
-            overrides={overrides}
-            onOverridesChange={setOverrides}
-          />
+          <AnalysisView query={query} axis={axis} meta={meta} overrides={overrides} onOverridesChange={setOverrides} />
           <FitSettingsForm
             key={applied ? "applied" : axis}
             baseline={baseline}
@@ -94,7 +95,7 @@ export function SessionResults({ id }: { id: string }) {
           />
         </>
       )}
-      <MetaPanel meta={meta} />
+      <MetaPanel meta={meta} analysis={query.data?.analysis ?? null} />
     </div>
   );
 }

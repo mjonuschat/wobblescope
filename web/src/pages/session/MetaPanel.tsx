@@ -3,8 +3,11 @@ import { Panel } from "@/components/Panel";
 import { pointLabel } from "@/components/charts/options";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatTime } from "@/lib/format";
+import type { Analysis } from "@/lib/generated/Analysis";
 import type { Outcome } from "@/lib/generated/Outcome";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
+
+import { effectiveSettings } from "./fit";
 
 function outcomeText(outcome: Outcome): string {
   if (outcome === "Complete") return "Complete";
@@ -38,7 +41,8 @@ function degradedSegments(meta: SessionMeta) {
   );
 }
 
-export function MetaPanel({ meta }: { meta: SessionMeta }) {
+export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analysis?: Analysis | null }) {
+  const fit = analysis ? effectiveSettings(analysis) : null;
   const s = meta.settings;
   const degraded = degradedSegments(meta);
   return (
@@ -73,6 +77,13 @@ export function MetaPanel({ meta }: { meta: SessionMeta }) {
           {row("Accel per Hz", `${s.accel_per_hz} mm/s²`)}
           {s.sweeping_accel !== null && row("Sweeping accel", `${s.sweeping_accel} mm/s²`)}
           {s.sweeping_period !== null && row("Sweeping period", `${s.sweeping_period} s`)}
+        </Fields>
+      )}
+      {analysis && (
+        <Fields aria-label="How it was analysed">
+          {fit && row("Shapers Tried", fit.shapers.join(", "))}
+          {fit && row("Analysed Up To", `${fit.max_freq} Hz`)}
+          {row("Analysis Version", analysis.core_version)}
         </Fields>
       )}
       {meta.notes.length > 0 && (

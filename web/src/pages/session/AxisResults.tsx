@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import { Panel } from "@/components/Panel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { AnalysisResult } from "@/analysis/protocol";
 
@@ -10,18 +9,13 @@ import { ChipResult } from "./ChipResult";
 import { CombinedResult } from "./CombinedResult";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { RecommendationCard } from "./RecommendationCard";
+import { effectiveSettings } from "./fit";
 
 /** The value of the tab that shows all the chips added together. */
 const ALL_CHIPS = "*all-chips*";
 
 /** True in the dev server when the URL asks for fake data, so the combined view can be looked at. */
 const previewing = () => import.meta.env.DEV && /[?&]preview=/.test(window.location.hash);
-
-function effectiveSettings(analysis: Analysis) {
-  return (
-    analysis.worst_case?.settings ?? analysis.per_chip.find((c) => c.recommendation)?.recommendation?.settings ?? null
-  );
-}
 
 interface Props {
   result: AnalysisResult;
@@ -96,13 +90,6 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
           />
         )
       )}
-      <p className="text-xs text-muted-foreground">
-        Analysed with core {analysis.core_version}
-        {settings &&
-          `. Fit: corner velocity ${settings.scv} mm/s, damping ratio ${settings.damping_ratio}, ` +
-            `smoothing limit ${settings.max_smoothing ?? "none"}, vibration limit ${settings.max_vibrations ?? "default"}, ` +
-            `shapers ${settings.shapers.join(", ")}, up to ${settings.max_freq} Hz.`}
-      </p>
     </div>
   );
 }

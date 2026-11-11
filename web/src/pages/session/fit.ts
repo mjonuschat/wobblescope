@@ -1,3 +1,4 @@
+import type { Analysis } from "@/lib/generated/Analysis";
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
@@ -88,4 +89,11 @@ export function draftToParams(draft: FitDraft): DraftResult {
       max_vibrations: parsed.max_vibrations === null ? null : Number((parsed.max_vibrations / 100).toPrecision(12)),
     },
   };
+}
+
+/** The fit settings an analysis used, from its recommendation. */
+export function effectiveSettings(analysis: Analysis) {
+  return (
+    analysis.worst_case?.settings ?? analysis.per_chip.find((c) => c.recommendation)?.recommendation?.settings ?? null
+  );
 }

@@ -361,15 +361,18 @@ describe("the session view", () => {
     expect(fake.analyze.mock.calls[1][0].params.max_smoothing).toBe(0.1);
   });
 
-  it("shows the core version and the effective fit settings", async () => {
+  it("shows how the session was analysed in its details, and no longer a line of jargon", async () => {
     const a = analysis();
     a.worst_case = recommendation();
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    const note = await screen.findByText(/Analysed with core 0.1.0/);
-    expect(note.textContent).toContain("corner velocity 5 mm/s");
-    expect(note.textContent).toContain("up to 200 Hz");
+    const details = await screen.findByRole("region", { name: "Session details" });
+    await waitFor(() => expect(details.textContent).toContain("Analysis Version"));
+    expect(details.textContent).toContain("0.1.0");
+    expect(details.textContent).toContain("Shapers Tried");
+    expect(details.textContent).toContain("200 Hz");
+    expect(screen.queryByText(/Analysed with core/)).toBeNull();
   });
 
   it("shows the daemon\u2019s message when the session cannot be loaded", async () => {
