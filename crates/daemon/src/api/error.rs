@@ -148,9 +148,10 @@ impl From<StorageError> for ApiError {
     fn from(e: StorageError) -> Self {
         let message = e.to_string();
         match e {
-            StorageError::NotFound(_) | StorageError::NoRecording { .. } => {
-                Self::NotFound { message }
-            }
+            StorageError::NotFound(_)
+            | StorageError::NoRecording { .. }
+            | StorageError::ResultNotFound(_) => Self::NotFound { message },
+            StorageError::BadRequest(_) => Self::InvalidRequest { message },
             StorageError::Pinned(_) => Self::Pinned { message },
             StorageError::InUse(_) => Self::InUse { message },
             StorageError::CapExceeded {
@@ -174,7 +175,9 @@ impl From<StorageError> for ApiError {
             | StorageError::Pins(_)
             | StorageError::Io(_)
             | StorageError::IdTaken(_)
-            | StorageError::BadSession(_) => Self::Internal { message },
+            | StorageError::BadSession(_)
+            | StorageError::SessionChanged(_)
+            | StorageError::ResultUnusable { .. } => Self::Internal { message },
         }
     }
 }

@@ -27,4 +27,12 @@ free_bytes: number,
 /**
  * Number of indexed sessions.
  */
-session_count: number, };
+session_count: number, 
+/**
+ * Number of saved result files. Results are outside the retention cap.
+ */
+result_count: number, 
+/**
+ * Bytes used by saved result files.
+ */
+result_bytes: number, };

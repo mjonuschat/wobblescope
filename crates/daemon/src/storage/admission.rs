@@ -10,7 +10,10 @@ use wobblescope_session::fs::{open_session, write_session};
 use wobblescope_session::meta::{SegmentFile, SessionMeta, validate_session_id};
 
 use super::index::{self, Summary};
-use super::{Inner, State, Storage, StorageError, leased, remove_and_forget, reserved_total};
+use super::{
+    Inner, State, Storage, StorageError, leased, remove_and_forget, reserved_total,
+    result_reserved_total,
+};
 
 /// Space and an id held for a test that has been admitted. Dropping it unused releases both.
 pub struct Reservation {
@@ -46,7 +49,8 @@ impl Storage {
     /// Everything is planned under the lock before anything is deleted: a refusal for a limit
     /// deletes nothing. When the cap would be exceeded, the oldest sessions that are neither
     /// pinned nor leased are evicted, just enough to fit. Free space is the probe's reading
-    /// plus what the eviction frees, minus space promised to live reservations, and must cover
+    /// plus what the eviction frees, minus space promised to live reservations and to saves in
+    /// progress (which count toward free space only, never toward the cap), and must cover
     /// the estimate plus headroom. An I/O error while evicting stops there; sessions already
     /// evicted stay deleted.
     ///
@@ -75,7 +79,10 @@ impl Storage {
             (Vec::new(), 0)
         };
         let free = (inner.probe)(&inner.sessions_dir)?;
-        let available = free.saturating_add(freed).saturating_sub(reserved);
+        let available = free
+            .saturating_add(freed)
+            .saturating_sub(reserved)
+            .saturating_sub(result_reserved_total(&st));
         let need = estimate_bytes.saturating_add(inner.headroom_bytes);
         if available < need {
             return Err(StorageError::InsufficientDisk { need, available });
