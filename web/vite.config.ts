@@ -36,7 +36,18 @@ export default defineConfig({
     proxy: {
       // `changeOrigin` rewrites `Host` to the target, which the daemon's host check requires;
       // `ws` forwards the `/api/live` socket.
-      '/api': { target: apiTarget, changeOrigin: true, ws: true },
+      '/api': {
+        target: apiTarget,
+        changeOrigin: true,
+        ws: true,
+        // A browser sends the dev server's `Origin` on a write, and the daemon refuses an origin that
+        // is not its own host or in Moonraker's `cors_domains`. The proxy presents the target's origin.
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            if (proxyReq.getHeader('origin')) proxyReq.setHeader('origin', apiTarget)
+          })
+        },
+      },
     },
   },
 })
