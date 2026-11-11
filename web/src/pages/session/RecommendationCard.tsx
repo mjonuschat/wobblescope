@@ -61,7 +61,8 @@ export function RecommendationCard({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        Max acceleration is a smoothing-based recommendation, not a machine limit.
+        Above this acceleration the shaper rounds corners more than you may want. It is a suggestion, not a limit of
+        your printer.
       </p>
       {snippet && (
         <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-sm select-text">{snippet}</pre>
