@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
@@ -23,6 +24,12 @@ export const STOP_CONSEQUENCE =
 
 /** The settings only one mode uses; they sit beside the mode choice. */
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
+
+/** The limits the daemon accepts for a sweep's start and end, in Hz. */
+const FREQ_MIN = 1;
+const FREQ_MAX = 300;
+
+const FREQ_KEYS = ["freq_start", "freq_end"] as const;
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
 
@@ -150,27 +157,41 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     );
   }
 
-  const overrideField = ({ key, label, unit }: (typeof OVERRIDE_FIELDS)[number]) => {
+  const clampFreq = (value: number) => Math.min(FREQ_MAX, Math.max(FREQ_MIN, value));
+  const rangeStart = clampFreq(overrides.freq_start ?? settings.settings.freq_start.value ?? FREQ_MIN);
+  const rangeEnd = clampFreq(overrides.freq_end ?? settings.settings.freq_end.value ?? FREQ_MAX);
+
+  const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];
     const required = setting.needed && setting.value === null;
     const placeholder = setting.value !== null ? String(setting.value) : required ? "required" : "printer default";
+    return (
+      <UnitInput
+        id={`override-${key}`}
+        unit={unit}
+        aria-label={extra.label}
+        className={extra.className}
+        placeholder={placeholder}
+        value={texts[key] ?? ""}
+        disabled={!setting.overridable}
+        aria-required={required}
+        aria-invalid={Boolean(typos[key] ?? errorFor(key))}
+        aria-describedby={`error-${key}`}
+        onChange={(e) => setTexts((old) => ({ ...old, [key]: e.target.value }))}
+      />
+    );
+  };
+
+  const overrideField = ({ key, label, unit }: (typeof OVERRIDE_FIELDS)[number]) => {
+    const setting = settings.settings[key];
+    const required = setting.needed && setting.value === null;
     return (
       <div key={key} className="space-y-1">
         <Label htmlFor={`override-${key}`}>
           {label}
           {required ? " *" : ""}
         </Label>
-        <UnitInput
-          id={`override-${key}`}
-          unit={unit}
-          placeholder={placeholder}
-          value={texts[key] ?? ""}
-          disabled={!setting.overridable}
-          aria-required={required}
-          aria-invalid={Boolean(typos[key] ?? errorFor(key))}
-          aria-describedby={`error-${key}`}
-          onChange={(e) => setTexts((old) => ({ ...old, [key]: e.target.value }))}
-        />
+        {overrideInput(key, unit)}
         <FieldError name={key} text={typos[key] ?? errorFor(key)} />
       </div>
     );
@@ -258,7 +279,30 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
           Leave a field empty to use the printer's value, shown in the field.
         </p>
         <div className="grid grid-cols-2 gap-4">
-          {OVERRIDE_FIELDS.filter(({ key }) => !isModeField(key)).map(overrideField)}
+          <div className="col-span-2 space-y-2">
+            <p className="text-sm font-medium">Frequency range</p>
+            <div className="flex items-center gap-4">
+              {overrideInput("freq_start", "Hz", { label: "Start frequency", className: "w-28 shrink-0" })}
+              <Slider
+                min={FREQ_MIN}
+                max={FREQ_MAX}
+                step={1}
+                value={[Math.min(rangeStart, rangeEnd), Math.max(rangeStart, rangeEnd)]}
+                thumbLabels={["Range start", "Range end"]}
+                onValueChange={(next) => {
+                  const [low, high] = next as number[];
+                  if (low !== rangeStart) setTexts((old) => ({ ...old, freq_start: String(low) }));
+                  if (high !== rangeEnd) setTexts((old) => ({ ...old, freq_end: String(high) }));
+                }}
+              />
+              {overrideInput("freq_end", "Hz", { label: "End frequency", className: "w-28 shrink-0" })}
+            </div>
+            <FieldError name="freq_start" text={typos.freq_start ?? errorFor("freq_start")} />
+            <FieldError name="freq_end" text={typos.freq_end ?? errorFor("freq_end")} />
+          </div>
+          {OVERRIDE_FIELDS.filter(
+            ({ key }) => !isModeField(key) && !(FREQ_KEYS as readonly string[]).includes(key),
+          ).map(overrideField)}
         </div>
       </FormCard>
 

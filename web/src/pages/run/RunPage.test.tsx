@@ -32,6 +32,7 @@ function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, s
 }
 
 const startButton = () => screen.getByRole("button", { name: /Start test|Checking printer/ });
+const thumb = (index: number) => document.querySelectorAll<HTMLInputElement>('input[type="range"]')[index];
 const mode = () => screen.getByRole("combobox", { name: "Mode" }).textContent;
 async function chooseMode(name: "Pulse" | "Sweep") {
   fireEvent.click(screen.getByRole("combobox", { name: "Mode" }));
@@ -185,6 +186,26 @@ describe("the run screen", () => {
     fireEvent.click(y);
     expect(screen.getByText("Choose at least one axis.")).toBeTruthy();
     expect((startButton() as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("starts the range slider at the printer's range and follows the typed values", async () => {
+    await open();
+    const start = () => thumb(0);
+    const end = () => thumb(1);
+    expect([start().value, end().value]).toEqual(["5", "135"]);
+    fireEvent.change(field(/End frequency/), { target: { value: "100" } });
+    expect(end().value).toBe("100");
+    expect(start().value).toBe("5");
+  });
+
+  it("moving a thumb overrides only that end of the range", async () => {
+    const calls = await open();
+    fireEvent.change(thumb(1), { target: { value: "90" } });
+    expect(field(/End frequency/).value).toBe("90");
+    expect(field(/Start frequency/).value).toBe("");
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({ freq_end: 90 });
   });
 
   it("hides the sweeping fields in pulse mode", async () => {
