@@ -23,7 +23,7 @@ function rateOptions(limit: number, current: number): number[] {
 
 function windowText(seconds: number): string {
   const name = WINDOWS.find((w) => w.seconds === seconds)?.name;
-  return name ? `${name} (${seconds} s)` : `${seconds} s`;
+  return name ?? `${seconds} s`;
 }
 
 /** The fixed ranges, with the daemon's default when it is not one of them. */

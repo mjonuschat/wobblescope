@@ -233,7 +233,7 @@ describe("the stream page", () => {
     server(streamHeader("a1", 0));
     const configure = worker.posted.find((m) => (m as { type: string }).type === "configure");
     expect(configure).toMatchObject({ chip: "a1", windowSeconds: 1 });
-    expect(screen.getByRole("combobox", { name: "Averaging Time" }).textContent).toContain("1 s");
+    expect(screen.getByRole("combobox", { name: "Averaging Time" }).textContent).toContain("Balanced");
   });
 
   it("stops feeding the worker while paused and keeps the socket", async () => {
