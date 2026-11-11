@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { candidate, recommendation } from "@/test/fixtures";
@@ -39,5 +39,12 @@ describe("RecommendationCard", () => {
       />,
     );
     expect(screen.queryByRole("listitem")).toBeNull();
+  });
+
+  it("explains the max acceleration in a tooltip on its label", async () => {
+    render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
+    expect(screen.queryByText(/not a limit of your printer/)).toBeNull();
+    fireEvent.focus(screen.getByRole("button", { name: "About max acceleration" }));
+    expect(await screen.findByText(/not a limit of your printer/)).toBeTruthy();
   });
 });

@@ -8,6 +8,9 @@ import type { Recommendation } from "@/lib/generated/Recommendation";
 
 import { CopyButton } from "./CopyButton";
 
+const MAX_ACCEL_HINT =
+  "Above this acceleration the shaper rounds corners more than you may want. It is a suggestion, not a limit of your printer.";
+
 interface Props {
   title: string;
   recommendation: Recommendation;
@@ -39,7 +42,9 @@ export function RecommendationCard({
       <Fields className="sm:grid-cols-4 lg:grid-cols-4">
         <Field label="Remaining vibrations">{(best.vibrs * 100).toFixed(1)}%</Field>
         <Field label="Smoothing">{best.smoothing.toFixed(3)} mm</Field>
-        <Field label="Max acceleration">{formatAccel(best.max_accel)}</Field>
+        <Field label="Max acceleration" hint={MAX_ACCEL_HINT}>
+          {formatAccel(best.max_accel)}
+        </Field>
         <Field label="Score">{best.score.toFixed(3)}</Field>
       </Fields>
       {datasetVibrations.length > 1 && (
@@ -60,10 +65,6 @@ export function RecommendationCard({
           </ul>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        Above this acceleration the shaper rounds corners more than you may want. It is a suggestion, not a limit of
-        your printer.
-      </p>
       {snippet && (
         <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-sm select-text">{snippet}</pre>
       )}
