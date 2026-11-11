@@ -1,3 +1,6 @@
+import { ChevronDownIcon } from "lucide-react";
+import { useState } from "react";
+
 import { Field, Fields } from "@/components/Fields";
 import { Panel } from "@/components/Panel";
 import { pointLabel } from "@/components/charts/options";
@@ -25,11 +28,58 @@ function fileName(meta: SessionMeta): string | null {
   return meta.source === "Capture" ? null : meta.source.CsvImport.original_file_name;
 }
 
-const row = (label: string, value: React.ReactNode) => (
-  <Field key={label} label={label}>
+const row = (label: string, value: React.ReactNode, className?: string) => (
+  <Field key={label} label={label} className={className}>
     {value}
   </Field>
 );
+
+/** A position as `X: 150.5, Y: 154, Z: 50`. */
+function positionText(position: [number, number, number] | null): string {
+  if (!position) return "Not recorded";
+  const [x, y, z] = position;
+  return `X: ${x}, Y: ${y}, Z: ${z}`;
+}
+
+/**
+ * The test points: the first on one line, and when there are more a button that opens them all,
+ * one per line below.
+ */
+function ProbePoints({ points }: { points: SessionMeta["probe_points"] }) {
+  const [open, setOpen] = useState(false);
+  if (points.length === 0) return <>Not recorded</>;
+  if (points.length === 1) return <>{positionText(points[0].position)}</>;
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        {open ? (
+          <span className="text-muted-foreground">{points.length} points</span>
+        ) : (
+          positionText(points[0].position)
+        )}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={open ? "Show only the first point" : `Show all ${points.length} points`}
+          onClick={() => setOpen(!open)}
+          className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDownIcon aria-hidden="true" className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+      {open && (
+        <ol className="mt-1 space-y-0.5">
+          {points.map((p, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: points are recorded in order and have no id
+            <li key={i}>
+              <span className="text-muted-foreground">{i + 1}</span> {positionText(p.position)}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
 
 /** The recordings whose own segment showed a problem, which the chip's overall health hides. */
 function degradedSegments(meta: SessionMeta) {
@@ -56,7 +106,6 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
         {fileName(meta) !== null && row("File Name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
         {row("Mode", meta.mode ?? "Not recorded")}
-        {row("Outcome", outcomeText(meta.outcome))}
         {row("Printer", meta.printer?.name ?? "Not recorded")}
         {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version)}
         {meta.printer?.square_corner_velocity != null &&
@@ -73,7 +122,11 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
               ))}
             </ul>,
           )}
-        {row("Probe points", meta.probe_points.map((_, i) => pointLabel(i, meta.probe_points)).join(", "))}
+        <Field label="Probe Points">
+          <ProbePoints points={meta.probe_points} />
+        </Field>
+        {/* The last item, in the fourth column where there are four. */}
+        {row("Outcome", outcomeText(meta.outcome), "lg:col-start-4")}
       </Fields>
       {s && (
         <Fields aria-label="Recorded sweep settings">

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { twoAxisMeta } from "@/test/fixtures";
@@ -83,5 +83,50 @@ describe("the session details", () => {
   it("lists no degraded segment when every recording was fine or unjudged", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
     expect(screen.queryByText("Degraded segments")).toBeNull();
+  });
+
+  describe("the probe points", () => {
+    const withPoints = (positions: ([number, number, number] | null)[]) => {
+      const meta = twoAxisMeta();
+      meta.probe_points = positions.map((position) => ({ position }));
+      return meta;
+    };
+
+    it("shows a single point as X, Y and Z with no expand button", () => {
+      render(<MetaPanel meta={withPoints([[150.5, 154, 50]])} />);
+      expect(screen.getByText("X: 150.5, Y: 154, Z: 50")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /points/ })).toBeNull();
+    });
+
+    it("shows the first point and a button that opens every point, one per line", () => {
+      render(
+        <MetaPanel
+          meta={withPoints([
+            [20, 20, 20],
+            [150.5, 154, 20],
+            [280, 288, 20],
+          ])}
+        />,
+      );
+      expect(screen.getByText("X: 20, Y: 20, Z: 20")).toBeTruthy();
+      expect(screen.queryByText("X: 150.5, Y: 154, Z: 20")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Show all 3 points" }));
+      const lines = screen.getAllByRole("listitem").map((li) => li.textContent);
+      expect(lines).toEqual(["1 X: 20, Y: 20, Z: 20", "2 X: 150.5, Y: 154, Z: 20", "3 X: 280, Y: 288, Z: 20"]);
+      fireEvent.click(screen.getByRole("button", { name: "Show only the first point" }));
+      expect(screen.queryByRole("listitem")).toBeNull();
+    });
+
+    it("says so when a point's position was not recorded", () => {
+      render(<MetaPanel meta={withPoints([null])} />);
+      expect(screen.getAllByText("Not recorded").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("puts the outcome last among the recording's facts", () => {
+    render(<MetaPanel meta={twoAxisMeta()} />);
+    const labels = [...document.querySelectorAll("dt")].map((dt) => dt.textContent);
+    const first = labels.indexOf("Source");
+    expect(labels.slice(first).indexOf("Outcome")).toBeGreaterThan(labels.slice(first).indexOf("Probe Points"));
   });
 });
