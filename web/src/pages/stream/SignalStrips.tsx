@@ -125,7 +125,7 @@ export function SignalStrips({ chips, paused }: Props) {
                       ...old,
                       [chip]: {
                         auto,
-                        text: old[chip]?.text || String(Math.max(1, Math.round(autoPeak(signal)))),
+                        text: old[chip]?.text || String(Math.max(100, Math.ceil(autoPeak(signal) / 100) * 100)),
                       },
                     }))
                   }
