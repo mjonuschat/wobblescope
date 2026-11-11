@@ -453,3 +453,60 @@ async fn a_sweep_and_a_stream_share_a_chip() {
     rig.until("the viewer's bridge closes", || rig.bridges_open() == 0)
         .await;
 }
+
+fn short_liveness() -> wobblescope::api::StreamTimings {
+    wobblescope::api::StreamTimings {
+        write_timeout: Duration::from_secs(10),
+        ping_interval: Duration::from_millis(100),
+        liveness_deadline: Duration::from_millis(400),
+    }
+}
+
+#[tokio::test]
+async fn a_viewer_that_never_answers_pings_is_torn_down() {
+    let rig = rig().await;
+    let mut socket =
+        connect_with_small_buffers_to(rig.app_with_stream_timings(short_liveness())).await;
+    text_of(&mut socket, "hello").await;
+    subscribe(&mut socket, "adxl345", 200.0, 1.0).await;
+    rig.until("the bridge opens", || rig.bridges_open() == 1)
+        .await;
+
+    // A trickle that fits the socket buffers, so no write ever blocks. The client stays
+    // connected but reads nothing, so it never answers a ping.
+    push_seconds(&rig, "adxl345", 10.0, 0.5);
+    rig.until("the bridge closes", || rig.bridges_open() == 0)
+        .await;
+    drop(socket);
+}
+
+#[tokio::test]
+async fn a_viewer_that_answers_pings_stays_connected() {
+    let rig = rig().await;
+    let addr = serve(rig.app_with_stream_timings(short_liveness())).await;
+    let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/api/stream"))
+        .await
+        .unwrap();
+    text_of(&mut socket, "hello").await;
+    subscribe(&mut socket, "adxl345", 200.0, 1.0).await;
+    rig.until("the bridge opens", || rig.bridges_open() == 1)
+        .await;
+
+    // Reading is what makes the client answer pings. Run for five times the deadline.
+    let messages = drain_for(&mut socket, Duration::from_secs(2)).await;
+    assert!(
+        !messages.iter().any(|m| matches!(m, Message::Close(_))),
+        "the connection was closed"
+    );
+    assert_eq!(rig.bridges_open(), 1);
+}
+
+/// Everything the socket delivers during `total`.
+async fn drain_for(socket: &mut Socket, total: Duration) -> Vec<Message> {
+    let end = tokio::time::Instant::now() + total;
+    let mut messages = Vec::new();
+    while let Ok(Some(message)) = tokio::time::timeout_at(end, socket.next()).await {
+        messages.push(message.unwrap());
+    }
+    messages
+}

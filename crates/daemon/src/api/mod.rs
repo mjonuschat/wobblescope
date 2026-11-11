@@ -78,8 +78,29 @@ pub struct CaptureState {
     pub max_segment_seconds: u32,
     /// The runner's timings.
     pub timings: RunnerTimings,
-    /// How long one websocket write to a stream viewer may take before the viewer is dropped.
-    pub stream_write_timeout: Duration,
+    /// The stream viewer's write and liveness limits.
+    pub stream_timings: StreamTimings,
+}
+
+/// The limits that drop a stream viewer which is slow or gone.
+#[derive(Debug, Clone, Copy)]
+pub struct StreamTimings {
+    /// How long one websocket write to a viewer may take before the viewer is dropped.
+    pub write_timeout: Duration,
+    /// How often the server pings a viewer.
+    pub ping_interval: Duration,
+    /// How long a viewer may send nothing at all before it is dropped.
+    pub liveness_deadline: Duration,
+}
+
+impl Default for StreamTimings {
+    fn default() -> Self {
+        Self {
+            write_timeout: stream::WRITE_TIMEOUT,
+            ping_interval: stream::PING_INTERVAL,
+            liveness_deadline: stream::LIVENESS_DEADLINE,
+        }
+    }
 }
 
 impl Default for CaptureState {
@@ -97,7 +118,7 @@ impl CaptureState {
             hub: LiveHub::new(),
             max_segment_seconds,
             timings: RunnerTimings::default(),
-            stream_write_timeout: stream::WRITE_TIMEOUT,
+            stream_timings: StreamTimings::default(),
         }
     }
 

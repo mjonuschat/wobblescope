@@ -593,6 +593,17 @@ impl Rig {
 
     /// The API router with a stream viewer's write timeout set to `timeout`.
     pub fn app_with_stream_write_timeout(&self, timeout: Duration) -> axum::Router {
+        self.app_with_stream_timings(wobblescope::api::StreamTimings {
+            write_timeout: timeout,
+            ..wobblescope::api::StreamTimings::default()
+        })
+    }
+
+    /// The API router with the stream viewer's write and liveness limits set to `timings`.
+    pub fn app_with_stream_timings(
+        &self,
+        timings: wobblescope::api::StreamTimings,
+    ) -> axum::Router {
         wobblescope::api::mount_capture(
             self.cell.clone(),
             self.moonraker.clone(),
@@ -602,7 +613,7 @@ impl Rig {
                 hub: self.hub.clone(),
                 max_segment_seconds: 600,
                 timings: self.runner.timings,
-                stream_write_timeout: timeout,
+                stream_timings: timings,
             },
         )
     }

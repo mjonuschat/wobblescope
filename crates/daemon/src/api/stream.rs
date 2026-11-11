@@ -38,6 +38,10 @@ const TICK: Duration = Duration::from_millis(25);
 const PRINT_STATE_TIMEOUT: Duration = Duration::from_secs(2);
 /// How long one websocket write to a viewer may take before the viewer is dropped.
 pub(super) const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// How often the server pings a viewer.
+pub(super) const PING_INTERVAL: Duration = Duration::from_secs(5);
+/// How long a viewer may send nothing before it is dropped.
+pub(super) const LIVENESS_DEADLINE: Duration = Duration::from_secs(15);
 /// Why a viewer that cannot keep up is disconnected.
 const TOO_SLOW: &str = "viewer too slow";
 
@@ -181,7 +185,8 @@ fn is_printing(state: Option<&str>) -> bool {
 
 async fn serve(mut socket: WebSocket, state: ApiState) {
     let settings = state.settings.clone();
-    let write_timeout = state.capture.stream_write_timeout;
+    let timings = state.capture.stream_timings;
+    let write_timeout = timings.write_timeout;
     let moonraker = state.moonraker.clone();
     let limits = StreamLimits::from_settings(&settings);
     let outbox = Arc::new(Outbox::new());
@@ -200,6 +205,11 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
         limits: limits.clone(),
     }));
 
+    let mut last_heard = tokio::time::Instant::now();
+    let mut pings =
+        tokio::time::interval_at(last_heard + timings.ping_interval, timings.ping_interval);
+    pings.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
     loop {
         while let Some(entry) = outbox.pop() {
             if !send_bounded(&mut socket, wire(entry), write_timeout, &outbox).await {
@@ -211,15 +221,25 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
             return;
         }
         tokio::select! {
-            incoming = socket.recv() => match incoming {
-                None | Some(Err(_) | Ok(Message::Close(_))) => return,
-                Some(Ok(Message::Text(text))) => {
-                    if let Ok(message) = serde_json::from_str::<ClientMessage>(&text) {
-                        handle(message, &mut subscriptions, &moonraker, &limits, &outbox);
+            incoming = socket.recv() => {
+                last_heard = tokio::time::Instant::now();
+                match incoming {
+                    None | Some(Err(_) | Ok(Message::Close(_))) => return,
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(message) = serde_json::from_str::<ClientMessage>(&text) {
+                            handle(message, &mut subscriptions, &moonraker, &limits, &outbox);
+                        }
                     }
+                    Some(Ok(_)) => {}
                 }
-                Some(Ok(_)) => {}
             },
+            _ = pings.tick() => {
+                let silent = last_heard.elapsed() >= timings.liveness_deadline;
+                let ping = Message::Ping(Vec::new().into());
+                if silent || !send_bounded(&mut socket, ping, write_timeout, &outbox).await {
+                    return;
+                }
+            }
             line = console.recv() => match line {
                 Ok(line) => outbox.push(Entry::Console(vec![line])),
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
