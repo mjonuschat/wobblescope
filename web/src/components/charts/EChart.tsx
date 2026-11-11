@@ -27,7 +27,8 @@ interface Props {
   option: EChartsCoreOption;
   /** What the chart shows, for people who cannot see the canvas. */
   label: string;
-  height?: number;
+  /** A pixel count, or any CSS length such as `60vh`. */
+  height?: number | string;
 }
 
 /** A chart that fills its container's width and follows its size. */

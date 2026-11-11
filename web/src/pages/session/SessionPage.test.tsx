@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
@@ -260,6 +260,21 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Chip adxl345" });
     expect(screen.getByRole("tab", { name: "adxl345" })).toBeTruthy();
+  });
+
+  it("expands the chart and table in a dialog and closes it again", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
+    serve();
+    renderRoute("/sessions/s1");
+    const card = await screen.findByRole("region", { name: "Chip a" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Expand the chart and table" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Resonance and Shapers: a/)).toBeTruthy();
+    expect(within(dialog).getByRole("img", { name: /PSD of a/ })).toBeTruthy();
+    expect(within(dialog).getAllByRole("row").length).toBeGreaterThan(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("shows an analysis error while the metadata stays visible", async () => {
