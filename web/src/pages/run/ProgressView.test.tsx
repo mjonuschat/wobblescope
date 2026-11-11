@@ -9,6 +9,10 @@ import { renderRoute } from "@/test/render";
 import { apiPath, stubApiWithStatus } from "@/test/status";
 import { FakeSocket, stubWebSocket } from "@/test/websocket";
 
+vi.mock("@/pages/session/SessionResults", () => ({
+  SessionResults: ({ id }: { id: string }) => <div>session results for {id}</div>,
+}));
+
 vi.mock("@/components/charts/EChart", () => ({
   EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
 }));
@@ -111,7 +115,7 @@ describe("a running test", () => {
       expect(nextButton().disabled).toBe(false);
       fireEvent.click(nextButton());
       await waitFor(() => expect(currentStep()).toContain("Results"));
-      expect(screen.getByRole("link", { name: "Open the session" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "New test" })).toBeTruthy();
     });
 
     it("goes on to the results by itself after five seconds", async () => {
@@ -206,10 +210,15 @@ describe("a running test", () => {
 });
 
 describe("a finished test", () => {
-  it("links to the session when one exists", async () => {
+  it("shows the session's results under a complete or incomplete test", async () => {
     await mount({ test: null, last: done });
-    const link = await screen.findByRole("link", { name: "Open the session" });
-    expect(link.getAttribute("href")).toBe("/sessions/test-1");
+    expect(await screen.findByText("session results for test-1")).toBeTruthy();
+  });
+
+  it("shows no session results under a failed test", async () => {
+    await mount({ test: null, last: { ...done, outcome: "failed", reason: "x" } });
+    await screen.findByText("The test failed.");
+    expect(screen.queryByText(/session results for/)).toBeNull();
   });
 
   it("shows only the reason when no session exists", async () => {
@@ -218,7 +227,6 @@ describe("a finished test", () => {
       last: { ...done, outcome: "no_session", session_id: null, reason: "Klipper is shutdown, not ready" },
     });
     expect(await screen.findByText("Klipper is shutdown, not ready")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Open the session" })).toBeNull();
     expect(screen.getByText("No session was saved.")).toBeTruthy();
   });
 

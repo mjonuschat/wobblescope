@@ -36,19 +36,12 @@ function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: Anal
   return <AxisResults result={analysis.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
 }
 
-interface Props {
-  /** The session to show. */
-  id: string;
-  /** Whether to show the session's details (its source, settings and chips) below the results. */
-  details?: boolean;
-}
-
 /**
  * A stored session's analysis: a tab for each axis, the recommendation and charts for the one
  * chosen, the fit settings and the details of the recording. The session page and the results
- * of a test both show it.
+ * of a test show the same thing.
  */
-export function SessionResults({ id, details = true }: Props) {
+export function SessionResults({ id }: { id: string }) {
   const session = useSession(id);
   const [selected, setSelected] = useState<Axis | null>(null);
   const [params, setParams] = useState<FitParams>(defaultFitParams);
@@ -93,7 +86,7 @@ export function SessionResults({ id, details = true }: Props) {
           <FitSettingsForm onApply={setParams} />
         </>
       )}
-      {details && <MetaPanel meta={meta} />}
+      <MetaPanel meta={meta} />
     </div>
   );
 }

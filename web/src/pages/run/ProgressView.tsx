@@ -1,5 +1,3 @@
-import { Link } from "@tanstack/react-router";
-
 import {
   ArrowRightIcon,
   CircleCheckIcon,
@@ -164,8 +162,8 @@ const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: strin
 };
 
 /**
- * How a test ended, with a way to the session and to a new test. A test that recorded data also
- * shows its results below. It stays until the user asks for a new test.
+ * How a test ended, with a way to a new test. A test that recorded data also shows its session
+ * below. It stays until the user asks for a new test.
  */
 export function ResultView({ last, onNewTest }: ResultProps) {
   const { Icon, className } = OUTCOME_ICON[last.outcome];
@@ -176,22 +174,15 @@ export function ResultView({ last, onNewTest }: ResultProps) {
         title="Result"
         label="Test result"
         action={
-          <div className="flex items-center gap-2">
-            {last.session_id && (
-              <Button render={<Link to="/sessions/$id" params={{ id: last.session_id }} />} variant="outline">
-                Open the session
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onNewTest}
-              disabled={last.motion_uncertain}
-              title={last.motion_uncertain ? "Stop the printer first: it may still be moving." : undefined}
-            >
-              New test
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onNewTest}
+            disabled={last.motion_uncertain}
+            title={last.motion_uncertain ? "Stop the printer first: it may still be moving." : undefined}
+          >
+            New test
+          </Button>
         }
       >
         <div className="flex items-start gap-3">
@@ -216,7 +207,7 @@ export function ResultView({ last, onNewTest }: ResultProps) {
           </div>
         )}
       </Panel>
-      {analysed && last.session_id && <SessionResults id={last.session_id} details={false} />}
+      {analysed && last.session_id && <SessionResults id={last.session_id} />}
     </div>
   );
 }
