@@ -143,68 +143,68 @@ describe("summedOption", () => {
   });
 });
 
-describe('liveSpectrumOption', () => {
+describe("liveSpectrumOption", () => {
   const spectrum = {
     freq_bins: [0, 10, 20],
     psd_x: [1, 2, 3],
     psd_y: [1, 2, 3],
     psd_z: [1, 2, 3],
     psd_sum: [3, 6, 9],
-  }
-  const peaks = [{ freq: 10, level: 6 }]
+  };
+  const peaks = [{ freq: 10, level: 6 }];
   const option = liveSpectrumOption({
     chips: [
-      { chip: 'a', spectrum, peaks, peakHold: [3, 7, 9], axes: ['x', 'sum'] },
-      { chip: 'b', spectrum, peaks: [], peakHold: [3, 6, 9], axes: ['z'] },
+      { chip: "a", spectrum, peaks, peakHold: [3, 7, 9], axes: ["x", "sum"] },
+      { chip: "b", spectrum, peaks: [], peakHold: [3, 6, 9], axes: ["z"] },
     ],
     maxHz: 200,
-  })
+  });
   type Live = {
-    name: string
-    color: string
-    lineStyle: { color: string; opacity?: number }
-    markPoint?: { data: { coord: number[]; label: { formatter: string } }[] }
-  }
-  const live = (option as { series: Live[] }).series
-  const byName = (name: string) => live.find((s) => s.name === name)!
+    name: string;
+    color: string;
+    lineStyle: { color: string; opacity?: number };
+    markPoint?: { data: { coord: number[]; label: { formatter: string } }[] };
+  };
+  const live = (option as { series: Live[] }).series;
+  const byName = (name: string) => live.find((s) => s.name === name)!;
 
-  it('draws a line per chip and axis plus a peak-hold line per chip', () => {
-    expect(live.map((s) => s.name)).toEqual(['a X', 'a SUM', 'a peak hold', 'b Z', 'b peak hold'])
-  })
+  it("draws a line per chip and axis plus a peak-hold line per chip", () => {
+    expect(live.map((s) => s.name)).toEqual(["a X", "a SUM", "a peak hold", "b Z", "b peak hold"]);
+  });
 
-  it('colours every line of a chip with that chip\u2019s colour', () => {
-    for (const name of ['a X', 'a SUM', 'a peak hold']) {
-      expect(byName(name).color).toBe(chipColor(0))
-      expect(byName(name).lineStyle.color).toBe(chipColor(0))
+  it("colours every line of a chip with that chip\u2019s colour", () => {
+    for (const name of ["a X", "a SUM", "a peak hold"]) {
+      expect(byName(name).color).toBe(chipColor(0));
+      expect(byName(name).lineStyle.color).toBe(chipColor(0));
     }
-    for (const name of ['b Z', 'b peak hold']) expect(byName(name).lineStyle.color).toBe(chipColor(1))
-  })
+    for (const name of ["b Z", "b peak hold"]) expect(byName(name).lineStyle.color).toBe(chipColor(1));
+  });
 
-  it('colours by colorIndex when given, not by position', () => {
+  it("colours by colorIndex when given, not by position", () => {
     const picked = liveSpectrumOption({
-      chips: [{ chip: 'b', colorIndex: 1, spectrum, peaks: [], peakHold: [], axes: ['sum'] }],
+      chips: [{ chip: "b", colorIndex: 1, spectrum, peaks: [], peakHold: [], axes: ["sum"] }],
       maxHz: 200,
-    })
-    expect((picked as { series: Live[] }).series[0].lineStyle.color).toBe(chipColor(1))
-  })
+    });
+    expect((picked as { series: Live[] }).series[0].lineStyle.color).toBe(chipColor(1));
+  });
 
-  it('draws the peak-hold lines faintly and the spectra solidly', () => {
-    expect(byName('a peak hold').lineStyle.opacity).toBe(0.3)
-    expect(byName('b peak hold').lineStyle.opacity).toBe(0.3)
-    expect(byName('a X').lineStyle.opacity).toBeUndefined()
-  })
+  it("draws the peak-hold lines faintly and the spectra solidly", () => {
+    expect(byName("a peak hold").lineStyle.opacity).toBe(0.3);
+    expect(byName("b peak hold").lineStyle.opacity).toBe(0.3);
+    expect(byName("a X").lineStyle.opacity).toBeUndefined();
+  });
 
-  it('marks peaks on the first line of a chip only, labelled with Hz and level', () => {
-    const [point] = byName('a X').markPoint!.data
-    expect(point.coord).toEqual([10, 6])
-    expect(point.label.formatter).toBe('10.0 Hz\n6.0e+0')
-    expect(byName('a SUM').markPoint).toBeUndefined()
-    expect(byName('a peak hold').markPoint).toBeUndefined()
-    expect(byName('b Z').markPoint?.data).toEqual([])
-  })
+  it("marks peaks on the first line of a chip only, labelled with Hz and level", () => {
+    const [point] = byName("a X").markPoint!.data;
+    expect(point.coord).toEqual([10, 6]);
+    expect(point.label.formatter).toBe("10.0 Hz\n6.0e+0");
+    expect(byName("a SUM").markPoint).toBeUndefined();
+    expect(byName("a peak hold").markPoint).toBeUndefined();
+    expect(byName("b Z").markPoint?.data).toEqual([]);
+  });
 
-  it('uses an axis tooltip and the requested frequency limit', () => {
-    expect((option as { tooltip: { trigger: string } }).tooltip.trigger).toBe('axis')
-    expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200)
-  })
-})
+  it("uses an axis tooltip and the requested frequency limit", () => {
+    expect((option as { tooltip: { trigger: string } }).tooltip.trigger).toBe("axis");
+    expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200);
+  });
+});

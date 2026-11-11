@@ -1,42 +1,42 @@
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 
 /** The range choice. It is a fixed top frequency or the most the chips allow. */
-export type Range = number | 'full'
+export type Range = number | "full";
 
-const WINDOW_SECONDS = [0.5, 1, 2, 4]
-const RANGES_HZ = [100, 200, 400]
-const RATES = [1, 2, 5, 10, 20]
+const WINDOW_SECONDS = [0.5, 1, 2, 4];
+const RANGES_HZ = [100, 200, 400];
+const RATES = [1, 2, 5, 10, 20];
 
 /** The update rates up to the daemon's limit, which is the top choice. */
 function rateOptions(limit: number, current: number): number[] {
-  return [...new Set([...RATES.filter((r) => r < limit), limit, current])].sort((a, b) => a - b)
+  return [...new Set([...RATES.filter((r) => r < limit), limit, current])].sort((a, b) => a - b);
 }
 
 /** The fixed ranges, with the daemon's default when it is not one of them. */
 function rangeOptions(current: number): number[] {
-  return [...new Set([...RANGES_HZ, current])].sort((a, b) => a - b)
+  return [...new Set([...RANGES_HZ, current])].sort((a, b) => a - b);
 }
 
 interface Props {
-  updatesPerSecond: number
-  rateLimit: number
-  onUpdatesPerSecond: (value: number) => void
-  range: Range
+  updatesPerSecond: number;
+  rateLimit: number;
+  onUpdatesPerSecond: (value: number) => void;
+  range: Range;
   /** The fixed range the daemon starts with. */
-  defaultMaxHz: number
+  defaultMaxHz: number;
   /** What "full" means now, in Hz. */
-  fullHz: number
-  onRange: (value: Range) => void
-  windowSeconds: number
-  onWindowSeconds: (value: number) => void
-  paused: boolean
-  onPaused: (value: boolean) => void
-  onResetPeakHold: () => void
+  fullHz: number;
+  onRange: (value: Range) => void;
+  windowSeconds: number;
+  onWindowSeconds: (value: number) => void;
+  paused: boolean;
+  onPaused: (value: boolean) => void;
+  onResetPeakHold: () => void;
 }
 
 /** The display choices: update rate, range, spectrum window, pause and peak-hold reset. */
 export function DisplaySettings(props: Props) {
-  const select = 'rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm'
+  const select = "rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm";
   return (
     <div className="flex flex-wrap items-end gap-4">
       <label className="space-y-1 text-sm">
@@ -58,7 +58,7 @@ export function DisplaySettings(props: Props) {
         <select
           className={select}
           value={String(props.range)}
-          onChange={(e) => props.onRange(e.target.value === 'full' ? 'full' : Number(e.target.value))}
+          onChange={(e) => props.onRange(e.target.value === "full" ? "full" : Number(e.target.value))}
         >
           {rangeOptions(props.defaultMaxHz).map((hz) => (
             <option key={hz} value={hz}>
@@ -83,11 +83,11 @@ export function DisplaySettings(props: Props) {
         </select>
       </label>
       <Button type="button" variant="outline" aria-pressed={props.paused} onClick={() => props.onPaused(!props.paused)}>
-        {props.paused ? 'Resume' : 'Pause'}
+        {props.paused ? "Resume" : "Pause"}
       </Button>
       <Button type="button" variant="outline" onClick={props.onResetPeakHold}>
         Reset peak hold
       </Button>
     </div>
-  )
+  );
 }

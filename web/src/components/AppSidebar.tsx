@@ -1,5 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ActivityIcon, AudioLinesIcon, FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  AudioLinesIcon,
+  FlaskConicalIcon,
+  FolderClockIcon,
+  PrinterIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
   Sidebar,

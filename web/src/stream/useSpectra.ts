@@ -1,40 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Peak } from '@/lib/generated/Peak'
-import type { Spectrum } from '@/lib/generated/Spectrum'
+import type { Peak } from "@/lib/generated/Peak";
+import type { Spectrum } from "@/lib/generated/Spectrum";
 
-import type { SpectrumRequest, SpectrumResponse } from './spectrumHandler'
-import type { StreamApi } from './useStream'
+import type { SpectrumRequest, SpectrumResponse } from "./spectrumHandler";
+import type { StreamApi } from "./useStream";
 
 export interface ChipSpectrum {
-  spectrum: Spectrum | null
-  peaks: Peak[]
+  spectrum: Spectrum | null;
+  peaks: Peak[];
   /** The running maximum of `psd_sum` per bin. */
-  peakHold: number[]
+  peakHold: number[];
   /** The latest worker failure for this chip, cleared by the next successful spectrum. */
-  error: string | null
+  error: string | null;
 }
 
-export type SpectraState = Record<string, ChipSpectrum>
+export type SpectraState = Record<string, ChipSpectrum>;
 
 /** The part of a Web Worker the hook uses, so tests can pass in a fake. */
 export interface SpectrumWorkerLike {
-  postMessage(message: SpectrumRequest, transfer?: Transferable[]): void
-  terminate(): void
-  onmessage: ((event: MessageEvent<SpectrumResponse>) => void) | null
+  postMessage(message: SpectrumRequest, transfer?: Transferable[]): void;
+  terminate(): void;
+  onmessage: ((event: MessageEvent<SpectrumResponse>) => void) | null;
 }
 
 function createSpectrumWorker(): SpectrumWorkerLike {
-  return new Worker(new URL('./spectrumWorker.ts', import.meta.url), { type: 'module' })
+  return new Worker(new URL("./spectrumWorker.ts", import.meta.url), { type: "module" });
 }
 
 interface Hold {
-  values: number[]
-  spacing: number
+  values: number[];
+  spacing: number;
 }
 
 function spacingOf(spectrum: Spectrum): number {
-  return spectrum.freq_bins.length > 1 ? spectrum.freq_bins[1] - spectrum.freq_bins[0] : 0
+  return spectrum.freq_bins.length > 1 ? spectrum.freq_bins[1] - spectrum.freq_bins[0] : 0;
 }
 
 /**
@@ -50,100 +50,102 @@ export function useSpectra(
   createWorker: () => SpectrumWorkerLike = createSpectrumWorker,
   paused = false,
 ): { spectra: SpectraState; resetPeakHold: (chip?: string) => void } {
-  const [spectra, setSpectra] = useState<SpectraState>({})
-  const workerRef = useRef<SpectrumWorkerLike | null>(null)
-  const holds = useRef(new Map<string, Hold>())
-  const configured = useRef(new Map<string, string>())
-  const pausedRef = useRef(paused)
-  pausedRef.current = paused
-  const { chips } = stream.state
-  const { onFrame } = stream
+  const [spectra, setSpectra] = useState<SpectraState>({});
+  const workerRef = useRef<SpectrumWorkerLike | null>(null);
+  const holds = useRef(new Map<string, Hold>());
+  const configured = useRef(new Map<string, string>());
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const { chips } = stream.state;
+  const { onFrame } = stream;
 
   const resetPeakHold = useCallback((chip?: string) => {
-    if (chip === undefined) holds.current.clear()
-    else holds.current.delete(chip)
+    if (chip === undefined) holds.current.clear();
+    else holds.current.delete(chip);
     setSpectra((previous) => {
-      const next: SpectraState = {}
+      const next: SpectraState = {};
       for (const [name, value] of Object.entries(previous)) {
-        next[name] = chip === undefined || chip === name ? { ...value, peakHold: [] } : value
+        next[name] = chip === undefined || chip === name ? { ...value, peakHold: [] } : value;
       }
-      return next
-    })
-  }, [])
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
-    const worker = createWorker()
-    const known = configured.current
-    workerRef.current = worker
+    const worker = createWorker();
+    const known = configured.current;
+    workerRef.current = worker;
     worker.onmessage = (event) => {
-      if (pausedRef.current) return
-      const message = event.data
-      if (message.type === 'error') {
+      if (pausedRef.current) return;
+      const message = event.data;
+      if (message.type === "error") {
         setSpectra((previous) => ({
           ...previous,
-          [message.chip]: { ...(previous[message.chip] ?? { spectrum: null, peaks: [], peakHold: [] }), error: message.message },
-        }))
-        return
+          [message.chip]: {
+            ...(previous[message.chip] ?? { spectrum: null, peaks: [], peakHold: [] }),
+            error: message.message,
+          },
+        }));
+        return;
       }
-      const { chip, spectrum, peaks } = message
-      const spacing = spacingOf(spectrum)
-      const old = holds.current.get(chip)
-      const sameGrid =
-        old && old.values.length === spectrum.psd_sum.length && Math.abs(old.spacing - spacing) < 1e-9
+      const { chip, spectrum, peaks } = message;
+      const spacing = spacingOf(spectrum);
+      const old = holds.current.get(chip);
+      const sameGrid = old && old.values.length === spectrum.psd_sum.length && Math.abs(old.spacing - spacing) < 1e-9;
       const values = sameGrid
         ? spectrum.psd_sum.map((level, i) => Math.max(level, old.values[i]))
-        : [...spectrum.psd_sum]
-      holds.current.set(chip, { values, spacing })
-      setSpectra((previous) => ({ ...previous, [chip]: { spectrum, peaks, peakHold: values, error: null } }))
-    }
+        : [...spectrum.psd_sum];
+      holds.current.set(chip, { values, spacing });
+      setSpectra((previous) => ({ ...previous, [chip]: { spectrum, peaks, peakHold: values, error: null } }));
+    };
     const stop = onFrame((chip, frame) => {
-      if (pausedRef.current) return
+      if (pausedRef.current) return;
       // Transfer a copy. Other onFrame subscribers share this frame and still need its samples.
-      const xyz = frame.xyz.slice()
-      worker.postMessage({ type: 'frame', chip, t0: frame.t0, xyz }, [xyz.buffer as ArrayBuffer])
-    })
+      const xyz = frame.xyz.slice();
+      worker.postMessage({ type: "frame", chip, t0: frame.t0, xyz }, [xyz.buffer as ArrayBuffer]);
+    });
     return () => {
-      stop()
-      worker.terminate()
-      workerRef.current = null
-      known.clear()
-    }
-  }, [onFrame, createWorker])
+      stop();
+      worker.terminate();
+      workerRef.current = null;
+      known.clear();
+    };
+  }, [onFrame, createWorker]);
 
   // A chip that left the stream is dropped from the worker and from the state.
   useEffect(() => {
-    const worker = workerRef.current
-    if (!worker) return
-    const gone = [...configured.current.keys()].filter((chip) => !(chip in chips))
-    if (gone.length === 0) return
+    const worker = workerRef.current;
+    if (!worker) return;
+    const gone = [...configured.current.keys()].filter((chip) => !(chip in chips));
+    if (gone.length === 0) return;
     for (const chip of gone) {
-      configured.current.delete(chip)
-      holds.current.delete(chip)
-      worker.postMessage({ type: 'drop', chip })
+      configured.current.delete(chip);
+      holds.current.delete(chip);
+      worker.postMessage({ type: "drop", chip });
     }
-    setSpectra((previous) => Object.fromEntries(Object.entries(previous).filter(([chip]) => !gone.includes(chip))))
-  }, [chips])
+    setSpectra((previous) => Object.fromEntries(Object.entries(previous).filter(([chip]) => !gone.includes(chip))));
+  }, [chips]);
 
   useEffect(() => {
-    const worker = workerRef.current
-    if (!worker) return
-    const minIntervalMs = 1000 / updatesPerSecond
+    const worker = workerRef.current;
+    if (!worker) return;
+    const minIntervalMs = 1000 / updatesPerSecond;
     for (const [chip, state] of Object.entries(chips)) {
-      if (state.rateHz <= 0 || state.maxHz <= 0) continue
-      const key = `${state.rateHz}/${state.maxHz}/${windowSeconds}/${minIntervalMs}`
-      if (configured.current.get(chip) === key) continue
-      configured.current.set(chip, key)
-      resetPeakHold(chip)
+      if (state.rateHz <= 0 || state.maxHz <= 0) continue;
+      const key = `${state.rateHz}/${state.maxHz}/${windowSeconds}/${minIntervalMs}`;
+      if (configured.current.get(chip) === key) continue;
+      configured.current.set(chip, key);
+      resetPeakHold(chip);
       worker.postMessage({
-        type: 'configure',
+        type: "configure",
         chip,
         rateHz: state.rateHz,
         windowSeconds,
         maxHz: state.maxHz,
         minIntervalMs,
-      })
+      });
     }
-  }, [chips, windowSeconds, updatesPerSecond, resetPeakHold])
+  }, [chips, windowSeconds, updatesPerSecond, resetPeakHold]);
 
-  return { spectra, resetPeakHold }
+  return { spectra, resetPeakHold };
 }
