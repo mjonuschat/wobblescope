@@ -51,7 +51,7 @@ describe("the session view", () => {
     clipboard({ writeText });
     serve();
     renderRoute("/sessions/s1");
-    expect(await screen.findByText(/unknown capture health/)).toBeTruthy();
+    expect(await screen.findByText(/no record of whether samples were dropped/)).toBeTruthy();
     expect(screen.getAllByText(/shaper_type_x: mzv/).length).toBeGreaterThan(0);
     const worst = screen.getByRole("region", { name: "Recommended Input Shaper" });
     fireEvent.click(worst.querySelector("button")!);
@@ -135,10 +135,8 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    const panel = await screen.findByRole("region", { name: "Capture health and eligibility" });
-    expect(panel.textContent).toContain(
-      "included, but could not be analysed: timestamps are not finite and strictly increasing",
-    );
+    const panel = await screen.findByRole("region", { name: "Data Quality" });
+    expect(panel.textContent).toContain("Could not be analysed: timestamps are not finite and strictly increasing");
     expect(screen.getByRole("region", { name: "Chip b" }).textContent).toContain(
       "No recommendation for this chip: timestamps are not finite and strictly increasing",
     );
@@ -196,8 +194,8 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     fireEvent.click(await screen.findByRole("checkbox", { name: /Include b anyway/ }));
     await waitFor(() =>
-      expect(screen.getByRole("region", { name: "Capture health and eligibility" }).textContent).toContain(
-        "included by override (degraded capture health), but could not be analysed: flat signal",
+      expect(screen.getByRole("region", { name: "Data Quality" }).textContent).toContain(
+        "Could not be analysed: flat signal",
       ),
     );
     expect(screen.getByRole("region", { name: "Chip b" }).textContent).toContain(
