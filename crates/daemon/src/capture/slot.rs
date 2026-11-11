@@ -94,6 +94,15 @@ impl TestSlot {
         }
     }
 
+    /// Asks the test that holds the slot, if any, to stop. Returns its id.
+    #[must_use]
+    pub fn request_stop_current(&self) -> Option<String> {
+        let s = lock(&self.state);
+        let id = s.id.clone().filter(|_| s.held)?;
+        s.stop.store(true, Ordering::Release);
+        Some(id)
+    }
+
     /// Withdraws a stop request, for a stop whose dispatch to Moonraker failed.
     pub fn cancel_stop(&self, id: &str) {
         let s = lock(&self.state);

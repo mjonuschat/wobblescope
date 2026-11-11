@@ -5,6 +5,7 @@ mod access;
 mod error;
 mod live;
 mod origin;
+mod printer;
 mod samples;
 mod sessions;
 mod settings;
@@ -22,6 +23,7 @@ use axum::routing::{get, post};
 
 pub use access::AccessGuard;
 pub use error::ApiError;
+pub use printer::{Homed, PrinterState};
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 pub use status::{StatusResponse, StorageState, StorageStatus};
 pub use tests::{StartedTest, StopDispatched};
@@ -203,6 +205,9 @@ pub fn mount_capture(
         .route("/settings", get(settings::settings))
         .route("/tests", post(tests::start))
         .route("/tests/{id}/emergency-stop", post(tests::emergency_stop))
+        .route("/printer", get(printer::printer))
+        .route("/printer/emergency-stop", post(printer::emergency_stop))
+        .route("/printer/home", post(printer::home))
         .route("/live", get(live::live))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
