@@ -15,7 +15,6 @@ interface Props {
 export const SPAN_MS = 60_000
 const WIDTH = 640
 const HEIGHT = 160
-const COLUMN_PX = 3
 
 /** Bins kept per spectrum for the colour scale: enough for percentiles, cheap to sort. */
 const SAMPLES_PER_SPECTRUM = 32
@@ -92,13 +91,15 @@ function addColumn(canvas: HTMLCanvasElement, drawn: Drawn, at: number, logPsd: 
   drawn.samples.push({ at, values: logPsd.filter((_, bin) => bin % stride === 0) })
   if (drawn.times.length === 1 || ++drawn.sinceScale >= SCALE_EVERY) updateScale(drawn)
 
-  const image = context.createImageData(COLUMN_PX, HEIGHT)
+  // As wide as the scroll, so each spectrum keeps its own columns instead of overwriting the last.
+  const columnPx = shift >= WIDTH ? 1 : Math.max(shift, 1)
+  const image = context.createImageData(columnPx, HEIGHT)
   for (let y = 0; y < HEIGHT; y++) {
     const bin = Math.floor(((HEIGHT - 1 - y) / HEIGHT) * logPsd.length)
     const [r, g, b] = ramp((logPsd[bin] - drawn.low) / drawn.range)
-    for (let x = 0; x < COLUMN_PX; x++) image.data.set([r, g, b, 255], (y * COLUMN_PX + x) * 4)
+    for (let x = 0; x < columnPx; x++) image.data.set([r, g, b, 255], (y * columnPx + x) * 4)
   }
-  context.putImageData(image, WIDTH - COLUMN_PX, 0)
+  context.putImageData(image, WIDTH - columnPx, 0)
   canvas.dataset.columns = String(drawn.times.length)
 }
 

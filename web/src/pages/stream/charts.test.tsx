@@ -107,18 +107,30 @@ describe('Spectrogram', () => {
   const props = (now: () => number, s: Spectrum) => (
     <Spectrogram chip="a" color="#fff" spectrum={s} now={now} />
   )
-  const put = () => calls.filter(([n]) => n === 'putImageData') as [string, { data: Uint8ClampedArray }, number, number][]
-  const pixel = (image: { data: Uint8ClampedArray }, row: number) => Array.from(image.data.slice(row * 3 * 4, row * 3 * 4 + 4))
+  const put = () => calls.filter(([n]) => n === 'putImageData') as [string, { data: Uint8ClampedArray; width: number }, number, number][]
+  const pixel = (image: { data: Uint8ClampedArray; width: number }, row: number) => Array.from(image.data.slice(row * image.width * 4, row * image.width * 4 + 4))
 
   it('draws the newest column at the right edge and scrolls older ones left', () => {
     let time = 0
     const now = () => time
     const { rerender } = render(props(now, spectrum()))
-    expect(put()[0].slice(2)).toEqual([640 - 3, 0])
+    expect(put()[0].slice(2)).toEqual([640 - 1, 0])
     time = 6_000
     act(() => rerender(props(now, spectrum())))
     expect(calls.filter(([n]) => n === 'drawImage').map((c) => c[2])).toEqual([-64])
-    expect(put()[1].slice(2)).toEqual([640 - 3, 0])
+    expect(put()[1].slice(2)).toEqual([640 - 64, 0])
+  })
+
+  it('draws each column as wide as the scroll since the previous one, at least one pixel', () => {
+    let time = 0
+    const now = () => time
+    const { rerender } = render(props(now, spectrum()))
+    for (const at of [1_000, 1_000, 1_100]) {
+      time = at
+      act(() => rerender(props(now, spectrum([2, 20, 200]))))
+    }
+    expect(put().map((c) => c[1].width)).toEqual([1, 11, 1, 1])
+    expect(put().map((c) => c[2])).toEqual([639, 629, 639, 639])
   })
 
   it('maps log10 power, from the 5th to the 99th percentile, onto the ramp', () => {
