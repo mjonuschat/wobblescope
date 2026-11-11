@@ -316,6 +316,7 @@ describe('the session view', () => {
     fireEvent.change(await screen.findByLabelText('Label'), { target: { value: 'after belts' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save result' }))
     expect(await screen.findByText(/Saved as r-1/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe('/results/r-1')
     const post = calls.find((c) => c.method === 'POST')!
     const expected: SaveRequest = {
       label: 'after belts',

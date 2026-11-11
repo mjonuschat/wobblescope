@@ -13,6 +13,9 @@ export function StorageUsage({ usage }: { usage: Usage }) {
         </span>
         <span className="text-muted-foreground">{usage.session_count} sessions</span>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Saved results: {usage.result_count}, {formatBytes(usage.result_bytes)}
+      </p>
       <div
         role="progressbar"
         aria-valuemin={0}

@@ -55,7 +55,8 @@ export const queryKeys = {
     params: FitParams,
     overrides: string[] = [],
     createdAt = '',
-  ) => ['analysis', id, axis, params, overrides, createdAt] as const,
+    resultId = '',
+  ) => ['analysis', id, axis, params, overrides, createdAt, resultId] as const,
 }
 
 /** A daemon answer with a JSON error is final. Anything else may be a blip, so retry it twice. */
@@ -256,6 +257,8 @@ export function useDeleteResult() {
     mutationFn: (id: string) => deleteResult(id),
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: queryKeys.result(id) })
+      queryClient.removeQueries({ queryKey: queryKeys.analysesOf(`result:${id}`) })
+      getAnalysisClient().forget(`result:${id}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.results })
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage })
     },

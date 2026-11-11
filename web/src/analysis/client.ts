@@ -59,6 +59,11 @@ function abortError(): DOMException {
   return new DOMException('The analysis was cancelled', 'AbortError')
 }
 
+/** What the worker and the held-files logic key a job by, so a result never shares files with a session. */
+function identityOf(job: AnalysisJob): string {
+  return job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId
+}
+
 /** The recordings of one axis, as (chip position, segment position, file name). */
 function filesFor(meta: SessionMeta, axis: Axis) {
   return meta.segments.flatMap((segment, index) =>
@@ -127,7 +132,8 @@ export function createAnalysisClient({
   async function run({ job, signal }: Queued): Promise<AnalysisResult> {
     if (signal?.aborted) throw abortError()
     const target = ensureWorker()
-    const sameSession = heldSession === job.sessionId && heldCreatedAt === job.meta.created_at
+    const identity = identityOf(job)
+    const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at
     const alreadyHeld = sameSession ? held : new Set<string>()
     const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name))
     const buffers = await Promise.all(
@@ -141,7 +147,7 @@ export function createAnalysisClient({
     // The worker failed to load while the files were downloading, so nothing can answer.
     if (worker !== target) throw new Error('The analysis module failed to load')
     if (!sameSession) {
-      heldSession = job.sessionId
+      heldSession = identity
       heldCreatedAt = job.meta.created_at
       held = new Set()
     }
@@ -166,7 +172,7 @@ export function createAnalysisClient({
         {
           type: 'analyze',
           id,
-          sessionId: job.sessionId,
+          sessionId: identity,
           meta: job.meta,
           axis: job.axis,
           params: job.params,

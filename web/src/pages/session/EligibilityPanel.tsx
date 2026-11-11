@@ -20,11 +20,13 @@ export function EligibilityPanel({
   probePoints,
   overrides,
   onOverridesChange,
+  readOnly = false,
 }: {
   analysis: Analysis
   probePoints: ProbePoint[]
   overrides: string[]
-  onOverridesChange: (overrides: string[]) => void
+  onOverridesChange?: (overrides: string[]) => void
+  readOnly?: boolean
 }) {
   const { decisions } = analysis.eligibility
   if (decisions.length === 0 && analysis.failures.length === 0) return null
@@ -56,8 +58,9 @@ export function EligibilityPanel({
             type="checkbox"
             className="mt-1"
             checked={overridden}
+            disabled={readOnly}
             onChange={(e) =>
-              onOverridesChange(
+              onOverridesChange?.(
                 e.target.checked ? [...overrides, chip] : overrides.filter((c) => c !== chip),
               )
             }

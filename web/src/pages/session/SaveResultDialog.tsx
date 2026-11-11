@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import type { AnalysisResult } from '@/analysis/protocol'
@@ -64,9 +65,9 @@ export function SaveResultDialog({ sessionId, meta, axis, params, overrides, res
       {save.isSuccess && (
         <p className="text-sm">
           Saved as {save.data.id}{' '}
-          <a href={`#/results/${encodeURIComponent(save.data.id)}`} className="underline">
+          <Link to="/results/$rid" params={{ rid: save.data.id }} className="underline">
             Open
-          </a>
+          </Link>
         </p>
       )}
       {save.isError && (

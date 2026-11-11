@@ -11,6 +11,7 @@ import { stubFetch } from '@/test/http'
 import {
   createQueryClient,
   queryKeys,
+  useDeleteResult,
   useDeleteSession,
   usePinSession,
   useSession,
@@ -39,6 +40,29 @@ describe('query hooks', () => {
     ).toBe(true)
     expect(client.getQueryState(queryKeys.sessionList({}))?.isInvalidated).toBe(true)
     expect(client.getQueryState(queryKeys.storage)?.isInvalidated).toBe(true)
+  })
+
+  it('keys an analysis by its result so a result and a session never share one', () => {
+    const session = queryKeys.analysis('s1', 'X', defaultParams, [], 'c')
+    expect(queryKeys.analysis('s1', 'X', defaultParams, [], 'c', 'r1')).not.toEqual(session)
+    expect(queryKeys.analysis('s1', 'X', defaultParams, [], 'c', 'r1')).not.toEqual(
+      queryKeys.analysis('s1', 'X', defaultParams, [], 'c', 'r2'),
+    )
+  })
+
+  it('removes the result, its analyses and its worker files after a delete', async () => {
+    const { client, wrapper } = setup()
+    stubFetch({ status: 204 })
+    client.setQueryData(queryKeys.result('r1'), {})
+    client.setQueryData(queryKeys.analysis('result:r1', 'X', defaultParams, [], 'c', 'r1'), {})
+    const forget = vi.spyOn(getAnalysisClient(), 'forget')
+    const { result } = renderHook(() => useDeleteResult(), { wrapper })
+    await act(() => result.current.mutateAsync('r1'))
+    expect(client.getQueryData(queryKeys.result('r1'))).toBeUndefined()
+    expect(
+      client.getQueryData(queryKeys.analysis('result:r1', 'X', defaultParams, [], 'c', 'r1')),
+    ).toBeUndefined()
+    expect(forget).toHaveBeenCalledWith('result:r1')
   })
 
   it('removes the session and its analyses after a delete, forgets it in the worker and invalidates lists and storage', async () => {

@@ -2,6 +2,8 @@ import { createRootRoute, createRoute } from '@tanstack/react-router'
 
 import { RootLayout } from '@/components/RootLayout'
 import { RunPage } from '@/pages/run/RunPage'
+import { ResultRoute } from '@/pages/results/ResultRoute'
+import { ResultsPage } from '@/pages/results/ResultsPage'
 import { SessionRoute } from '@/pages/session/SessionRoute'
 import { SessionsPage } from '@/pages/sessions/SessionsPage'
 
@@ -25,4 +27,22 @@ const sessionRoute = createRoute({
   component: SessionRoute,
 })
 
-export const routeTree = rootRoute.addChildren([runRoute, sessionsRoute, sessionRoute])
+const resultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/results',
+  component: ResultsPage,
+})
+
+const resultRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/results/$rid',
+  component: ResultRoute,
+})
+
+export const routeTree = rootRoute.addChildren([
+  runRoute,
+  sessionsRoute,
+  sessionRoute,
+  resultsRoute,
+  resultRoute,
+])

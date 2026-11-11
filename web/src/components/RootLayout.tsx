@@ -11,6 +11,7 @@ export function RootLayout() {
       <nav className="flex gap-4 border-b border-neutral-800 px-6 py-3">
         <Link to="/">Run test</Link>
         <Link to="/sessions">Sessions</Link>
+        <Link to="/results">Results</Link>
       </nav>
       <StatusBanner />
       <main className="p-6">

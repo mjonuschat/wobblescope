@@ -44,7 +44,7 @@ export function useSessionAnalysis({
   client = getAnalysisClient(),
 }: Args) {
   return useQuery({
-    queryKey: queryKeys.analysis(sessionId, axis ?? 'X', params, overrides, meta?.created_at),
+    queryKey: queryKeys.analysis(sessionId, axis ?? 'X', params, overrides, meta?.created_at, resultId),
     queryFn: ({ signal }) =>
       client.analyze(
         { sessionId, resultId, meta: meta!, axis: axis!, params, overrides },
