@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ActivityIcon, FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
+import { ActivityIcon, AudioLinesIcon, FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useStatus } from "@/lib/api/queries";
 
-type Path = "/" | "/run/shaper" | "/sessions" | "/results";
+type Path = "/" | "/run/shaper" | "/stream" | "/sessions" | "/results";
 
 interface Page {
   to: Path;
@@ -30,7 +30,10 @@ const pages: Page[] = [
     to: "/run/shaper",
     label: "Measure",
     icon: FlaskConicalIcon,
-    children: [{ to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon }],
+    children: [
+      { to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon },
+      { to: "/stream", label: "Live view", icon: AudioLinesIcon },
+    ],
   },
   { to: "/sessions", label: "History", icon: FolderClockIcon },
 ];

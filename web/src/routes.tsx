@@ -8,6 +8,7 @@ import { ResultsPage } from "@/pages/results/ResultsPage";
 import { RunPage } from "@/pages/run/RunPage";
 import { SessionRoute } from "@/pages/session/SessionRoute";
 import { SessionsPage } from "@/pages/sessions/SessionsPage";
+import { StreamPage } from "@/pages/stream/StreamPage";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -29,6 +30,12 @@ const shaperRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/run/shaper",
   component: RunPage,
+});
+
+const streamRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/stream",
+  component: () => <StreamPage />,
 });
 
 const historyRoute = createRoute({
@@ -65,6 +72,7 @@ export const routeTree = rootRoute.addChildren([
   printerRoute,
   runRoute,
   shaperRoute,
+  streamRoute,
   historyRoute.addChildren([sessionsRoute, resultsRoute]),
   sessionRoute,
   resultRoute,
