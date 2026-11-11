@@ -1,7 +1,6 @@
 import { Panel } from "@/components/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { psdOption } from "@/components/charts/options";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
@@ -26,11 +25,7 @@ export function ChipResult({ chip, snippet, probePoints, maxFreq, decisions }: P
     .flatMap((d) => (d.decision === "Excluded" ? d.reasons : d.dropped !== null ? [d.dropped] : []));
   const option = psdOption({ chip, recommendation: rec, probePoints, maxFreq });
   return (
-    <Panel
-      title={chip.chip}
-      label={`Chip ${chip.chip}`}
-      action={<Badge variant={chip.health === "Degraded" ? "destructive" : "secondary"}>{chip.health}</Badge>}
-    >
+    <Panel title={chip.chip} label={`Chip ${chip.chip}`}>
       <EChart
         option={option}
         label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
