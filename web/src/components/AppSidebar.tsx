@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FlaskConicalIcon, FolderClockIcon, type LucideIcon } from "lucide-react";
+import { FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/sidebar";
 import { useStatus } from "@/lib/api/queries";
 
-const pages: { to: "/" | "/sessions"; label: string; icon: LucideIcon }[] = [
-  { to: "/", label: "Run test", icon: FlaskConicalIcon },
+const pages: { to: "/" | "/run" | "/sessions"; label: string; icon: LucideIcon }[] = [
+  { to: "/", label: "Printer", icon: PrinterIcon },
+  { to: "/run", label: "Run test", icon: FlaskConicalIcon },
   { to: "/sessions", label: "Sessions", icon: FolderClockIcon },
 ];
 

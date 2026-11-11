@@ -37,7 +37,7 @@ const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && 
 
 async function open(options?: Options) {
   const calls = api(options);
-  renderRoute("/");
+  renderRoute("/run");
   await screen.findByRole("button", { name: "Start test" });
   return calls;
 }
@@ -153,7 +153,7 @@ describe("the run screen", () => {
         return new Response(JSON.stringify(body), { status: 200 });
       }),
     );
-    renderRoute("/");
+    renderRoute("/run");
     fireEvent.click(await screen.findByRole("button", { name: "Start test" }));
     const busy = await screen.findByRole("button", { name: "Checking printer…" });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
@@ -199,7 +199,7 @@ describe("the run screen", () => {
       },
       () => ({ body: ready ? healthyStatus : starting }),
     );
-    const { client } = renderRoute("/");
+    const { client } = renderRoute("/run");
     expect(await screen.findByText("the daemon is not connected to Moonraker")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start test" })).toBeNull();
 

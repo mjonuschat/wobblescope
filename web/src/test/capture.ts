@@ -13,6 +13,18 @@ const setting = (value: number | null, needed = false): Setting => ({
 export function printerSettings(overrides: Partial<PrinterSettings["settings"]> = {}): PrinterSettings {
   return {
     variant: "mainline",
+    machine: {
+      name: "buster",
+      klipper_version: "v0.13.0",
+      kinematics: "corexy",
+      mcus: ["mcu", "mcu toolhead"],
+      max_velocity: 500,
+      max_accel: 20000,
+      minimum_cruise_ratio: 0.5,
+      square_corner_velocity: 5,
+      max_z_velocity: 15,
+      max_z_accel: null,
+    },
     default_mode: "Sweep",
     settings: {
       freq_start: setting(5, true),
