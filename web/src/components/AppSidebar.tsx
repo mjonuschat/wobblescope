@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FlaskConicalIcon, FolderClockIcon, PrinterIcon, WavesIcon, type LucideIcon } from "lucide-react";
+import { ActivityIcon, FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -31,7 +31,7 @@ const pages: Page[] = [
     to: "/run/shaper",
     label: "Run Test",
     icon: FlaskConicalIcon,
-    children: [{ to: "/run/shaper", label: "Input Shaper", icon: WavesIcon }],
+    children: [{ to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon }],
   },
   { to: "/sessions", label: "Sessions", icon: FolderClockIcon },
 ];
