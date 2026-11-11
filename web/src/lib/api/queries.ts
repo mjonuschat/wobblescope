@@ -14,7 +14,6 @@ import {
   type StartTestRequest,
   checkChips,
   deleteSession,
-  emergencyStop,
   getChips,
   getSession,
   getSettings,
@@ -205,10 +204,6 @@ export function useCheckChips() {
 
 export function useStartTest() {
   return useMutation({ mutationFn: (request: StartTestRequest) => startTest(request) });
-}
-
-export function useEmergencyStop() {
-  return useMutation({ mutationFn: (id: string) => emergencyStop(id) });
 }
 
 /** The homed axes, polled while Klipper is ready. */

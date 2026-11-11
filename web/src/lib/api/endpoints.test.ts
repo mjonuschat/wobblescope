@@ -6,7 +6,6 @@ import { ApiClientError } from "./client";
 import {
   checkChips,
   deleteSession,
-  emergencyStop,
   fetchSample,
   getChips,
   getSettings,
@@ -99,9 +98,6 @@ describe("endpoints", () => {
       overrides: { freq_end: 100 },
       points: [[100, 100, 20]],
     });
-    await emergencyStop("test 1");
-    expect(http.url(1)).toMatch(/\/api\/tests\/test%201\/emergency-stop$/);
-    expect(http.init(1).method).toBe("POST");
   });
 
   it("surfaces a preflight_failed answer as an error that carries every failed check", async () => {

@@ -134,13 +134,6 @@ export function startTest(request: StartTestRequest) {
   });
 }
 
-/** Calls Moonraker's emergency stop at once, with no confirmation. */
-export function emergencyStop(id: string) {
-  return apiJson<StopDispatched>(`tests/${encodeURIComponent(id)}/emergency-stop`, {
-    method: "POST",
-  });
-}
-
 /** What the printer reports about itself right now. */
 export function getPrinter(signal?: AbortSignal) {
   return apiJson<PrinterState>("printer", { signal });

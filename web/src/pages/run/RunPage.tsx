@@ -69,7 +69,7 @@ export function RunPage() {
   if (live.test) {
     body = <ProgressView test={live.test} connected={live.connected} />;
   } else if (starting && startedId) {
-    body = <StartingView id={startedId} connected={live.connected} />;
+    body = <StartingView connected={live.connected} />;
   } else if (showResult && finished) {
     body = <ResultView last={finished} onNewTest={newTest} />;
   } else {

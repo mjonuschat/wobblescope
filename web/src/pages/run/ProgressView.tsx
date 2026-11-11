@@ -5,8 +5,6 @@ import { LoaderCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { useEmergencyStop } from "@/lib/api/queries";
 import type { FinishedOutcome } from "@/lib/generated/FinishedOutcome";
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
@@ -34,33 +32,6 @@ const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
 /** What the user is told after an emergency stop. */
 export const SHUTDOWN_NOTICE =
   "Emergency stop sent. Klipper is in shutdown and needs a FIRMWARE_RESTART before it moves again.";
-
-/** The red button, at the right under a separator. It never asks for confirmation. */
-function StopButton({ id }: { id: string }) {
-  const stop = useEmergencyStop();
-  return (
-    <>
-      <Separator />
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          {stop.isSuccess && (
-            <p role="status" className="text-sm">
-              {SHUTDOWN_NOTICE}
-            </p>
-          )}
-          {stop.isError && (
-            <p role="alert" className="text-sm text-destructive">
-              {stop.error.message}
-            </p>
-          )}
-        </div>
-        <Button type="button" variant="destructive" size="lg" className="ml-auto px-5" onClick={() => stop.mutate(id)}>
-          Emergency stop
-        </Button>
-      </div>
-    </>
-  );
-}
 
 function PanelCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -108,24 +79,17 @@ export function ProgressView({ test, connected }: ProgressProps) {
       <PanelCard title="Signal">
         <LiveChart test={test} />
       </PanelCard>
-      <StopButton id={test.id} />
     </div>
   );
 }
 
 interface StartingProps {
-  /** The id the daemon accepted. */
-  id: string;
   /** Whether the live socket is open. */
   connected: boolean;
 }
 
-/**
- * Shown from the 202 until the live socket names the new test. The test is already running, so
- * the stop button is here too: a proxy that refuses the websocket must not leave the user with
- * no way to stop it.
- */
-export function StartingView({ id, connected }: StartingProps) {
+/** Shown from the 202 until the live socket names the new test. */
+export function StartingView({ connected }: StartingProps) {
   return (
     <div className="space-y-4">
       <PanelCard title="Progress">
@@ -139,7 +103,6 @@ export function StartingView({ id, connected }: StartingProps) {
           </p>
         )}
       </PanelCard>
-      <StopButton id={id} />
     </div>
   );
 }
@@ -170,11 +133,11 @@ export function ResultView({ last, onNewTest }: ResultProps) {
         <p className="text-sm text-muted-foreground">No session was saved.</p>
       )}
       {last.motion_uncertain && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           <p role="alert" className="text-sm text-amber-400">
             The printer may still be moving.
           </p>
-          <StopButton id={last.id} />
+          <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
         </div>
       )}
       <Button

@@ -37,22 +37,19 @@ const done: FinishedTest = {
   motion_uncertain: false,
 };
 
-function api(stop: Reply = { body: { dispatched: true } }, start: Reply = { status: 202, body: { id: "test-1" } }) {
+function api(start: Reply = { status: 202, body: { id: "test-1" } }) {
   return stubApiWithStatus((call: ApiCall) => {
     const path = apiPath(call);
     if (path === "settings") return { body: printerSettings() };
     if (path === "chips") return { body: chipsSnapshot() };
     if (path === "tests") return start;
-    if (path.endsWith("/emergency-stop")) return stop;
     return { status: 404, body: { error: "not_found", message: "no" } };
   });
 }
 
-const stops = (calls: ApiCall[]) => calls.filter((c) => apiPath(c).endsWith("/emergency-stop"));
-
 /** Renders the run screen and opens the live socket with `snapshot`. */
-async function mount(snapshot: { test: TestState | null; last: FinishedTest | null }, stop?: Reply) {
-  const calls = api(stop);
+async function mount(snapshot: { test: TestState | null; last: FinishedTest | null }) {
+  const calls = api();
   renderRoute("/run/shaper");
   await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
   act(() => FakeSocket.latest.open());
@@ -86,33 +83,23 @@ describe("a running test", () => {
     expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
   });
 
-  it("stops with one click and no dialog, and a failed finish shows the shutdown notice", async () => {
-    const calls = await mount({ test: running, last: null });
-    fireEvent.click(await screen.findByRole("button", { name: "Emergency stop" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    await waitFor(() => expect(stops(calls)).toHaveLength(1));
-    expect(apiPath(stops(calls)[0])).toBe("tests/test-1/emergency-stop");
-    expect(await screen.findByText(/FIRMWARE_RESTART/)).toBeTruthy();
-
+  it("shows the shutdown notice when the test ended with an emergency stop", async () => {
+    await mount({ test: running, last: null });
     send({ test: null, last: { ...done, outcome: "failed", reason: "emergency stop" } });
     expect(await screen.findByText("The test failed.")).toBeTruthy();
     expect(screen.getAllByText(/FIRMWARE_RESTART/).length).toBeGreaterThan(0);
   });
 
-  it("shows a failed stop request with the daemon message and keeps the button enabled", async () => {
-    await mount(
-      { test: running, last: null },
-      { status: 503, body: { error: "moonraker_unavailable", message: "Moonraker did not take the emergency stop" } },
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Emergency stop" }));
-    expect(await screen.findByText("Moonraker did not take the emergency stop")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Emergency stop" }) as HTMLButtonElement).disabled).toBe(false);
+  it("has no stop button of its own; the header has the printer's", async () => {
+    await mount({ test: running, last: null });
+    await screen.findByText("Progress");
+    expect(screen.queryByRole("button", { name: "Emergency stop" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop printer" })).toBeTruthy();
   });
 
-  it("says the failure is recorded while the sweep ends, with the stop button enabled", async () => {
+  it("says the failure is recorded while the sweep ends", async () => {
     await mount({ test: { ...running, phase: "waiting_for_sweep" }, last: null });
     expect(await screen.findByText("Failure recorded, waiting for the sweep to end")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Emergency stop" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   describe("chip warnings", () => {
@@ -156,14 +143,12 @@ describe("a running test", () => {
     });
   });
 
-  it("keeps the last state and the stop button when the socket drops, and a new snapshot clears the mark", async () => {
-    const calls = await mount({ test: running, last: null });
+  it("keeps the last state when the socket drops, and a new snapshot clears the mark", async () => {
+    await mount({ test: running, last: null });
     await screen.findByText("Progress");
     act(() => FakeSocket.latest.drop());
     expect(await screen.findByText(/Connection lost, this may be out of date/)).toBeTruthy();
     expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Emergency stop" }));
-    await waitFor(() => expect(stops(calls)).toHaveLength(1));
 
     // The page reconnects on its own; the new snapshot replaces the old state.
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(1), { timeout: 3000 });
@@ -191,21 +176,19 @@ describe("a finished test", () => {
     expect(screen.getByText("No session was saved.")).toBeTruthy();
   });
 
-  it("keeps the stop button and a warning while motion is uncertain, until an event clears it", async () => {
-    const calls = await mount({
+  it("keeps a warning while motion is uncertain, until an event clears it", async () => {
+    await mount({
       test: null,
       last: { ...done, outcome: "failed", reason: "the sweep's outcome is unknown", motion_uncertain: true },
     });
     expect(await screen.findByText("The printer may still be moving.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Emergency stop" }));
-    await waitFor(() => expect(stops(calls)).toHaveLength(1));
+    expect(screen.getByText(/stop button at the top right/)).toBeTruthy();
 
     send({ test: null, last: { ...done, outcome: "failed", reason: "x", motion_uncertain: false } });
     expect(screen.queryByText("The printer may still be moving.")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Emergency stop" })).toBeNull();
   });
 
-  it("does not let New test hide the stop button while motion is uncertain", async () => {
+  it("does not let New test hide the warning while motion is uncertain", async () => {
     await mount({
       test: null,
       last: { ...done, outcome: "failed", reason: "the sweep's outcome is unknown", motion_uncertain: true },
@@ -213,7 +196,6 @@ describe("a finished test", () => {
     const newTest = await screen.findByRole("button", { name: "New test" });
     expect((newTest as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(newTest);
-    expect(screen.getByRole("button", { name: "Emergency stop" })).toBeTruthy();
     expect(screen.getByText("The printer may still be moving.")).toBeTruthy();
 
     send({ test: null, last: { ...done, outcome: "failed", reason: "x", motion_uncertain: false } });
@@ -247,16 +229,13 @@ describe("a finished test", () => {
 });
 
 describe("starting a test", () => {
-  it("keeps the stop button when the live socket never delivers a snapshot", async () => {
-    const calls = api();
+  it("says the live view is not connected when the socket never delivers a snapshot", async () => {
+    api();
     renderRoute("/run/shaper");
     // The socket is never opened, as when a proxy refuses the upgrade.
     fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
     expect(await screen.findByText("Starting…")).toBeTruthy();
     expect(screen.getByText(/The live view is not connected/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Emergency stop" }));
-    await waitFor(() => expect(stops(calls)).toHaveLength(1));
-    expect(apiPath(stops(calls)[0])).toBe("tests/test-1/emergency-stop");
   });
 
   it("shows Starting… after the 202 and progress once the live state names the test", async () => {
