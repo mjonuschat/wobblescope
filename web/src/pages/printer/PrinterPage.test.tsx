@@ -5,7 +5,7 @@ import { chip, printerSettings } from "@/test/capture";
 import { renderRoute } from "@/test/render";
 import { apiPath, stubApiWithStatus } from "@/test/status";
 
-import { measure } from "./PrinterPage";
+import { firmwareName, measure } from "./PrinterPage";
 
 function api() {
   stubApiWithStatus((call) => {
@@ -59,6 +59,14 @@ describe("the printer page", () => {
     api();
     renderRoute("/");
     expect(await screen.findByText("Sweeping period")).toBeTruthy();
+  });
+});
+
+describe("firmwareName", () => {
+  it("calls mainline Klipper and keeps Kalico", () => {
+    expect(firmwareName("mainline")).toBe("Klipper");
+    expect(firmwareName("kalico")).toBe("Kalico");
+    expect(firmwareName("unknown")).toBe("unknown");
   });
 });
 

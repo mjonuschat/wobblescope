@@ -19,9 +19,9 @@ export function measure(value: number | null | undefined, unit: string, digits =
   return unit ? `${text} ${unit}` : text;
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
-    <div>
+    <div className={className}>
       <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="font-mono text-sm">{children}</dd>
     </div>
@@ -43,16 +43,21 @@ function Fields({ children }: { children: ReactNode }) {
   return <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">{children}</dl>;
 }
 
+/** The firmware's display name: Klipper for mainline, Kalico for its fork. */
+export function firmwareName(variant: PrinterSettings["variant"]): string {
+  return { mainline: "Klipper", kalico: "Kalico", unknown: UNKNOWN }[variant];
+}
+
 function MachineSection({ settings }: { settings: PrinterSettings }) {
   const m = settings.machine;
   return (
     <Section title={m.name ?? "Printer"}>
       <Fields>
         <Field label="Kinematics">{m.kinematics ?? UNKNOWN}</Field>
-        <Field label="Firmware">
-          {settings.variant === "unknown" ? UNKNOWN : settings.variant} {m.klipper_version ?? ""}
+        <Field label="Firmware" className="sm:col-span-2 lg:col-span-3">
+          {firmwareName(settings.variant)} {m.klipper_version ?? ""}
         </Field>
-        <Field label="MCUs">
+        <Field label="MCUs" className="col-span-full">
           {m.mcus.length > 0 ? m.mcus.map((name) => name.replace(/^mcu /, "")).join(", ") : UNKNOWN}
         </Field>
       </Fields>
