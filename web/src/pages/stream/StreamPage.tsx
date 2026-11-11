@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
+import { AudioLinesIcon } from "lucide-react";
+
 import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Waiting } from "@/components/Waiting";
 import { useChips } from "@/lib/api/queries";
 import { type SpectraState, type SpectrumWorkerLike, useSpectra } from "@/stream/useSpectra";
@@ -83,6 +87,16 @@ export function StreamPage({ createWorker }: Props) {
     }
   }
 
+  // Turns on every chip Klipper reports as usable, up to the most that can stream at once.
+  function enableAll() {
+    const sections = (chipList?.chips ?? [])
+      .filter((chip) => chip.availability.state !== "unavailable")
+      .map((chip) => chip.section)
+      .slice(0, maxChips);
+    setSelected(sections);
+    for (const section of sections) stream.subscribe(section, maxHz, updatesPerSecond);
+  }
+
   const shown = selected.flatMap((chip, index) => {
     const entry = shownSpectra[chip];
     return entry?.spectrum ? [{ chip, index, entry, spectrum: entry.spectrum }] : [];
@@ -132,7 +146,26 @@ export function StreamPage({ createWorker }: Props) {
         </Panel>
       )}
       {chipList && !hello && <Waiting>Waiting for the daemon's defaults.</Waiting>}
-      {selected.length === 0 && <p className="text-sm text-muted-foreground">Pick a chip to see its signal.</p>}
+      {hello && chipList && chipList.chips.length > 0 && selected.length === 0 && (
+        <Card>
+          <CardContent>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <AudioLinesIcon />
+                </EmptyMedia>
+                <EmptyTitle>No Sources Enabled</EmptyTitle>
+                <EmptyDescription>Please enable at least one chip to stream data from.</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button type="button" onClick={enableAll}>
+                  Enable All
+                </Button>
+              </EmptyContent>
+            </Empty>
+          </CardContent>
+        </Card>
+      )}
       {selected.length > 0 && (
         <Panel title="Signals">
           <SignalStrips

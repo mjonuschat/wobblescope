@@ -162,6 +162,28 @@ describe("the stream page", () => {
     expect(screen.queryByText("unchecked")).toBeNull();
   });
 
+  it("shows an empty state with Enable All while no chip is on", async () => {
+    open();
+    await connect();
+    expect(screen.getByText("No Sources Enabled")).toBeTruthy();
+    expect(screen.getByText("Please enable at least one chip to stream data from.")).toBeTruthy();
+    pick("a1");
+    expect(screen.queryByText("No Sources Enabled")).toBeNull();
+    pick("a1");
+    expect(screen.getByText("No Sources Enabled")).toBeTruthy();
+  });
+
+  it("turns every chip on with Enable All, up to the most that can stream", async () => {
+    open(5);
+    await connect();
+    fireEvent.click(screen.getByRole("button", { name: "Enable All" }));
+    expect(sent().map((m) => m.chip)).toEqual(["a1", "a2", "a3", "a4"]);
+    expect(sent()[0]).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 10 });
+    expect(screen.queryByText("No Sources Enabled")).toBeNull();
+    expect(screen.getByRole("switch", { name: "Stream a4" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Stream a5" }).getAttribute("aria-checked")).toBe("false");
+  });
+
   it("unsubscribes when a chip is cleared", async () => {
     open();
     await connect();
