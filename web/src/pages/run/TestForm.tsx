@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ApiClientError } from "@/lib/api/client";
 import { useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
@@ -20,6 +20,9 @@ import { OVERRIDE_FIELDS, type OverrideKey, formatDuration, segmentSeconds } fro
 /** The consequence of the emergency stop, shown before a test starts. */
 export const STOP_CONSEQUENCE =
   "Emergency stop puts Klipper into shutdown. You will need a FIRMWARE_RESTART afterwards.";
+
+/** The settings only one mode uses; they sit beside the mode choice. */
+const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
 
@@ -147,6 +150,31 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     );
   }
 
+  const overrideField = ({ key, label, unit }: (typeof OVERRIDE_FIELDS)[number]) => {
+    const setting = settings.settings[key];
+    const required = setting.needed && setting.value === null;
+    const placeholder = setting.value !== null ? String(setting.value) : required ? "required" : "printer default";
+    return (
+      <div key={key} className="space-y-1">
+        <Label htmlFor={`override-${key}`}>
+          {label} ({unit}){required ? " *" : ""}
+        </Label>
+        <Input
+          id={`override-${key}`}
+          inputMode="decimal"
+          placeholder={placeholder}
+          value={texts[key] ?? ""}
+          disabled={!setting.overridable}
+          aria-required={required}
+          aria-invalid={Boolean(typos[key] ?? errorFor(key))}
+          aria-describedby={`error-${key}`}
+          onChange={(e) => setTexts((old) => ({ ...old, [key]: e.target.value }))}
+        />
+        <FieldError name={key} text={typos[key] ?? errorFor(key)} />
+      </div>
+    );
+  };
+
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
       <FormCard title="Test">
@@ -205,22 +233,22 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
               ))}
             </div>
           </ChoiceRow>
-          <ChoiceRow label="Mode" error={<FieldError name="mode" text={errorFor("mode")} />}>
-            <ToggleGroup
-              variant="outline"
-              aria-label="Mode"
-              value={[mode]}
-              onValueChange={(value) => {
-                if (value.length > 0) setChosenMode(value[0] as Mode);
-              }}
-            >
-              {(["Pulse", "Sweep"] as const).map((m) => (
-                <ToggleGroupItem key={m} value={m}>
-                  {m}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </ChoiceRow>
+          <div className="grid grid-cols-3 items-start gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="mode">Mode</Label>
+              <Select value={mode} onValueChange={(value) => setChosenMode(value as Mode)}>
+                <SelectTrigger id="mode" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pulse">Pulse</SelectItem>
+                  <SelectItem value="Sweep">Sweep</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldError name="mode" text={errorFor("mode")} />
+            </div>
+            {OVERRIDE_FIELDS.filter(({ key }) => isModeField(key) && !sweepOnly(key)).map(overrideField)}
+          </div>
         </div>
       </FormCard>
 
@@ -229,31 +257,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
           Leave a field empty to use the printer's value, shown in the field.
         </p>
         <div className="grid grid-cols-2 gap-4">
-          {OVERRIDE_FIELDS.filter(({ key }) => !sweepOnly(key)).map(({ key, label, unit }) => {
-            const setting = settings.settings[key];
-            const required = setting.needed && setting.value === null;
-            const placeholder =
-              setting.value !== null ? String(setting.value) : required ? "required" : "printer default";
-            return (
-              <div key={key} className="space-y-1">
-                <Label htmlFor={`override-${key}`}>
-                  {label} ({unit}){required ? " *" : ""}
-                </Label>
-                <Input
-                  id={`override-${key}`}
-                  inputMode="decimal"
-                  placeholder={placeholder}
-                  value={texts[key] ?? ""}
-                  disabled={!setting.overridable}
-                  aria-required={required}
-                  aria-invalid={Boolean(typos[key] ?? errorFor(key))}
-                  aria-describedby={`error-${key}`}
-                  onChange={(e) => setTexts((old) => ({ ...old, [key]: e.target.value }))}
-                />
-                <FieldError name={key} text={typos[key] ?? errorFor(key)} />
-              </div>
-            );
-          })}
+          {OVERRIDE_FIELDS.filter(({ key }) => !isModeField(key)).map(overrideField)}
         </div>
       </FormCard>
 

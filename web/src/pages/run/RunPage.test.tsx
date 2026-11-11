@@ -32,7 +32,14 @@ function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, s
 }
 
 const startButton = () => screen.getByRole("button", { name: /Start test|Checking printer/ });
-const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed") === "true";
+const mode = () => screen.getByRole("combobox", { name: "Mode" }).textContent;
+async function chooseMode(name: "Pulse" | "Sweep") {
+  fireEvent.click(screen.getByRole("combobox", { name: "Mode" }));
+  const option = await screen.findByRole("option", { name });
+  fireEvent.pointerDown(option);
+  fireEvent.pointerUp(option);
+  fireEvent.click(option);
+}
 const isOn = (name: string) => screen.getByRole("switch", { name }).getAttribute("aria-checked") === "true";
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
 const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && apiPath(c) === "tests");
@@ -51,7 +58,7 @@ describe("the run screen", () => {
     await open();
     expect(field(/End frequency/).placeholder).toBe("135");
     expect(field(/Acceleration per Hz/).placeholder).toBe("60");
-    expect(pressed("Sweep")).toBe(true);
+    expect(mode()).toContain("Sweep");
     expect(isOn("lis2dw ebb36")).toBe(true);
     expect(isOn("adxl345")).toBe(false);
     expect((startButton() as HTMLButtonElement).disabled).toBe(false);
@@ -59,7 +66,7 @@ describe("the run screen", () => {
 
   it("preselects pulse when the printer sweeps with a period of 0", async () => {
     await open({ settings: { ...printerSettings(), default_mode: "Pulse" } });
-    expect(pressed("Pulse")).toBe(true);
+    expect(mode()).toContain("Pulse");
   });
 
   it("shows the emergency stop consequence before a test starts", async () => {
@@ -183,8 +190,8 @@ describe("the run screen", () => {
   it("hides the sweeping fields in pulse mode", async () => {
     await open();
     expect(screen.queryByLabelText(/Sweeping period/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Pulse" }));
-    expect(screen.queryByLabelText(/Sweeping period/)).toBeNull();
+    await chooseMode("Pulse");
+    await waitFor(() => expect(screen.queryByLabelText(/Sweeping period/)).toBeNull());
     expect(screen.queryByLabelText(/Sweeping acceleration/)).toBeNull();
     expect(screen.getByLabelText(/End frequency/)).toBeTruthy();
   });
