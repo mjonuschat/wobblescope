@@ -1,8 +1,10 @@
 import type { Axis } from "@/lib/generated/Axis";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
+import type { Homed } from "@/lib/generated/Homed";
 import type { Mode } from "@/lib/generated/Mode";
 import type { Overrides } from "@/lib/generated/Overrides";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
+import type { PrinterState } from "@/lib/generated/PrinterState";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
 import type { SessionList } from "@/lib/generated/SessionList";
 import type { StartedTest } from "@/lib/generated/StartedTest";
@@ -137,4 +139,19 @@ export function emergencyStop(id: string) {
   return apiJson<StopDispatched>(`tests/${encodeURIComponent(id)}/emergency-stop`, {
     method: "POST",
   });
+}
+
+/** What the printer reports about itself right now. */
+export function getPrinter(signal?: AbortSignal) {
+  return apiJson<PrinterState>("printer", { signal });
+}
+
+/** Stops the printer at once, whether or not a test is running. */
+export function stopPrinter() {
+  return apiJson<StopDispatched>("printer/emergency-stop", { method: "POST" });
+}
+
+/** Homes all axes. The answer comes when the move is done, which can take a minute. */
+export function homePrinter() {
+  return apiJson<Homed>("printer/home", { method: "POST" });
 }

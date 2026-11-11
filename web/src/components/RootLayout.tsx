@@ -1,6 +1,7 @@
 import { Link, Outlet } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/AppSidebar";
+import { PrinterControls } from "@/components/PrinterControls";
 import { StatusBanner } from "@/components/StatusBanner";
 import { StatusDots } from "@/components/StatusDots";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -19,6 +20,7 @@ export function RootLayout() {
         </div>
         <div className="flex flex-1 items-center px-4">
           <StatusDots />
+          <PrinterControls />
         </div>
       </header>
       <div className="flex flex-1">

@@ -22,8 +22,11 @@ import {
   getStorage,
   importCsv,
   listSessions,
+  getPrinter,
+  homePrinter,
   pinSession,
   startTest,
+  stopPrinter,
 } from "./endpoints";
 
 export const queryKeys = {
@@ -34,6 +37,7 @@ export const queryKeys = {
   settings: ["settings"] as const,
   chips: ["chips"] as const,
   status: ["status"] as const,
+  printer: ["printer"] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
   /** `createdAt` tells a session written again under the same id from the one analysed before. */
   analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = [], createdAt = "") =>
@@ -205,4 +209,35 @@ export function useStartTest() {
 
 export function useEmergencyStop() {
   return useMutation({ mutationFn: (id: string) => emergencyStop(id) });
+}
+
+/** The homed axes, polled while Klipper is ready. */
+export function usePrinterState(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.printer,
+    queryFn: ({ signal }) => getPrinter(signal),
+    refetchInterval: STATUS_POLL_MS,
+    retry: false,
+    enabled,
+  });
+}
+
+/** The emergency stop for the whole printer. Klipper shuts down, so the status is read again. */
+export function useStopPrinter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => stopPrinter(),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.status });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.printer });
+    },
+  });
+}
+
+export function useHomePrinter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => homePrinter(),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
+  });
 }
