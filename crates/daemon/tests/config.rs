@@ -238,3 +238,46 @@ fn a_bad_allowed_host_is_refused_naming_the_key_and_the_entry() {
 fn a_misspelled_listen_key_is_still_refused_by_name() {
     refused_naming("listen_addr = \"0.0.0.0:7126\"\n", "listen_addr");
 }
+
+#[test]
+fn the_stream_settings_default_and_can_be_set() {
+    let s = load_text("").unwrap();
+    assert_eq!(s.stream_idle_updates_per_second, 10.0);
+    assert_eq!(s.stream_printing_updates_per_second, 5.0);
+    assert_eq!(s.stream_max_updates_per_second, 20.0);
+    assert_eq!(s.stream_default_max_hz, 200.0);
+    assert_eq!(s.stream_max_hz, 1600.0);
+    let s = load_text("stream_printing_updates_per_second = 2\n").unwrap();
+    assert_eq!(s.stream_printing_updates_per_second, 2.0);
+}
+
+#[test]
+fn stream_limits_below_their_defaults_are_refused_by_name() {
+    refused_naming(
+        "stream_max_updates_per_second = 3\n",
+        "stream_max_updates_per_second",
+    );
+    refused_naming("stream_max_hz = 100\n", "stream_max_hz");
+}
+
+#[test]
+fn stream_settings_out_of_range_are_refused_by_name() {
+    for key in [
+        "stream_idle_updates_per_second",
+        "stream_printing_updates_per_second",
+        "stream_max_updates_per_second",
+    ] {
+        refused_naming(&format!("{key} = 0.4\n"), key);
+    }
+    for key in [
+        "stream_idle_updates_per_second",
+        "stream_printing_updates_per_second",
+        "stream_max_updates_per_second",
+        "stream_default_max_hz",
+        "stream_max_hz",
+    ] {
+        for value in ["0", "-1", "nan", "inf"] {
+            refused_naming(&format!("{key} = {value}\n"), key);
+        }
+    }
+}

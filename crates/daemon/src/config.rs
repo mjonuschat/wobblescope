@@ -113,13 +113,18 @@ struct RawConfig {
     moonraker_url: Option<String>,
     moonraker_api_key: Option<String>,
     max_segment_seconds: Option<u32>,
+    stream_idle_updates_per_second: Option<f64>,
+    stream_printing_updates_per_second: Option<f64>,
+    stream_max_updates_per_second: Option<f64>,
+    stream_default_max_hz: Option<f64>,
+    stream_max_hz: Option<f64>,
     listen: Option<String>,
     trusted_proxies: Option<Vec<String>>,
     allowed_hosts: Option<Vec<String>>,
 }
 
 /// The storage settings, with sizes in bytes.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Settings {
     /// Where sessions and pins live, when the config names it.
     pub storage_dir: Option<PathBuf>,
@@ -133,6 +138,16 @@ pub struct Settings {
     pub moonraker_api_key: Option<String>,
     /// The longest one `TEST_RESONANCES` command may be expected to run, in seconds.
     pub max_segment_seconds: u32,
+    /// The stream view's display updates per second while no test or print runs.
+    pub stream_idle_updates_per_second: f64,
+    /// The stream view's display updates per second while a print runs.
+    pub stream_printing_updates_per_second: f64,
+    /// The most display updates per second a viewer may ask for.
+    pub stream_max_updates_per_second: f64,
+    /// The top of the stream view's frequency range when the viewer does not set one, in Hz.
+    pub stream_default_max_hz: f64,
+    /// The highest top of the frequency range a viewer may ask for, in Hz.
+    pub stream_max_hz: f64,
     /// The address the daemon listens on.
     pub listen: SocketAddr,
     /// The addresses and networks whose `X-Forwarded-For` the daemon believes.
@@ -180,6 +195,20 @@ impl fmt::Debug for Settings {
             .field("free_space_headroom_bytes", &self.free_space_headroom_bytes)
             .field("moonraker_url", &self.moonraker_url)
             .field("max_segment_seconds", &self.max_segment_seconds)
+            .field(
+                "stream_idle_updates_per_second",
+                &self.stream_idle_updates_per_second,
+            )
+            .field(
+                "stream_printing_updates_per_second",
+                &self.stream_printing_updates_per_second,
+            )
+            .field(
+                "stream_max_updates_per_second",
+                &self.stream_max_updates_per_second,
+            )
+            .field("stream_default_max_hz", &self.stream_default_max_hz)
+            .field("stream_max_hz", &self.stream_max_hz)
             .field("listen", &self.listen)
             .field("trusted_proxies", &self.trusted_proxies)
             .field("allowed_hosts", &self.allowed_hosts)
@@ -200,6 +229,11 @@ impl Default for Settings {
             moonraker_url: Uri::from_static(DEFAULT_MOONRAKER_URL),
             moonraker_api_key: None,
             max_segment_seconds: DEFAULT_MAX_SEGMENT_SECONDS,
+            stream_idle_updates_per_second: 10.0,
+            stream_printing_updates_per_second: 5.0,
+            stream_max_updates_per_second: 20.0,
+            stream_default_max_hz: 200.0,
+            stream_max_hz: 1600.0,
             listen: DEFAULT_LISTEN,
             trusted_proxies: Vec::new(),
             allowed_hosts: Vec::new(),
@@ -249,6 +283,37 @@ fn allowed_host(text: &str) -> Result<String, &'static str> {
     Ok(text.to_lowercase())
 }
 
+/// The least display update rate, matching the minimum the stream clamp uses.
+const MIN_UPDATES_PER_SECOND: f64 = 0.5;
+
+/// The value or its default, which must be finite and at least `min`; `too_small` is the
+/// reason given when it is not.
+fn finite_at_least(
+    value: Option<f64>,
+    default: f64,
+    min: f64,
+    too_small: &'static str,
+) -> Result<f64, &'static str> {
+    let value = value.unwrap_or(default);
+    if !value.is_finite() {
+        return Err("must be a finite number");
+    }
+    if value < min {
+        return Err(too_small);
+    }
+    Ok(value)
+}
+
+/// A display update rate: finite and at least [`MIN_UPDATES_PER_SECOND`].
+fn rate(value: Option<f64>, default: f64) -> Result<f64, &'static str> {
+    finite_at_least(
+        value,
+        default,
+        MIN_UPDATES_PER_SECOND,
+        "must be at least 0.5",
+    )
+}
+
 /// Loads the settings from `path`, or returns the defaults when there is no path.
 ///
 /// # Errors
@@ -275,6 +340,48 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
     }
     if raw.max_segment_seconds == Some(0) {
         return Err(invalid("max_segment_seconds", "must be above 0"));
+    }
+    let defaults = Settings::default();
+    let stream_idle = rate(
+        raw.stream_idle_updates_per_second,
+        defaults.stream_idle_updates_per_second,
+    )
+    .map_err(|reason| invalid("stream_idle_updates_per_second", reason))?;
+    let stream_printing = rate(
+        raw.stream_printing_updates_per_second,
+        defaults.stream_printing_updates_per_second,
+    )
+    .map_err(|reason| invalid("stream_printing_updates_per_second", reason))?;
+    let stream_max_rate = rate(
+        raw.stream_max_updates_per_second,
+        defaults.stream_max_updates_per_second,
+    )
+    .map_err(|reason| invalid("stream_max_updates_per_second", reason))?;
+    let stream_default_hz = finite_at_least(
+        raw.stream_default_max_hz,
+        defaults.stream_default_max_hz,
+        1.0,
+        "must be at least 1",
+    )
+    .map_err(|reason| invalid("stream_default_max_hz", reason))?;
+    let stream_max_hz = finite_at_least(
+        raw.stream_max_hz,
+        defaults.stream_max_hz,
+        1.0,
+        "must be at least 1",
+    )
+    .map_err(|reason| invalid("stream_max_hz", reason))?;
+    if stream_max_rate < stream_idle.max(stream_printing) {
+        return Err(invalid(
+            "stream_max_updates_per_second",
+            "must be at least the idle and printing update rates",
+        ));
+    }
+    if stream_max_hz < stream_default_hz {
+        return Err(invalid(
+            "stream_max_hz",
+            "must be at least stream_default_max_hz",
+        ));
     }
     if raw.moonraker_api_key.as_deref() == Some("") {
         return Err(invalid("moonraker_api_key", "must not be empty"));
@@ -312,7 +419,6 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         allowed_hosts
             .push(allowed_host(text).map_err(|reason| entry("allowed_hosts", text, reason))?);
     }
-    let defaults = Settings::default();
     let moonraker_url = match raw.moonraker_url {
         Some(text) => moonraker_url(&text).map_err(|reason| invalid("moonraker_url", reason))?,
         None => defaults.moonraker_url,
@@ -326,6 +432,11 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         max_segment_seconds: raw
             .max_segment_seconds
             .unwrap_or(defaults.max_segment_seconds),
+        stream_idle_updates_per_second: stream_idle,
+        stream_printing_updates_per_second: stream_printing,
+        stream_max_updates_per_second: stream_max_rate,
+        stream_default_max_hz: stream_default_hz,
+        stream_max_hz,
         storage_dir: raw.storage_dir,
         retention_cap_bytes: raw
             .retention_cap_mib
