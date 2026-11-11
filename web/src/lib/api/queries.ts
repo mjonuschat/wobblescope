@@ -3,6 +3,7 @@ import { useEffect } from "react";
 
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
+import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
 
 import { getAnalysisClient } from "@/analysis/client";
@@ -13,17 +14,21 @@ import {
   type SessionFilters,
   type StartTestRequest,
   checkChips,
+  deleteResult,
   deleteSession,
   getChips,
+  getResult,
   getSession,
   getSettings,
   getStatus,
   getStorage,
   importCsv,
+  listResults,
   listSessions,
   getPrinter,
   homePrinter,
   pinSession,
+  saveResult,
   startTest,
   stopPrinter,
 } from "./endpoints";
@@ -32,6 +37,8 @@ export const queryKeys = {
   sessionLists: ["sessions", "list"] as const,
   sessionList: (filters: SessionFilters) => ["sessions", "list", filters] as const,
   session: (id: string) => ["sessions", "detail", id] as const,
+  results: ["results"] as const,
+  result: (id: string) => ["results", id] as const,
   storage: ["storage"] as const,
   settings: ["settings"] as const,
   chips: ["chips"] as const,
@@ -39,8 +46,8 @@ export const queryKeys = {
   printer: ["printer"] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
   /** `createdAt` tells a session written again under the same id from the one analysed before. */
-  analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = [], createdAt = "") =>
-    ["analysis", id, axis, params, overrides, createdAt] as const,
+  analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = [], createdAt = "", resultId = "") =>
+    ["analysis", id, axis, params, overrides, createdAt, resultId] as const,
 };
 
 /** A daemon answer with a JSON error is final. Anything else may be a blip, so retry it twice. */
@@ -73,6 +80,20 @@ export function useStorage() {
   return useQuery({
     queryKey: queryKeys.storage,
     queryFn: ({ signal }) => getStorage(signal),
+  });
+}
+
+export function useResults() {
+  return useQuery({
+    queryKey: queryKeys.results,
+    queryFn: ({ signal }) => listResults(signal),
+  });
+}
+
+export function useResult(id: string) {
+  return useQuery({
+    queryKey: queryKeys.result(id),
+    queryFn: ({ signal }) => getResult(id, signal),
   });
 }
 
@@ -234,5 +255,30 @@ export function useHomePrinter() {
   return useMutation({
     mutationFn: () => homePrinter(),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
+  });
+}
+
+export function useSaveResult() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, body }: { sessionId: string; body: SaveRequest }) => saveResult(sessionId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.results });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
+    },
+  });
+}
+
+export function useDeleteResult() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteResult(id),
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.result(id) });
+      queryClient.removeQueries({ queryKey: queryKeys.analysesOf(`result:${id}`) });
+      getAnalysisClient().forget(`result:${id}`);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.results });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
+    },
   });
 }

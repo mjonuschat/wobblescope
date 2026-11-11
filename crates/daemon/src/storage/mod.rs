@@ -11,11 +11,13 @@ pub mod estimate;
 pub mod index;
 pub mod pins;
 pub mod probe;
+mod results;
 
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
@@ -108,6 +110,14 @@ pub enum StorageError {
         /// Segment position asked for.
         segment: usize,
     },
+    #[error("session {0} was replaced since it was analysed")]
+    SessionChanged(String),
+    #[error("no result {0}")]
+    ResultNotFound(String),
+    #[error("result {id} is unusable: {reason}")]
+    ResultUnusable { id: String, reason: String },
+    #[error("cannot save result: {0}")]
+    BadRequest(String),
     /// The session to store does not match its reservation or cannot be indexed.
     #[error("cannot store session: {0}")]
     BadSession(String),
@@ -191,6 +201,10 @@ pub struct Usage {
     pub free_bytes: u64,
     /// Number of indexed sessions.
     pub session_count: usize,
+    /// Number of saved result files. Results are outside the retention cap.
+    pub result_count: usize,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub result_bytes: u64,
 }
 
 struct State {
@@ -198,10 +212,18 @@ struct State {
     pins: Pins,
     leases: HashMap<String, usize>,
     reservations: HashMap<String, u64>,
+    /// Space promised to saves in progress. Counts toward free space, never toward the cap.
+    result_reservations: HashMap<String, u64>,
 }
 
 struct Inner {
     sessions_dir: PathBuf,
+    results_dir: PathBuf,
+    save_hook: Mutex<Option<SaveHook>>,
+    /// Outcome of the last verification of each result file, so a read does not hash it again.
+    /// Held only to read or write an entry, never while verifying.
+    verified: Mutex<HashMap<PathBuf, results::VerifiedEntry>>,
+    verifications: AtomicU64,
     pins_path: PathBuf,
     cap_bytes: u64,
     headroom_bytes: u64,
@@ -214,6 +236,10 @@ impl Inner {
         crate::lock::lock(&self.state)
     }
 }
+
+/// Called by a save after its space is reserved and before it writes, so a test can act while
+/// the save holds its lease.
+type SaveHook = Arc<dyn Fn(&Storage) + Send + Sync>;
 
 /// The storage layer. Cloning shares one state.
 #[derive(Clone)]
@@ -236,15 +262,22 @@ impl Storage {
     ) -> Result<(Self, OpenReport), StorageError> {
         let sessions_dir = data_dir.join("sessions");
         let pins_path = data_dir.join("pins.json");
+        let results_dir = data_dir.join("results");
         fs::create_dir_all(&sessions_dir)?;
+        fs::create_dir_all(&results_dir)?;
         let mut pins = Pins::load(&pins_path)?;
         let recovered = recover_unsealed(&sessions_dir)?;
-        let swept = sweep_leftovers(&sessions_dir)?;
+        let mut swept = sweep_leftovers(&sessions_dir)?;
+        swept.extend(results::sweep_temporaries(&results_dir)?);
         let pruned_pins = pins.prune(|id| fs::symlink_metadata(sessions_dir.join(id)).is_ok());
         let (index, skipped) = index::scan(&sessions_dir, &pins)?;
         let storage = Self {
             inner: Arc::new(Inner {
                 sessions_dir,
+                results_dir,
+                save_hook: Mutex::new(None),
+                verified: Mutex::new(HashMap::new()),
+                verifications: AtomicU64::new(0),
                 pins_path,
                 cap_bytes: settings.retention_cap_bytes,
                 headroom_bytes: settings.free_space_headroom_bytes,
@@ -254,6 +287,7 @@ impl Storage {
                     pins,
                     leases: HashMap::new(),
                     reservations: HashMap::new(),
+                    result_reservations: HashMap::new(),
                 }),
             }),
         };
@@ -336,6 +370,7 @@ impl Storage {
     /// # Errors
     /// [`StorageError::Io`] when the free-space probe fails.
     pub fn usage(&self) -> Result<Usage, StorageError> {
+        let (result_count, result_bytes) = results::scan_usage(&self.inner.results_dir)?;
         let st = self.inner.lock();
         let free_bytes = (self.inner.probe)(&self.inner.sessions_dir)?;
         Ok(Usage {
@@ -345,6 +380,8 @@ impl Storage {
             cap_bytes: self.inner.cap_bytes,
             free_bytes,
             session_count: st.index.len(),
+            result_count,
+            result_bytes,
         })
     }
 
@@ -468,6 +505,12 @@ fn leased(st: &State, id: &str) -> bool {
 
 fn reserved_total(st: &State) -> u64 {
     st.reservations
+        .values()
+        .fold(0, |sum, b| sum.saturating_add(*b))
+}
+
+fn result_reserved_total(st: &State) -> u64 {
+    st.result_reservations
         .values()
         .fold(0, |sum, b| sum.saturating_add(*b))
 }

@@ -16,6 +16,9 @@ export function StorageUsage({ usage }: { usage: Usage }) {
       <p className="text-sm">
         {formatBytes(committed)} of {formatBytes(usage.cap_bytes)} used
       </p>
+      <p className="text-sm text-muted-foreground">
+        Saved results: {usage.result_count}, {formatBytes(usage.result_bytes)}
+      </p>
       <div
         role="progressbar"
         aria-label="Storage used"

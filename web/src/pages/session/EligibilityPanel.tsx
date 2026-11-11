@@ -53,11 +53,13 @@ export function EligibilityPanel({
   probePoints,
   overrides,
   onOverridesChange,
+  readOnly = false,
 }: {
   analysis: Analysis;
   probePoints: ProbePoint[];
   overrides: string[];
-  onOverridesChange: (overrides: string[]) => void;
+  onOverridesChange?: (overrides: string[]) => void;
+  readOnly?: boolean;
 }) {
   const { decisions } = analysis.eligibility;
   if (decisions.length === 0 && analysis.failures.length === 0) return null;
@@ -92,8 +94,9 @@ export function EligibilityPanel({
           <Checkbox
             id={`include-${chip}`}
             checked={overridden}
+            disabled={readOnly}
             onCheckedChange={(checked) =>
-              onOverridesChange(checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
+              onOverridesChange?.(checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
             }
           />
           <Label htmlFor={`include-${chip}`} className="font-normal">

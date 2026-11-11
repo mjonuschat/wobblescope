@@ -10,6 +10,7 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
+import { SaveResultDialog } from "./SaveResultDialog";
 import { baselineFor } from "./fit";
 
 type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
@@ -17,13 +18,17 @@ type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
 /** The analysis of the chosen axis: a wait, the reason it failed, or the results. */
 function AnalysisView({
   query,
+  id,
   axis,
   meta,
+  params,
   overrides,
   onOverridesChange,
 }: {
   query: AnalysisQuery;
+  id: string;
   axis: Axis;
+  params: FitParams;
   meta: SessionMeta;
   overrides: string[];
   onOverridesChange: (overrides: string[]) => void;
@@ -38,7 +43,19 @@ function AnalysisView({
       </p>
     );
   }
-  return <AxisResults result={query.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
+  return (
+    <div className="space-y-4">
+      <SaveResultDialog
+        sessionId={id}
+        meta={meta}
+        axis={axis}
+        params={params}
+        overrides={overrides}
+        result={query.data}
+      />
+      <AxisResults result={query.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />
+    </div>
+  );
 }
 
 /**
@@ -68,7 +85,8 @@ function Loaded({ id, meta }: { id: string; meta: SessionMeta }) {
   const axes = [...new Set(meta.segments.map((s) => s.axis))];
   const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
   const baseline = baselineFor(meta, axis ?? "X");
-  const query = useSessionAnalysis({ sessionId: id, meta, axis, params: applied ?? baseline.params, overrides });
+  const params = applied ?? baseline.params;
+  const query = useSessionAnalysis({ sessionId: id, meta, axis, params, overrides });
 
   return (
     <div className="space-y-4">
@@ -85,7 +103,15 @@ function Loaded({ id, meta }: { id: string; meta: SessionMeta }) {
               ))}
             </TabsList>
           </Tabs>
-          <AnalysisView query={query} axis={axis} meta={meta} overrides={overrides} onOverridesChange={setOverrides} />
+          <AnalysisView
+            query={query}
+            id={id}
+            axis={axis}
+            meta={meta}
+            params={params}
+            overrides={overrides}
+            onOverridesChange={setOverrides}
+          />
           <FitSettingsForm
             key={applied ? "applied" : axis}
             baseline={baseline}

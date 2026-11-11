@@ -104,6 +104,35 @@ describe("the analysis client", () => {
     expect(fetchSample).toHaveBeenCalledTimes(4);
   });
 
+  it("fetches a result job its own samples from the result route even when a session shares its id and creation time", async () => {
+    const { worker, fetchSample, job } = setup();
+    const fetchResultSample = vi.fn(
+      async (_id: string, chip: number, segment: number) => new Uint8Array([9, chip, segment]).buffer,
+    );
+    const shared = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample,
+      fetchResultSample,
+    });
+    const a = shared.analyze(job());
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await a;
+    const b = shared.analyze(job({ resultId: "r1" }));
+    await flush();
+    worker.answer(worker.analyses()[1].id);
+    await b;
+    expect(fetchSample).toHaveBeenCalledTimes(2);
+    expect(fetchResultSample.mock.calls.map((c) => `${c[0]}:${c[1]}/${c[2]}`)).toEqual(["r1:0/0", "r1:1/0"]);
+    expect(worker.analyses()[1].sessionId).toBe("result:r1");
+
+    const c = shared.analyze(job({ resultId: "r2" }));
+    await flush();
+    worker.answer(worker.analyses()[2].id);
+    await c;
+    expect(fetchResultSample).toHaveBeenCalledTimes(4);
+  });
+
   it("fetches every file again and tells the worker after the session is forgotten", async () => {
     const { worker, fetchSample, client, job } = setup();
     const a = client.analyze(job());
@@ -252,5 +281,28 @@ describe("the analysis client", () => {
     expect(createWorker).toHaveBeenCalledTimes(2);
     worker.answer(worker.analyses()[0].id);
     await expect(next).resolves.toBeTruthy();
+  });
+
+  it("the client fetches a result job\u2019s samples from the result route", async () => {
+    const worker = new FakeWorker();
+    const fetchSample = vi.fn(async () => new Uint8Array([1]).buffer);
+    const fetchResultSample = vi.fn(async () => new Uint8Array([2]).buffer);
+    const client = createAnalysisClient({ createWorker: () => worker, fetchSample, fetchResultSample });
+    const pending = client.analyze({
+      sessionId: "s1",
+      resultId: "r1",
+      meta: twoAxisMeta("s1"),
+      axis: "X",
+      params: defaultParams,
+      overrides: [],
+    });
+    await flush();
+    expect(fetchSample).not.toHaveBeenCalled();
+    expect(fetchResultSample.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+      ["r1", 0, 0],
+      ["r1", 1, 0],
+    ]);
+    worker.answer(1);
+    await pending;
   });
 });

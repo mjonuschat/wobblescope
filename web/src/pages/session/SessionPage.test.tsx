@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
 import type { Analysis } from "@/lib/generated/Analysis";
+import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import { analysis, decision, recommendation, twoAxisMeta } from "@/test/fixtures";
 import { stubApiWithStatus as stubApi } from "@/test/status";
 import { renderRoute } from "@/test/render";
@@ -380,5 +381,139 @@ describe("the session view", () => {
     renderRoute("/sessions/other");
     expect(await screen.findByText("no such session")).toBeTruthy();
     expect(fake.analyze).not.toHaveBeenCalled();
+  });
+
+  it("saves the shown analysis with the label, the worker\u2019s core version and the session\u2019s created_at", async () => {
+    const a = analysis();
+    a.core_version = "9.9.9";
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
+    const meta = twoAxisMeta();
+    const calls = stubApi(({ url, method }) => {
+      if (method === "POST" && url.pathname.endsWith("/sessions/s1/results")) {
+        return { status: 201, body: { id: "r-1" } };
+      }
+      return url.pathname.endsWith("/sessions/s1")
+        ? { body: { summary: summary("s1"), meta } }
+        : { status: 404, body: { error: "not_found", message: "no such session" } };
+    });
+    renderRoute("/sessions/s1");
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "after belts" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save result" }));
+    expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open" }).getAttribute("href")).toBe("/results/r-1");
+    const post = calls.find((c) => c.method === "POST")!;
+    const expected: SaveRequest = {
+      label: "after belts",
+      core_version: "9.9.9",
+      session_created_at: meta.created_at,
+      fit_params: fake.analyze.mock.calls[0][0].params,
+      overrides: [],
+      axes: [
+        {
+          axis: "X",
+          analysis: a,
+          snippets: {
+            worst_case: result(a, [SNIPPET, null]).snippets.worstCase,
+            per_chip: result(a, [SNIPPET, null]).snippets.perChip,
+          },
+        },
+      ],
+    };
+    expect(JSON.parse(post.body as string)).toEqual(expected);
+  });
+
+  it("shows the daemon\u2019s refusal when the session changed", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    stubApi(({ url, method }) => {
+      if (method === "POST") {
+        return {
+          status: 409,
+          body: { error: "session_changed", message: "the session changed since it was analysed" },
+        };
+      }
+      return url.pathname.endsWith("/sessions/s1")
+        ? { body: { summary: summary("s1"), meta: twoAxisMeta() } }
+        : { status: 404, body: { error: "not_found", message: "no such session" } };
+    });
+    renderRoute("/sessions/s1");
+    fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
+    const alert = await screen.findByText("the session changed since it was analysed");
+    expect(alert.closest('[role="alert"]')).toBeTruthy();
+  });
+
+  describe("the Save button", () => {
+    function serveSave(saves: number[]) {
+      stubApi(({ url, method }) => {
+        if (method === "POST" && url.pathname.endsWith("/sessions/s1/results")) {
+          const status = saves.shift() ?? 201;
+          return status === 201
+            ? { status, body: { id: "r-1" } }
+            : { status, body: { error: "internal", message: "disk is full" } };
+        }
+        return url.pathname.endsWith("/sessions/s1")
+          ? { body: { summary: summary("s1"), meta: twoAxisMeta() } }
+          : { status: 404, body: { error: "not_found", message: "no such session" } };
+      });
+    }
+    const saveButton = () => screen.getByRole("button", { name: "Save result" }) as HTMLButtonElement;
+
+    async function saveOnce() {
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      serveSave([]);
+      renderRoute("/sessions/s1");
+      fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
+      expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
+      expect(saveButton().disabled).toBe(true);
+    }
+
+    it("disables Save after a successful save until the label changes", async () => {
+      await saveOnce();
+      fireEvent.change(screen.getByLabelText("Label"), { target: { value: "again" } });
+      expect(saveButton().disabled).toBe(false);
+      expect(screen.queryByText(/Saved as r-1/)).toBeNull();
+      fireEvent.change(screen.getByLabelText("Label"), { target: { value: "" } });
+      expect(saveButton().disabled).toBe(true);
+      expect(screen.getByText(/Saved as r-1/)).toBeTruthy();
+    });
+
+    it("re-enables Save when the fit params change", async () => {
+      await saveOnce();
+      fireEvent.change(screen.getByLabelText(/Maximum Corner Rounding/), { target: { value: "0.1" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(saveButton().disabled).toBe(false));
+    });
+
+    it("re-enables Save when the axis or overrides change", async () => {
+      const a = analysis();
+      a.eligibility.decisions = [decision("a", "Included"), decision("b", "Excluded", ["degraded capture health"])];
+      fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
+      serveSave([]);
+      renderRoute("/sessions/s1");
+      fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
+      expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
+      expect(saveButton().disabled).toBe(true);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: /Include b anyway/ }));
+      await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(saveButton().disabled).toBe(false));
+      fireEvent.click(saveButton());
+      await waitFor(() => expect(saveButton().disabled).toBe(true));
+
+      fireEvent.click(screen.getByRole("tab", { name: "Axis Y" }));
+      await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(saveButton().disabled).toBe(false));
+    });
+
+    it("does not disable Save after a failed save", async () => {
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      serveSave([500]);
+      renderRoute("/sessions/s1");
+      fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
+      expect(await screen.findByText("disk is full")).toBeTruthy();
+      expect(saveButton().disabled).toBe(false);
+      fireEvent.click(saveButton());
+      expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
+    });
   });
 });

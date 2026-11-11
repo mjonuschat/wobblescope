@@ -21,10 +21,11 @@ interface Props {
   result: AnalysisResult;
   meta: SessionMeta;
   overrides: string[];
-  onOverridesChange: (overrides: string[]) => void;
+  onOverridesChange?: (overrides: string[]) => void;
+  readOnly?: boolean;
 }
 
-export function AxisResults({ result, meta, overrides, onOverridesChange }: Props) {
+export function AxisResults({ result, meta, overrides, onOverridesChange, readOnly }: Props) {
   const { analysis, snippets } = result;
   const settings = effectiveSettings(analysis);
   const maxFreq = settings?.max_freq ?? 200;
@@ -76,6 +77,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         probePoints={meta.probe_points}
         overrides={overrides}
         onOverridesChange={onOverridesChange}
+        readOnly={readOnly}
       />
       {showAll && analysis.summed ? (
         <CombinedResult summed={analysis.summed} maxFreq={maxFreq} switcher={switcher} />

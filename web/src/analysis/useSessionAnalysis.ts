@@ -18,6 +18,8 @@ const CACHE_MS = 5 * 60_000;
 
 interface Args {
   sessionId: string;
+  /** A saved result to fetch the samples from; `sessionId` is then only the cache key. */
+  resultId?: string;
   /** `SessionDetail.meta`; the analysis waits until it is there. */
   meta: SessionMeta | undefined;
   axis: Axis | null;
@@ -34,6 +36,7 @@ interface Args {
  */
 export function useSessionAnalysis({
   sessionId,
+  resultId,
   meta,
   axis,
   params,
@@ -41,8 +44,9 @@ export function useSessionAnalysis({
   client = getAnalysisClient(),
 }: Args) {
   return useQuery({
-    queryKey: queryKeys.analysis(sessionId, axis ?? "X", params, overrides, meta?.created_at),
-    queryFn: ({ signal }) => client.analyze({ sessionId, meta: meta!, axis: axis!, params, overrides }, signal),
+    queryKey: queryKeys.analysis(sessionId, axis ?? "X", params, overrides, meta?.created_at, resultId),
+    queryFn: ({ signal }) =>
+      client.analyze({ sessionId, resultId, meta: meta!, axis: axis!, params, overrides }, signal),
     enabled: meta !== undefined && axis !== null,
     gcTime: CACHE_MS,
     // The answer depends only on the key, so a cached result never goes stale.

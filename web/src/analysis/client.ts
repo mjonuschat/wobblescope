@@ -1,7 +1,7 @@
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
-import { fetchSample as fetchSampleFile } from "@/lib/api/endpoints";
+import { fetchResultSample as fetchResultSampleFile, fetchSample as fetchSampleFile } from "@/lib/api/endpoints";
 
 import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 
@@ -14,7 +14,10 @@ export interface WorkerLike {
 }
 
 export interface AnalysisJob {
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
   sessionId: string;
+  /** A saved result whose own sample files are fetched instead of the session's. */
+  resultId?: string;
   meta: SessionMeta;
   axis: Axis;
   params: FitParams;
@@ -39,6 +42,7 @@ export interface AnalysisClient {
 interface Options {
   createWorker: () => WorkerLike;
   fetchSample?: typeof fetchSampleFile;
+  fetchResultSample?: typeof fetchResultSampleFile;
 }
 
 interface Queued {
@@ -50,6 +54,11 @@ interface Queued {
 
 function abortError(): DOMException {
   return new DOMException("The analysis was cancelled", "AbortError");
+}
+
+/** What the worker and the held-files logic key a job by, so a result never shares files with a session. */
+function identityOf(job: AnalysisJob): string {
+  return job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId;
 }
 
 /** The recordings of one axis, as (chip position, segment position, file name). */
@@ -70,7 +79,11 @@ function filesFor(meta: SessionMeta, axis: Axis) {
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
  * request at a time: a newer request replaces one still waiting.
  */
-export function createAnalysisClient({ createWorker, fetchSample = fetchSampleFile }: Options): AnalysisClient {
+export function createAnalysisClient({
+  createWorker,
+  fetchSample = fetchSampleFile,
+  fetchResultSample = fetchResultSampleFile,
+}: Options): AnalysisClient {
   let worker: WorkerLike | null = null;
   let heldSession: string | null = null;
   let heldCreatedAt: string | null = null;
@@ -113,15 +126,22 @@ export function createAnalysisClient({ createWorker, fetchSample = fetchSampleFi
   async function run({ job, signal }: Queued): Promise<AnalysisResult> {
     if (signal?.aborted) throw abortError();
     const target = ensureWorker();
-    const sameSession = heldSession === job.sessionId && heldCreatedAt === job.meta.created_at;
+    const identity = identityOf(job);
+    const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at;
     const alreadyHeld = sameSession ? held : new Set<string>();
     const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name));
-    const buffers = await Promise.all(missing.map((f) => fetchSample(job.sessionId, f.chip, f.segment, signal)));
+    const buffers = await Promise.all(
+      missing.map((f) =>
+        job.resultId !== undefined
+          ? fetchResultSample(job.resultId, f.chip, f.segment, signal)
+          : fetchSample(job.sessionId, f.chip, f.segment, signal),
+      ),
+    );
     if (signal?.aborted) throw abortError();
     // The worker failed to load while the files were downloading, so nothing can answer.
     if (worker !== target) throw new Error("The analysis module failed to load");
     if (!sameSession) {
-      heldSession = job.sessionId;
+      heldSession = identity;
       heldCreatedAt = job.meta.created_at;
       held = new Set();
     }
@@ -146,7 +166,7 @@ export function createAnalysisClient({ createWorker, fetchSample = fetchSampleFi
         {
           type: "analyze",
           id,
-          sessionId: job.sessionId,
+          sessionId: identity,
           meta: job.meta,
           axis: job.axis,
           params: job.params,
