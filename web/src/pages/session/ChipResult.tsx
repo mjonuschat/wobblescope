@@ -34,9 +34,6 @@ export function ChipResult({ chip, switcher, snippets, probePoints, maxFreq, dec
         option={option}
         label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
       />
-      <p className="text-xs text-muted-foreground">
-        Spectra are frequency-normalised as in Klipper's graphs, not raw PSD.
-      </p>
       {rec ? (
         <ShaperTable recommendation={rec} snippets={snippets} />
       ) : (

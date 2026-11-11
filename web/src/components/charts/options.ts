@@ -20,14 +20,15 @@ const GRID = "rgba(255, 255, 255, 0.08)";
 const PALETTE = ["#ff7a33", "#4da3ff", "#7ee081", "#ffd166", "#c792ea", "#ef5b7b", "#5eead4", "#f59e0b"];
 const splitLine = { lineStyle: { color: GRID } };
 
-function base(title: string, maxFreq: number): EChartsCoreOption {
+/** The parts every chart shares. `title` is left out for a chart whose card already says what it is. */
+function base(title: string | null, maxFreq: number): EChartsCoreOption {
   return {
     backgroundColor: "transparent",
     textStyle: { color: text },
     color: PALETTE,
-    title: { text: title, left: 0, textStyle: { color: text, fontSize: 13, fontWeight: 500 } },
+    title: title ? { text: title, left: 0, textStyle: { color: text, fontSize: 13, fontWeight: 500 } } : undefined,
     tooltip: { trigger: "axis" },
-    grid: { top: 92, left: 64, right: 64, bottom: 40 },
+    grid: { top: title ? 92 : 64, left: 64, right: 64, bottom: 40 },
     xAxis: { type: "value", name: "Hz", min: 0, max: maxFreq, splitLine },
   };
 }
@@ -86,11 +87,11 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
     });
   }
   return {
-    ...base(`${chip.chip}: PSD and shaper response`, maxFreq),
-    legend: { type: "scroll", top: 34, selected, textStyle: { color: text } },
+    ...base(null, maxFreq),
+    legend: { type: "scroll", top: 0, selected, textStyle: { color: text } },
     yAxis: [
-      { type: "value", name: "Frequency-normalised PSD", splitLine },
-      { type: "value", name: "Shaper response", min: 0, max: 1, splitLine: { show: false } },
+      { type: "value", name: "Vibration strength", splitLine },
+      { type: "value", name: "Let through by shaper", min: 0, max: 1, splitLine: { show: false } },
     ],
     series,
   };
