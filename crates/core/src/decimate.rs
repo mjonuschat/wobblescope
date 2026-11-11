@@ -105,6 +105,12 @@ impl Decimator {
         self.input_rate_hz / self.factor as f64
     }
 
+    /// Forgets the filter history and restarts the phase, as for a new stream.
+    pub fn reset(&mut self) {
+        self.history.iter_mut().for_each(|h| h.fill(0.0));
+        self.next_index = 0;
+    }
+
     /// Filters `s` and returns the kept samples, each with the timestamp of the
     /// input sample it stands for. Chunk sizes do not change the result.
     pub fn process(&mut self, s: &RawSamples) -> RawSamples {

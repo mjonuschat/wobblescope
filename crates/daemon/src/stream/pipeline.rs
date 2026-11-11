@@ -230,6 +230,9 @@ impl ChipPipeline {
             && first - last > GAP_PERIODS * period
         {
             self.flush_frame(now, out);
+            if let State::Running { decimator, .. } = &mut self.state {
+                decimator.reset();
+            }
         }
     }
 

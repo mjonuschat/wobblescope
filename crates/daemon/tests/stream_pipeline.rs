@@ -203,6 +203,42 @@ fn a_timestamp_gap_ends_the_frame_and_nothing_panics() {
 }
 
 #[test]
+fn the_first_frame_after_a_gap_is_not_shaped_by_samples_from_before_it() {
+    let mut f = feed(3200.0, 200.0, 5.0);
+    f.run(3200.0, 1.0, 160);
+    // A large DC level up to the gap, silence after it.
+    let level = |f: &mut Feed, value: f64, seconds: f64| {
+        for _ in 0..(seconds * 3200.0 / 160.0) as usize {
+            let mut b = batch(f.t, 3200.0, 160);
+            for axis in [&mut b.samples.x, &mut b.samples.y, &mut b.samples.z] {
+                axis.fill(value);
+            }
+            let now = f.base + Duration::from_secs_f64(f.clock);
+            f.out.extend(f.pipe.push(&b, now));
+            f.t += 0.05;
+            f.clock += 0.05;
+        }
+    };
+    level(&mut f, 1000.0, 1.0);
+    let before = f.frames().len();
+    f.t += 2.0;
+    level(&mut f, 0.0, 1.0);
+
+    let frames: Vec<&Vec<u8>> = f
+        .out
+        .iter()
+        .filter_map(|o| match o {
+            Output::Frame(b) => Some(b),
+            _ => None,
+        })
+        .collect();
+    // frames[before] is the one flushed at the gap; the next is the first made after it.
+    let after = frames[before + 1];
+    let first_x = f32::from_le_bytes(after[16..20].try_into().unwrap());
+    assert!(first_x.abs() < 1.0, "pre-gap level leaked: {first_x}");
+}
+
+#[test]
 fn a_non_finite_or_backwards_batch_is_dropped_with_a_warning() {
     let mut f = feed(3200.0, 200.0, 10.0);
     f.run(3200.0, 0.5, 160);

@@ -115,3 +115,18 @@ fn bad_parameters_are_refused() {
         ));
     }
 }
+
+#[test]
+fn reset_makes_the_output_equal_to_a_fresh_decimators() {
+    let mut used = Decimator::new(FS, 200.0).unwrap();
+    let mut step = tone(100.0, 0.5);
+    step.x.iter_mut().for_each(|v| *v += 50.0);
+    used.process(&step);
+    // Odd length so the phase is not back at zero by chance.
+    used.process(&tone(40.0, 0.1234));
+    used.reset();
+
+    let input = tone(60.0, 1.0);
+    let mut fresh = Decimator::new(FS, 200.0).unwrap();
+    assert_eq!(used.process(&input), fresh.process(&input));
+}
