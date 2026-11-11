@@ -12,6 +12,7 @@ use wobblescope_core::CORE_VERSION;
 use wobblescope_core::error::CoreError;
 use wobblescope_core::fit::{Axis, FitParams, Recommendation};
 use wobblescope_core::multichip::{Analysis, analyze};
+use wobblescope_core::spectrum::{LiveSpectrum, Peak, Spectrum, top_peaks};
 use wobblescope_session::SessionError;
 use wobblescope_session::bridge::{apply_overrides, dataset_inputs};
 use wobblescope_session::codec::decode_samples;
@@ -88,6 +89,55 @@ impl Session {
         })?;
         apply_overrides(&mut inputs, overrides);
         Ok(analyze(&inputs, params)?)
+    }
+}
+
+/// Most samples per axis a live window may hold, so a mistaken or hostile caller cannot make
+/// the browser allocate gigabytes.
+pub const MAX_LIVE_WINDOW_SAMPLES: f64 = 4_000_000.0;
+
+/// A live spectrum over the latest seconds of a streamed accelerometer.
+#[derive(Debug, Clone)]
+pub struct Live {
+    inner: LiveSpectrum,
+}
+
+impl Live {
+    /// Opens a live window of `window_seconds` at `rate_hz`, reporting bins up to `max_hz`.
+    ///
+    /// # Errors
+    /// `InvalidParameter` for a bad argument or a window above [`MAX_LIVE_WINDOW_SAMPLES`].
+    pub fn new(rate_hz: f64, window_seconds: f64, max_hz: f64) -> Result<Self, CoreError> {
+        if rate_hz * window_seconds > MAX_LIVE_WINDOW_SAMPLES {
+            return Err(CoreError::InvalidParameter(format!(
+                "a window of {window_seconds} s at {rate_hz} Hz exceeds \
+                 {MAX_LIVE_WINDOW_SAMPLES} samples"
+            )));
+        }
+        Ok(Self {
+            inner: LiveSpectrum::new(rate_hz, window_seconds, max_hz)?,
+        })
+    }
+
+    /// Appends interleaved x, y, z samples starting at time `t0`; see
+    /// [`LiveSpectrum::push_f32`].
+    ///
+    /// # Errors
+    /// As [`LiveSpectrum::push_f32`].
+    pub fn push(&mut self, t0: f64, xyz: &[f32]) -> Result<(), CoreError> {
+        self.inner.push_f32(t0, xyz)
+    }
+
+    /// The current spectrum, or `None` until the window holds one full segment.
+    pub fn spectrum(&self) -> Option<Spectrum> {
+        self.inner.spectrum()
+    }
+
+    /// The strongest peaks of the current summed spectrum, empty when there is none.
+    pub fn peaks(&self, count: usize, min_separation_hz: f64) -> Vec<Peak> {
+        self.spectrum().map_or_else(Vec::new, |s| {
+            top_peaks(&s.freq_bins, &s.psd_sum, count, min_separation_hz)
+        })
     }
 }
 

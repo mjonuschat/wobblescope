@@ -6,7 +6,7 @@ use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::prelude::*;
 use wobblescope_core::fit::{Axis, FitParams, Recommendation};
 
-use crate::Session;
+use crate::{Live, Session};
 
 fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
     value
@@ -54,6 +54,45 @@ impl WasmSession {
             .analyze(axis, &params, &overrides.unwrap_or_default())
             .map_err(|e| JsError::new(&e.to_string()))?;
         to_js(&analysis)
+    }
+}
+
+/// A live spectrum over the latest seconds of a streamed accelerometer.
+#[wasm_bindgen]
+pub struct WasmLiveSpectrum {
+    inner: Live,
+}
+
+#[wasm_bindgen]
+impl WasmLiveSpectrum {
+    /// Opens a window of `window_seconds` at `rate_hz`, reporting bins up to `max_hz`.
+    /// Throws on bad parameters.
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        rate_hz: f64,
+        window_seconds: f64,
+        max_hz: f64,
+    ) -> Result<WasmLiveSpectrum, JsError> {
+        let inner =
+            Live::new(rate_hz, window_seconds, max_hz).map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// Appends interleaved x, y, z samples; sample `i` is at `t0 + i / rate_hz`.
+    pub fn push(&mut self, t0: f64, xyz: &[f32]) -> Result<(), JsError> {
+        self.inner
+            .push(t0, xyz)
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    /// The current `Spectrum`, or `null` until the window holds one full segment.
+    pub fn spectrum(&self) -> Result<JsValue, JsError> {
+        to_js(&self.inner.spectrum())
+    }
+
+    /// The strongest `Peak[]` of the current summed spectrum, empty when there is none.
+    pub fn peaks(&self, count: usize, min_separation_hz: f64) -> Result<JsValue, JsError> {
+        to_js(&self.inner.peaks(count, min_separation_hz))
     }
 }
 

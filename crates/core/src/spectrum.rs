@@ -27,7 +27,8 @@ pub struct Spectrum {
 }
 
 /// A local maximum of a spectrum.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Peak {
     /// Frequency in Hz.
     pub freq: f64,
