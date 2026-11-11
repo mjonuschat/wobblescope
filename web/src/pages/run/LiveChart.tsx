@@ -11,6 +11,7 @@ export function LiveChart({ test }: { test: TestState }) {
   useEffect(() => {
     setTraces((old) => extend(old, test));
   }, [test]);
-  const option = useMemo(() => liveSignalOption(traces.series), [traces]);
+  const [low, high] = test.frequency_range;
+  const option = useMemo(() => liveSignalOption(traces.series, [low, high]), [traces, low, high]);
   return <EChart option={option} label="Signal against frequency for each chip" height={260} />;
 }

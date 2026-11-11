@@ -340,6 +340,10 @@ impl Run {
             expected_segment_seconds: self.plan.segment_seconds,
             elapsed_seconds: segment.map_or(0.0, |(c, _)| c.began.elapsed().as_secs_f64()),
             frequency_hz: self.progress.frequency(),
+            frequency_range: [
+                self.plan.effective.freq_start,
+                self.plan.effective.freq_end,
+            ],
             chips: self.progress.snapshot(),
         };
         self.r.hub.update(|s| s.test = Some(state));

@@ -46,6 +46,10 @@ elapsed_seconds: number,
  */
 frequency_hz: number | null, 
 /**
+ * The lowest and highest frequency of every segment, in Hz, so a chart can fix its axis.
+ */
+frequency_range: [number, number], 
+/**
  * Per-chip level and warnings.
  */
 chips: Array<ChipLive>, };

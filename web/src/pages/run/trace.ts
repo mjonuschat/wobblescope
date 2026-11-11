@@ -57,7 +57,7 @@ const GRID = "rgba(255, 255, 255, 0.08)";
 const COLORS = ["#ff5a1f", "#ffb347", "#e0431a", "#ffd699"];
 
 /** A line per chip with Hz along the bottom and the signal up the side. */
-export function liveSignalOption(series: Trace[]): EChartsCoreOption {
+export function liveSignalOption(series: Trace[], range: [number, number]): EChartsCoreOption {
   return {
     backgroundColor: "transparent",
     textStyle: { color: text },
@@ -71,7 +71,9 @@ export function liveSignalOption(series: Trace[]): EChartsCoreOption {
       name: "Hz",
       nameLocation: "middle",
       nameGap: 24,
-      min: 0,
+      // The range is known before the sweep starts, so the axis does not rescale as points arrive.
+      min: range[0],
+      max: range[1],
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: { type: "value", name: "mm/s²", splitLine: { lineStyle: { color: GRID } } },

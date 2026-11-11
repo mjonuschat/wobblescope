@@ -66,6 +66,8 @@ pub struct TestState {
     /// whole-number frequency of "Testing frequency N Hz" and runs slightly ahead of the motion,
     /// because Klipper reports it when it queues the move.
     pub frequency_hz: Option<f64>,
+    /// The lowest and highest frequency of every segment, in Hz, so a chart can fix its axis.
+    pub frequency_range: [f64; 2],
     /// Per-chip level and warnings.
     pub chips: Vec<ChipLive>,
 }

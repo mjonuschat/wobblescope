@@ -27,6 +27,7 @@ const running: TestState = {
   expected_segment_seconds: 145,
   elapsed_seconds: 12,
   frequency_hz: 17,
+  frequency_range: [10, 135],
   chips: [
     { chip: "adxl345", level: [120, 40, 8], warnings: [] },
     { chip: "lis2dw ebb36", level: null, warnings: [] },

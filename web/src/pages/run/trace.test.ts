@@ -14,6 +14,7 @@ const state = (over: Partial<TestState> = {}): TestState => ({
   expected_segment_seconds: 100,
   elapsed_seconds: 10,
   frequency_hz: 12,
+  frequency_range: [10, 135],
   chips: [
     { chip: "a", level: [5, 50, 500], warnings: [] },
     { chip: "b", level: null, warnings: [] },
@@ -67,13 +68,24 @@ describe("extend", () => {
 
 describe("liveSignalOption", () => {
   it("draws a line per chip and a legend only for more than one", () => {
-    const one = liveSignalOption([{ chip: "a", points: [[1, 2]] }]) as { series: unknown[]; legend: unknown };
+    const one = liveSignalOption([{ chip: "a", points: [[1, 2]] }], [10, 135]) as {
+      series: unknown[];
+      legend: unknown;
+    };
     expect(one.series).toHaveLength(1);
     expect(one.legend).toBeUndefined();
-    const two = liveSignalOption([
-      { chip: "a", points: [] },
-      { chip: "b", points: [] },
-    ]) as { legend: unknown };
+    const two = liveSignalOption(
+      [
+        { chip: "a", points: [] },
+        { chip: "b", points: [] },
+      ],
+      [10, 135],
+    ) as { legend: unknown };
     expect(two.legend).toBeDefined();
+  });
+
+  it("fixes the frequency axis to the range of the run before any point arrives", () => {
+    const option = liveSignalOption([], [10, 135]) as { xAxis: { min: number; max: number } };
+    expect(option.xAxis).toMatchObject({ min: 10, max: 135 });
   });
 });
