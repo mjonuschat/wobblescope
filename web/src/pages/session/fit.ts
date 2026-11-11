@@ -22,14 +22,20 @@ export interface FitDraft {
   max_vibrations: string;
 }
 
-/** The form text for `params`: an unset value is an empty field. */
+/** A fraction as a percentage, without the float noise of multiplying by 100. */
+const toPercent = (fraction: number) => Number((fraction * 100).toPrecision(12));
+
+/**
+ * The form text for `params`: an unset value is an empty field. The vibration limit is a
+ * fraction in the analysis and a percentage on the page, as every other vibration is.
+ */
 export function draftFrom(params: FitParams): FitDraft {
   const text = (value: number | null) => (value === null ? "" : String(value));
   return {
     scv: String(params.scv),
     damping_ratio: text(params.damping_ratio),
     max_smoothing: text(params.max_smoothing),
-    max_vibrations: text(params.max_vibrations),
+    max_vibrations: params.max_vibrations === null ? "" : String(toPercent(params.max_vibrations)),
   };
 }
 
@@ -75,6 +81,7 @@ export function draftToParams(draft: FitDraft): DraftResult {
       ...defaultFitParams,
       ...parsed,
       scv: parsed.scv ?? defaultFitParams.scv,
+      max_vibrations: parsed.max_vibrations === null ? null : Number((parsed.max_vibrations / 100).toPrecision(12)),
     },
   };
 }

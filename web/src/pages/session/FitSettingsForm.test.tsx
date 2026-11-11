@@ -62,4 +62,12 @@ describe("FitSettingsForm", () => {
     expect(onReset).toHaveBeenCalledOnce();
     expect(onApply).not.toHaveBeenCalled();
   });
+
+  it("takes the vibration limit as a percentage", () => {
+    const onApply = vi.fn();
+    render(<FitSettingsForm onApply={onApply} />);
+    fireEvent.change(field(/Acceptable Vibration/), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ max_vibrations: 0.05 }));
+  });
 });

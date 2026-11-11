@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { twoAxisMeta } from "@/test/fixtures";
 
-import { baselineFor, defaultFitParams, draftFrom } from "./fit";
+import { baselineFor, defaultFitParams, draftFrom, draftToParams } from "./fit";
 
 const withPrinter = (over: Partial<NonNullable<ReturnType<typeof twoAxisMeta>["printer"]>>) => {
   const meta = twoAxisMeta();
@@ -47,5 +47,20 @@ describe("draftFrom", () => {
       max_smoothing: "",
       max_vibrations: "",
     });
+  });
+});
+
+describe("the vibration limit", () => {
+  it("is a percentage on the page and a fraction in the analysis", () => {
+    expect(draftFrom({ ...defaultFitParams, max_vibrations: 0.05 }).max_vibrations).toBe("5");
+    expect(draftFrom({ ...defaultFitParams, max_vibrations: 0.07 }).max_vibrations).toBe("7");
+    const draft = { ...draftFrom(defaultFitParams), max_vibrations: "5" };
+    const result = draftToParams(draft);
+    expect("params" in result && result.params.max_vibrations).toBe(0.05);
+  });
+
+  it("is unset when the field is empty", () => {
+    const result = draftToParams(draftFrom(defaultFitParams));
+    expect("params" in result && result.params.max_vibrations).toBeNull();
   });
 });
