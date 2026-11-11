@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Availability } from "@/lib/generated/Availability";
 import type { Chip } from "@/lib/generated/Chip";
 
@@ -47,12 +49,11 @@ export function ChipPicker({ chips, selected, maxChips, axes, onToggle, onAxes, 
           <li key={chip.section} className="space-y-2 rounded-md border p-3">
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   aria-label={`Stream ${chip.section}`}
                   checked={on}
                   disabled={blocked}
-                  onChange={() => onToggle(chip.section)}
+                  onCheckedChange={() => onToggle(chip.section)}
                 />
                 {chip.section}
               </label>
@@ -65,26 +66,22 @@ export function ChipPicker({ chips, selected, maxChips, axes, onToggle, onAxes, 
             </div>
             {on && (
               <div className="space-y-2">
-                <fieldset aria-label={`Axes of ${chip.section}`} className="m-0 flex min-w-0 gap-2 border-0 p-0">
-                  {AXIS_CHOICES.map(({ axis, label }) => {
-                    const pressed = chosen.includes(axis);
-                    return (
-                      <button
-                        key={axis}
-                        type="button"
-                        aria-pressed={pressed}
-                        aria-label={`${label} of ${chip.section}`}
-                        className={`rounded-md border px-2 py-0.5 text-xs ${pressed ? "border-neutral-300 bg-neutral-700" : "border-neutral-700"}`}
-                        onClick={() => {
-                          const next = pressed ? chosen.filter((a) => a !== axis) : [...chosen, axis];
-                          if (next.length > 0) onAxes(chip.section, next);
-                        }}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </fieldset>
+                <ToggleGroup
+                  multiple
+                  variant="outline"
+                  size="sm"
+                  aria-label={`Axes of ${chip.section}`}
+                  value={chosen}
+                  onValueChange={(next) => {
+                    if (next.length > 0) onAxes(chip.section, next as Axis3[]);
+                  }}
+                >
+                  {AXIS_CHOICES.map(({ axis, label }) => (
+                    <ToggleGroupItem key={axis} value={axis} aria-label={`${label} of ${chip.section}`}>
+                      {label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
                 {badge(chip.section)}
               </div>
             )}

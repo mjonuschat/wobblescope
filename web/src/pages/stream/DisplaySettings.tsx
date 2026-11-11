@@ -1,4 +1,8 @@
+import type { ReactNode } from "react";
+
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** The range choice. It is a fixed top frequency or the most the chips allow. */
 export type Range = number | "full";
@@ -34,54 +38,76 @@ interface Props {
   onResetPeakHold: () => void;
 }
 
+function Choice({
+  label,
+  value,
+  text,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  text: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  const id = `display-${label.toLowerCase().replaceAll(" ", "-")}`;
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={(next) => onChange(String(next))}>
+        <SelectTrigger id={id} className="w-40">
+          <SelectValue>{text}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>{children}</SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 /** The display choices: update rate, range, spectrum window, pause and peak-hold reset. */
 export function DisplaySettings(props: Props) {
-  const select = "rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm";
+  const rateText = (r: number) => `${r} per second`;
+  const rangeText = (range: Range) => (range === "full" ? `Full (${props.fullHz} Hz)` : `${range} Hz`);
   return (
     <div className="flex flex-wrap items-end gap-4">
-      <label className="space-y-1 text-sm">
-        <span className="block">Update rate</span>
-        <select
-          className={select}
-          value={props.updatesPerSecond}
-          onChange={(e) => props.onUpdatesPerSecond(Number(e.target.value))}
-        >
-          {rateOptions(props.rateLimit, props.updatesPerSecond).map((r) => (
-            <option key={r} value={r}>
-              {r} per second
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="space-y-1 text-sm">
-        <span className="block">Frequency range</span>
-        <select
-          className={select}
-          value={String(props.range)}
-          onChange={(e) => props.onRange(e.target.value === "full" ? "full" : Number(e.target.value))}
-        >
-          {rangeOptions(props.defaultMaxHz).map((hz) => (
-            <option key={hz} value={hz}>
-              {hz} Hz
-            </option>
-          ))}
-          <option value="full">Full ({props.fullHz} Hz)</option>
-        </select>
-      </label>
-      <label className="space-y-1 text-sm">
-        <span className="block">Spectrum window</span>
-        <select
-          className={select}
-          value={props.windowSeconds}
-          onChange={(e) => props.onWindowSeconds(Number(e.target.value))}
-        >
-          {WINDOW_SECONDS.map((s) => (
-            <option key={s} value={s}>
-              {s} s
-            </option>
-          ))}
-        </select>
-      </label>
+      <Choice
+        label="Update rate"
+        value={String(props.updatesPerSecond)}
+        text={rateText(props.updatesPerSecond)}
+        onChange={(value) => props.onUpdatesPerSecond(Number(value))}
+      >
+        {rateOptions(props.rateLimit, props.updatesPerSecond).map((r) => (
+          <SelectItem key={r} value={String(r)}>
+            {rateText(r)}
+          </SelectItem>
+        ))}
+      </Choice>
+      <Choice
+        label="Frequency range"
+        value={String(props.range)}
+        text={rangeText(props.range)}
+        onChange={(value) => props.onRange(value === "full" ? "full" : Number(value))}
+      >
+        {rangeOptions(props.defaultMaxHz).map((hz) => (
+          <SelectItem key={hz} value={String(hz)}>
+            {rangeText(hz)}
+          </SelectItem>
+        ))}
+        <SelectItem value="full">{rangeText("full")}</SelectItem>
+      </Choice>
+      <Choice
+        label="Spectrum window"
+        value={String(props.windowSeconds)}
+        text={`${props.windowSeconds} s`}
+        onChange={(value) => props.onWindowSeconds(Number(value))}
+      >
+        {WINDOW_SECONDS.map((s) => (
+          <SelectItem key={s} value={String(s)}>
+            {s} s
+          </SelectItem>
+        ))}
+      </Choice>
       <Button type="button" variant="outline" aria-pressed={props.paused} onClick={() => props.onPaused(!props.paused)}>
         {props.paused ? "Resume" : "Pause"}
       </Button>

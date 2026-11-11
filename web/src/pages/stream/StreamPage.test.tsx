@@ -104,6 +104,13 @@ async function connect(hello: unknown = HELLO) {
   await screen.findByLabelText("Stream a1");
 }
 const sent = () => socket().sent.map((m) => JSON.parse(m));
+async function choose(label: string, option: string | RegExp) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.pointerDown(item);
+  fireEvent.pointerUp(item);
+  fireEvent.click(item);
+}
 const pick = (name: string) => fireEvent.click(screen.getByLabelText(`Stream ${name}`));
 const chartProps = () => JSON.parse(screen.getByTestId("spectrum-chart").textContent ?? "");
 
@@ -136,9 +143,9 @@ describe("the stream page", () => {
     open(5);
     await connect();
     for (const n of names.slice(0, 4)) pick(n);
-    expect((screen.getByLabelText("Stream a5") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByRole("checkbox", { name: "Stream a5" }).getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByText("at most 4 chips at once")).toBeTruthy();
-    expect((screen.getByLabelText("Stream a1") as HTMLInputElement).disabled).toBe(false);
+    expect(screen.getByRole("checkbox", { name: "Stream a1" }).getAttribute("aria-disabled")).not.toBe("true");
   });
 
   it("unsubscribes when a chip is cleared", async () => {
@@ -172,7 +179,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    fireEvent.change(screen.getByLabelText("Frequency range"), { target: { value: "400" } });
+    await choose("Frequency range", "400 Hz");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 400, updates_per_second: 10 });
   });
 
@@ -180,7 +187,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    fireEvent.change(screen.getByLabelText("Update rate"), { target: { value: "5" } });
+    await choose("Update rate", "5 per second");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 5 });
   });
 
@@ -189,7 +196,7 @@ describe("the stream page", () => {
     await connect();
     pick("a1");
     server(streamHeader("a1", 0));
-    fireEvent.change(screen.getByLabelText("Frequency range"), { target: { value: "full" } });
+    await choose("Frequency range", /^Full/);
     expect(sent().at(-1).max_hz).toBe(800);
   });
 
@@ -227,7 +234,7 @@ describe("the stream page", () => {
     server(streamHeader("a1", 0));
     const configure = worker.posted.find((m) => (m as { type: string }).type === "configure");
     expect(configure).toMatchObject({ chip: "a1", windowSeconds: 1 });
-    expect((screen.getByLabelText("Spectrum window") as HTMLSelectElement).value).toBe("1");
+    expect(screen.getByRole("combobox", { name: "Spectrum window" }).textContent).toBe("1 s");
   });
 
   it("stops feeding the worker while paused and keeps the socket", async () => {
@@ -271,7 +278,7 @@ describe("the stream page", () => {
     await connect();
     pick("a1");
     server({ ...streamHeader("a1", 0), input_rate_hz: 400 });
-    fireEvent.change(screen.getByLabelText("Frequency range"), { target: { value: "full" } });
+    await choose("Frequency range", /^Full/);
     expect(sent().at(-1).max_hz).toBe(200);
   });
 
@@ -282,7 +289,7 @@ describe("the stream page", () => {
     pick("a2");
     server({ ...streamHeader("a1", 0), input_rate_hz: 1000 });
     server({ ...streamHeader("a2", 1), input_rate_hz: 600 });
-    fireEvent.change(screen.getByLabelText("Frequency range"), { target: { value: "full" } });
+    await choose("Frequency range", /^Full/);
     expect(sent().at(-1).max_hz).toBe(300);
   });
 

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Input } from "@/components/ui/input";
+
 import type { ChipSignal } from "./useSignalBuffers";
 
 export interface StripChip {
@@ -91,12 +93,12 @@ export function SignalStrips({ chips, paused }: Props) {
             <span className="font-medium">{chip}</span>
             <label className="ml-auto flex items-center gap-1">
               Scale
-              <input
+              <Input
                 type="number"
                 min={0}
                 placeholder="auto"
                 aria-label={`${chip} scale`}
-                className="w-24 rounded border border-input bg-transparent px-1"
+                className="h-7 w-24"
                 value={scales[chip] ?? ""}
                 onChange={(event) => setScales((old) => ({ ...old, [chip]: event.target.value }))}
               />
