@@ -53,7 +53,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     expect(await screen.findByText(/unknown capture health/)).toBeTruthy();
     expect(screen.getAllByText(/shaper_type_x: mzv/).length).toBeGreaterThan(0);
-    const worst = screen.getByRole("region", { name: "Worst case across all chips" });
+    const worst = screen.getByRole("region", { name: "Recommended Input Shaper" });
     fireEvent.click(worst.querySelector("button")!);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SNIPPET));
     expect(await screen.findByText("Copied")).toBeTruthy();
@@ -67,7 +67,7 @@ describe("the session view", () => {
     clipboard(value);
     serve();
     renderRoute("/sessions/s1");
-    const worst = await screen.findByRole("region", { name: "Worst case across all chips" });
+    const worst = await screen.findByRole("region", { name: "Recommended Input Shaper" });
     fireEvent.click(worst.querySelector("button")!);
     expect(await screen.findByText(/Copy failed/)).toBeTruthy();
     expect(worst.textContent).toContain("shaper_type_x: mzv");
@@ -82,7 +82,7 @@ describe("the session view", () => {
     const degraded = await screen.findByRole("region", { name: "Chip b" });
     expect(degraded.textContent).toContain("No recommendation for this chip: degraded capture health");
     expect(degraded.querySelector('[role="img"]')).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Worst case across all chips" }).textContent).toContain("mzv at 48.2 Hz");
+    expect(screen.getByRole("region", { name: "Recommended Input Shaper" }).textContent).toContain("mzv at 48.2 Hz");
   });
 
   it("lets the user include an excluded chip, and analyses again with it named", async () => {
@@ -142,7 +142,7 @@ describe("the session view", () => {
     expect(screen.getByRole("region", { name: "Chip b" }).textContent).toContain(
       "No recommendation for this chip: timestamps are not finite and strictly increasing",
     );
-    expect(screen.getByRole("region", { name: "Worst case across all chips" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recommended Input Shaper" })).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: /Include b anyway/ })).toBeNull();
   });
 
@@ -256,7 +256,7 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    await screen.findByRole("region", { name: "Worst case across all chips" });
+    await screen.findByRole("region", { name: "Recommended Input Shaper" });
     fireEvent.change(screen.getByLabelText(/Smoothing limit/), { target: { value: "0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));

@@ -30,7 +30,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
     <div className="space-y-4">
       {analysis.worst_case ? (
         <RecommendationCard
-          title="Worst case across all chips"
+          title="Recommended Input Shaper"
           recommendation={analysis.worst_case}
           snippet={snippets.worstCase}
           datasetVibrations={analysis.worst_case_vibrations}
