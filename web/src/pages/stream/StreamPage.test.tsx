@@ -1,7 +1,8 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { createQueryClient } from "@/lib/api/queries";
 import type { Spectrum } from "@/lib/generated/Spectrum";
 import { chip, chipsSnapshot } from "@/test/capture";
@@ -94,7 +95,9 @@ function open(count = 2) {
   );
   render(
     <QueryClientProvider client={createQueryClient()}>
-      <StreamPage createWorker={() => worker} />
+      <TooltipProvider delay={0}>
+        <StreamPage createWorker={() => worker} />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }
@@ -328,7 +331,7 @@ describe("the stream page", () => {
     server(streamHeader("a2", 1));
     server({ type: "closed", chip: "a1", reason: "the chip went away" });
     expect(screen.getByTestId("health-a1").dataset.tone).toBe("error");
-    expect(screen.getByText("Closed: the chip went away")).toBeTruthy();
+    expect(screen.getByTestId("health-a1").getAttribute("aria-label")).toContain("Closed: the chip went away");
     expect(screen.getByTestId("health-a2").dataset.tone).toBe("ok");
   });
 
@@ -340,11 +343,24 @@ describe("the stream page", () => {
     server(health("a1", { warnings: ["rate is low"] }));
     const badge = screen.getByTestId("health-a1");
     expect(badge.dataset.tone).toBe("warning");
-    expect(badge.textContent).toContain("Rate: 3190 Hz of 3200 Hz");
-    expect(badge.textContent).toContain("Overflows: 3");
-    expect(badge.textContent).toContain("Errors: 1");
-    expect(badge.textContent).toContain("Dropped frames: 7");
-    expect(within(badge).getByText("rate is low")).toBeTruthy();
+    const details = badge.getAttribute("aria-label") ?? "";
+    expect(badge.textContent).toContain("3190 / 3200 Hz");
+    expect(details).toContain("Rate: 3190 Hz of 3200 Hz");
+    expect(details).toContain("Overflows: 3");
+    expect(details).toContain("Errors: 1");
+    expect(details).toContain("Dropped frames: 7");
+    expect(details).toContain("rate is low");
+  });
+
+  it("shows the counts and warnings in a tooltip on the dot", async () => {
+    open();
+    await connect();
+    pick("a1");
+    server(streamHeader("a1", 0));
+    server(health("a1", { warnings: ["rate is low"] }));
+    fireEvent.focus(screen.getByTestId("health-a1"));
+    expect(await screen.findByText(/Overflows: 3/)).toBeTruthy();
+    expect(screen.getByText("rate is low")).toBeTruthy();
   });
 
   it("says not reported and not configured when the chip gives none", async () => {
@@ -353,7 +369,7 @@ describe("the stream page", () => {
     pick("a1");
     server(streamHeader("a1", 0));
     server(health("a1", { overflows: null, errors: null, configured_rate_hz: null }));
-    const text = screen.getByTestId("health-a1").textContent;
+    const text = screen.getByTestId("health-a1").getAttribute("aria-label") ?? "";
     expect(text).toContain("Overflows: not reported");
     expect(text).toContain("Errors: not reported");
     expect(text).toContain("not configured");
@@ -365,7 +381,9 @@ describe("the stream page", () => {
     pick("a1");
     server(streamHeader("a1", 0));
     act(() => worker.emit({ type: "error", chip: "a1", message: "wasm failed" }));
-    expect(screen.getByText("wasm failed").className).toContain("text-destructive");
+    const badge = screen.getByTestId("health-a1");
+    expect(badge.dataset.tone).toBe("error");
+    expect(badge.getAttribute("aria-label")).toContain("wasm failed");
   });
 
   it("shows console lines with errors in red and prefixes stripped", async () => {
