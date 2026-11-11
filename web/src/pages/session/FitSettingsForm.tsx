@@ -56,9 +56,11 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   return (
     <div className="space-y-1">
       <Tooltip>
-        <TooltipTrigger render={<Label htmlFor={id} className="w-fit cursor-help" />}>
-          {label}
-          <InfoIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
+        <TooltipTrigger render={<span className="block w-fit cursor-help" />}>
+          <Label htmlFor={id} className="cursor-help">
+            {label}
+            <InfoIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
+          </Label>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-64">
           {hint}
