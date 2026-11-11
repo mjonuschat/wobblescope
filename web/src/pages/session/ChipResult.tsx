@@ -69,7 +69,7 @@ export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Pro
       >
         <Maximize2Icon />
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100vh-4rem)] gap-4 overflow-auto sm:max-w-6xl">
+      <DialogContent className="max-h-[calc(100vh-4rem)] gap-4 overflow-auto sm:max-w-[min(calc(100vw-8rem),1500px)]">
         <DialogHeader>
           <DialogTitle>Resonance and Shapers: {chip.chip}</DialogTitle>
         </DialogHeader>
