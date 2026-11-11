@@ -202,6 +202,7 @@ pub fn mount_capture(
             "/sessions/{id}/samples/{chip}/{segment}",
             get(samples::download),
         )
+        .route("/sessions/{id}/download", get(samples::download_session))
         .route(
             "/sessions/{id}/results",
             post(results::save).layer(DefaultBodyLimit::max(RESULT_LIMIT)),

@@ -2,7 +2,7 @@
 
 use std::io::Read;
 
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
 
 use super::error::{ApiError, ApiPath};
@@ -27,6 +27,27 @@ pub(super) async fn download(
         [
             (CONTENT_TYPE, "application/octet-stream"),
             (CACHE_CONTROL, "no-store"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+/// `GET /api/sessions/{id}/download`: the session as a zip with its `meta.json` and sample files.
+pub(super) async fn download_session(
+    Store(storage): Store,
+    ApiPath(id): ApiPath<String>,
+) -> Result<Response, ApiError> {
+    let name = id.clone();
+    let bytes = blocking(move || Ok(storage.session_zip(&id)?)).await?;
+    Ok((
+        [
+            (CONTENT_TYPE, "application/zip".to_owned()),
+            (CACHE_CONTROL, "no-store".to_owned()),
+            (
+                CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{name}.zip\""),
+            ),
         ],
         bytes,
     )

@@ -183,3 +183,8 @@ export function stopPrinter() {
 export function homePrinter() {
   return apiJson<Homed>("printer/home", { method: "POST" });
 }
+
+/** Where the browser fetches a session as a zip of its metadata and sample files. */
+export function sessionDownloadUrl(id: string): string {
+  return apiUrl(`sessions/${encodeURIComponent(id)}/download`).toString();
+}

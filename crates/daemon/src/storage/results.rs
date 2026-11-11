@@ -315,6 +315,40 @@ impl Storage {
         Ok(summary_of(&record, size))
     }
 
+    /// The session as a zip: `meta.json` as stored and each sample file under `samples/`.
+    /// The session stays leased while its files are read.
+    ///
+    /// # Errors
+    /// [`StorageError::NotFound`] for an unknown session, or an I/O error.
+    pub fn session_zip(&self, session_id: &str) -> Result<Vec<u8>, StorageError> {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipWriter};
+
+        let _lease = self.lease(session_id)?;
+        let session = self.open_sealed(session_id)?;
+        let dir = self.inner.sessions_dir.join(session_id);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let mut zip = ZipWriter::new(io::Cursor::new(Vec::new()));
+        let zip_error = |e: zip::result::ZipError| io::Error::other(e.to_string());
+
+        let meta_path = dir.join("meta.json");
+        if !fs::symlink_metadata(&meta_path)?.is_file() {
+            return Err(StorageError::BadRequest(
+                "the session's meta.json is not a regular file".to_owned(),
+            ));
+        }
+        zip.start_file("meta.json", options).map_err(zip_error)?;
+        zip.write_all(&fs::read(&meta_path)?)?;
+        for file in session.meta().segments.iter().flat_map(|s| &s.files) {
+            let mut input = session.open_sample(file)?;
+            zip.start_file(format!("samples/{}", file.sample_file), options)
+                .map_err(zip_error)?;
+            io::copy(&mut input, &mut zip)?;
+        }
+        Ok(zip.finish().map_err(zip_error)?.into_inner())
+    }
+
     /// Picks an unused result id, builds the record for it and reserves its size bound plus
     /// headroom against free space. `build` returns the record and that bound.
     fn reserve_result(

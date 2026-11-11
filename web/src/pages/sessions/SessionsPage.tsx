@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { PinIcon, PinOffIcon, Trash2Icon, UploadIcon } from "lucide-react";
+import { DownloadIcon, PinIcon, PinOffIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Panel } from "@/components/Panel";
@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ApiClientError } from "@/lib/api/client";
 import type { SessionFilters as Filters } from "@/lib/api/endpoints";
+import { sessionDownloadUrl } from "@/lib/api/endpoints";
 import { usePinSession, useSessions, useStorage } from "@/lib/api/queries";
 import { formatBytes, formatTime } from "@/lib/format";
 import type { OutcomeKind } from "@/lib/generated/OutcomeKind";
@@ -35,6 +36,7 @@ function IconAction({
   label,
   hint,
   disabled,
+  href,
   onClick,
   children,
 }: {
@@ -42,7 +44,9 @@ function IconAction({
   /** What the action does, shown in the tooltip. The label when omitted. */
   hint?: string;
   disabled?: boolean;
-  onClick: () => void;
+  /** Makes the action a download link instead of a button. */
+  href?: string;
+  onClick?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -56,6 +60,7 @@ function IconAction({
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
+            {...(href ? { render: <a href={href} download />, nativeButton: false } : {})}
           />
         }
       >
@@ -160,6 +165,9 @@ export function SessionsPage() {
                     onClick={() => pin.mutate({ id: s.id, pinned: !s.pinned })}
                   >
                     {s.pinned ? <PinOffIcon /> : <PinIcon />}
+                  </IconAction>
+                  <IconAction label="Download" hint="Download the session as a zip" href={sessionDownloadUrl(s.id)}>
+                    <DownloadIcon />
                   </IconAction>
                   <IconAction label="Delete" onClick={() => setDeleting(s.id)}>
                     <Trash2Icon />

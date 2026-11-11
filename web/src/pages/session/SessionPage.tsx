@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, DownloadIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { sessionDownloadUrl } from "@/lib/api/endpoints";
 
 import { SessionResults } from "./SessionResults";
 
@@ -14,6 +15,16 @@ export function SessionPage({ id }: { id: string }) {
           <ArrowLeftIcon />
         </Button>
         <h1 className="font-mono text-xl font-semibold">{id}</h1>
+        <Button
+          render={<a href={sessionDownloadUrl(id)} download />}
+          nativeButton={false}
+          variant="outline"
+          size="icon"
+          aria-label="Download"
+          className="ml-auto"
+        >
+          <DownloadIcon />
+        </Button>
       </div>
       <SessionResults id={id} />
     </div>

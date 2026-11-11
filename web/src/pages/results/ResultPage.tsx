@@ -3,6 +3,9 @@ import { useState } from "react";
 
 import type { AnalysisResult } from "@/analysis/protocol";
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
+import { ArrowLeftIcon } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useResult } from "@/lib/api/queries";
 import { formatTime } from "@/lib/format";
@@ -105,11 +108,11 @@ export function ResultPage({ rid }: { rid: string }) {
   const axis = record.axes.find((a) => a.axis === selected) ?? record.axes[0];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/results" className="text-sm underline">
-          Results
-        </Link>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex items-center gap-3">
+        <Button render={<Link to="/results" />} variant="outline" size="icon" aria-label="Back to results">
+          <ArrowLeftIcon />
+        </Button>
         <h1 className="text-xl font-semibold">{record.label ?? record.id}</h1>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -125,9 +128,9 @@ export function ResultPage({ rid }: { rid: string }) {
       ) : (
         <>
           <Tabs value={axis.axis} onValueChange={(value) => setSelected(value as Axis)}>
-            <TabsList>
+            <TabsList variant="line">
               {axes.map((a) => (
-                <TabsTrigger key={a} value={a}>
+                <TabsTrigger key={a} value={a} className="after:bg-primary">
                   Axis {a}
                 </TabsTrigger>
               ))}

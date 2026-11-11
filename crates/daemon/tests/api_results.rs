@@ -288,3 +288,35 @@ async fn a_result_id_with_path_traversal_is_refused() {
     let (status, _) = json(&app, "GET", &format!("/api/results/{id}")).await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn a_session_downloads_as_a_zip_of_its_meta_and_samples() {
+    let (_d, s) = one_session();
+    let app = app(Some(s));
+    let (status, headers, body) = send(&app, get_request("/api/sessions/s1/download")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["content-type"], "application/zip");
+    assert!(
+        headers["content-disposition"]
+            .to_str()
+            .unwrap()
+            .contains("s1.zip")
+    );
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(body)).unwrap();
+    let names: Vec<String> = archive
+        .file_names()
+        .map(|n| n.unwrap().into_owned())
+        .collect();
+    assert!(names.contains(&"meta.json".to_owned()));
+    assert!(names.iter().any(|n| n.starts_with("samples/c0-s0")));
+    let mut meta = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name("meta.json").unwrap(), &mut meta).unwrap();
+    assert!(serde_json::from_str::<Value>(&meta).is_ok());
+
+    let (status, _, _) = send(&app, get_request("/api/sessions/nope/download")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+fn get_request(uri: &str) -> Request<Body> {
+    Request::builder().uri(uri).body(Body::empty()).unwrap()
+}

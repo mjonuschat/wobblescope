@@ -11,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDeleteResult, useResults } from "@/lib/api/queries";
@@ -112,9 +113,9 @@ export function ResultsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       <h1 className="text-xl font-semibold">Results</h1>
-      {body}
+      <Panel title="Saved results">{body}</Panel>
       <DeleteResultDialog id={deleting} onClose={() => setDeleting(null)} />
     </div>
   );

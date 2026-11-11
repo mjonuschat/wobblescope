@@ -45,6 +45,14 @@ describe("the sessions page", () => {
     expect(text[2]).toContain("CSV");
   });
 
+  it("links each row to the session's zip download", async () => {
+    api([summary("s1")]);
+    renderRoute("/sessions");
+    const link = (await screen.findByRole("link", { name: "Download" })) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toMatch(/\/api\/sessions\/s1\/download$/);
+    expect(link.hasAttribute("download")).toBe(true);
+  });
+
   it('requests only pinned sessions when "pinned only" is chosen', async () => {
     const calls = api();
     renderRoute("/sessions");
