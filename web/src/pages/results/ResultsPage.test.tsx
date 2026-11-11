@@ -71,6 +71,30 @@ describe('the results page', () => {
     await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(2))
   })
 
+  it('keeps the dialog open and shows the error when the delete fails', async () => {
+    let fail = true
+    const calls = stubApi(({ url, method }) => {
+      const path = url.pathname.replace(/^.*\/api\//, '')
+      if (path === 'results' && method === 'GET') return { body: { results: [resultSummary('r1')] } }
+      if (path === 'results/r1' && method === 'DELETE') {
+        if (fail) return { status: 500, body: { error: 'internal', message: 'disk is read-only' } }
+        return { status: 204 }
+      }
+      return { status: 404, body: { error: 'not_found', message: 'no' } }
+    })
+    renderRoute('/results')
+    const row = (await screen.findAllByRole('row'))[1]
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('disk is read-only')
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    fail = false
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(2)
+  })
+
   it('shows an empty state', async () => {
     serve([])
     renderRoute('/results')

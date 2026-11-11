@@ -45,7 +45,7 @@ function DeleteResultDialog({ id, onClose }: { id: string | null; onClose: () =>
           </p>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={remove.isPending}
