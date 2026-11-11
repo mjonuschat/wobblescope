@@ -50,7 +50,7 @@ describe("the printer page", () => {
     api();
     renderRoute("/");
     const row = (await screen.findByText("lis2dw ebb36")).closest("tr") as HTMLElement;
-    expect(within(row).getByText("X, Y")).toBeTruthy();
+    expect(within(row).getByText("X and Y")).toBeTruthy();
     const other = screen.getAllByText("adxl345")[0].closest("tr") as HTMLElement;
     expect(within(other).getByText("none")).toBeTruthy();
   });

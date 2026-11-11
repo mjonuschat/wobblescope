@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useChips, useSettings } from "@/lib/api/queries";
@@ -141,7 +140,7 @@ function defaultAxes(chips: ChipList, chip: Chip): string {
   return (["x", "y"] as const)
     .filter((axis) => chips.defaults[axis].includes(chip.section))
     .map((axis) => axis.toUpperCase())
-    .join(", ");
+    .join(" and ");
 }
 
 function ChipsSection({ chips }: { chips: ChipList }) {
@@ -169,7 +168,7 @@ function ChipsSection({ chips }: { chips: ChipList }) {
                   <TableCell>{chip.chip_type}</TableCell>
                   <TableCell>{chip.mcu ?? UNKNOWN}</TableCell>
                   <TableCell className="font-mono">{measure(chip.nominal_rate_hz, "Hz")}</TableCell>
-                  <TableCell>{axes ? <Badge variant="secondary">{axes}</Badge> : "none"}</TableCell>
+                  <TableCell>{axes || "none"}</TableCell>
                 </TableRow>
               );
             })}
