@@ -29,6 +29,9 @@ const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "s
 const FREQ_MIN = 1;
 const FREQ_MAX = 300;
 
+/** How far the arrows of a number field move it; the others move by 1. */
+const FIELD_STEPS: Partial<Record<OverrideKey, number>> = { hz_per_sec: 0.1, sweeping_period: 0.1 };
+
 const FREQ_KEYS = ["freq_start", "freq_end"] as const;
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
@@ -169,6 +172,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
       <UnitInput
         id={`override-${key}`}
         unit={unit}
+        step={FIELD_STEPS[key] ?? 1}
         aria-label={extra.label}
         className={extra.className}
         placeholder={placeholder}
@@ -319,6 +323,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                   <UnitInput
                     id={`point-${i}-${axis}`}
                     unit="mm"
+                    step={1}
                     className="w-32"
                     value={row[axis]}
                     onChange={(e) =>
