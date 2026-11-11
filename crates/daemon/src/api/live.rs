@@ -15,7 +15,7 @@ pub(super) async fn live(State(state): State<ApiState>, upgrade: WebSocketUpgrad
 }
 
 fn frame(snapshot: &LiveSnapshot) -> Message {
-    Message::text(serde_json::to_string(snapshot).unwrap_or_else(|_| "{}".to_owned()))
+    Message::text(serde_json::to_string(snapshot).expect("live snapshot serializes"))
 }
 
 async fn serve(mut socket: WebSocket, state: ApiState) {

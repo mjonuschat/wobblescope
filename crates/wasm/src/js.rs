@@ -78,7 +78,7 @@ impl WasmLiveSpectrum {
         Ok(Self { inner })
     }
 
-    /// Appends interleaved x, y, z samples; sample `i` is at `t0 + i / rate_hz`.
+    /// Appends interleaved x, y, z samples. Sample `i` is at `t0 + i / rate_hz`.
     pub fn push(&mut self, t0: f64, xyz: &[f32]) -> Result<(), JsError> {
         self.inner
             .push(t0, xyz)

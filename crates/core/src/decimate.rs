@@ -22,7 +22,7 @@ const ATTENUATION_DB: f64 = 60.0;
 pub struct Decimator {
     input_rate_hz: f64,
     factor: usize,
-    /// Filter coefficients; empty when `factor == 1`.
+    /// Filter coefficients. Empty when `factor == 1`.
     taps: Vec<f64>,
     /// Last `taps.len() - 1` inputs per axis (x, y, z), oldest first.
     history: [Vec<f64>; 3],

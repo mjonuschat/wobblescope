@@ -1,4 +1,4 @@
-//! `GET /api/stream`: a websocket that streams accelerometer data to a viewer.
+//! `GET /api/stream`: a websocket that sends accelerometer data to a viewer.
 //!
 //! The viewer subscribes to chips. Each subscribed chip has one task that owns its bridge and
 //! its [`ChipPipeline`] and puts what the pipeline produces on the connection's [`OutQueue`].
@@ -262,7 +262,7 @@ fn too_slow_close() -> Message {
 
 fn wire(entry: Entry) -> Message {
     let text = |message: &ServerMessage| {
-        Message::text(serde_json::to_string(message).unwrap_or_else(|_| "{}".to_owned()))
+        Message::text(serde_json::to_string(message).expect("server message serializes"))
     };
     match entry {
         Entry::Frame(bytes) => Message::Binary(bytes.into()),
@@ -495,7 +495,7 @@ mod tests {
         assert!(!outbox.overflowed.load(Ordering::Acquire));
     }
 
-    /// A socket-level test cannot reach this: the handler pops and sends every entry it queues
+    /// A socket-level test cannot reach this. The handler pops and sends every entry it queues
     /// before it reads the next client message, so only a blocked socket lets reliable entries
     /// pile up, and a blocked handler accepts no new subscriptions to produce them.
     #[test]

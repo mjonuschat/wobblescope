@@ -195,7 +195,7 @@ fn a_timestamp_gap_ends_the_frame_and_nothing_panics() {
     f.run(3200.0, 1.0, 160);
     let frames = f.frames();
     assert!(frames.len() > before);
-    // The frame pending at the gap is flushed early; the next one starts 2 s past what it covered.
+    // The frame pending at the gap is flushed early. The next one starts 2 s past what it covered.
     let flushed = frames[before];
     let first_after = frames[before + 1];
     let span = flushed.1 as f64 / (3200.0 / 6.0);
@@ -232,7 +232,7 @@ fn the_first_frame_after_a_gap_is_not_shaped_by_samples_from_before_it() {
             _ => None,
         })
         .collect();
-    // frames[before] is the one flushed at the gap; the next is the first made after it.
+    // frames[before] is the one flushed at the gap. The next is the first made after it.
     let after = frames[before + 1];
     let first_x = f32::from_le_bytes(after[16..20].try_into().unwrap());
     assert!(first_x.abs() < 1.0, "pre-gap level leaked: {first_x}");
@@ -304,7 +304,7 @@ fn an_unusable_update_rate_is_clamped_instead_of_panicking() {
             unreachable!()
         };
         assert_eq!(*updates_per_second, 0.5);
-        // One frame every two seconds: a frame is not flushed before then.
+        // One frame every two seconds, so no frame is flushed before then.
         assert!(f.frames().len() <= 3, "{updates}: {}", f.frames().len());
     }
 }

@@ -41,7 +41,7 @@ pub enum ClientMessage {
 pub struct StreamDefaults {
     /// The top of the frequency range, in Hz.
     pub max_hz: f64,
-    /// Display updates per second: the printing value while printing, else the idle one.
+    /// Display updates per second. This is the printing value while printing, else the idle one.
     pub updates_per_second: f64,
 }
 
@@ -127,7 +127,7 @@ pub enum ServerMessage {
         overflows: Option<u64>,
         /// The chip's error count, when known.
         errors: Option<u64>,
-        /// Frames dropped from the outgoing queue. The websocket handler fills this in; the
+        /// Frames dropped from the outgoing queue. The websocket handler fills this in. The
         /// pipeline emits 0.
         dropped_frames: u64,
         /// Problems worth showing to the viewer.
@@ -169,7 +169,7 @@ pub fn encode_frame(index: u16, t0: f64, xyz: &[f32]) -> Vec<u8> {
     out
 }
 
-/// `value` limited to `[low, high]`; NaN becomes `low`. `low` wins if the range is empty.
+/// `value` limited to `[low, high]`. NaN becomes `low`, and `low` wins if the range is empty.
 fn bounded(value: f64, low: f64, high: f64) -> f64 {
     if value.is_nan() {
         low
@@ -179,7 +179,7 @@ fn bounded(value: f64, low: f64, high: f64) -> f64 {
 }
 
 /// Limits a viewer's request to what the daemon allows for a chip sampling at
-/// `input_rate_hz`: the top frequency into `[1, min(limits.max_hz, input_rate_hz / 2)]` and the
+/// `input_rate_hz`. The top frequency goes into `[1, min(limits.max_hz, input_rate_hz / 2)]` and the
 /// update rate into `[MIN_UPDATES_PER_SECOND, limits.max_updates_per_second]`.
 pub fn clamp_request(
     max_hz: f64,
@@ -194,7 +194,7 @@ pub fn clamp_request(
     )
 }
 
-/// `updates` limited to `[MIN_UPDATES_PER_SECOND, limits.max_updates_per_second]`; NaN becomes
+/// `updates` limited to `[MIN_UPDATES_PER_SECOND, limits.max_updates_per_second]`. NaN becomes
 /// the minimum.
 pub fn clamp_updates(updates: f64, limits: &StreamLimits) -> f64 {
     bounded(

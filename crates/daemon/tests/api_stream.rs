@@ -312,7 +312,7 @@ async fn a_slow_reader_gets_dropped_frames_not_a_growing_queue() {
         .await;
 
     // The client reads nothing while four chips produce about 800 frames, far more than the
-    // socket buffers and the queue hold. Each frame is 16 + 12 * samples bytes; the small socket
+    // socket buffers and the queue hold. Each frame is 16 + 12 * samples bytes. The small socket
     // buffers fill after a few of them, so 10 s is kept as the brief specifies.
     push_in_real_time(&rig, &["adxl345", "b", "c", "d"], 10.0, 10.0).await;
 
@@ -341,7 +341,7 @@ async fn a_viewer_that_stops_reading_is_torn_down_after_the_write_timeout() {
         .await;
 
     // The client reads nothing while data flows until the socket buffers are full and a write
-    // blocks; the write timeout then closes the connection and with it every bridge.
+    // blocks. The write timeout then closes the connection and with it every bridge.
     push_in_real_time(&rig, &["adxl345", "b", "c", "d"], 10.0, 10.0).await;
     rig.until("every bridge closed", || rig.bridges_open() == 0)
         .await;

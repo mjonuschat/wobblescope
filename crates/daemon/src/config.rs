@@ -286,7 +286,7 @@ fn allowed_host(text: &str) -> Result<String, &'static str> {
 /// The least display update rate, shared by config validation and the stream clamp.
 pub const MIN_UPDATES_PER_SECOND: f64 = 0.5;
 
-/// The value or its default, which must be finite and at least `min`; `too_small` is the
+/// The value or its default, which must be finite and at least `min`. `too_small` is the
 /// reason given when it is not.
 fn finite_at_least(
     value: Option<f64>,
@@ -304,7 +304,7 @@ fn finite_at_least(
     Ok(value)
 }
 
-/// A display update rate: finite and at least [`MIN_UPDATES_PER_SECOND`].
+/// A display update rate. It must be finite and at least [`MIN_UPDATES_PER_SECOND`].
 fn rate(value: Option<f64>, default: f64) -> Result<f64, &'static str> {
     finite_at_least(
         value,

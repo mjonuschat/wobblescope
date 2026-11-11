@@ -1,6 +1,6 @@
-//! One chip's samples, filtered and batched into frames for one viewer.
+//! One chip's samples, filtered, then batched into frames for one viewer.
 //!
-//! The pipeline does no I/O and never sleeps: all time comes in through the `now` argument.
+//! The pipeline does no I/O and never sleeps. All time comes in through the `now` argument.
 
 use std::time::{Duration, Instant};
 
@@ -40,7 +40,7 @@ enum State {
         decimator: Decimator,
         input_rate_hz: f64,
     },
-    /// The filter could not be built; input is ignored.
+    /// The filter could not be built. Input is ignored.
     Failed,
 }
 

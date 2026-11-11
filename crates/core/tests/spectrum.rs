@@ -154,7 +154,7 @@ fn no_false_peak_after_the_decimator_and_the_spectrum() {
 
 #[test]
 fn a_burst_in_the_newest_samples_is_in_the_spectrum() {
-    // 1535 samples with nfft 1024: whole-buffer segmentation would end 511 samples early.
+    // 1535 samples with nfft 1024. Whole-buffer segmentation would end 511 samples early.
     let rate = 500.0;
     let n = 1535;
     let burst = 50;

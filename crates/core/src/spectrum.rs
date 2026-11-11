@@ -82,7 +82,7 @@ impl LiveSpectrum {
         })
     }
 
-    /// Appends interleaved x, y, z samples; sample `i` is at `t0 + i / rate_hz`. The buffer is
+    /// Appends interleaved x, y, z samples. Sample `i` is at `t0 + i / rate_hz`. The buffer is
     /// cleared first when `t0` is more than 1.5 sample periods from the expected time.
     ///
     /// # Errors
@@ -120,7 +120,7 @@ impl LiveSpectrum {
             return None;
         }
         let psd = |axis: &VecDeque<f64>| {
-            // Segment from the newest sample: welch ends on a whole step, so drop the oldest extra.
+            // Segment from the newest sample. Welch ends on a whole step, so drop the oldest extra.
             let step = self.nfft / 2;
             let used = self.nfft + (axis.len() - self.nfft) / step * step;
             let x: Vec<f64> = axis.iter().skip(axis.len() - used).copied().collect();
