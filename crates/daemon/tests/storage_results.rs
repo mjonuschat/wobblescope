@@ -197,7 +197,7 @@ fn lists_a_damaged_file_as_unusable() {
         .id;
     let path = results_dir(dir.path()).join(format!("{bad}.zip"));
 
-    // A flipped sample byte fails the manifest: marked unusable with a reason, the rest intact.
+    // Offset 100 lies in the first entry, meta.json. A flipped byte there fails the manifest: marked unusable with a reason, the rest intact.
     flip(&path, 100);
     let list = storage.list_results().unwrap();
     assert_eq!(list.len(), 2);
@@ -401,4 +401,27 @@ fn save_summary(storage: &Storage) -> wobblescope::results::record::ResultSummar
     storage
         .save_result("s1", request(CREATED, "0.1.0"), now())
         .unwrap()
+}
+
+#[test]
+fn stores_the_session_meta_byte_for_byte() {
+    let (dir, storage) = with_session(u64::MAX / 4, plenty());
+    let path = sessions_dir(dir.path()).join("s1").join("meta.json");
+    let text = fs::read_to_string(&path).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let odd = format!("{}\n\n", serde_json::to_string_pretty(&value).unwrap());
+    assert_ne!(odd, text);
+    fs::write(&path, &odd).unwrap();
+
+    let id = save(&storage);
+    let zip = results_dir(dir.path()).join(format!("{id}.zip"));
+    let file = wobblescope::results::container::ResultFile::open(&zip).unwrap();
+    file.verify().unwrap();
+    let stored = {
+        let mut archive = zip::ZipArchive::new(fs::File::open(&zip).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut archive.by_name("meta.json").unwrap(), &mut bytes).unwrap();
+        bytes
+    };
+    assert_eq!(stored, odd.as_bytes());
 }

@@ -186,10 +186,13 @@ impl Storage {
                 inner.sessions_dir.join(session_id).join(&file.sample_file),
             ));
         }
-        let meta_bytes = meta
-            .to_json()
-            .map_err(|e| StorageError::BadRequest(e.to_string()))?
-            .into_bytes();
+        let meta_path = inner.sessions_dir.join(session_id).join("meta.json");
+        if !fs::symlink_metadata(&meta_path)?.is_file() {
+            return Err(StorageError::BadRequest(
+                "the session's meta.json is not a regular file".to_owned(),
+            ));
+        }
+        let meta_bytes = fs::read(&meta_path)?;
 
         let reservation = self.reserve_result(now, |id| {
             let record = ResultRecord {
