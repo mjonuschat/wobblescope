@@ -55,10 +55,10 @@ async function open(options?: Options) {
 describe("the run screen", () => {
   beforeEach(() => stubWebSocket());
 
-  it("shows the printer values as placeholders, preselects the mode and enables Start", async () => {
+  it("fills the fields with the printer values, preselects the mode and enables Start", async () => {
     await open();
-    expect(field(/End frequency/).placeholder).toBe("135");
-    expect(field(/Acceleration per Hz/).placeholder).toBe("60");
+    expect(field(/End frequency/).value).toBe("135");
+    expect(field(/Acceleration per Hz/).value).toBe("60");
     expect(mode()).toContain("Sweep");
     expect(isOn("lis2dw ebb36")).toBe(true);
     expect(isOn("adxl345")).toBe(false);
@@ -111,6 +111,15 @@ describe("the run screen", () => {
       overrides: { freq_end: 100 },
       points: [[150.5, 154, 20]],
     });
+  });
+
+  it("sends no override for a value equal to the printer's or for a cleared field", async () => {
+    const calls = await open();
+    fireEvent.change(field(/End frequency/), { target: { value: "135" } });
+    fireEvent.change(field(/Hz per second/), { target: { value: "" } });
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({});
   });
 
   it("shows a daemon message beside the field it names", async () => {
@@ -202,7 +211,7 @@ describe("the run screen", () => {
     const calls = await open();
     fireEvent.change(thumb(1), { target: { value: "90" } });
     expect(field(/End frequency/).value).toBe("90");
-    expect(field(/Start frequency/).value).toBe("");
+    expect(field(/Start frequency/).value).toBe("5");
     fireEvent.click(startButton());
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
     expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({ freq_end: 90 });

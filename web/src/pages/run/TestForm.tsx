@@ -153,7 +153,11 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         chips,
         axes,
         mode,
-        overrides: Object.fromEntries(Object.entries(overrides).filter(([key]) => !sweepOnly(key as OverrideKey))),
+        overrides: Object.fromEntries(
+          Object.entries(overrides).filter(
+            ([key, value]) => !sweepOnly(key as OverrideKey) && value !== settings.settings[key as OverrideKey].value,
+          ),
+        ),
         points: parsedPoints.map((p) => p as [number, number, number]),
       },
       { onSuccess: (started) => onStarted(started.id) },
@@ -176,7 +180,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         aria-label={extra.label}
         className={extra.className}
         placeholder={placeholder}
-        value={texts[key] ?? ""}
+        value={texts[key] ?? (setting.value !== null ? String(setting.value) : "")}
         disabled={!setting.overridable}
         aria-required={required}
         aria-invalid={Boolean(typos[key] ?? errorFor(key))}
@@ -280,7 +284,8 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
 
       <FormCard title="Parameters">
         <p className="mb-4 text-sm text-muted-foreground">
-          Leave a field empty to use the printer's value, shown in the field.
+          The fields start with the printer's values. Change one to override it; clear it to use the printer's value
+          again.
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 space-y-2">
