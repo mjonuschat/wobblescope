@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import type { AnalysisResult } from '@/analysis/protocol'
 import { Button } from '@/components/ui/button'
@@ -23,12 +23,13 @@ interface Props {
 /** Saves the shown axis, as the worker computed it, so the daemon keeps what the user saw. */
 export function SaveResultDialog({ sessionId, meta, axis, params, overrides, result }: Props) {
   const [label, setLabel] = useState('')
+  const [savedKey, setSavedKey] = useState<string | null>(null)
   const save = useSaveResult()
+  const trimmed = label.trim()
 
-  function submit() {
-    const trimmed = label.trim()
-    const body: SaveRequest = {
-      label: trimmed === '' ? null : trimmed,
+  const body = useMemo<SaveRequest>(
+    () => ({
+      label: null,
       // The version that computed the axes, which can differ from this app's own version.
       core_version: result.analysis.core_version,
       session_created_at: meta.created_at,
@@ -44,8 +45,19 @@ export function SaveResultDialog({ sessionId, meta, axis, params, overrides, res
           },
         },
       ],
-    }
-    save.mutate({ sessionId, body })
+    }),
+    [axis, meta.created_at, overrides, params, result],
+  )
+  const bodyKey = useMemo(() => JSON.stringify(body), [body])
+  // Identifies what a save would store. A second save of the same key would duplicate a result.
+  const key = `${sessionId}\n${JSON.stringify(trimmed)}\n${bodyKey}`
+  const saved = savedKey === key
+
+  function submit() {
+    save.mutate(
+      { sessionId, body: { ...body, label: trimmed === '' ? null : trimmed } },
+      { onSuccess: () => setSavedKey(key) },
+    )
   }
 
   return (
@@ -59,10 +71,10 @@ export function SaveResultDialog({ sessionId, meta, axis, params, overrides, res
           onChange={(event) => setLabel(event.target.value)}
         />
       </div>
-      <Button onClick={submit} disabled={save.isPending}>
+      <Button onClick={submit} disabled={save.isPending || saved}>
         {save.isPending ? 'Saving…' : 'Save result'}
       </Button>
-      {save.isSuccess && (
+      {saved && save.isSuccess && (
         <p className="text-sm">
           Saved as {save.data.id}{' '}
           <Link to="/results/$rid" params={{ rid: save.data.id }} className="underline">
