@@ -66,9 +66,8 @@ function drawStrip(
 
 /** Three canvases per chip (X, Y, Z) with a scale box: empty means automatic. */
 export function SignalStrips({ chips, paused }: Props) {
-  const shown = useRef(chips)
-  if (!paused) shown.current = chips
-  const drawn = shown.current
+  const [drawn, setDrawn] = useState(chips)
+  if (!paused && drawn !== chips) setDrawn(chips)
   const canvases = useRef(new Map<string, HTMLCanvasElement>())
   const [scales, setScales] = useState<Record<string, string>>({})
 

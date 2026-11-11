@@ -67,7 +67,9 @@ function draw(canvas: HTMLCanvasElement, columns: Column[], at: number) {
 export function Spectrogram({ chip, color, spectrum, now = () => performance.now() }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const clock = useRef(now)
-  clock.current = now
+  useEffect(() => {
+    clock.current = now
+  }, [now])
   const [columns, setColumns] = useState<Column[]>([])
 
   useEffect(() => {
