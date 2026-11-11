@@ -11,6 +11,7 @@ mod samples;
 mod sessions;
 mod settings;
 mod status;
+mod stream;
 mod tests;
 
 use std::sync::Arc;
@@ -33,6 +34,7 @@ pub use tests::{StartedTest, StopDispatched};
 use crate::capture::live::LiveHub;
 use crate::capture::runner::{Runner, RunnerTimings};
 use crate::capture::slot::TestSlot;
+use crate::config::Settings;
 use crate::moonraker::Moonraker;
 use crate::startup::StorageCell;
 use crate::storage::Storage;
@@ -113,6 +115,7 @@ struct ApiState {
     moonraker: Moonraker,
     imports: ImportGate,
     capture: CaptureState,
+    settings: Arc<Settings>,
 }
 
 impl FromRequestParts<ApiState> for ImportPermit {
@@ -178,12 +181,25 @@ pub fn mount_with(storage: StorageCell, moonraker: Moonraker, imports: ImportGat
     mount_capture(storage, moonraker, imports, CaptureState::default())
 }
 
-/// The API router with the capture state shared with the rest of the daemon.
+/// The API router with the capture state shared with the rest of the daemon and the default
+/// settings.
 pub fn mount_capture(
     storage: StorageCell,
     moonraker: Moonraker,
     imports: ImportGate,
     capture: CaptureState,
+) -> Router {
+    mount_configured(storage, moonraker, imports, capture, Settings::default())
+}
+
+/// [`mount_capture`] with the daemon's settings, which the live stream takes its defaults and
+/// limits from.
+pub fn mount_configured(
+    storage: StorageCell,
+    moonraker: Moonraker,
+    imports: ImportGate,
+    capture: CaptureState,
+    settings: Settings,
 ) -> Router {
     let api = Router::new()
         .route(
@@ -227,6 +243,7 @@ pub fn mount_capture(
         .route("/printer/emergency-stop", post(printer::emergency_stop))
         .route("/printer/home", post(printer::home))
         .route("/live", get(live::live))
+        .route("/stream", get(stream::stream))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(origin::guard))
@@ -235,6 +252,7 @@ pub fn mount_capture(
             moonraker,
             imports,
             capture,
+            settings: Arc::new(settings),
         });
     Router::new().nest("/api", api)
 }

@@ -86,11 +86,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         settings.storage_dir.is_none(),
     );
 
-    let app = api::mount_capture(
+    let app = api::mount_configured(
         cell.clone(),
         moonraker.clone(),
         api::ImportGate::default(),
         capture.clone(),
+        settings.clone(),
     )
     .fallback(web::static_handler);
     let app = api::guarded(

@@ -127,8 +127,13 @@ fn parse_g1(script: &str) -> Option<[f64; 3]> {
 
 impl Sim {
     pub async fn start() -> Self {
+        Self::start_with_config(config()).await
+    }
+
+    /// Like [`Sim::start`], with `config` as the printer's `configfile.config`.
+    pub async fn start_with_config(config: Value) -> Self {
         let fake = Arc::new(FakeMoonraker::start().await);
-        let printer = FakePrinter::new(&fake, "ready", config());
+        let printer = FakePrinter::new(&fake, "ready", config);
         printer.set_field("mcu ebb36", "mcu_version", json!("v0.13.0-820-g0cee841e"));
         printer.set_field("toolhead", "position", json!([0.0, 0.0, 0.0, 0.0]));
         let real = super::fake_printer::fixture("real_settings.json");
@@ -469,7 +474,20 @@ pub async fn rig() -> Rig {
 }
 
 pub async fn rig_with(timings: RunnerTimings, cap: u64) -> Rig {
-    let sim = Sim::start().await;
+    rig_on(Sim::start().await, timings, cap).await
+}
+
+/// A rig whose printer also has the accelerometer sections `extra` (for example `adxl345 b`).
+pub async fn rig_with_extra_chips(extra: &[&str]) -> Rig {
+    let mut printer_config = config();
+    for section in extra {
+        printer_config[*section] = json!({"cs_pin": "PA4"});
+    }
+    let sim = Sim::start_with_config(printer_config).await;
+    rig_on(sim, fast_runner(), u64::MAX / 4).await
+}
+
+async fn rig_on(sim: Sim, timings: RunnerTimings, cap: u64) -> Rig {
     let settings = Settings {
         moonraker_url: sim.fake.http_url().parse().unwrap(),
         ..Settings::default()
