@@ -89,11 +89,12 @@ function FieldError({ name, text }: { name: string; text: string | undefined }) 
   );
 }
 
-function FormCard({ title, children }: { title: string; children: ReactNode }) {
+function FormCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex items-center justify-between gap-4">
         <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
+        {action}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -188,6 +189,22 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   const clampFreq = (value: number) => Math.min(FREQ_MAX, Math.max(FREQ_MIN, value));
   const rangeStart = clampFreq(overrides.freq_start ?? settings.settings.freq_start.value ?? FREQ_MIN);
   const rangeEnd = clampFreq(overrides.freq_end ?? settings.settings.freq_end.value ?? FREQ_MAX);
+
+  const patternMenu = limits ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
+        Pattern
+        <ChevronDownIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        {POINT_PATTERNS.map(({ value, label }) => (
+          <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null;
 
   const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];
@@ -336,7 +353,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         </div>
       </FormCard>
 
-      <FormCard title="Points">
+      <FormCard title="Points" action={patternMenu}>
         <div className="space-y-2">
           {points.map((row, i) => {
             return (
@@ -386,21 +403,6 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                   >
                     <PlusIcon />
                   </Button>
-                  {i === 0 && limits && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
-                        Pattern
-                        <ChevronDownIcon />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
-                        {POINT_PATTERNS.map(({ value, label }) => (
-                          <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
-                            {label}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
                 </div>
               </div>
             );

@@ -42,7 +42,7 @@ function defaultAxes(chips: ChipsSnapshot, chip: Chip): string {
 export function AccelerometersCard({ chips, onCheck, checking, checkBlocked }: Props) {
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-4">
+      <CardHeader className="flex items-center justify-between gap-4">
         <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Accelerometers
         </CardTitle>
