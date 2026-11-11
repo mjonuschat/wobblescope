@@ -32,6 +32,8 @@ struct State {
     pieces: usize,
     failures: Vec<Failure>,
     delays: Vec<(usize, Duration)>,
+    /// Added to the target of every absolute move, as a G-code offset or a mesh would.
+    landing_error: [f64; 3],
 }
 
 /// The simulated printer, the supervisor and the slot. Clones of the inner state are shared.
@@ -62,7 +64,7 @@ impl HoldSim {
         );
         let real = fixture("real_settings.json");
         printer.set_settings(real["status"]["configfile"]["settings"].clone());
-        printer.set_field("toolhead", "position", json!([150.0, 150.0, 20.0, 0.0]));
+        printer.set_field("toolhead", "position", json!([150.5, 154.0, 20.0, 0.0]));
         printer.set_field("toolhead", "max_velocity", json!(500.0));
         printer.set_field("toolhead", "max_accel", json!(3000.0));
         printer.set_field("toolhead", "minimum_cruise_ratio", json!(0.5));
@@ -80,12 +82,13 @@ impl HoldSim {
             started: Instant::now(),
             scripts: vec![],
             absolute: true,
-            position: [150.0, 150.0, 20.0],
+            position: [150.5, 154.0, 20.0],
             max_accel: 3000.0,
             print_time: EPOCH,
             pieces: 0,
             failures: vec![],
             delays: vec![],
+            landing_error: [0.0; 3],
         }));
         let sim_state = state.clone();
         let sim_printer = printer.clone();
@@ -103,6 +106,16 @@ impl HoldSim {
                 {
                     let s = clock_state.lock().unwrap();
                     let est = EPOCH + s.started.elapsed().as_secs_f64();
+                    // The toolhead is at its target once the queued motion has played. Set it
+                    // before the clock, so a query that finds the queue idle also finds it there.
+                    if est >= s.print_time {
+                        let p = s.position;
+                        clock_printer.set_field(
+                            "toolhead",
+                            "position",
+                            json!([p[0], p[1], p[2], 0.0]),
+                        );
+                    }
                     clock_printer.set_field("toolhead", "estimated_print_time", json!(est));
                     clock_printer.set_field("toolhead", "print_time", json!(s.print_time));
                 }
@@ -194,6 +207,19 @@ impl HoldSim {
         self.state.lock().unwrap().delays.push((nth, delay));
     }
 
+    /// Makes every absolute move land `error` mm away from its target.
+    pub fn set_landing_error(&self, error: [f64; 3]) {
+        self.state.lock().unwrap().landing_error = error;
+    }
+
+    /// The absolute travel moves received (`G90` then `G1`), in order.
+    pub fn travel_scripts(&self) -> Vec<String> {
+        self.scripts()
+            .into_iter()
+            .filter(|s| s.starts_with("G90\nG1"))
+            .collect()
+    }
+
     pub fn set_print_state(&self, state: &str) {
         self.printer.set_field("print_stats", "state", json!(state));
     }
@@ -260,11 +286,24 @@ fn script(state: &Arc<Mutex<State>>, printer: &FakePrinter, text: &str) -> Scrip
                 word(line, "Y").unwrap_or(f64::NAN),
                 word(line, "Z").unwrap_or(f64::NAN),
             );
+            let landing = s.landing_error;
             let target = if s.absolute {
                 [
-                    if dx.is_nan() { before[0] } else { dx },
-                    if dy.is_nan() { before[1] } else { dy },
-                    if dz.is_nan() { before[2] } else { dz },
+                    if dx.is_nan() {
+                        before[0]
+                    } else {
+                        dx + landing[0]
+                    },
+                    if dy.is_nan() {
+                        before[1]
+                    } else {
+                        dy + landing[1]
+                    },
+                    if dz.is_nan() {
+                        before[2]
+                    } else {
+                        dz + landing[2]
+                    },
                 ]
             } else {
                 [
@@ -290,13 +329,9 @@ fn script(state: &Arc<Mutex<State>>, printer: &FakePrinter, text: &str) -> Scrip
             };
             s.print_time = start + duration;
             s.position = target;
-            printer.set_field(
-                "toolhead",
-                "position",
-                json!([target[0], target[1], target[2], 0.0]),
-            );
         }
     }
+    printer.set_field("toolhead", "print_time", json!(s.print_time));
     let delay = if is_piece {
         s.delays
             .iter()

@@ -9,7 +9,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::capture::CheckFailure;
 use crate::capture::iso_utc;
-use crate::capture::position::Timeouts;
+use crate::capture::position::{TOLERANCE_MM, Timeouts, position};
 use crate::capture::preflight::{check_printer, quarantine_failure};
 use crate::capture::slot::{SlotPermit, TestSlot};
 use crate::hold::pacer::Pacer;
@@ -18,6 +18,7 @@ use crate::hold::pieces::{
     piece_script, ramp,
 };
 use crate::hold::settings::{Restore, STATE_NAME, Saved, accel_line, restore_script, setup_script};
+use crate::hold::travel::segments;
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::Rpc;
 
@@ -29,6 +30,12 @@ pub const DEFAULT_DURATION_SECONDS: f64 = 30.0;
 const STATE_INTERVAL: f64 = 0.25;
 /// How often the slot's stop flag is checked.
 const STOP_POLL: Duration = Duration::from_millis(50);
+/// The travel speed used when the printer's `move_speed` cannot be read, in mm/s.
+const DEFAULT_TRAVEL_SPEED: f64 = 50.0;
+/// The start buffer assumed while pacing the travel, before the real one is measured.
+const TRAVEL_BUFFER: f64 = 0.4;
+/// The longest the toolhead may take to finish the travel after the last segment, in seconds.
+const TRAVEL_SETTLE_SECONDS: f64 = 5.0;
 /// How long to wait after the calibration move before reading Klipper's print time.
 const CALIBRATION_WAIT: Duration = Duration::from_millis(600);
 
@@ -201,6 +208,8 @@ struct Plan {
     drive: Drive,
     duration: f64,
     point: [f64; 3],
+    /// The travel speed to the point, in mm/s.
+    speed: f64,
     min: [f64; 3],
     max: [f64; 3],
     max_velocity: f64,
@@ -304,7 +313,15 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
     drive
         .check_velocity(saved.max_velocity)
         .map_err(Refusal::Invalid)?;
-    let point = request.start_point.unwrap_or(position);
+    let point = request
+        .start_point
+        .or(settings.default_point)
+        .unwrap_or(position);
+    let speed = settings
+        .settings
+        .move_speed
+        .value
+        .unwrap_or(DEFAULT_TRAVEL_SPEED);
     drive
         .check_room(point, min, max)
         .map_err(Refusal::Invalid)?;
@@ -328,6 +345,7 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
             drive,
             duration,
             point,
+            speed,
             min,
             max,
             max_velocity: saved.max_velocity,
@@ -338,6 +356,8 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
 
 /// What changes while a hold runs.
 struct Live {
+    /// Where the hold runs: the start point, then the verified position after travel.
+    point: [f64; 3],
     target: Drive,
     working: f64,
     accel_for: f64,
@@ -363,6 +383,7 @@ impl Hold {
         let start = Instant::now();
         let mut applied = false;
         let mut live = Live {
+            point: self.plan.point,
             target: self.plan.drive,
             working: self.plan.drive.frequency,
             accel_for: self.plan.drive.frequency,
@@ -416,10 +437,10 @@ impl Hold {
             .map_err(|e| e.to_string())
     }
 
-    fn check(&self, drive: &Drive) -> Result<(), String> {
+    fn check(&self, drive: &Drive, point: [f64; 3]) -> Result<(), String> {
         drive.validate()?;
         drive.check_velocity(self.plan.max_velocity)?;
-        drive.check_room(self.plan.point, self.plan.min, self.plan.max)
+        drive.check_room(point, self.plan.min, self.plan.max)
     }
 
     /// Applies one command. Returns the reason when it ends the hold.
@@ -440,7 +461,7 @@ impl Hold {
                     frequency,
                     ..live.target
                 };
-                match self.check(&drive) {
+                match self.check(&drive, live.point) {
                     Ok(()) => live.target = drive,
                     Err(message) => rejected(message),
                 }
@@ -451,7 +472,7 @@ impl Hold {
                     axis,
                     ..live.target
                 };
-                match self.check(&drive) {
+                match self.check(&drive, live.point) {
                     Ok(()) => live.target = drive,
                     Err(message) => rejected(message),
                 }
@@ -518,6 +539,146 @@ impl Hold {
         }
     }
 
+    /// Sends a script like [`Self::send`], as a result.
+    async fn send_checked(
+        &self,
+        script: String,
+        commands: &mut UnboundedReceiver<Command>,
+        live: &mut Live,
+        events: &UnboundedSender<HoldEvent>,
+    ) -> Result<(), EndReason> {
+        match self.send(script, commands, live, events).await {
+            Sent::Done(Ok(())) => Ok(()),
+            Sent::Done(Err(message)) => Err(EndReason::Failed { message }),
+            Sent::Interrupted(reason) => Err(reason),
+        }
+    }
+
+    /// Waits until the toolhead has played everything queued, still handling commands.
+    async fn settle(
+        &self,
+        commands: &mut UnboundedReceiver<Command>,
+        live: &mut Live,
+        events: &UnboundedSender<HoldEvent>,
+        start: Instant,
+    ) -> Result<(), EndReason> {
+        let began = Instant::now();
+        loop {
+            let (print_time, estimated, _) = self
+                .print_times(start)
+                .await
+                .map_err(|message| EndReason::Failed { message })?;
+            if estimated >= print_time {
+                return Ok(());
+            }
+            if began.elapsed().as_secs_f64() > TRAVEL_SETTLE_SECONDS {
+                return Err(EndReason::Failed {
+                    message: "the toolhead did not finish the travel in time".to_owned(),
+                });
+            }
+            if let Some(reason) = self
+                .pause(Duration::from_millis(250), commands, live, events)
+                .await
+            {
+                return Err(reason);
+            }
+        }
+    }
+
+    /// Moves to the start point in paced segments, waits for the motion to finish, and
+    /// corrects once if the toolhead missed. Afterwards the live point is where the toolhead is.
+    async fn travel(
+        &self,
+        commands: &mut UnboundedReceiver<Command>,
+        live: &mut Live,
+        events: &UnboundedSender<HoldEvent>,
+        start: Instant,
+    ) -> Result<(), EndReason> {
+        let plan = &self.plan;
+        let read = |e: crate::capture::position::PositionError| EndReason::Failed {
+            message: e.to_string(),
+        };
+        let here = position(&self.control, self.timings.timeouts.query)
+            .await
+            .map_err(read)?;
+        let near = |a: [f64; 3]| (0..3).all(|i| (a[i] - plan.point[i]).abs() <= TOLERANCE_MM);
+        if near(here) {
+            live.point = here;
+            return Ok(());
+        }
+        let mut pacer = Pacer::new(TRAVEL_BUFFER);
+        let mut last = here;
+        for target in segments(here, plan.point, plan.speed, self.timings.piece_seconds) {
+            let distance = ((target[0] - last[0]).powi(2)
+                + (target[1] - last[1]).powi(2)
+                + (target[2] - last[2]).powi(2))
+            .sqrt();
+            let duration = distance / plan.speed;
+            loop {
+                let now = start.elapsed().as_secs_f64();
+                let due = pacer.next_send_time(now, duration);
+                if due <= now + 1e-4 {
+                    pacer.sent(now, duration);
+                    break;
+                }
+                let wait = Duration::from_secs_f64((due - now).min(STATE_INTERVAL));
+                if let Some(reason) = self.pause(wait, commands, live, events).await {
+                    return Err(reason);
+                }
+            }
+            let _ = events.send(HoldEvent::State(HoldState {
+                phase: Phase::Travelling,
+                elapsed_seconds: start.elapsed().as_secs_f64(),
+                frequency: live.working,
+                axis: live.target.axis,
+                acceleration: live.target.acceleration(),
+                accel_limit: live.target.acceleration(),
+            }));
+            let [x, y, z] = target;
+            self.send_checked(
+                format!("G90\nG1 X{x:.4} Y{y:.4} Z{z:.4} F{:.0}", plan.speed * 60.0),
+                commands,
+                live,
+                events,
+            )
+            .await?;
+            last = target;
+        }
+        self.settle(commands, live, events, start).await?;
+        let mut got = position(&self.control, self.timings.timeouts.query)
+            .await
+            .map_err(read)?;
+        if !near(got) {
+            let target = [
+                plan.point[0] - (got[0] - plan.point[0]),
+                plan.point[1] - (got[1] - plan.point[1]),
+                plan.point[2] - (got[2] - plan.point[2]),
+            ];
+            let [x, y, z] = target;
+            self.send_checked(
+                format!("G90\nG1 X{x:.4} Y{y:.4} Z{z:.4} F{:.0}", plan.speed * 60.0),
+                commands,
+                live,
+                events,
+            )
+            .await?;
+            self.settle(commands, live, events, start).await?;
+            got = position(&self.control, self.timings.timeouts.query)
+                .await
+                .map_err(read)?;
+            if !near(got) {
+                return Err(EndReason::Failed {
+                    message: format!(
+                        "the toolhead could not reach the start point {:?}; it is at {got:?}",
+                        plan.point
+                    ),
+                });
+            }
+        }
+        live.point = got;
+        Ok(())
+    }
+
     /// `print_time` and `estimated_print_time`, and when the query was answered, in seconds on
     /// the hold's clock (the midpoint of the call).
     async fn print_times(&self, start: Instant) -> Result<(f64, f64, f64), String> {
@@ -569,6 +730,9 @@ impl Hold {
         try_send!(format!("SAVE_GCODE_STATE NAME={STATE_NAME}"));
         *applied = true;
         try_send!(setup_script(&plan.saved, &plan.drive));
+        if let Err(reason) = self.travel(commands, live, events, start).await {
+            return reason;
+        }
 
         // Klipper starts motion on an idle toolhead after its own buffer. Measure it with a
         // move of 0.01 mm that returns to its start, then read Klipper's print time after the

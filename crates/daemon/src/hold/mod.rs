@@ -7,3 +7,4 @@ pub mod pacer;
 pub mod pieces;
 pub mod runner;
 pub mod settings;
+pub mod travel;

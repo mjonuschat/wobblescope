@@ -303,10 +303,10 @@ async fn nonsense_is_refused_before_any_motion() {
     zero.accel_per_hz = Some(0.0);
     let m = invalid(begin(&deps(&sim, t.clone()), zero).await);
     assert!(m.contains("acceleration per Hz"), "{m}");
-    sim.set_position([300.995, 150.0, 20.0]);
-    let m = invalid(begin(&deps(&sim, t.clone()), request(60.0, Some(2.0))).await);
+    let mut edge = request(60.0, Some(2.0));
+    edge.start_point = Some([300.995, 150.0, 20.0]);
+    let m = invalid(begin(&deps(&sim, t.clone()), edge).await);
     assert!(m.contains("axis X"), "{m}");
-    sim.set_position([150.0, 150.0, 20.0]);
     let mut fast = request(60.0, Some(2.0));
     fast.accel_per_hz = Some(2400.0);
     let m = invalid(begin(&deps(&sim, t), fast).await);
@@ -340,12 +340,11 @@ async fn room_is_checked_at_the_start_point() {
 async fn a_change_that_does_not_fit_is_rejected() {
     let sim = HoldSim::start().await;
     sim.set_position([300.93, 307.97, 20.0]);
-    let hold = begin(
-        &deps(&sim, HoldTimings::default()),
-        request(60.0, Some(3.0)),
-    )
-    .await
-    .unwrap();
+    let mut here = request(60.0, Some(3.0));
+    here.start_point = Some([300.93, 307.97, 20.0]);
+    let hold = begin(&deps(&sim, HoldTimings::default()), here)
+        .await
+        .unwrap();
     let mut running = spawn(hold);
     tokio::time::sleep(Duration::from_millis(600)).await;
     running
@@ -462,4 +461,164 @@ async fn the_hold_starts_with_its_id() {
     let id = running.id().await;
     assert!(id.starts_with("hold-"), "{id}");
     running.handle.await.unwrap();
+}
+
+/// The default point of the simulated printer: the middle of X and Y at Z 20.
+const DEFAULT_POINT: [f64; 3] = [150.5, 154.0, 20.0];
+
+fn at(point: [f64; 3]) -> HoldRequest {
+    HoldRequest {
+        start_point: Some(point),
+        ..request(60.0, Some(1.0))
+    }
+}
+
+fn near(a: [f64; 3], b: [f64; 3], tolerance: f64) -> bool {
+    (0..3).all(|i| (a[i] - b[i]).abs() <= tolerance)
+}
+
+#[tokio::test]
+async fn travel_then_hold() {
+    let sim = HoldSim::start().await;
+    sim.set_position([110.5, 154.0, 20.0]);
+    let hold = begin(
+        &deps(&sim, HoldTimings::default()),
+        request(60.0, Some(1.0)),
+    )
+    .await
+    .unwrap();
+    let ended = spawn(hold).handle.await.unwrap();
+    assert_eq!(ended.reason, EndReason::TimeLimit);
+    // 40 mm at the printer's move speed in segments of 0.25 s of motion.
+    let travel = sim.travel_scripts();
+    assert!(travel.len() >= 3, "{travel:?}");
+    assert!(travel.iter().all(|s| s.contains("G1 X") && s.contains('F')));
+    let scripts = sim.scripts();
+    let first_piece = scripts
+        .iter()
+        .position(|s| s.starts_with("G91\nG1"))
+        .unwrap();
+    let last_travel = scripts
+        .iter()
+        .rposition(|s| s.starts_with("G90\nG1"))
+        .unwrap();
+    assert!(last_travel < first_piece, "a piece before the travel ended");
+    assert!(
+        near(sim.position(), DEFAULT_POINT, 0.2),
+        "{:?}",
+        sim.position()
+    );
+}
+
+#[tokio::test]
+async fn a_hold_at_the_point_does_not_travel() {
+    let sim = HoldSim::start().await;
+    let hold = begin(
+        &deps(&sim, HoldTimings::default()),
+        request(60.0, Some(1.0)),
+    )
+    .await
+    .unwrap();
+    spawn(hold).handle.await.unwrap();
+    assert!(sim.travel_scripts().is_empty());
+}
+
+#[tokio::test]
+async fn a_missed_point_gets_one_correction() {
+    let sim = HoldSim::start().await;
+    sim.set_position([140.5, 154.0, 20.0]);
+    sim.set_landing_error([0.2, 0.0, 0.0]);
+    let hold = begin(&deps(&sim, HoldTimings::default()), at(DEFAULT_POINT))
+        .await
+        .unwrap();
+    let ended = spawn(hold).handle.await.unwrap();
+    assert_eq!(ended.reason, EndReason::TimeLimit);
+    // 10 mm is one segment at 0.25 s and 50 mm/s (12.5 mm), then one correction.
+    assert_eq!(sim.travel_scripts().len(), 2, "{:?}", sim.travel_scripts());
+    assert!(
+        near(sim.position(), DEFAULT_POINT, 0.06),
+        "{:?}",
+        sim.position()
+    );
+}
+
+#[tokio::test]
+async fn the_position_is_read_after_the_travel_finishes() {
+    let sim = HoldSim::start().await;
+    sim.set_position([60.5, 154.0, 20.0]);
+    let hold = begin(&deps(&sim, HoldTimings::default()), at(DEFAULT_POINT))
+        .await
+        .unwrap();
+    let ended = spawn(hold).handle.await.unwrap();
+    assert_eq!(ended.reason, EndReason::TimeLimit);
+    // 90 mm is 8 segments of 12.5 mm at the printer's move speed. The last one finishes about a
+    // second after the script is accepted, and a position read before that would look like a
+    // miss and send a correction.
+    assert_eq!(sim.travel_scripts().len(), 8, "{:?}", sim.travel_scripts());
+    assert!(near(sim.position(), DEFAULT_POINT, 0.06));
+}
+
+#[tokio::test]
+async fn live_changes_use_the_position_after_travel() {
+    let sim = HoldSim::start().await;
+    sim.set_position([150.0, 150.0, 20.0]);
+    // The stated point has 0.04 mm of room on Y, less than the 0.0625 mm a Y hold needs. The
+    // toolhead lands 0.04 mm short of it, still within the position tolerance, and there it has
+    // 0.08 mm: the Y change fits where the toolhead is.
+    sim.set_landing_error([0.0, -0.04, 0.0]);
+    let mut tight = at([150.0, 307.96, 20.0]);
+    tight.duration_seconds = Some(5.0);
+    let hold = begin(&deps(&sim, HoldTimings::default()), tight)
+        .await
+        .unwrap();
+    let mut running = spawn(hold);
+    tokio::time::sleep(Duration::from_millis(4500)).await;
+    running
+        .commands
+        .send(Command::SetAxis(HoldAxis::Y))
+        .unwrap();
+    let ended = (&mut running.handle).await.unwrap();
+    assert_eq!(ended.reason, EndReason::TimeLimit);
+    let events = running.drain();
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e, HoldEvent::Rejected { .. })),
+        "the change was checked against the stated point, not where the toolhead is: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, HoldEvent::State(s) if s.axis == HoldAxis::Y))
+    );
+}
+
+#[tokio::test]
+async fn stop_during_travel_ends_between_segments() {
+    let sim = HoldSim::start().await;
+    sim.set_position([20.5, 154.0, 20.0]);
+    let hold = begin(&deps(&sim, HoldTimings::default()), at(DEFAULT_POINT))
+        .await
+        .unwrap();
+    let running = spawn(hold);
+    tokio::time::sleep(Duration::from_millis(900)).await;
+    let sent = Instant::now();
+    running.commands.send(Command::Stop).unwrap();
+    let ended = running.handle.await.unwrap();
+    assert_eq!(ended.reason, EndReason::Stopped);
+    assert_eq!(ended.restore, Restore::Done);
+    assert!(sent.elapsed() < Duration::from_millis(1500));
+    // 130 mm is 11 segments of 12.5 mm, and the stop came well before they were all sent.
+    assert!(
+        sim.travel_scripts().len() < 11,
+        "{}",
+        sim.travel_scripts().len()
+    );
+    assert_eq!(sim.pieces(), 0);
+    assert!(
+        sim.scripts()
+            .last()
+            .unwrap()
+            .contains("RESTORE_GCODE_STATE")
+    );
 }

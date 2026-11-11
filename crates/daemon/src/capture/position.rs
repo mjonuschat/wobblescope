@@ -96,7 +96,7 @@ fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
     (list.len() >= N).then_some(out)
 }
 
-async fn position(control: &Rpc, timeout: Duration) -> Result<[f64; 3], PositionError> {
+pub(crate) async fn position(control: &Rpc, timeout: Duration) -> Result<[f64; 3], PositionError> {
     let answer = query(control, &json!({"toolhead": ["position"]}), timeout).await?;
     answer
         .get("status")
