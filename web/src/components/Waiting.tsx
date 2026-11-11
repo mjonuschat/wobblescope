@@ -1,15 +1,24 @@
-import { LoaderCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
-/** A card with a spinner and a line of text, for something that is being calculated or loaded. */
+/** A card of placeholder lines with a caption, for results that are being calculated or loaded. */
 export function Waiting({ children }: { children: ReactNode }) {
   return (
-    <Card role="status">
-      <CardContent className="flex flex-col items-center gap-3 py-10 text-sm text-muted-foreground">
-        <LoaderCircleIcon aria-hidden="true" className="size-6 animate-spin" />
-        <p>{children}</p>
+    <Card role="status" aria-busy="true">
+      <CardHeader>
+        <Skeleton className="h-3 w-40" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+        </div>
+        <Skeleton className="h-24 w-full" />
+        <p className="text-sm text-muted-foreground">{children}</p>
       </CardContent>
     </Card>
   );
