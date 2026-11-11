@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
@@ -396,24 +397,28 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         </div>
       </FormCard>
 
-      <div className="space-y-2">
-        {general && (
-          <p role="alert" className="text-sm text-destructive">
-            {general}
-          </p>
-        )}
-        {failures.length > 0 && (
-          <div role="alert" className="space-y-1 text-sm text-destructive">
-            <p>The test did not start:</p>
-            <ul className="list-disc pl-5">
-              {failures.map((f) => (
-                <li key={f.check}>{f.message}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
-        <Button type="submit" disabled={problem !== null || start.isPending}>
+      <Separator />
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          {general && (
+            <p role="alert" className="text-sm text-destructive">
+              {general}
+            </p>
+          )}
+          {failures.length > 0 && (
+            <div role="alert" className="space-y-1 text-sm text-destructive">
+              <p>The test did not start:</p>
+              <ul className="list-disc pl-5">
+                {failures.map((f) => (
+                  <li key={f.check}>{f.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
+        </div>
+        <Button type="submit" size="lg" className="ml-auto px-5" disabled={problem !== null || start.isPending}>
           {start.isPending ? "Checking printer…" : "Start test"}
         </Button>
       </div>
