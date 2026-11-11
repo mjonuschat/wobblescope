@@ -41,6 +41,12 @@ function serve(meta = twoAxisMeta()) {
   );
 }
 
+/** Opens a chip's tab and returns its card; with several chips the page shows one at a time. */
+async function chipCard(name: string) {
+  fireEvent.click(await screen.findByRole("tab", { name }));
+  return screen.findByRole("region", { name: `Chip ${name}` });
+}
+
 function clipboard(value: unknown) {
   Object.defineProperty(navigator, "clipboard", { value, configurable: true });
 }
@@ -88,7 +94,7 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    const degraded = await screen.findByRole("region", { name: "Chip b" });
+    const degraded = await chipCard("b");
     expect(degraded.textContent).toContain("No recommendation for this chip: degraded capture health");
     expect(degraded.querySelector('[role="img"]')).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recommended Input Shaper" }).textContent).toContain("mzv at 48.2 Hz");
@@ -131,7 +137,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     expect(await screen.findByText(/none of its recordings could be used/)).toBeTruthy();
-    expect(screen.getAllByText(/incomplete coverage: tail/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/The capture is incomplete: tail/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/shaper_type_x/)).toBeNull();
   });
 
@@ -146,7 +152,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     const panel = await screen.findByRole("region", { name: "Data Quality" });
     expect(panel.textContent).toContain("Could not be analysed: timestamps are not finite and strictly increasing");
-    expect(screen.getByRole("region", { name: "Chip b" }).textContent).toContain(
+    expect((await chipCard("b")).textContent).toContain(
       "No recommendation for this chip: timestamps are not finite and strictly increasing",
     );
     expect(screen.getByRole("region", { name: "Recommended Input Shaper" })).toBeTruthy();
@@ -167,7 +173,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     expect(await screen.findByText(/none of its recordings could be used/)).toBeTruthy();
     expect(screen.getAllByText(/too few samples: have 0/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("region", { name: "Chip b" }).querySelector('[role="img"]')).toBeTruthy();
+    expect((await chipCard("b")).querySelector('[role="img"]')).toBeTruthy();
   });
 
   it("covers AE6: an undersampled chip can be included anyway", async () => {
@@ -207,7 +213,7 @@ describe("the session view", () => {
         "Could not be analysed: flat signal",
       ),
     );
-    expect(screen.getByRole("region", { name: "Chip b" }).textContent).toContain(
+    expect((await chipCard("b")).textContent).toContain(
       "No recommendation for this chip: flat signal: no vibration power to analyse",
     );
     const box = screen.getByRole("checkbox", { name: /Include b anyway/ });
@@ -231,6 +237,29 @@ describe("the session view", () => {
     const quality = await screen.findByRole("region", { name: "Data Quality" });
     expect(quality.textContent).toContain("Good data");
     expect(quality.textContent).not.toContain("Left out");
+  });
+
+  it("shows one chip at a time, with a tab for each chip when there are several", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
+    serve();
+    renderRoute("/sessions/s1");
+    const first = await screen.findByRole("region", { name: "Chip a" });
+    expect(first).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Chip b" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "b" }));
+    expect(await screen.findByRole("region", { name: "Chip b" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
+  });
+
+  it("shows no chip tabs for a single chip", async () => {
+    const a = analysis();
+    a.per_chip = [{ ...a.per_chip[0], chip: "adxl345" }];
+    a.eligibility.decisions = [decision("adxl345", "Included")];
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET]));
+    serve();
+    renderRoute("/sessions/s1");
+    await screen.findByRole("region", { name: "Chip adxl345" });
+    expect(screen.queryByRole("tab", { name: "adxl345" })).toBeNull();
   });
 
   it("shows an analysis error while the metadata stays visible", async () => {

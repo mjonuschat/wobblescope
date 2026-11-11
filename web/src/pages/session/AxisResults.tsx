@@ -1,6 +1,9 @@
+import { useState } from "react";
+
 import { Panel } from "@/components/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { summedOption } from "@/components/charts/options";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { AnalysisResult } from "@/analysis/protocol";
@@ -26,6 +29,13 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
   const { analysis, snippets } = result;
   const settings = effectiveSettings(analysis);
   const maxFreq = settings?.max_freq ?? 200;
+  // The chip whose chart and table show. A name that is not in this axis's analysis gives way to the first.
+  const [chipName, setChipName] = useState<string | null>(null);
+  const shownIndex = Math.max(
+    0,
+    analysis.per_chip.findIndex((c) => c.chip === chipName),
+  );
+  const shown = analysis.per_chip[shownIndex];
   return (
     <div className="space-y-4">
       {analysis.worst_case ? (
@@ -49,16 +59,27 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         overrides={overrides}
         onOverridesChange={onOverridesChange}
       />
-      {analysis.per_chip.map((chip, i) => (
+      {analysis.per_chip.length > 1 && (
+        <Tabs value={shown.chip} onValueChange={setChipName}>
+          <TabsList variant="line">
+            {analysis.per_chip.map((c) => (
+              <TabsTrigger key={c.chip} value={c.chip} className="after:bg-primary">
+                {c.chip}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+      {shown && (
         <ChipResult
-          key={chip.chip}
-          chip={chip}
-          snippets={snippets.perChip[i]}
+          key={shown.chip}
+          chip={shown}
+          snippets={snippets.perChip[shownIndex]}
           probePoints={meta.probe_points}
           maxFreq={maxFreq}
           decisions={analysis.eligibility.decisions}
         />
-      ))}
+      )}
       {analysis.summed && (
         <Panel title="Summed PSD" label="Summed PSD">
           <EChart
