@@ -16,7 +16,6 @@ const STEPS = [
   { id: "results", label: "Results" },
 ];
 
-/** The Input Shaper test screen. */
 export function RunPage() {
   const status = useStatus();
   const settings = useSettings();
@@ -29,7 +28,6 @@ export function RunPage() {
   const [dismissed, setDismissed] = useState<string | null>(null);
   // The running test as last seen, so its progress can stay on screen when it ends.
   const [lastSeen, setLastSeen] = useState<TestState | null>(null);
-  // The finished test the user has moved on from, by Next or by the countdown.
   const [advanced, setAdvanced] = useState<string | null>(null);
   useEffect(() => {
     if (live.test) setLastSeen(live.test);

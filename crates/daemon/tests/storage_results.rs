@@ -224,7 +224,6 @@ fn lists_a_damaged_file_as_unusable() {
     ));
     storage.result(&good).unwrap();
 
-    // Damage to result.json makes the file unusable in the list too, and it sorts last.
     flip(&path, 100);
     let bytes = fs::read(&path).unwrap();
     let at = bytes

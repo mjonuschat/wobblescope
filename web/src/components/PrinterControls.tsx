@@ -5,13 +5,11 @@ import { CONFIRM_WINDOW_MS, useConfirmClick } from "@/lib/confirm";
 import { useHomePrinter, usePrinterState, useStatus, useStopPrinter } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
 
-/** How much of the printer is homed: all of X, Y and Z, some of them, or none. */
 export function homedTone(axes: string | null | undefined): "full" | "partial" | "none" {
   if (!axes) return "none";
   return ["x", "y", "z"].every((a) => axes.includes(a)) ? "full" : "partial";
 }
 
-/** The emergency stop and home buttons for the whole printer, at the right end of the header. */
 export function PrinterControls() {
   const status = useStatus();
   const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";

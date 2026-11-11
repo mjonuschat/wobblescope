@@ -16,7 +16,6 @@ interface Props {
   all: Summary[];
 }
 
-/** Which column a filter belongs to. */
 export type FilterColumn = "chip" | "printer" | "pinned";
 
 function Choice({
@@ -51,10 +50,6 @@ function Choice({
 
 const same = (names: string[]) => names.map((name) => ({ value: name, label: name }));
 
-/**
- * A filter icon for a column header. It opens a popover with a select box, and is outlined in
- * the accent colour while the column is filtered.
- */
 export function ColumnFilter({ column, filters, onChange, all }: Props & { column: FilterColumn }) {
   let label: string;
   let everything: string;

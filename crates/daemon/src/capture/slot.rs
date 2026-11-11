@@ -94,7 +94,6 @@ impl TestSlot {
         }
     }
 
-    /// Asks the test that holds the slot, if any, to stop. Returns its id.
     #[must_use]
     pub fn request_stop_current(&self) -> Option<String> {
         let s = lock(&self.state);

@@ -11,7 +11,6 @@ import { EligibilityPanel } from "./EligibilityPanel";
 import { RecommendationCard } from "./RecommendationCard";
 import { effectiveSettings } from "./fit";
 
-/** The value of the tab that shows all the chips added together. */
 const ALL_CHIPS = "*all-chips*";
 
 /** True in the dev server when the URL asks for fake data, so the combined view can be looked at. */

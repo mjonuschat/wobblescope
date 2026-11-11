@@ -188,7 +188,6 @@ impl Link {
         }
     }
 
-    /// Passes the console lines of a `notify_gcode_response` on to whoever listens.
     fn forward_gcode(&self, note: &Notification) {
         let lines = note.params.as_array().into_iter().flatten();
         for line in lines.filter_map(serde_json::Value::as_str) {

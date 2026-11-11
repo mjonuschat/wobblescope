@@ -14,7 +14,6 @@ interface Options {
   settings?: PrinterSettings;
   chips?: ChipsSnapshot;
   checked?: ChipsSnapshot;
-  /** The axes Klipper reports as homed. */
   homed?: string | null;
   start?: Reply | ((call: ApiCall) => Reply);
 }
@@ -232,13 +231,11 @@ describe("the run screen", () => {
     const xs = () =>
       [...document.querySelectorAll<HTMLInputElement>('input[id^="point-"][id$="-x"]')].map((i) => i.value);
     const hidden = (el: Element) => el.className.includes("invisible");
-    // One point: the minus keeps its space but is hidden.
     expect(hidden(screen.getByRole("button", { name: "Remove point 1" }))).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Add a point after point 1" }));
     fireEvent.change(document.getElementById("point-1-x") as HTMLInputElement, { target: { value: "200" } });
     expect(xs()).toEqual(["150.5", "200"]);
     expect(hidden(screen.getByRole("button", { name: "Remove point 1" }))).toBe(false);
-    // The plus of the first row inserts between the two.
     fireEvent.click(screen.getByRole("button", { name: "Add a point after point 1" }));
     expect(xs()).toEqual(["150.5", "150.5", "200"]);
     fireEvent.click(screen.getByRole("button", { name: "Remove point 2" }));
@@ -254,7 +251,6 @@ describe("the run screen", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "3 x 3 Grid" }));
     await waitFor(() => expect(xs()).toHaveLength(9));
     expect(xs().slice(0, 3)).toEqual(["20", "150.5", "281"]);
-    // A pattern replaces the rows; the 5 point one has five.
     fireEvent.click(screen.getByRole("button", { name: /Pattern/ }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Center + Corners" }));
     await waitFor(() => expect(xs()).toHaveLength(5));

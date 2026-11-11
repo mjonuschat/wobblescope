@@ -16,7 +16,6 @@ import { baselineFor } from "./fit";
 
 type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
 
-/** The analysis of the chosen axis: a wait, the reason it failed, or the results. */
 function AnalysisView({
   query,
   axis,
@@ -43,11 +42,6 @@ function AnalysisView({
   return <AxisResults result={query.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
 }
 
-/**
- * A stored session's analysis: a tab for each axis, the recommendation and charts for the one
- * chosen, the fit settings and the details of the recording. The session page and the results
- * of a test show the same thing.
- */
 export function SessionResults({ id, header = defaultHeader }: { id: string; header?: Header }) {
   const session = useSession(id);
   if (session.isPending) {

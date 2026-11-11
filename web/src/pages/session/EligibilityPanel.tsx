@@ -20,7 +20,6 @@ function overridable(analysis: Analysis) {
   return chips;
 }
 
-/** The reasons the analysis gives, in words for someone who has not read its source. */
 export function explainReason(reason: string): string {
   if (reason === "degraded capture health") return "The chip dropped or garbled samples during the capture.";
   if (reason === "unknown capture health") {
@@ -33,7 +32,6 @@ export function explainReason(reason: string): string {
 
 type Tone = "good" | "warn" | "bad";
 
-/** What a decision comes to for the reader: how it went, and why. */
 export function verdict(d: DatasetDecision): { tone: Tone; headline: string; detail: string } {
   const detail = d.reasons.map(explainReason).join(" ");
   if (d.decision === "Excluded") return { tone: "bad", headline: "Left out", detail };
@@ -63,7 +61,6 @@ export function EligibilityPanel({
 }) {
   const { decisions } = analysis.eligibility;
   if (decisions.length === 0 && analysis.failures.length === 0) return null;
-  // The test point only tells recordings apart when there is more than one.
   const manyPoints = new Set(decisions.map((d) => d.point)).size > 1;
   return (
     <Panel title="Data Quality">

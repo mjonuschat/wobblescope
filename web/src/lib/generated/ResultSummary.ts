@@ -7,20 +7,4 @@ export type ResultSummary = {
 /**
  * Result id, taken from the file name.
  */
-id: string, label: string | null, 
-/**
- * Save time, when the record could be read.
- */
-created_at: string | null, 
-/**
- * Source session, when the record could be read.
- */
-session_id: string | null, 
-/**
- * Core version of the analysis, when the record could be read.
- */
-core_version: string | null, size_bytes: number, 
-/**
- * Why the zip cannot be used, when it cannot.
- */
-unusable: string | null, };
+id: string, label: string | null, created_at: string | null, session_id: string | null, core_version: string | null, size_bytes: number, unusable: string | null, };

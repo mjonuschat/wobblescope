@@ -4,14 +4,11 @@ import type { Axis } from "@/lib/generated/Axis";
 import type { ChipLive } from "@/lib/generated/ChipLive";
 import type { TestState } from "@/lib/generated/TestState";
 
-/** One chip's signal against frequency for the segment being measured. */
 export interface Trace {
   chip: string;
-  /** `[Hz, signal]` pairs in the order they arrived. */
   points: [number, number][];
 }
 
-/** The traces of one segment. A new segment has a new key and starts empty. */
 export interface Traces {
   key: string;
   series: Trace[];
@@ -19,7 +16,6 @@ export interface Traces {
 
 export const NO_TRACES: Traces = { key: "", series: [] };
 
-/** The chip's signal on the tested axis: X for an X segment, Y for a Y segment. */
 export function levelOf(chip: ChipLive, axis: Axis | null): number | null {
   if (!chip.level) return null;
   return chip.level[axis === "Y" ? 1 : 0];
@@ -56,7 +52,6 @@ const text = "#d4d4d4";
 const GRID = "rgba(255, 255, 255, 0.08)";
 const COLORS = ["#ff5a1f", "#ffb347", "#e0431a", "#ffd699"];
 
-/** A line per chip with Hz along the bottom and the signal up the side. */
 export function liveSignalOption(series: Trace[], range: [number, number]): EChartsCoreOption {
   return {
     backgroundColor: "transparent",

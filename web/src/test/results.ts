@@ -18,7 +18,6 @@ export function resultSummary(id: string, over: Partial<ResultSummary> = {}): Re
   };
 }
 
-/** A saved axis X result of session `s1`, with chip `a` recommending and chip `b` not. */
 export function resultDetail(over: { coreVersion?: string } = {}): ResultDetail {
   const saved = analysis();
   return {

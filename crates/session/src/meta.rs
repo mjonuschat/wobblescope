@@ -81,10 +81,8 @@ pub struct PrinterInfo {
     /// depends on it.
     #[serde(default)]
     pub square_corner_velocity: Option<f64>,
-    /// `damping_ratio_x` of the printer's `[input_shaper]` section, when it sets one.
     #[serde(default)]
     pub damping_ratio_x: Option<f64>,
-    /// `damping_ratio_y` of the printer's `[input_shaper]` section, when it sets one.
     #[serde(default)]
     pub damping_ratio_y: Option<f64>,
 }

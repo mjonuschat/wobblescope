@@ -12,15 +12,12 @@ import { ShaperTable } from "./ShaperTable";
 
 interface Props {
   chip: ChipAnalysis;
-  /** The control that switches between chips, shown at the top of the card. */
   switcher: ReactNode;
-  /** The `[input_shaper]` snippet of each shaper in the recommendation, in order. */
   snippets: string[] | null;
   maxFreq: number;
   decisions: DatasetDecision[];
 }
 
-/** One chip's chart and shaper table, or why it has no recommendation. */
 function ChipDetails({
   chip,
   snippets,
@@ -30,7 +27,6 @@ function ChipDetails({
   corner,
 }: Omit<Props, "switcher"> & {
   chartHeight?: number | string;
-  /** A control for the top right corner of the chart, beside the legend. */
   corner?: ReactNode;
 }) {
   const rec = chip.recommendation;

@@ -25,7 +25,6 @@ export interface ForgetRequest {
 
 export type WorkerRequest = AnalyzeRequest | ForgetRequest;
 
-/** The analysis plus the `[input_shaper]` text for each recommendation and each candidate shaper in it. */
 export interface AnalysisResult {
   analysis: Analysis;
   snippets: {

@@ -18,12 +18,10 @@ function outcomeText(outcome: Outcome): string {
   return `Failed: ${outcome.Failed.reason}`;
 }
 
-/** Where the session came from: this app's own test, or a CSV file. */
 function sourceText(meta: SessionMeta): string {
   return meta.source === "Capture" ? "Wobblescope" : "CSV";
 }
 
-/** The name of the file an import came from, when it has one. A test has no file. */
 function fileName(meta: SessionMeta): string | null {
   return meta.source === "Capture" ? null : meta.source.CsvImport.original_file_name;
 }
@@ -34,17 +32,12 @@ const row = (label: string, value: React.ReactNode, className?: string) => (
   </Field>
 );
 
-/** A position as `X: 150.5, Y: 154, Z: 50`. */
 function positionText(position: [number, number, number] | null): string {
   if (!position) return "Not recorded";
   const [x, y, z] = position;
   return `X: ${x}, Y: ${y}, Z: ${z}`;
 }
 
-/**
- * The test points: the first on one line, and when there are more a button that opens them all,
- * one per line below.
- */
 function ProbePoints({ points }: { points: SessionMeta["probe_points"] }) {
   const [open, setOpen] = useState(false);
   if (points.length === 0) return <>Not recorded</>;

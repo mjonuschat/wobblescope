@@ -22,7 +22,6 @@ export function formatAccel(accel: number): string {
   return `${Math.round(accel / 100) * 100} mm/s²`;
 }
 
-/** An RFC 3339 time as `YYYY-MM-DD HH:MM:SS` on a 24 hour clock, in the viewer's time zone. */
 export function formatTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;

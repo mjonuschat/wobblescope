@@ -19,13 +19,9 @@ use crate::psd::{CalibrationData, MAX_FREQ};
 pub struct SummedPsd {
     /// Frequency grid in Hz.
     pub freq_bins: Vec<f64>,
-    /// Summed total PSD.
     pub psd: Vec<f64>,
-    /// Summed x-direction PSD.
     pub psd_x: Vec<f64>,
-    /// Summed y-direction PSD.
     pub psd_y: Vec<f64>,
-    /// Summed z-direction PSD.
     pub psd_z: Vec<f64>,
 }
 
@@ -61,7 +57,7 @@ pub fn summed_psd(data: &[CalibrationData], max_freq: f64) -> Option<SummedPsd> 
         psd_x: sum(|d| &d.psd_x),
         psd_y: sum(|d| &d.psd_y),
         psd_z: sum(|d| &d.psd_z),
-        freq_bins: grid.clone(),
+        freq_bins: grid,
     })
 }
 

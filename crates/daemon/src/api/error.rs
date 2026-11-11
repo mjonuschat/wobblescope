@@ -20,25 +20,44 @@ use crate::storage::StorageError;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ApiError {
     /// No such session, recording or path.
-    NotFound { message: String },
+    NotFound {
+        message: String,
+    },
     /// The path exists but not for this method.
-    MethodNotAllowed { message: String },
+    MethodNotAllowed {
+        message: String,
+    },
     /// A bad path, query or body.
-    InvalidRequest { message: String },
+    InvalidRequest {
+        message: String,
+    },
     /// The uploaded file is not a valid Klipper raw CSV.
-    InvalidCsv { message: String },
+    InvalidCsv {
+        message: String,
+    },
     /// The upload is over the size limit.
-    TooLarge { message: String },
+    TooLarge {
+        message: String,
+    },
     /// Another import is running.
-    Busy { message: String },
+    Busy {
+        message: String,
+    },
     /// The session is pinned.
-    Pinned { message: String },
+    Pinned {
+        message: String,
+    },
     /// The session is being downloaded.
-    InUse { message: String },
-    /// The session was replaced since the browser analysed it.
-    SessionChanged { message: String },
+    InUse {
+        message: String,
+    },
+    SessionChanged {
+        message: String,
+    },
     /// A saved result is damaged, unreadable or from a newer version; `message` says why.
-    ResultUnusable { message: String },
+    ResultUnusable {
+        message: String,
+    },
     /// The retention cap cannot fit the import even after evicting everything eligible.
     CapExceeded {
         message: String,
@@ -65,23 +84,41 @@ pub enum ApiError {
         failures: Vec<CheckFailure>,
     },
     /// No running test has this id, and no finished test with uncertain motion.
-    TestNotRunning { message: String },
+    TestNotRunning {
+        message: String,
+    },
     /// A write from another origin.
-    CrossOrigin { message: String },
+    CrossOrigin {
+        message: String,
+    },
     /// The client's address is not in Moonraker's `trusted_clients`.
-    UntrustedClient { message: String },
+    UntrustedClient {
+        message: String,
+    },
     /// The `Host` of the request is not on the allowlist.
-    HostNotAllowed { message: String },
+    HostNotAllowed {
+        message: String,
+    },
     /// Moonraker requires logins, which the daemon cannot check yet.
-    LoginsRequired { message: String },
+    LoginsRequired {
+        message: String,
+    },
     /// The daemon has not read Moonraker's `trusted_clients`, so it admits only loopback.
-    AccessUnavailable { message: String },
+    AccessUnavailable {
+        message: String,
+    },
     /// Storage is not open yet: the daemon is waiting for Moonraker to report the data directory.
-    StorageUnavailable { message: String },
+    StorageUnavailable {
+        message: String,
+    },
     /// Moonraker cannot answer: not connected, or it answered with an error.
-    MoonrakerUnavailable { message: String },
+    MoonrakerUnavailable {
+        message: String,
+    },
     /// Anything else that went wrong on the daemon.
-    Internal { message: String },
+    Internal {
+        message: String,
+    },
 }
 
 impl ApiError {

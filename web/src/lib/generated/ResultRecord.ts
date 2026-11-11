@@ -2,9 +2,6 @@
 import type { AxisSnapshot } from "./AxisSnapshot";
 import type { FitParams } from "./FitParams";
 
-/**
- * The contents of `result.json`.
- */
 export type ResultRecord = { 
 /**
  * Version of this shape; see [`RESULT_VERSION`].

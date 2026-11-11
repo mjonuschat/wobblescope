@@ -16,7 +16,6 @@ const FIELDS: Record<keyof FitDraft, { label: string; unit: string; step: number
   max_vibrations: { label: "Acceptable Vibration", unit: "%", step: 0.1 },
 };
 
-/** What a field means, in a sentence or two, including where its starting value came from. */
 function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string {
   switch (key) {
     case "scv":
@@ -47,7 +46,6 @@ interface FieldProps {
   onChange: (value: string) => void;
 }
 
-/** A number field whose whole label, with an info icon, shows what it means when hovered. */
 function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   const { label, unit, step } = FIELDS[name];
   const id = `fit-${name}`;
@@ -90,7 +88,6 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
 interface Props {
   /** The values to start from, and which of them the printer recorded. Klipper's defaults when omitted. */
   baseline?: FitBaseline;
-  /** The settings the view is using now, when the user changed them. */
   applied?: FitParams | null;
   onApply: (params: FitParams) => void;
   /** Called by Reset. Without it, Reset applies the baseline. */

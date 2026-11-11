@@ -42,7 +42,6 @@ function serve(meta = twoAxisMeta()) {
   );
 }
 
-/** Opens a chip's tab and returns its card; with several chips the page shows one at a time. */
 async function chipCard(name: string) {
   fireEvent.click(await screen.findByRole("tab", { name }));
   return screen.findByRole("region", { name: `Chip ${name}` });
@@ -57,7 +56,6 @@ beforeEach(() => {
 });
 afterEach(() => clipboard(undefined));
 
-/** Opens the save dialog once the analysis has arrived and enabled the button. */
 async function openSaveDialog() {
   const button = (await screen.findByRole("button", { name: "Save" })) as HTMLButtonElement;
   await waitFor(() => expect(button.disabled).toBe(false));
@@ -296,7 +294,6 @@ describe("the session view", () => {
     expect(all.textContent).toContain("adds the chips together");
     expect(all.textContent).toContain("only for looking");
     expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
-    // Back to a chip.
     fireEvent.click(screen.getByRole("tab", { name: "a" }));
     expect(await screen.findByRole("region", { name: "Chip a" })).toBeTruthy();
   });
@@ -473,7 +470,6 @@ describe("the session view", () => {
       await save();
     }
 
-    /** Opens the dialog and confirms it. */
     async function save() {
       await openSaveDialog();
       fireEvent.click(await screen.findByRole("button", { name: "Save" }));

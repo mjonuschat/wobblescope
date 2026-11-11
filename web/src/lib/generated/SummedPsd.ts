@@ -8,20 +8,4 @@ export type SummedPsd = {
 /**
  * Frequency grid in Hz.
  */
-freq_bins: Array<number>, 
-/**
- * Summed total PSD.
- */
-psd: Array<number>, 
-/**
- * Summed x-direction PSD.
- */
-psd_x: Array<number>, 
-/**
- * Summed y-direction PSD.
- */
-psd_y: Array<number>, 
-/**
- * Summed z-direction PSD.
- */
-psd_z: Array<number>, };
+freq_bins: Array<number>, psd: Array<number>, psd_x: Array<number>, psd_y: Array<number>, psd_z: Array<number>, };

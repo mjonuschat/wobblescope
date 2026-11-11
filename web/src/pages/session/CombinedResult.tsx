@@ -9,13 +9,11 @@ import type { SummedPsd } from "@/lib/generated/SummedPsd";
 interface Props {
   summed: SummedPsd;
   maxFreq: number;
-  /** The control that switches between chips, shown at the top of the card. */
   switcher: ReactNode;
 }
 
 const LABEL = "All chips added together, vibration strength against frequency";
 
-/** The chips' vibration added up into one curve, for looking at how the printer vibrates overall. */
 export function CombinedResult({ summed, maxFreq, switcher }: Props) {
   const option = summedOption(summed, maxFreq);
   return (

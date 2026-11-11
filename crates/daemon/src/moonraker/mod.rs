@@ -197,7 +197,6 @@ pub struct Publisher {
 }
 
 impl Publisher {
-    /// Publishes a line Klipper wrote to the console.
     pub fn publish_gcode(&self, line: String) {
         // No receiver is the normal case between tests.
         let _ = self.gcode.send(line);

@@ -227,7 +227,6 @@ export function useStartTest() {
   return useMutation({ mutationFn: (request: StartTestRequest) => startTest(request) });
 }
 
-/** The homed axes, polled while Klipper is ready. */
 export function usePrinterState(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.printer,

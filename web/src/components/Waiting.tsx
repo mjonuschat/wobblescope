@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/** A card of placeholder lines with a caption, for results that are being calculated or loaded. */
 export function Waiting({ children }: { children: ReactNode }) {
   return (
     <Card role="status" aria-busy="true">

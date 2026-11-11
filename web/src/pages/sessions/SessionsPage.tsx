@@ -30,7 +30,6 @@ const OUTCOME_CLASS: Record<OutcomeKind, string> = {
   Failed: "border-red-500/50 text-red-400",
 };
 
-/** An icon button that names itself in a tooltip. */
 function IconAction({
   label,
   hint,
@@ -41,12 +40,9 @@ function IconAction({
   children,
 }: {
   label: string;
-  /** What the action does, shown in the tooltip. The label when omitted. */
   hint?: string;
   disabled?: boolean;
-  /** Makes the action a download link instead of a button. */
   href?: string;
-  /** Outlines the button in the accent colour. */
   highlighted?: boolean;
   onClick?: () => void;
   children: ReactNode;

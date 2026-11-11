@@ -4,10 +4,8 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-/** The height of a chart in the expanded view, which follows the window. */
 export const EXPANDED_CHART_HEIGHT = "clamp(280px, calc(100vh - 30rem), 640px)";
 
-/** An icon button that opens `children` in a large dialog, for a detailed look. */
 export function ExpandDialog({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Dialog>

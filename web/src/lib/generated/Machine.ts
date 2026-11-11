@@ -8,40 +8,8 @@ export type Machine = {
 /**
  * The host's name, which Klipper reports as `hostname`.
  */
-name: string | null, 
-/**
- * Klipper's `software_version`.
- */
-klipper_version: string | null, 
-/**
- * The `[printer]` section's `kinematics`, such as `corexy`.
- */
-kinematics: string | null, 
+name: string | null, klipper_version: string | null, kinematics: string | null, 
 /**
  * The names of the MCU sections in the config, `mcu` first.
  */
-mcus: Array<string>, 
-/**
- * The toolhead's current `max_velocity`, in mm/s.
- */
-max_velocity: number | null, 
-/**
- * The toolhead's current `max_accel`, in mm/s².
- */
-max_accel: number | null, 
-/**
- * The toolhead's current `minimum_cruise_ratio`.
- */
-minimum_cruise_ratio: number | null, 
-/**
- * The toolhead's current `square_corner_velocity`, in mm/s.
- */
-square_corner_velocity: number | null, 
-/**
- * The config's `max_z_velocity`, in mm/s.
- */
-max_z_velocity: number | null, 
-/**
- * The config's `max_z_accel`, in mm/s².
- */
-max_z_accel: number | null, };
+mcus: Array<string>, max_velocity: number | null, max_accel: number | null, minimum_cruise_ratio: number | null, square_corner_velocity: number | null, max_z_velocity: number | null, max_z_accel: number | null, };

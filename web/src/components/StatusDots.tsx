@@ -11,7 +11,6 @@ interface Connection {
   details: string[];
 }
 
-/** One light per link in the chain: Moonraker, Klipper behind it, and the session storage. */
 export function connections(status: StatusResponse | undefined): Connection[] {
   if (!status) {
     return ["Moonraker", "Klipper", "Storage"].map((label) => ({ label, tone: "off", details: ["No answer yet"] }));
@@ -60,7 +59,6 @@ export function Dot({ tone }: { tone: Tone }) {
   return <span aria-hidden="true" className={cn("inline-block size-2 rounded-full", color)} />;
 }
 
-/** The connection lights in the header, each with its details in a tooltip. */
 export function StatusDots() {
   const status = useStatus();
   const items = connections(status.data);

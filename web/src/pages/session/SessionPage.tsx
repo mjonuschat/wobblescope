@@ -6,7 +6,6 @@ import { sessionDownloadUrl } from "@/lib/api/endpoints";
 
 import { SessionResults } from "./SessionResults";
 
-/** A stored session: its title and its analysis. */
 export function SessionPage({ id }: { id: string }) {
   return (
     <div className="mx-auto max-w-5xl space-y-6">

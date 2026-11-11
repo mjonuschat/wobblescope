@@ -126,7 +126,6 @@ export function deleteResult(id: string) {
   return apiJson<void>(`results/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** The stored, compressed sample file of one recording, as the saved result holds it. */
 export async function fetchResultSample(
   id: string,
   chip: number,
@@ -169,12 +168,10 @@ export function startTest(request: StartTestRequest) {
   });
 }
 
-/** What the printer reports about itself right now. */
 export function getPrinter(signal?: AbortSignal) {
   return apiJson<PrinterState>("printer", { signal });
 }
 
-/** Stops the printer at once, whether or not a test is running. */
 export function stopPrinter() {
   return apiJson<StopDispatched>("printer/emergency-stop", { method: "POST" });
 }
@@ -184,7 +181,6 @@ export function homePrinter() {
   return apiJson<Homed>("printer/home", { method: "POST" });
 }
 
-/** Where the browser fetches a session as a zip of its metadata and sample files. */
 export function sessionDownloadUrl(id: string): string {
   return apiUrl(`sessions/${encodeURIComponent(id)}/download`).toString();
 }

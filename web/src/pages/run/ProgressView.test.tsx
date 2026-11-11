@@ -48,7 +48,6 @@ const done: FinishedTest = {
   motion_uncertain: false,
 };
 
-/** The start button once the printer is known to be homed. */
 async function enabledRun() {
   const button = (await screen.findByRole("button", { name: "Run Test" })) as HTMLButtonElement;
   await waitFor(() => expect(button.disabled).toBe(false));
@@ -315,7 +314,6 @@ describe("starting a test", () => {
     api();
     renderRoute("/run/shaper");
     const run = await enabledRun();
-    // The socket drops after the form is up, as when a proxy cuts it.
     act(() => FakeSocket.latest.drop());
     fireEvent.click(run);
     expect(await screen.findByText("Starting…")).toBeTruthy();

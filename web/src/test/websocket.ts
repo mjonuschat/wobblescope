@@ -9,7 +9,6 @@ export class FakeSocket {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onclose: (() => void) | null = null;
 
-  /** Whether a new socket opens and sends an idle snapshot on its own. */
   static idle = false;
 
   constructor(url: string | URL) {
@@ -48,10 +47,6 @@ export class FakeSocket {
   }
 }
 
-/**
- * Replaces `WebSocket` with [`FakeSocket`] and forgets earlier sockets. With `idle`, each socket
- * opens at once and reports no test, as a daemon with nothing running does.
- */
 export function stubWebSocket({ idle = false }: { idle?: boolean } = {}) {
   FakeSocket.instances = [];
   FakeSocket.idle = idle;

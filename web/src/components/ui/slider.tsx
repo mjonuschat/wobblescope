@@ -10,7 +10,6 @@ function Slider({
   thumbLabels,
   ...props
 }: SliderPrimitive.Root.Props & {
-  /** The accessible name of each thumb, in order. */
   thumbLabels?: string[]
 }) {
   const _values = Array.isArray(value)

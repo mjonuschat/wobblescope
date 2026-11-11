@@ -33,7 +33,6 @@ pub(super) async fn download(
         .into_response())
 }
 
-/// `GET /api/sessions/{id}/download`: the session as a zip with its `meta.json` and sample files.
 pub(super) async fn download_session(
     Store(storage): Store,
     ApiPath(id): ApiPath<String>,

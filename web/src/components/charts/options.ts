@@ -21,7 +21,6 @@ const GRID = "rgba(255, 255, 255, 0.08)";
 const PALETTE = ["#ff7a33", "#4da3ff", "#7ee081", "#ffd166", "#c792ea", "#ef5b7b", "#5eead4", "#f59e0b"];
 const splitLine = { lineStyle: { color: GRID } };
 
-/** The parts every chart shares. `title` is left out for a chart whose card already says what it is. */
 function base(title: string | null, maxFreq: number): EChartsCoreOption {
   return {
     backgroundColor: "transparent",
@@ -49,7 +48,6 @@ interface PsdInput {
 export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = [];
   const selected: Record<string, boolean> = {};
-  // The curves of a chip are told apart by their test point only when it has more than one.
   const many = chip.datasets.length > 1;
   const named = (point: number, what: string) => (many ? `Point ${point + 1} ${what}` : what);
   for (const [point, data] of chip.datasets) {
@@ -88,7 +86,6 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
       data: zip(grid, candidate.vals),
     });
   }
-  // The axes curves and the shapers get a row each, so it is clear which is which.
   const measured = series.filter((s) => s.yAxisIndex === undefined).map((s) => s.name as string);
   const shapers = series.filter((s) => s.yAxisIndex === 1).map((s) => s.name as string);
   const rowLabel = (label: string, top: number) => ({
@@ -121,11 +118,6 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
   };
 }
 
-/**
- * The sum of the eligible chips' vibration: the total, and the accelerometers' X, Y and Z
- * directions behind the legend as in a chip's chart. It is for looking at; no recommendation
- * comes from it.
- */
 export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
   const curves = [
     ["Total", summed.psd],

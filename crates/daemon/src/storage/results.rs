@@ -24,7 +24,6 @@ use crate::results::record::{
 
 static RESULT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Space and an id held for a save in progress. Dropping it releases both.
 struct ResultReservation {
     inner: Arc<Inner>,
     id: String,
@@ -36,7 +35,6 @@ impl Drop for ResultReservation {
     }
 }
 
-/// Removes the temporary file unless the rename disarmed it.
 struct TempFile {
     path: PathBuf,
     armed: bool,
@@ -50,7 +48,6 @@ impl Drop for TempFile {
     }
 }
 
-/// The result id for a file name `<id>.zip`, or `None` for anything else.
 fn id_of_file(name: &str) -> Option<&str> {
     let id = name.strip_suffix(".zip")?;
     validate_session_id(id).ok()?;
@@ -65,7 +62,6 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
     fs::File::open(dir)?.sync_all()
 }
 
-/// Removes `.*.zip.tmp` files a crash left in `dir` and returns their relative names.
 pub(super) fn sweep_temporaries(dir: &Path) -> io::Result<Vec<String>> {
     let mut swept = Vec::new();
     for entry in fs::read_dir(dir)? {
@@ -103,8 +99,6 @@ fn write_error(error: ResultError) -> StorageError {
     }
 }
 
-/// Maps a failure to open or verify result `id`: a missing file is not found, anything else
-/// makes the result unusable.
 fn read_error(id: &str, error: ResultError) -> StorageError {
     match error {
         ResultError::Io(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -147,7 +141,6 @@ struct FileKey {
     changed_nanos: i64,
 }
 
-/// The outcome of verifying the file that had `key`: `Ok` or the reason it is unusable.
 pub(super) struct VerifiedEntry {
     key: FileKey,
     outcome: Result<(), String>,
@@ -169,7 +162,6 @@ fn file_key(path: &Path) -> Result<Option<FileKey>, ResultError> {
 }
 
 impl Storage {
-    /// Test hook: how many times a result file has been hashed and decoded.
     #[doc(hidden)]
     pub fn verification_count(&self) -> u64 {
         self.inner.verifications.load(Ordering::SeqCst)
@@ -213,8 +205,6 @@ impl Storage {
         Ok((file, outcome))
     }
 
-    /// Test hook: `hook` runs during every save, after the space is reserved and before the
-    /// write starts, with no storage lock held.
     #[doc(hidden)]
     pub fn set_save_hook(&self, hook: impl Fn(&Storage) + Send + Sync + 'static) {
         let hook: SaveHook = Arc::new(hook);
@@ -315,11 +305,6 @@ impl Storage {
         Ok(summary_of(&record, size))
     }
 
-    /// The session as a zip: `meta.json` as stored and each sample file under `samples/`.
-    /// The session stays leased while its files are read.
-    ///
-    /// # Errors
-    /// [`StorageError::NotFound`] for an unknown session, or an I/O error.
     pub fn session_zip(&self, session_id: &str) -> Result<Vec<u8>, StorageError> {
         use std::io::Write;
         use zip::write::SimpleFileOptions;
@@ -349,8 +334,6 @@ impl Storage {
         Ok(zip.finish().map_err(zip_error)?.into_inner())
     }
 
-    /// Picks an unused result id, builds the record for it and reserves its size bound plus
-    /// headroom against free space. `build` returns the record and that bound.
     fn reserve_result(
         &self,
         now: OffsetDateTime,
@@ -452,10 +435,6 @@ impl Storage {
         }
     }
 
-    /// The record and session metadata of one result, after verifying the manifest.
-    ///
-    /// # Errors
-    /// [`StorageError::ResultNotFound`] or [`StorageError::ResultUnusable`].
     pub fn result(&self, id: &str) -> Result<ResultDetail, StorageError> {
         let file = self.open_verified(id)?;
         let meta = file.meta().map_err(|e| read_error(id, e))?;
@@ -465,12 +444,6 @@ impl Storage {
         })
     }
 
-    /// The bytes of one sample file in a result, after verifying the manifest. The file is
-    /// found through the stored metadata.
-    ///
-    /// # Errors
-    /// [`StorageError::ResultNotFound`], [`StorageError::ResultUnusable`] or
-    /// [`StorageError::NoRecording`].
     pub fn result_sample(
         &self,
         id: &str,
@@ -490,10 +463,6 @@ impl Storage {
             .map_err(|e| read_error(id, e))
     }
 
-    /// Deletes a result, whether or not it is usable.
-    ///
-    /// # Errors
-    /// [`StorageError::ResultNotFound`] or an I/O error.
     pub fn delete_result(&self, id: &str) -> Result<(), StorageError> {
         validate_result_id(id)?;
         let path = self.inner.results_dir.join(format!("{id}.zip"));

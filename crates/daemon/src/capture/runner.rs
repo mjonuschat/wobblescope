@@ -209,7 +209,6 @@ struct Stored {
 struct Progress {
     levels: mpsc::UnboundedReceiver<Level>,
     chips: Vec<ChipLive>,
-    /// The console lines Klipper writes, for the frequency of the sweep.
     console: broadcast::Receiver<String>,
     frequency: Option<f64>,
 }
@@ -221,7 +220,6 @@ fn tested_frequency(line: &str) -> Option<f64> {
 }
 
 impl Progress {
-    /// Forgets the frequency and the lines before it, as a new segment begins.
     fn restart_frequency(&mut self) {
         self.frequency = None;
         while self.console.try_recv().is_ok() {}

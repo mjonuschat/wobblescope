@@ -16,7 +16,6 @@ export interface WorkerLike {
 export interface AnalysisJob {
   /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
   sessionId: string;
-  /** A saved result whose own sample files are fetched instead of the session's. */
   resultId?: string;
   meta: SessionMeta;
   axis: Axis;
@@ -105,7 +104,7 @@ export function createAnalysisClient({
         held = new Set();
       }
       const entry = pending.get(response.id);
-      if (!entry) return; // A late answer to a request nobody waits for.
+      if (!entry) return;
       pending.delete(response.id);
       if (response.type === "result") entry.resolve(response.result);
       else entry.reject(new Error(response.message));

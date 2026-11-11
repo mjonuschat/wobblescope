@@ -94,7 +94,6 @@ fn good_entries() -> Vec<(&'static str, Vec<u8>)> {
     ]
 }
 
-/// Writes a zip holding `entries` plus a `result.json` whose manifest matches them.
 fn hostile(dir: &Path, entries: &[(&str, Vec<u8>)]) -> PathBuf {
     let json = serde_json::to_vec(&record(manifest_of(entries))).unwrap();
     hostile_with_record(dir, entries, json)

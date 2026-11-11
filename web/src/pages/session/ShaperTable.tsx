@@ -5,7 +5,6 @@ import type { Recommendation } from "@/lib/generated/Recommendation";
 
 interface Props {
   recommendation: Recommendation;
-  /** The `[input_shaper]` snippet of each shaper in `recommendation.all`, in order. */
   snippets?: string[] | null;
 }
 

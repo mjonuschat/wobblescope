@@ -5,7 +5,6 @@ import type { TestState } from "@/lib/generated/TestState";
 
 import { NO_TRACES, type Traces, extend, liveSignalOption } from "./trace";
 
-/** The signal of each chip against frequency, drawn as the sweep goes. */
 export function LiveChart({ test }: { test: TestState }) {
   const [traces, setTraces] = useState<Traces>(NO_TRACES);
   useEffect(() => {

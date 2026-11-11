@@ -1,6 +1,3 @@
-//! `GET /api/printer`, `POST /api/printer/emergency-stop` and `POST /api/printer/home`: the
-//! controls that act on the printer itself, not on one test.
-
 use std::time::Duration;
 
 use axum::Json;
@@ -13,16 +10,13 @@ use super::{ApiError, ApiState};
 use crate::capture::CheckFailure;
 use crate::capture::preflight::read_printer_state;
 
-/// How long Moonraker may take to answer a state query.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// How long the stop may take to reach Moonraker.
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How long homing may take. Moonraker answers the script when the motion is done.
 const HOME_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// What `GET /api/printer` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PrinterState {
@@ -30,7 +24,6 @@ pub struct PrinterState {
     pub homed_axes: Option<String>,
 }
 
-/// What `POST /api/printer/home` answers once the printer has homed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Homed {

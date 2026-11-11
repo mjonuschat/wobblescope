@@ -12,7 +12,6 @@ import { AccelerometersCard } from "./AccelerometersCard";
 
 const UNKNOWN = "unknown";
 
-/** A number with its unit, or "unknown" when Klipper did not report it. */
 export function measure(value: number | null | undefined, unit: string, digits = 0): string {
   if (value === null || value === undefined) return UNKNOWN;
   const text = value.toLocaleString("en-US", { maximumFractionDigits: digits, useGrouping: false });
@@ -30,7 +29,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** The firmware's display name: Klipper for mainline, Kalico for its fork. */
 export function firmwareName(variant: PrinterSettings["variant"]): string {
   return { mainline: "Klipper", kalico: "Kalico", unknown: UNKNOWN }[variant];
 }
@@ -124,7 +122,6 @@ function ResonanceSection({ settings }: { settings: PrinterSettings }) {
   );
 }
 
-/** What the printer is, how it moves, and how Klipper is set up to test it. */
 export function PrinterPage() {
   const settings = useSettings();
   const chips = useChips();

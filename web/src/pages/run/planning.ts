@@ -28,7 +28,6 @@ export function formatPoint(point: readonly number[]): string {
   return point.map((v) => String(Math.round(v * 1000) / 1000)).join(", ");
 }
 
-/** A set of test points spread over the bed. */
 export type PointPattern = "center" | "five" | "nine";
 
 export const POINT_PATTERNS: { value: PointPattern; label: string }[] = [
@@ -37,7 +36,6 @@ export const POINT_PATTERNS: { value: PointPattern; label: string }[] = [
   { value: "nine", label: "3 x 3 Grid" },
 ];
 
-/** How far a pattern's outer points stay from the travel limits, in mm. */
 export const POINT_MARGIN_MM = 20;
 
 const tenth = (value: number) => Math.round(value * 10) / 10;

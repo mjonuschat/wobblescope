@@ -11,10 +11,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useRecoverStorage } from "@/lib/api/queries";
 
-/** The frame of every page: the header, the sidebar, the status banner and the page itself. */
 export function RootLayout() {
   useRecoverStorage();
-  // Toasts belong to the page that raised them.
   const path = useRouterState({ select: (state) => state.location.pathname });
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new path is the trigger
   useEffect(() => {

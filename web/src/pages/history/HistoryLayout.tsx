@@ -5,10 +5,6 @@ import { useStorage } from "@/lib/api/queries";
 
 import { StorageUsage } from "../sessions/StorageUsage";
 
-/**
- * The saved sessions and the saved results as two tabs. The storage use sits below both and
- * stays mounted while the tab changes.
- */
 export function HistoryLayout() {
   const navigate = useNavigate();
   const tab = useRouterState({ select: (s) => (s.location.pathname.endsWith("/results") ? "results" : "sessions") });

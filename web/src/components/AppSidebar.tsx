@@ -21,7 +21,6 @@ interface Page {
   to: Path;
   label: string;
   icon: LucideIcon;
-  /** Pages under this one, one for each kind of test. */
   children?: { to: Path; label: string; icon: LucideIcon }[];
 }
 

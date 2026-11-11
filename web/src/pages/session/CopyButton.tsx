@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-/** How long "Copied" stays on screen, in milliseconds. */
 const CONFIRMATION_MS = 2000;
 
 /**

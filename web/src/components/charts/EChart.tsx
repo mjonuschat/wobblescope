@@ -27,7 +27,6 @@ interface Props {
   option: EChartsCoreOption;
   /** What the chart shows, for people who cannot see the canvas. */
   label: string;
-  /** A pixel count, or any CSS length such as `60vh`. */
   height?: number | string;
 }
 

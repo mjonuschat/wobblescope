@@ -4,7 +4,6 @@ import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { parseNumber } from "@/lib/parse";
 
-/** Klipper's own fit: square corner velocity 5 mm/s, damping ratio 0.1 and every other setting left to `core`. */
 export const defaultFitParams: FitParams = {
   scv: 5,
   damping_ratio: 0.1,
@@ -42,16 +41,11 @@ export function draftFrom(params: FitParams): FitDraft {
 
 export const defaultDraft: FitDraft = draftFrom(defaultFitParams);
 
-/** The fit a session starts from, and which of its values came from the printer. */
 export interface FitBaseline {
   params: FitParams;
   recorded: { scv: boolean; damping: boolean };
 }
 
-/**
- * The fit to start from for `axis`: the printer's own square corner velocity and damping ratio
- * when the session recorded them, Klipper's defaults otherwise.
- */
 export function baselineFor(meta: SessionMeta, axis: Axis): FitBaseline {
   const printer = meta.printer;
   const scv = printer?.square_corner_velocity ?? null;
@@ -91,7 +85,6 @@ export function draftToParams(draft: FitDraft): DraftResult {
   };
 }
 
-/** The fit settings an analysis used, from its recommendation. */
 export function effectiveSettings(analysis: Analysis) {
   return (
     analysis.worst_case?.settings ?? analysis.per_chip.find((c) => c.recommendation)?.recommendation?.settings ?? null

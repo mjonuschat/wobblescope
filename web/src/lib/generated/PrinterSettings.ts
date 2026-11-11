@@ -12,11 +12,7 @@ export type PrinterSettings = {
 /**
  * The Klipper fork.
  */
-variant: Variant, 
-/**
- * The printer and its motion limits.
- */
-machine: Machine, 
+variant: Variant, machine: Machine, 
 /**
  * `Sweep` when the effective `sweeping_period` is above 0, else `Pulse`.
  */

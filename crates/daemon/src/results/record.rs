@@ -25,7 +25,6 @@ pub struct AxisSnapshot {
     pub snippets: Snippets,
 }
 
-/// The contents of `result.json`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ResultRecord {
@@ -66,15 +65,11 @@ pub struct ResultSummary {
     /// Result id, taken from the file name.
     pub id: String,
     pub label: Option<String>,
-    /// Save time, when the record could be read.
     pub created_at: Option<String>,
-    /// Source session, when the record could be read.
     pub session_id: Option<String>,
-    /// Core version of the analysis, when the record could be read.
     pub core_version: Option<String>,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub size_bytes: u64,
-    /// Why the zip cannot be used, when it cannot.
     pub unusable: Option<String>,
 }
 

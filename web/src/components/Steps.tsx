@@ -9,14 +9,11 @@ export interface Step {
 
 interface Props {
   steps: Step[];
-  /** The id of the step the user is at. Earlier ones show as done. */
   current: string;
-  /** The steps a click may go to. The others are not buttons. */
   selectable?: string[];
   onSelect?: (id: string) => void;
 }
 
-/** A row of numbered steps joined by lines: done ones ticked, the current one filled. */
 export function Steps({ steps, current, selectable = [], onSelect }: Props) {
   const at = steps.findIndex((s) => s.id === current);
   return (

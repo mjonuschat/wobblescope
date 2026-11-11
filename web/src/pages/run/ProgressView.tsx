@@ -43,20 +43,16 @@ const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
 export const SHUTDOWN_NOTICE =
   "Emergency stop sent. Klipper is in shutdown and needs a FIRMWARE_RESTART before it moves again.";
 
-/** How long the page waits after a test ends before it moves on to the results, in seconds. */
 export const AUTO_CONTINUE_SECONDS = 5;
 
 interface ProgressProps {
   test: TestState;
   /** Whether the live socket is open. */
   connected: boolean;
-  /** How the test ended, once it has. The page then counts down to the results. */
   ended: FinishedTest | null;
-  /** Moves on to the results. */
   onNext: () => void;
 }
 
-/** Counts down from [`AUTO_CONTINUE_SECONDS`] while `active`, and calls `onDone` at zero. */
 function useCountdown(active: boolean, onDone: () => void): number | null {
   const [left, setLeft] = useState(AUTO_CONTINUE_SECONDS);
   useEffect(() => {
@@ -131,7 +127,6 @@ interface StartingProps {
   connected: boolean;
 }
 
-/** Shown from the 202 until the live socket names the new test. */
 export function StartingView({ connected }: StartingProps) {
   return (
     <div className="space-y-4">

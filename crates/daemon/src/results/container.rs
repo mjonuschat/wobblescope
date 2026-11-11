@@ -169,7 +169,6 @@ const LIMITS: Limits = Limits {
     total: MAX_TOTAL_BYTES,
 };
 
-/// `result.json`, `meta.json` or `samples/c<chip>-s<segment>.zst`.
 fn is_allowed_name(name: &str) -> bool {
     if name == RECORD_NAME || name == META_NAME {
         return true;
@@ -215,7 +214,6 @@ fn has_zip64_locator(file: &mut File) -> io::Result<bool> {
     Ok(eocd >= 20 && tail[eocd - 20..eocd - 16] == LOCATOR)
 }
 
-/// An opened result zip whose structure and `result.json` have been checked.
 #[derive(Debug)]
 pub struct ResultFile {
     path: PathBuf,
@@ -378,11 +376,6 @@ impl ResultFile {
         Ok(())
     }
 
-    /// The session metadata stored in the zip.
-    ///
-    /// # Errors
-    /// [`ResultError::Format`] when `meta.json` is absent, [`ResultError::Json`] when it does
-    /// not parse.
     pub fn meta(&self) -> Result<SessionMeta, ResultError> {
         if !self.entries.contains(META_NAME) {
             return Err(ResultError::Format("meta.json is missing".to_owned()));

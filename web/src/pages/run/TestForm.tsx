@@ -28,14 +28,12 @@ import { homedTone } from "@/components/PrinterControls";
 
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 
-/** The settings only one mode uses; they sit beside the mode choice. */
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
 
 /** The limits the daemon accepts for a sweep's start and end, in Hz. */
 const FREQ_MIN = 1;
 const FREQ_MAX = 300;
 
-/** How far the arrows of a number field move it; the others move by 1. */
 const FIELD_STEPS: Partial<Record<OverrideKey, number>> = { hz_per_sec: 0.1, sweeping_period: 0.1 };
 
 const FREQ_KEYS = ["freq_start", "freq_end"] as const;
@@ -50,7 +48,6 @@ interface PointRow {
 
 interface Props {
   settings: PrinterSettings;
-  /** Every configured chip. */
   chipList: ChipsSnapshot;
   /** The chips that will record. */
   chips: string[];
@@ -102,7 +99,6 @@ function ChoiceRow({ label, error, children }: { label: string; error: ReactNode
   );
 }
 
-/** The run form: chips, axes, mode, settings, points, and the start button. */
 export function TestForm({ settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
   const printer = usePrinterState(true);

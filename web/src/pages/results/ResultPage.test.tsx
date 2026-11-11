@@ -34,7 +34,6 @@ beforeEach(() => {
   fake.analyze.mockReset();
 });
 
-/** An analysis that never finishes until its query is cancelled. */
 function pending(_job: unknown, signal?: AbortSignal) {
   return new Promise((_resolve, reject) => {
     signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")));

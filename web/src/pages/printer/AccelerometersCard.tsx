@@ -10,7 +10,6 @@ interface Props {
   chips: ChipsSnapshot;
   onCheck: () => void;
   checking: boolean;
-  /** Why a check cannot run now, or `null`. */
   checkBlocked: string | null;
 }
 
@@ -30,7 +29,6 @@ function AvailabilityCell({ availability }: { availability: Availability }) {
   }
 }
 
-/** The axes a chip is Klipper's default for, such as "X and Y", or "none". */
 function defaultAxes(chips: ChipsSnapshot, chip: Chip): string {
   const axes = (["x", "y"] as const)
     .filter((axis) => chips.defaults[axis].includes(chip.section))
@@ -38,7 +36,6 @@ function defaultAxes(chips: ChipsSnapshot, chip: Chip): string {
   return axes.length > 0 ? axes.join(" and ") : "none";
 }
 
-/** The configured accelerometers with their availability, and the check that tests them. */
 export function AccelerometersCard({ chips, onCheck, checking, checkBlocked }: Props) {
   return (
     <Card>

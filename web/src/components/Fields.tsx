@@ -6,13 +6,11 @@ import { cn } from "@/lib/utils";
 
 interface FieldProps {
   label: string;
-  /** An explanation shown in a tooltip on an info icon after the label. */
   hint?: string;
   className?: string;
   children: ReactNode;
 }
 
-/** A small uppercase label over a monospace value. */
 export function Field({ label, hint, className, children }: FieldProps) {
   return (
     <div className={className}>
@@ -44,7 +42,6 @@ export function Field({ label, hint, className, children }: FieldProps) {
   );
 }
 
-/** A grid of [`Field`]s. */
 export function Fields({ className, children, ...props }: React.ComponentProps<"dl">) {
   return (
     <dl className={cn("grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4", className)} {...props}>
