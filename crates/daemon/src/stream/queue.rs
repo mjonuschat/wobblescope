@@ -86,10 +86,13 @@ impl OutQueue {
                 queued.map(|queued| *queued = entry.clone()).is_some()
             }
             Entry::Console(lines) => {
-                let queued = self
-                    .entries
-                    .iter_mut()
-                    .find_map(|e| if let Entry::Console(l) = e { Some(l) } else { None });
+                let queued = self.entries.iter_mut().find_map(|e| {
+                    if let Entry::Console(l) = e {
+                        Some(l)
+                    } else {
+                        None
+                    }
+                });
                 queued
                     .map(|queued| {
                         queued.extend(lines.iter().cloned());

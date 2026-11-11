@@ -190,11 +190,17 @@ pub fn clamp_request(
     let top = limits.max_hz.min(input_rate_hz / 2.0);
     (
         bounded(max_hz, MIN_MAX_HZ, top),
-        bounded(
-            updates,
-            MIN_UPDATES_PER_SECOND,
-            limits.max_updates_per_second,
-        ),
+        clamp_updates(updates, limits),
+    )
+}
+
+/// `updates` limited to `[MIN_UPDATES_PER_SECOND, limits.max_updates_per_second]`; NaN becomes
+/// the minimum.
+pub fn clamp_updates(updates: f64, limits: &StreamLimits) -> f64 {
+    bounded(
+        updates,
+        MIN_UPDATES_PER_SECOND,
+        limits.max_updates_per_second,
     )
 }
 

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use wobblescope_core::decimate::Decimator;
 use wobblescope_core::samples::RawSamples;
 
-use super::protocol::{ServerMessage, StreamLimits, clamp_request, encode_frame};
+use super::protocol::{ServerMessage, StreamLimits, clamp_request, clamp_updates, encode_frame};
 use crate::capture::availability::rate_from_times;
 use crate::moonraker::bridge::Batch;
 use crate::moonraker::chips::Chip;
@@ -68,7 +68,8 @@ pub struct ChipPipeline {
 
 impl ChipPipeline {
     /// A pipeline for `chip` whose frames carry `index`, showing `0..=max_hz` and sending
-    /// `updates_per_second` frames a second, both limited by `limits`.
+    /// `updates_per_second` frames a second, both limited by `limits`. An update rate outside the
+    /// limits is clamped here, because the frame interval needs it before the filter is built.
     pub fn new(
         chip: &Chip,
         index: u16,
@@ -81,7 +82,7 @@ impl ChipPipeline {
             index,
             nominal_rate_hz: chip.nominal_rate_hz,
             max_hz,
-            updates_per_second,
+            updates_per_second: clamp_updates(updates_per_second, limits),
             limits: limits.clone(),
             state: State::Measuring { held: Vec::new() },
             last_t: None,

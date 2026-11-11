@@ -253,3 +253,22 @@ fn a_rate_change_rebuilds_the_filter() {
     };
     assert!((input_rate_hz - 1600.0).abs() < 2.0);
 }
+
+#[test]
+fn an_unusable_update_rate_is_clamped_instead_of_panicking() {
+    for updates in [0.0, -1.0, f64::NAN] {
+        let mut f = feed(3200.0, 200.0, updates);
+        f.run(3200.0, 4.0, 320);
+        let streams = f.streams();
+        assert_eq!(streams.len(), 1, "{updates}");
+        let ServerMessage::Stream {
+            updates_per_second, ..
+        } = streams[0]
+        else {
+            unreachable!()
+        };
+        assert_eq!(*updates_per_second, 0.5);
+        // One frame every two seconds: a frame is not flushed before then.
+        assert!(f.frames().len() <= 3, "{updates}: {}", f.frames().len());
+    }
+}
