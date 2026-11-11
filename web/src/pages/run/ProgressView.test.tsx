@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +11,12 @@ import { apiPath, stubApiWithStatus } from "@/test/status";
 import { FakeSocket, stubWebSocket } from "@/test/websocket";
 
 vi.mock("@/pages/session/SessionResults", () => ({
-  SessionResults: ({ id }: { id: string }) => <div>session results for {id}</div>,
+  SessionResults: ({ id, header }: { id: string; header?: (save: unknown) => ReactNode }) => (
+    <div>
+      {header?.(null)}
+      <div>session results for {id}</div>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/charts/EChart", () => ({

@@ -25,7 +25,7 @@ describe("RecommendationCard", () => {
       />,
     );
     const items = screen.getAllByRole("listitem");
-    expect(items.map((i) => i.textContent)).toEqual(["a: 1.0%", "b: 3.2% (sets the worst case)"]);
+    expect(items.map((i) => i.textContent)).toEqual(["a: 1.0%", "b: 3.2%"]);
     expect(items.map((i) => i.getAttribute("data-limiting"))).toEqual(["false", "true"]);
   });
 

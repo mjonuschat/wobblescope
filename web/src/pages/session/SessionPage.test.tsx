@@ -57,6 +57,13 @@ beforeEach(() => {
 });
 afterEach(() => clipboard(undefined));
 
+/** Opens the save dialog once the analysis has arrived and enabled the button. */
+async function openSaveDialog() {
+  const button = (await screen.findByRole("button", { name: "Save" })) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+}
+
 describe("the session view", () => {
   it("covers AE3: an imported session shows the unknown-health warning and a copyable snippet", async () => {
     const a = analysis();
@@ -397,10 +404,10 @@ describe("the session view", () => {
         : { status: 404, body: { error: "not_found", message: "no such session" } };
     });
     renderRoute("/sessions/s1");
-    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "after belts" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save result" }));
-    expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open" }).getAttribute("href")).toBe("/results/r-1");
+    await openSaveDialog();
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "after belts" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved as after belts")).toBeTruthy();
     const post = calls.find((c) => c.method === "POST")!;
     const expected: SaveRequest = {
       label: "after belts",
@@ -436,12 +443,13 @@ describe("the session view", () => {
         : { status: 404, body: { error: "not_found", message: "no such session" } };
     });
     renderRoute("/sessions/s1");
-    fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
+    await openSaveDialog();
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     const alert = await screen.findByText("the session changed since it was analysed");
     expect(alert.closest('[role="alert"]')).toBeTruthy();
   });
 
-  describe("the Save button", () => {
+  describe("saving a result", () => {
     function serveSave(saves: number[]) {
       stubApi(({ url, method }) => {
         if (method === "POST" && url.pathname.endsWith("/sessions/s1/results")) {
@@ -455,25 +463,41 @@ describe("the session view", () => {
           : { status: 404, body: { error: "not_found", message: "no such session" } };
       });
     }
-    const saveButton = () => screen.getByRole("button", { name: "Save result" }) as HTMLButtonElement;
+    // The button on the page, or the one in the dialog while it is open (the page is then inert).
+    const saveButton = () => screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
 
     async function saveOnce() {
       fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
       serveSave([]);
       renderRoute("/sessions/s1");
-      fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
-      expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
+      await save();
+    }
+
+    /** Opens the dialog and confirms it. */
+    async function save() {
+      await openSaveDialog();
+      fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+      expect((await screen.findAllByText("Saved as r-1")).length).toBeGreaterThan(0);
+      await waitFor(() => expect(screen.queryByLabelText("Name")).toBeNull());
       expect(saveButton().disabled).toBe(true);
     }
 
-    it("disables Save after a successful save until the label changes", async () => {
+    it("asks for a name in a dialog and disables Save after a successful save", async () => {
       await saveOnce();
-      fireEvent.change(screen.getByLabelText("Label"), { target: { value: "again" } });
-      expect(saveButton().disabled).toBe(false);
-      expect(screen.queryByText(/Saved as r-1/)).toBeNull();
-      fireEvent.change(screen.getByLabelText("Label"), { target: { value: "" } });
-      expect(saveButton().disabled).toBe(true);
-      expect(screen.getByText(/Saved as r-1/)).toBeTruthy();
+    });
+
+    it("closes the dialog on Cancel without saving", async () => {
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      const calls = stubApi(({ url }) =>
+        url.pathname.endsWith("/sessions/s1")
+          ? { body: { summary: summary("s1"), meta: twoAxisMeta() } }
+          : { status: 404, body: { error: "not_found", message: "no" } },
+      );
+      renderRoute("/sessions/s1");
+      await openSaveDialog();
+      fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByLabelText("Name")).toBeNull());
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
     });
 
     it("re-enables Save when the fit params change", async () => {
@@ -490,15 +514,12 @@ describe("the session view", () => {
       fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
       serveSave([]);
       renderRoute("/sessions/s1");
-      fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
-      expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
-      expect(saveButton().disabled).toBe(true);
+      await save();
 
       fireEvent.click(screen.getByRole("checkbox", { name: /Include b anyway/ }));
       await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(saveButton().disabled).toBe(false));
-      fireEvent.click(saveButton());
-      await waitFor(() => expect(saveButton().disabled).toBe(true));
+      await save();
 
       fireEvent.click(screen.getByRole("tab", { name: "Axis Y" }));
       await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(3));
@@ -509,11 +530,11 @@ describe("the session view", () => {
       fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
       serveSave([500]);
       renderRoute("/sessions/s1");
-      fireEvent.click(await screen.findByRole("button", { name: "Save result" }));
+      await openSaveDialog();
+      fireEvent.click(await screen.findByRole("button", { name: "Save" }));
       expect(await screen.findByText("disk is full")).toBeTruthy();
-      expect(saveButton().disabled).toBe(false);
       fireEvent.click(saveButton());
-      expect(await screen.findByText(/Saved as r-1/)).toBeTruthy();
+      expect(await screen.findByText("Saved as r-1")).toBeTruthy();
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { Panel } from "@/components/Panel";
@@ -168,12 +169,12 @@ const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: strin
 export function ResultView({ last, onNewTest }: ResultProps) {
   const { Icon, className } = OUTCOME_ICON[last.outcome];
   const analysed = last.session_id !== null && (last.outcome === "complete" || last.outcome === "incomplete");
-  return (
-    <div className="space-y-4">
-      <Panel
-        title="Result"
-        label="Test result"
-        action={
+  const card = (save: ReactNode) => (
+    <Panel
+      title="Result"
+      label="Test result"
+      action={
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -183,31 +184,32 @@ export function ResultView({ last, onNewTest }: ResultProps) {
           >
             New test
           </Button>
-        }
-      >
-        <div className="flex items-start gap-3">
-          <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
-          <div className="space-y-1">
-            <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
-            {last.reason && <p className="text-sm">{last.reason}</p>}
-            {last.reason === "emergency stop" && (
-              <p role="status" className="text-sm text-muted-foreground">
-                {SHUTDOWN_NOTICE}
-              </p>
-            )}
-            {!last.session_id && <p className="text-sm text-muted-foreground">No session was saved.</p>}
-          </div>
+          {save}
         </div>
-        {last.motion_uncertain && (
-          <div className="space-y-1">
-            <p role="alert" className="text-sm text-amber-400">
-              The printer may still be moving.
+      }
+    >
+      <div className="flex items-start gap-3">
+        <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
+        <div className="space-y-1">
+          <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
+          {last.reason && <p className="text-sm">{last.reason}</p>}
+          {last.reason === "emergency stop" && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {SHUTDOWN_NOTICE}
             </p>
-            <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
-          </div>
-        )}
-      </Panel>
-      {analysed && last.session_id && <SessionResults id={last.session_id} />}
-    </div>
+          )}
+          {!last.session_id && <p className="text-sm text-muted-foreground">No session was saved.</p>}
+        </div>
+      </div>
+      {last.motion_uncertain && (
+        <div className="space-y-1">
+          <p role="alert" className="text-sm text-amber-400">
+            The printer may still be moving.
+          </p>
+          <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
+        </div>
+      )}
+    </Panel>
   );
+  return analysed && last.session_id ? <SessionResults id={last.session_id} header={card} /> : card(null);
 }

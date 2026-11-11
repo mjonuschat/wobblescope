@@ -55,7 +55,6 @@ export function RecommendationCard({
               >
                 {v.chip}
                 {multiplePoints && ` ${pointLabel(v.point, probePoints)}`}: {(v.vibrs * 100).toFixed(1)}%
-                {v.vibrs === largest && " (sets the worst case)"}
               </li>
             ))}
           </ul>
