@@ -44,7 +44,7 @@ export function ChipPicker({ chips, selected, maxChips, axes, onToggle, onAxes, 
         const blocked = !on && full;
         const chosen = axes[chip.section] ?? ["sum"];
         return (
-          <li key={chip.section} className="space-y-2 rounded-md border border-neutral-800 p-3">
+          <li key={chip.section} className="space-y-2 rounded-md border p-3">
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2">
                 <input
@@ -57,10 +57,10 @@ export function ChipPicker({ chips, selected, maxChips, axes, onToggle, onAxes, 
                 {chip.section}
               </label>
               <Badge variant="outline">{chip.chip_type}</Badge>
-              <span className="text-sm text-neutral-400">
+              <span className="text-sm text-muted-foreground">
                 {chip.nominal_rate_hz === null ? "rate unknown" : `${chip.nominal_rate_hz} Hz`}
               </span>
-              <span className="text-sm text-neutral-400">{check(chip.availability)}</span>
+              <span className="text-sm text-muted-foreground">{check(chip.availability)}</span>
               {blocked && <span className="text-sm text-amber-400">at most {maxChips} chips at once</span>}
             </div>
             {on && (

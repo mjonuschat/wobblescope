@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Panel } from "@/components/Panel";
+import { Waiting } from "@/components/Waiting";
 import { useChips } from "@/lib/api/queries";
 import { type SpectraState, type SpectrumWorkerLike, useSpectra } from "@/stream/useSpectra";
 import { useStream } from "@/stream/useStream";
@@ -90,74 +92,86 @@ export function StreamPage({ createWorker }: Props) {
 
   if (!stream.state.connected) {
     return (
-      <section className="space-y-2">
+      <section className="mx-auto max-w-5xl space-y-4">
         <h1 className="text-xl font-semibold">Stream</h1>
-        <p className="text-sm text-neutral-400">Not connected to the daemon. The stream starts when it is.</p>
+        <p className="text-sm text-muted-foreground">Not connected to the daemon. The stream starts when it is.</p>
       </section>
     );
   }
 
   return (
-    <section className="space-y-6">
+    <section className="mx-auto max-w-5xl space-y-4">
       <h1 className="text-xl font-semibold">Stream</h1>
       {hello?.printing && <p className="text-sm text-amber-400">A print is running: showing a lower update rate</p>}
       {hello && (
-        <DisplaySettings
-          updatesPerSecond={updatesPerSecond}
-          rateLimit={hello.limits.max_updates_per_second}
-          onUpdatesPerSecond={setUpdates}
-          range={effectiveRange}
-          defaultMaxHz={defaultMaxHz}
-          fullHz={fullHz}
-          onRange={setRange}
-          windowSeconds={windowSeconds}
-          onWindowSeconds={setWindowSeconds}
-          paused={paused}
-          onPaused={pause}
-          onResetPeakHold={() => resetPeakHold()}
-        />
+        <Panel title="Display">
+          <DisplaySettings
+            updatesPerSecond={updatesPerSecond}
+            rateLimit={hello.limits.max_updates_per_second}
+            onUpdatesPerSecond={setUpdates}
+            range={effectiveRange}
+            defaultMaxHz={defaultMaxHz}
+            fullHz={fullHz}
+            onRange={setRange}
+            windowSeconds={windowSeconds}
+            onWindowSeconds={setWindowSeconds}
+            paused={paused}
+            onPaused={pause}
+            onResetPeakHold={() => resetPeakHold()}
+          />
+        </Panel>
       )}
       {chipList && chipList.chips.length === 0 && (
-        <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
+        <p className="text-sm text-muted-foreground">Klipper's config lists no supported accelerometer.</p>
       )}
       {chipList && hello && (
-        <ChipPicker
-          chips={chipList.chips}
-          selected={selected}
-          maxChips={maxChips}
-          axes={axes}
-          onToggle={toggle}
-          onAxes={(section, next) => setAxes((old) => ({ ...old, [section]: next }))}
-          badge={(section) => (
-            <HealthBadge chip={section} state={streams[section]} error={spectra[section]?.error ?? null} />
-          )}
-        />
+        <Panel title="Chips">
+          <ChipPicker
+            chips={chipList.chips}
+            selected={selected}
+            maxChips={maxChips}
+            axes={axes}
+            onToggle={toggle}
+            onAxes={(section, next) => setAxes((old) => ({ ...old, [section]: next }))}
+            badge={(section) => (
+              <HealthBadge chip={section} state={streams[section]} error={spectra[section]?.error ?? null} />
+            )}
+          />
+        </Panel>
       )}
-      {chipList && !hello && <p className="text-sm text-neutral-400">Waiting for the daemon's defaults.</p>}
-      {selected.length === 0 && <p className="text-sm text-neutral-400">Pick a chip to see its signal.</p>}
+      {chipList && !hello && <Waiting>Waiting for the daemon's defaults.</Waiting>}
+      {selected.length === 0 && <p className="text-sm text-muted-foreground">Pick a chip to see its signal.</p>}
       {selected.length > 0 && (
-        <SignalStrips
-          paused={paused}
-          chips={selected.map((chip, i) => ({ chip, color: chipColor(i), signal: shownSignals[chip] }))}
-        />
+        <Panel title="Signals">
+          <SignalStrips
+            paused={paused}
+            chips={selected.map((chip, i) => ({ chip, color: chipColor(i), signal: shownSignals[chip] }))}
+          />
+        </Panel>
       )}
       {shown.length > 0 && (
-        <SpectrumChart
-          maxHz={maxHz}
-          onResetPeakHold={() => resetPeakHold()}
-          chips={shown.map(({ chip, index, entry, spectrum }) => ({
-            chip,
-            colorIndex: index,
-            spectrum,
-            peaks: entry.peaks,
-            peakHold: entry.peakHold,
-            axes: axes[chip] ?? ["sum"],
-          }))}
-        />
+        <Panel title="Spectrum">
+          <SpectrumChart
+            maxHz={maxHz}
+            onResetPeakHold={() => resetPeakHold()}
+            chips={shown.map(({ chip, index, entry, spectrum }) => ({
+              chip,
+              colorIndex: index,
+              spectrum,
+              peaks: entry.peaks,
+              peakHold: entry.peakHold,
+              axes: axes[chip] ?? ["sum"],
+            }))}
+          />
+        </Panel>
       )}
-      {shown.map(({ chip, index, spectrum }) => (
-        <Spectrogram key={chip} chip={chip} color={chipColor(index)} spectrum={spectrum} />
-      ))}
+      {shown.length > 0 && (
+        <Panel title="Spectrogram">
+          {shown.map(({ chip, index, spectrum }) => (
+            <Spectrogram key={chip} chip={chip} color={chipColor(index)} spectrum={spectrum} />
+          ))}
+        </Panel>
+      )}
       <ConsoleCard lines={stream.state.console} />
     </section>
   );

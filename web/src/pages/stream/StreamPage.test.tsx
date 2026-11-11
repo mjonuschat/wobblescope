@@ -344,7 +344,7 @@ describe("the stream page", () => {
     pick("a1");
     server(streamHeader("a1", 0));
     act(() => worker.emit({ type: "error", chip: "a1", message: "wasm failed" }));
-    expect(screen.getByText("wasm failed").className).toContain("text-red");
+    expect(screen.getByText("wasm failed").className).toContain("text-destructive");
   });
 
   it("shows console lines with errors in red and prefixes stripped", async () => {
@@ -355,7 +355,7 @@ describe("the stream page", () => {
     expect(screen.getByLabelText("Klipper console")).toBeTruthy();
     expect(screen.getByText("info line")).toBeTruthy();
     expect(screen.getByText("hello")).toBeTruthy();
-    expect(screen.getByText("!! Move out of range").className).toContain("text-red");
+    expect(screen.getByText("!! Move out of range").className).toContain("text-destructive");
   });
 
   it("has a Live view link under Measure in the sidebar", async () => {

@@ -1,3 +1,5 @@
+import { Card } from "@/components/ui/card";
+
 interface Props {
   lines: string[];
 }
@@ -15,14 +17,16 @@ export function ConsoleCard({ lines }: Props) {
   return (
     <aside
       aria-label="Klipper console"
-      className="fixed right-4 bottom-4 w-96 max-w-[90vw] space-y-1 rounded-md border border-neutral-700 bg-neutral-900 p-3 font-mono text-xs"
+      className="fixed bottom-4 left-4 z-40 w-96 max-w-[calc(100vw-2rem)] md:left-[calc(var(--sidebar-width)+--spacing(4))]"
     >
-      {lines.map((line, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the same line can repeat, and lines only append at the end
-        <p key={i} className={line.startsWith("!!") ? "text-red-400" : "text-neutral-300"}>
-          {strip(line)}
-        </p>
-      ))}
+      <Card className="gap-1 p-3 font-mono text-xs">
+        {lines.map((line, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the same line can repeat, and lines only append at the end
+          <p key={i} className={line.startsWith("!!") ? "text-destructive" : "text-muted-foreground"}>
+            {strip(line)}
+          </p>
+        ))}
+      </Card>
     </aside>
   );
 }

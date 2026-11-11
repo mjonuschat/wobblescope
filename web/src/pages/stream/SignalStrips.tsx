@@ -96,7 +96,7 @@ export function SignalStrips({ chips, paused }: Props) {
                 min={0}
                 placeholder="auto"
                 aria-label={`${chip} scale`}
-                className="w-24 rounded border bg-transparent px-1"
+                className="w-24 rounded border border-input bg-transparent px-1"
                 value={scales[chip] ?? ""}
                 onChange={(event) => setScales((old) => ({ ...old, [chip]: event.target.value }))}
               />
