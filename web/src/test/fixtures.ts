@@ -121,7 +121,7 @@ export function analysis(): Analysis {
     ],
     worst_case: rec,
     worst_case_vibrations: [{ chip: "a", point: 0, vibrs: 0.032 }],
-    summed: { freq_bins: [5, 5.2, 5.4], psd: [3, 4, 5] },
+    summed: { freq_bins: [5, 5.2, 5.4], psd: [3, 4, 5], psd_x: [2, 3, 4], psd_y: [1, 1, 1], psd_z: [0, 0, 0] },
     failures: [],
     eligibility: { decisions: [] },
     core_version: "0.1.0",

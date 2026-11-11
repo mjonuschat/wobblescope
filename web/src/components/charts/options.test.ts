@@ -119,10 +119,25 @@ describe("pointLabel", () => {
 });
 
 describe("summedOption", () => {
-  it("has one series, no heading of its own and a plain axis name", () => {
-    const option = summedOption(analysis().summed!, 200);
-    expect(series(option)).toHaveLength(1);
+  const option = summedOption(analysis().summed!, 200);
+
+  it("has no heading of its own and a plain axis name", () => {
     expect((option as { title?: unknown }).title).toBeUndefined();
     expect((option as { yAxis: { name: string } }).yAxis.name).toBe("Vibration Strength");
+  });
+
+  it("draws the total and the three directions, with the directions hidden in the legend", () => {
+    expect(series(option).map((s) => s.name)).toEqual(["Total", "X", "Y", "Z"]);
+    const legend = (option as { legend: { selected: Record<string, boolean> } }).legend;
+    expect(legend.selected).toEqual({ X: false, Y: false, Z: false });
+  });
+
+  it("plots each direction from its own summed curve", () => {
+    const x = series(option)[1] as unknown as { data: number[][] };
+    expect(x.data).toEqual([
+      [5, 2],
+      [5.2, 3],
+      [5.4, 4],
+    ]);
   });
 });

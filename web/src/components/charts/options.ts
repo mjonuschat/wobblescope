@@ -121,20 +121,36 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
   };
 }
 
-/** The sum of the eligible chips' vibration. It is for looking at; no recommendation comes from it. */
+/**
+ * The sum of the eligible chips' vibration: the total, and the accelerometers' X, Y and Z
+ * directions behind the legend as in a chip's chart. It is for looking at; no recommendation
+ * comes from it.
+ */
 export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
+  const curves = [
+    ["Total", summed.psd],
+    ["X", summed.psd_x],
+    ["Y", summed.psd_y],
+    ["Z", summed.psd_z],
+  ] as const;
   return {
     ...base(null, maxFreq),
-    // One axis and no legend, so the plot can start nearer the top and reach the right edge.
-    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    // One axis, so the plot reaches the right edge. The legend row sits above it.
+    grid: { top: 64, left: 64, right: 24, bottom: 40 },
+    legend: {
+      data: curves.map(([name]) => name),
+      top: 0,
+      left: 56,
+      selected: { X: false, Y: false, Z: false },
+      textStyle: { color: text },
+    },
+    graphic: [{ type: "text", left: 0, top: 4, style: { text: "Axes", fill: MUTED, fontSize: 12 } }],
     yAxis: { type: "value", name: "Vibration Strength", splitLine },
-    series: [
-      {
-        name: "All Chips",
-        type: "line",
-        showSymbol: false,
-        data: zip(summed.freq_bins, summed.psd),
-      },
-    ],
+    series: curves.map(([name, values]) => ({
+      name,
+      type: "line",
+      showSymbol: false,
+      data: zip(summed.freq_bins, values),
+    })),
   };
 }
