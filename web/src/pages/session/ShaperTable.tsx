@@ -13,7 +13,6 @@ export function ShaperTable({ recommendation }: { recommendation: Recommendation
           <TableHead>Vibrations</TableHead>
           <TableHead>Smoothing</TableHead>
           <TableHead>Max accel</TableHead>
-          <TableHead>Score</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -30,7 +29,6 @@ export function ShaperTable({ recommendation }: { recommendation: Recommendation
               <TableCell>{(c.vibrs * 100).toFixed(1)}%</TableCell>
               <TableCell>{c.smoothing.toFixed(3)} mm</TableCell>
               <TableCell>{formatAccel(c.max_accel)}</TableCell>
-              <TableCell>{c.score.toFixed(3)}</TableCell>
             </TableRow>
           );
         })}

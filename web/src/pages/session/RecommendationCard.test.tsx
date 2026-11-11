@@ -47,4 +47,9 @@ describe("RecommendationCard", () => {
     fireEvent.focus(screen.getByRole("button", { name: "About max acceleration" }));
     expect(await screen.findByText(/not a limit of your printer/)).toBeTruthy();
   });
+
+  it("shows no score, which says nothing to a person", () => {
+    render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
+    expect(screen.queryByText("Score")).toBeNull();
+  });
 });

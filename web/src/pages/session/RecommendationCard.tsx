@@ -39,13 +39,12 @@ export function RecommendationCard({
       <p className="text-xl font-semibold">
         {best.name} at {formatHz(best.freq)} Hz
       </p>
-      <Fields className="sm:grid-cols-4 lg:grid-cols-4">
+      <Fields className="sm:grid-cols-3 lg:grid-cols-3">
         <Field label="Remaining vibrations">{(best.vibrs * 100).toFixed(1)}%</Field>
         <Field label="Smoothing">{best.smoothing.toFixed(3)} mm</Field>
         <Field label="Max acceleration" hint={MAX_ACCEL_HINT}>
           {formatAccel(best.max_accel)}
         </Field>
-        <Field label="Score">{best.score.toFixed(3)}</Field>
       </Fields>
       {datasetVibrations.length > 1 && (
         <div className="space-y-1 text-sm">
