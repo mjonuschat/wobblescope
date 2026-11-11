@@ -24,13 +24,16 @@ async fn connect(rig: &Rig) -> Socket {
 /// A connection whose socket buffers are as small as the system allows (about 400 KB on a macOS
 /// loopback), so that a client which stops reading backs the server's writes up soon.
 async fn connect_with_small_buffers(rig: &Rig) -> Socket {
+    connect_with_small_buffers_to(rig.app()).await
+}
+
+async fn connect_with_small_buffers_to(app: axum::Router) -> Socket {
     const BUFFER: u32 = 4096;
     let server = tokio::net::TcpSocket::new_v4().unwrap();
     server.set_send_buffer_size(BUFFER).unwrap();
     server.bind("127.0.0.1:0".parse().unwrap()).unwrap();
     let listener = server.listen(8).unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = rig.app();
     tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
@@ -321,6 +324,27 @@ async fn a_slow_reader_gets_dropped_frames_not_a_growing_queue() {
     assert!(health["dropped_frames"].as_u64().unwrap() > 0, "{health}");
     let frames = frame_count(&messages);
     assert!(frames < 700, "{frames} of about 800 frames were delivered");
+}
+
+#[tokio::test]
+async fn a_viewer_that_stops_reading_is_torn_down_after_the_write_timeout() {
+    let rig = rig_with_extra_chips(&["adxl345 b", "adxl345 c", "adxl345 d"]).await;
+    let mut socket = connect_with_small_buffers_to(
+        rig.app_with_stream_write_timeout(Duration::from_millis(300)),
+    )
+    .await;
+    text_of(&mut socket, "hello").await;
+    for chip in ["adxl345", "adxl345 b", "adxl345 c", "adxl345 d"] {
+        subscribe(&mut socket, chip, 1600.0, 20.0).await;
+    }
+    rig.until("four bridges open", || rig.bridges_open() == 4)
+        .await;
+
+    // The client reads nothing while data flows until the socket buffers are full and a write
+    // blocks; the write timeout then closes the connection and with it every bridge.
+    push_in_real_time(&rig, &["adxl345", "b", "c", "d"], 10.0, 10.0).await;
+    rig.until("every bridge closed", || rig.bridges_open() == 0)
+        .await;
 }
 
 #[tokio::test]

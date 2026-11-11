@@ -36,6 +36,8 @@ const TOKEN_TIMEOUT: Duration = Duration::from_secs(5);
 const TICK: Duration = Duration::from_millis(25);
 /// How long `Hello` waits for the printer state before assuming no print is running.
 const PRINT_STATE_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long one websocket write to a viewer may take before the viewer is dropped.
+pub(super) const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Why a viewer that cannot keep up is disconnected.
 const TOO_SLOW: &str = "viewer too slow";
 
@@ -48,6 +50,7 @@ struct Outbox {
     queue: Mutex<OutQueue>,
     wake: Notify,
     overflowed: AtomicBool,
+    overflow: Notify,
 }
 
 impl Outbox {
@@ -56,6 +59,7 @@ impl Outbox {
             queue: Mutex::new(OutQueue::new(QUEUE_CAPACITY)),
             wake: Notify::new(),
             overflowed: AtomicBool::new(false),
+            overflow: Notify::new(),
         }
     }
 
@@ -71,6 +75,7 @@ impl Outbox {
     fn after_push(&self, pushed: Push) {
         if pushed == Push::Overflow {
             self.overflowed.store(true, Ordering::Release);
+            self.overflow.notify_one();
         }
         self.wake.notify_one();
     }
@@ -108,6 +113,14 @@ impl Outbox {
             };
             drop(queue);
             self.after_push(pushed);
+        }
+    }
+
+    /// Resolves once the queue has overflowed.
+    async fn overflowed(&self) {
+        let notified = self.overflow.notified();
+        if !self.overflowed.load(Ordering::Acquire) {
+            notified.await;
         }
     }
 
@@ -168,6 +181,7 @@ fn is_printing(state: Option<&str>) -> bool {
 
 async fn serve(mut socket: WebSocket, state: ApiState) {
     let settings = state.settings.clone();
+    let write_timeout = state.capture.stream_write_timeout;
     let moonraker = state.moonraker.clone();
     let limits = StreamLimits::from_settings(&settings);
     let outbox = Arc::new(Outbox::new());
@@ -188,12 +202,12 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
 
     loop {
         while let Some(entry) = outbox.pop() {
-            if socket.send(wire(entry)).await.is_err() {
+            if !send_bounded(&mut socket, wire(entry), write_timeout, &outbox).await {
                 return;
             }
         }
         if let Some(close) = overflow_close(&outbox) {
-            let _ = socket.send(close).await;
+            let _ = tokio::time::timeout(write_timeout, socket.send(close)).await;
             return;
         }
         tokio::select! {
@@ -213,6 +227,20 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
             },
             () = outbox.wake.notified() => {}
         }
+    }
+}
+
+/// Writes one message. A write that fails, outlasts `timeout` or is still blocked when the
+/// queue overflows ends the connection, so `false` means the caller must return.
+async fn send_bounded(
+    socket: &mut WebSocket,
+    message: Message,
+    timeout: Duration,
+    outbox: &Outbox,
+) -> bool {
+    tokio::select! {
+        sent = tokio::time::timeout(timeout, socket.send(message)) => sent.is_ok_and(|sent| sent.is_ok()),
+        () = outbox.overflowed() => false,
     }
 }
 

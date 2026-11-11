@@ -16,6 +16,7 @@ mod tests;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequestParts};
@@ -77,6 +78,8 @@ pub struct CaptureState {
     pub max_segment_seconds: u32,
     /// The runner's timings.
     pub timings: RunnerTimings,
+    /// How long one websocket write to a stream viewer may take before the viewer is dropped.
+    pub stream_write_timeout: Duration,
 }
 
 impl Default for CaptureState {
@@ -94,6 +97,7 @@ impl CaptureState {
             hub: LiveHub::new(),
             max_segment_seconds,
             timings: RunnerTimings::default(),
+            stream_write_timeout: stream::WRITE_TIMEOUT,
         }
     }
 

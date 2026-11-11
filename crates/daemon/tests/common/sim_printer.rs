@@ -588,6 +588,11 @@ pub fn outcome(f: &wobblescope::capture::live::FinishedTest) -> FinishedOutcome 
 impl Rig {
     /// The API router sharing this rig's slot and live hub.
     pub fn app(&self) -> axum::Router {
+        self.app_with_stream_write_timeout(Duration::from_secs(10))
+    }
+
+    /// The API router with a stream viewer's write timeout set to `timeout`.
+    pub fn app_with_stream_write_timeout(&self, timeout: Duration) -> axum::Router {
         wobblescope::api::mount_capture(
             self.cell.clone(),
             self.moonraker.clone(),
@@ -597,6 +602,7 @@ impl Rig {
                 hub: self.hub.clone(),
                 max_segment_seconds: 600,
                 timings: self.runner.timings,
+                stream_write_timeout: timeout,
             },
         )
     }
