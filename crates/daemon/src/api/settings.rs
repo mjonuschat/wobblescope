@@ -25,7 +25,10 @@ pub(super) async fn read(state: &ApiState) -> Result<PrinterSettings, ApiError> 
         .ok_or_else(|| unavailable("the daemon is not connected to Moonraker".to_owned()))?;
     let query = json!({"objects": {
         "configfile": ["settings"],
-        "toolhead": ["axis_minimum", "axis_maximum"],
+        "toolhead": [
+            "axis_minimum", "axis_maximum", "max_velocity", "max_accel",
+            "minimum_cruise_ratio", "square_corner_velocity",
+        ],
     }});
     let answer = control
         .call("printer.objects.query", Some(query), QUERY_TIMEOUT)

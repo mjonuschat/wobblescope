@@ -75,12 +75,41 @@ pub struct AxisLimits {
     pub z: Limits,
 }
 
+/// What the printer is and how fast its toolhead may move, for the Printer page. Each value is
+/// `None` when Klipper did not report it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Machine {
+    /// The host's name, which Klipper reports as `hostname`.
+    pub name: Option<String>,
+    /// Klipper's `software_version`.
+    pub klipper_version: Option<String>,
+    /// The `[printer]` section's `kinematics`, such as `corexy`.
+    pub kinematics: Option<String>,
+    /// The names of the MCU sections in the config, `mcu` first.
+    pub mcus: Vec<String>,
+    /// The toolhead's current `max_velocity`, in mm/s.
+    pub max_velocity: Option<f64>,
+    /// The toolhead's current `max_accel`, in mm/s².
+    pub max_accel: Option<f64>,
+    /// The toolhead's current `minimum_cruise_ratio`.
+    pub minimum_cruise_ratio: Option<f64>,
+    /// The toolhead's current `square_corner_velocity`, in mm/s.
+    pub square_corner_velocity: Option<f64>,
+    /// The config's `max_z_velocity`, in mm/s.
+    pub max_z_velocity: Option<f64>,
+    /// The config's `max_z_accel`, in mm/s².
+    pub max_z_accel: Option<f64>,
+}
+
 /// What `GET /api/settings` answers.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PrinterSettings {
     /// The Klipper fork.
     pub variant: Variant,
+    /// The printer and its motion limits.
+    pub machine: Machine,
     /// `Sweep` when the effective `sweeping_period` is above 0, else `Pulse`.
     pub default_mode: Mode,
     /// The effective settings.
@@ -158,14 +187,45 @@ pub fn parse_settings(query: &Value, info: &Value) -> Result<PrinterSettings, Se
             DEFAULT_Z.clamp(l.z.min, l.z.max),
         ]
     });
+    let machine = parse_machine(all, status.and_then(|s| s.get("toolhead")), info);
     Ok(PrinterSettings {
         variant,
+        machine,
         default_mode,
         settings,
         axis_limits,
         default_point,
         segment_overhead_seconds: crate::capture::request::SEGMENT_OVERHEAD_SECONDS,
     })
+}
+
+fn parse_machine(
+    config: &serde_json::Map<String, Value>,
+    toolhead: Option<&Value>,
+    info: &Value,
+) -> Machine {
+    let text = |value: Option<&Value>| value.and_then(Value::as_str).map(str::to_owned);
+    let printer = config.get("printer");
+    let limit = |key: &str| toolhead.and_then(|t| t.get(key)).and_then(number);
+    let configured = |key: &str| printer.and_then(|p| p.get(key)).and_then(number);
+    let mut mcus: Vec<String> = config
+        .keys()
+        .filter(|k| *k == "mcu" || k.starts_with("mcu "))
+        .cloned()
+        .collect();
+    mcus.sort_by(|a, b| (a != "mcu", a).cmp(&(b != "mcu", b)));
+    Machine {
+        name: text(info.get("hostname")),
+        klipper_version: text(info.get("software_version")),
+        kinematics: text(printer.and_then(|p| p.get("kinematics"))),
+        mcus,
+        max_velocity: limit("max_velocity"),
+        max_accel: limit("max_accel"),
+        minimum_cruise_ratio: limit("minimum_cruise_ratio"),
+        square_corner_velocity: limit("square_corner_velocity"),
+        max_z_velocity: configured("max_z_velocity"),
+        max_z_accel: configured("max_z_accel"),
+    }
 }
 
 /// A number, or text that holds one; anything else, and anything not finite, is unreadable.

@@ -147,3 +147,40 @@ async fn an_unreachable_moonraker_is_a_503_with_a_message() {
     assert_eq!(body["error"], "moonraker_unavailable");
     assert!(body["message"].as_str().unwrap().contains("Moonraker"));
 }
+
+#[test]
+fn the_machine_comes_from_the_config_the_toolhead_and_the_printer_info() {
+    let mut query = real();
+    query["status"]["toolhead"] = json!({
+        "axis_minimum": [0.0, 0.0, -2.0, 0.0],
+        "axis_maximum": [301.0, 308.0, 290.0, 0.0],
+        "max_velocity": 500.0,
+        "max_accel": 20000.0,
+        "minimum_cruise_ratio": 0.5,
+        "square_corner_velocity": 5.0,
+    });
+    query["status"]["configfile"]["settings"]["printer"]["max_z_velocity"] = json!(15.0);
+    query["status"]["configfile"]["settings"]["mcu toolhead"] = json!({});
+    query["status"]["configfile"]["settings"]["mcu"] = json!({});
+    let m = parse_settings(&query, &info(None)).unwrap().machine;
+    assert_eq!(m.name.as_deref(), Some("buster"));
+    assert_eq!(
+        m.klipper_version.as_deref(),
+        Some("v0.13.0-658-gbd09e017-dirty")
+    );
+    assert_eq!(m.kinematics.as_deref(), Some("corexy"));
+    assert_eq!(m.mcus, ["mcu", "mcu toolhead"]);
+    assert_eq!(m.max_velocity, Some(500.0));
+    assert_eq!(m.max_accel, Some(20000.0));
+    assert_eq!(m.minimum_cruise_ratio, Some(0.5));
+    assert_eq!(m.square_corner_velocity, Some(5.0));
+    assert_eq!(m.max_z_velocity, Some(15.0));
+    assert_eq!(m.max_z_accel, None);
+}
+
+#[test]
+fn a_machine_value_klipper_did_not_report_is_none() {
+    let m = parse_settings(&real(), &info(None)).unwrap().machine;
+    assert_eq!(m.max_accel, None);
+    assert_eq!(m.square_corner_velocity, None);
+}
