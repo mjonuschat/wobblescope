@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { analysis, candidate, recommendation } from "@/test/fixtures";
 
-import { pointLabel, psdOption, summedOption } from "./options";
+import { liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
 
 type Series = { name: string; yAxisIndex?: number; markLine?: { data: { xAxis: number }[] } };
 
@@ -141,3 +141,33 @@ describe("summedOption", () => {
     ]);
   });
 });
+
+describe('liveSpectrumOption', () => {
+  const spectrum = {
+    freq_bins: [0, 10, 20],
+    psd_x: [1, 2, 3],
+    psd_y: [1, 2, 3],
+    psd_z: [1, 2, 3],
+    psd_sum: [3, 6, 9],
+  }
+  const peaks = [{ freq: 10, level: 6 }]
+  const option = liveSpectrumOption({
+    chips: [
+      { chip: 'a', spectrum, peaks, peakHold: [3, 7, 9], axes: ['x', 'sum'] },
+      { chip: 'b', spectrum, peaks: [], peakHold: [3, 6, 9], axes: ['z'] },
+    ],
+    maxHz: 200,
+  })
+  type Live = { name: string; markPoint?: { data: { coord: number[] }[] } }
+  const live = (option as { series: Live[] }).series
+
+  it('draws a line per chip and axis plus a peak-hold line per chip', () => {
+    expect(live.map((s) => s.name)).toEqual(['a X', 'a SUM', 'a peak hold', 'b Z', 'b peak hold'])
+  })
+
+  it('marks the chip\u2019s peaks and uses an axis tooltip', () => {
+    expect(live[0].markPoint?.data.map((d) => d.coord)).toEqual([[10, 6]])
+    expect((option as { tooltip: { trigger: string } }).tooltip.trigger).toBe('axis')
+    expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200)
+  })
+})

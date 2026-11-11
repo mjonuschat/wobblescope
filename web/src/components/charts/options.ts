@@ -2,9 +2,13 @@ import type { EChartsCoreOption } from "echarts/core";
 
 import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
+import type { Peak } from '@/lib/generated/Peak'
 import type { ProbePoint } from "@/lib/generated/ProbePoint";
 import type { Recommendation } from "@/lib/generated/Recommendation";
+import type { Spectrum } from '@/lib/generated/Spectrum'
 import type { SummedPsd } from "@/lib/generated/SummedPsd";
+import type { Axis3 } from '@/pages/stream/axes'
+import { chipColor } from '@/pages/stream/colors'
 
 /** Where a probe point is, or its number when its position is not known. */
 export function pointLabel(index: number, probePoints: ProbePoint[]): string {
@@ -145,4 +149,65 @@ export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOpt
       data: zip(summed.freq_bins, values),
     })),
   };
+}
+
+interface LiveSpectrumInput {
+  chips: { chip: string; spectrum: Spectrum; peaks: Peak[]; peakHold: number[]; axes: Axis3[] }[]
+  maxHz: number
+}
+
+const SPECTRUM_VALUES = {
+  x: (s: Spectrum) => s.psd_x,
+  y: (s: Spectrum) => s.psd_y,
+  z: (s: Spectrum) => s.psd_z,
+  sum: (s: Spectrum) => s.psd_sum,
+} as const
+
+/**
+ * The live spectra: one line per chip and chosen axis in the chip's colour, a faint peak-hold
+ * line per chip (the summed spectrum's hold) and the chip's peaks marked on its first line.
+ */
+export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): EChartsCoreOption {
+  const series: Record<string, unknown>[] = []
+  chips.forEach(({ chip, spectrum, peaks, peakHold, axes }, index) => {
+    const color = chipColor(index)
+    axes.forEach((axis, n) => {
+      const line: Record<string, unknown> = {
+        name: `${chip} ${axis.toUpperCase()}`,
+        type: 'line',
+        showSymbol: false,
+        color,
+        lineStyle: { color, width: 1.5, type: axis === 'sum' ? 'solid' : axis === 'x' ? 'dashed' : 'dotted' },
+        data: zip(spectrum.freq_bins, SPECTRUM_VALUES[axis](spectrum)),
+      }
+      if (n === 0) {
+        line.markPoint = {
+          silent: true,
+          symbol: 'pin',
+          symbolSize: 36,
+          itemStyle: { color },
+          data: peaks.map((peak) => ({
+            coord: [peak.freq, peak.level],
+            value: peak.level,
+            label: { formatter: `${formatHz(peak.freq)} Hz\n${peak.level.toExponential(1)}`, color: text, fontSize: 10 },
+          })),
+        }
+      }
+      series.push(line)
+    })
+    series.push({
+      name: `${chip} peak hold`,
+      type: 'line',
+      showSymbol: false,
+      color,
+      lineStyle: { color, width: 1, opacity: 0.3 },
+      data: zip(spectrum.freq_bins, peakHold),
+    })
+  })
+  return {
+    ...base('Live spectrum', maxHz),
+    legend: { type: 'scroll', top: 28, textStyle: { color: text } },
+    yAxis: { type: 'value', name: 'PSD' },
+    series,
+  }
 }
