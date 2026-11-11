@@ -1,3 +1,4 @@
+import { MinusIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -316,45 +317,55 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
       </FormCard>
 
       <FormCard title="Points">
-        <div className="space-y-3">
-          {points.map((row, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
-            <div key={i} className="flex items-end gap-2">
-              {(["x", "y", "z"] as const).map((axis) => (
-                <div key={axis} className="space-y-1">
-                  <Label htmlFor={`point-${i}-${axis}`}>
-                    Point {i + 1} {axis.toUpperCase()}
-                  </Label>
-                  <UnitInput
-                    id={`point-${i}-${axis}`}
-                    unit="mm"
-                    step={1}
-                    className="w-32"
-                    value={row[axis]}
-                    onChange={(e) =>
-                      setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
-                    }
-                  />
+        <div className="space-y-2">
+          {points.map((row, i) => {
+            const last = i === points.length - 1;
+            return (
+              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
+              <div key={i} className="flex items-end gap-2">
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <div key={axis} className="space-y-1">
+                    <Label htmlFor={`point-${i}-${axis}`} className={i === 0 ? undefined : "sr-only"}>
+                      Point {i + 1} {axis.toUpperCase()}
+                    </Label>
+                    <UnitInput
+                      id={`point-${i}-${axis}`}
+                      unit="mm"
+                      step={1}
+                      className="w-32"
+                      value={row[axis]}
+                      onChange={(e) =>
+                        setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
+                      }
+                    />
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={`Remove point ${i + 1}`}
+                    className={points.length === 1 ? "invisible" : undefined}
+                    onClick={() => setPoints((old) => old.filter((_, j) => j !== i))}
+                  >
+                    <MinusIcon />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Add a point"
+                    className={last ? undefined : "invisible"}
+                    onClick={() => setPoints((old) => [...old, rowFrom(settings.default_point)])}
+                  >
+                    <PlusIcon />
+                  </Button>
                 </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={points.length === 1}
-                onClick={() => setPoints((old) => old.filter((_, j) => j !== i))}
-              >
-                Remove point {i + 1}
-              </Button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
           <FieldError name="points" text={errorFor("points")} />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setPoints((old) => [...old, rowFrom(settings.default_point)])}
-          >
-            Add a point
-          </Button>
         </div>
       </FormCard>
 

@@ -217,6 +217,21 @@ describe("the run screen", () => {
     expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({ freq_end: 90 });
   });
 
+  it("adds a point with the plus on the last row and removes one with the minus", async () => {
+    await open();
+    const rows = () => document.querySelectorAll('input[id^="point-"][id$="-x"]').length;
+    const hidden = (el: Element) => el.className.includes("invisible");
+    // One point: the minus is there but hidden, the plus is shown.
+    expect(hidden(screen.getByRole("button", { name: "Remove point 1", hidden: true }))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Add a point" }));
+    expect(rows()).toBe(2);
+    expect(hidden(screen.getByRole("button", { name: "Remove point 1", hidden: true }))).toBe(false);
+    // Only the last row keeps its plus.
+    expect(screen.getAllByRole("button", { name: "Add a point", hidden: true }).map(hidden)).toEqual([true, false]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove point 2" }));
+    expect(rows()).toBe(1);
+  });
+
   it("hides the sweeping fields in pulse mode", async () => {
     await open();
     expect(screen.queryByLabelText(/Sweeping period/)).toBeTruthy();
