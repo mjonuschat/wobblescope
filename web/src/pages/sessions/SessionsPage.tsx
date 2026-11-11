@@ -36,6 +36,7 @@ function IconAction({
   hint,
   disabled,
   href,
+  highlighted,
   onClick,
   children,
 }: {
@@ -45,6 +46,8 @@ function IconAction({
   disabled?: boolean;
   /** Makes the action a download link instead of a button. */
   href?: string;
+  /** Outlines the button in the accent colour. */
+  highlighted?: boolean;
   onClick?: () => void;
   children: ReactNode;
 }) {
@@ -57,6 +60,7 @@ function IconAction({
             variant="outline"
             size="icon"
             aria-label={label}
+            className={highlighted ? "border-primary" : undefined}
             disabled={disabled}
             onClick={onClick}
             {...(href ? { render: <a href={href} download />, nativeButton: false } : {})}
@@ -152,13 +156,12 @@ export function SessionsPage() {
                     {s.outcome}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  {formatBytes(s.size_bytes)} {s.pinned && <Badge>Pinned</Badge>}
-                </TableCell>
+                <TableCell>{formatBytes(s.size_bytes)}</TableCell>
                 <TableCell className="space-x-2 text-right">
                   <IconAction
                     label={s.pinned ? "Unpin" : "Pin"}
                     hint={s.pinned ? PIN_HINTS.unpin : PIN_HINTS.pin}
+                    highlighted={s.pinned}
                     disabled={pinning}
                     onClick={() => pin.mutate({ id: s.id, pinned: !s.pinned })}
                   >

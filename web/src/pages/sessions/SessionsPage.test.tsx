@@ -26,7 +26,7 @@ function api(
 }
 
 describe("the sessions page", () => {
-  it("lists sessions in the order returned with chips, size and a pinned badge", async () => {
+  it("lists sessions in the order returned with chips and size, and outlines the unpin button of a pinned one", async () => {
     api([
       summary("newest", { chips: ["adxl345", "lis2dw ebb36"], size_bytes: 1536, pinned: true }),
       summary("older", { size_bytes: 3 * 1024 ** 2 }),
@@ -38,10 +38,11 @@ describe("the sessions page", () => {
     expect(text[0]).toContain("newest");
     expect(text[0]).toContain("adxl345, lis2dw ebb36");
     expect(text[0]).toContain("1.5 KiB");
-    expect(text[0]).toContain("Pinned");
+    expect(within(rows[1]).getByRole("button", { name: "Unpin" }).className).toContain("border-primary");
+    expect(within(rows[1]).queryByText("Pinned")).toBeNull();
     expect(text[1]).toContain("older");
     expect(text[1]).toContain("3 MiB");
-    expect(text[1]).not.toContain("Pinned");
+    expect(within(rows[2]).getByRole("button", { name: "Pin" }).className).not.toContain("border-primary");
     expect(text[2]).toContain("CSV");
   });
 
