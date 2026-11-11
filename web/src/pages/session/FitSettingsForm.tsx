@@ -13,7 +13,7 @@ const FIELDS: Record<keyof FitDraft, { label: string; unit: string; step: number
   scv: { label: "Square Corner Velocity", unit: "mm/s", step: 1 },
   damping_ratio: { label: "Damping Ratio", unit: "", step: 0.01 },
   max_smoothing: { label: "Maximum Corner Rounding", unit: "mm", step: 0.01 },
-  max_vibrations: { label: "Acceptable Vibration", unit: "%", step: 1 },
+  max_vibrations: { label: "Acceptable Vibration", unit: "%", step: 0.1 },
 };
 
 /** What a field means, in a sentence or two, including where its starting value came from. */
