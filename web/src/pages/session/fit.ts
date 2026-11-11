@@ -3,10 +3,10 @@ import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { parseNumber } from "@/lib/parse";
 
-/** Klipper's own fit: square corner velocity 5 mm/s and every other setting left to `core`. */
+/** Klipper's own fit: square corner velocity 5 mm/s, damping ratio 0.1 and every other setting left to `core`. */
 export const defaultFitParams: FitParams = {
   scv: 5,
-  damping_ratio: null,
+  damping_ratio: 0.1,
   max_smoothing: null,
   max_vibrations: null,
   test_damping_ratios: null,
@@ -56,7 +56,11 @@ export function baselineFor(meta: SessionMeta, axis: Axis): FitBaseline {
   const scv = printer?.square_corner_velocity ?? null;
   const damping = (axis === "X" ? printer?.damping_ratio_x : printer?.damping_ratio_y) ?? null;
   return {
-    params: { ...defaultFitParams, scv: scv ?? defaultFitParams.scv, damping_ratio: damping },
+    params: {
+      ...defaultFitParams,
+      scv: scv ?? defaultFitParams.scv,
+      damping_ratio: damping ?? defaultFitParams.damping_ratio,
+    },
     recorded: { scv: scv !== null, damping: damping !== null },
   };
 }

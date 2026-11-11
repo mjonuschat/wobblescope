@@ -32,9 +32,9 @@ describe("baselineFor", () => {
     expect(baselineFor(meta, "Y").recorded).toEqual({ scv: true, damping: true });
   });
 
-  it("keeps the default damping for an axis the printer sets none for", () => {
+  it("uses the default damping of 0.1 for an axis the printer sets none for", () => {
     const meta = withPrinter({ square_corner_velocity: 8, damping_ratio_x: 0.12 });
-    expect(baselineFor(meta, "Y").params.damping_ratio).toBeNull();
+    expect(baselineFor(meta, "Y").params.damping_ratio).toBe(0.1);
     expect(baselineFor(meta, "Y").recorded).toEqual({ scv: true, damping: false });
   });
 });
