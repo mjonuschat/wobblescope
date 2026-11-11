@@ -283,8 +283,8 @@ fn allowed_host(text: &str) -> Result<String, &'static str> {
     Ok(text.to_lowercase())
 }
 
-/// The least display update rate, matching the minimum the stream clamp uses.
-const MIN_UPDATES_PER_SECOND: f64 = 0.5;
+/// The least display update rate, shared by config validation and the stream clamp.
+pub(crate) const MIN_UPDATES_PER_SECOND: f64 = 0.5;
 
 /// The value or its default, which must be finite and at least `min`; `too_small` is the
 /// reason given when it is not.

@@ -8,7 +8,7 @@ use crate::config::Settings;
 pub const MAX_CHIPS: usize = 4;
 
 /// The least display update rate a viewer may request.
-pub const MIN_UPDATES_PER_SECOND: f64 = 0.5;
+pub use crate::config::MIN_UPDATES_PER_SECOND;
 
 /// The least top frequency a viewer may request, in Hz.
 const MIN_MAX_HZ: f64 = 1.0;
@@ -178,7 +178,7 @@ fn bounded(value: f64, low: f64, high: f64) -> f64 {
     }
 }
 
-/// StreamLimits a viewer's request to what the daemon allows for a chip sampling at
+/// Limits a viewer's request to what the daemon allows for a chip sampling at
 /// `input_rate_hz`: the top frequency into `[1, min(limits.max_hz, input_rate_hz / 2)]` and the
 /// update rate into `[MIN_UPDATES_PER_SECOND, limits.max_updates_per_second]`.
 pub fn clamp_request(
