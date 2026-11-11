@@ -112,23 +112,27 @@ function ResonanceSection({ settings }: { settings: PrinterSettings }) {
   const sweep = settings.default_mode === "Sweep";
   return (
     <Section title="Resonance testing">
-      <Fields>
-        <Field label="Default mode">{sweep ? "Sweep" : "Pulse"}</Field>
-        <Field label="Frequency range">
-          {s.freq_start.value === null || s.freq_end.value === null
-            ? UNKNOWN
-            : `${setting(s.freq_start, "")} to ${setting(s.freq_end, "Hz")}`}
-        </Field>
-        <Field label="Hz per second">{setting(s.hz_per_sec, "Hz/s", 1)}</Field>
-        <Field label="Acceleration per Hz">{setting(s.accel_per_hz, "mm/s² per Hz", 1)}</Field>
-        <Field label="Move speed">{setting(s.move_speed, "mm/s")}</Field>
-        {sweep && (
-          <>
-            <Field label="Sweeping acceleration">{setting(s.sweeping_accel, "mm/s²")}</Field>
-            <Field label="Sweeping period">{setting(s.sweeping_period, "s", 1)}</Field>
-          </>
-        )}
-      </Fields>
+      <div className="space-y-4">
+        <Fields>
+          <Field label="Default mode">{sweep ? "Sweep" : "Pulse"}</Field>
+          {sweep && (
+            <>
+              <Field label="Sweeping acceleration">{setting(s.sweeping_accel, "mm/s²")}</Field>
+              <Field label="Sweeping period">{setting(s.sweeping_period, "s", 1)}</Field>
+            </>
+          )}
+        </Fields>
+        <Fields>
+          <Field label="Frequency range">
+            {s.freq_start.value === null || s.freq_end.value === null
+              ? UNKNOWN
+              : `${setting(s.freq_start, "")} to ${setting(s.freq_end, "Hz")}`}
+          </Field>
+          <Field label="Hz per second">{setting(s.hz_per_sec, "Hz/s", 1)}</Field>
+          <Field label="Acceleration per Hz">{setting(s.accel_per_hz, "mm/s² per Hz", 1)}</Field>
+          <Field label="Move speed">{setting(s.move_speed, "mm/s")}</Field>
+        </Fields>
+      </div>
     </Section>
   );
 }
