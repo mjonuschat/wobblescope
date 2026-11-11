@@ -10,7 +10,7 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
-import { defaultFitParams } from "./fit";
+import { baselineFor } from "./fit";
 
 interface AnalysisProps {
   id: string;
@@ -44,7 +44,8 @@ function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: Anal
 export function SessionResults({ id }: { id: string }) {
   const session = useSession(id);
   const [selected, setSelected] = useState<Axis | null>(null);
-  const [params, setParams] = useState<FitParams>(defaultFitParams);
+  // The settings the user applied. Until they do, the fit starts from what the session recorded.
+  const [applied, setApplied] = useState<FitParams | null>(null);
   const [overrides, setOverrides] = useState<string[]>([]);
 
   if (session.isPending) return <p className="text-sm text-muted-foreground">Loading session…</p>;
@@ -59,6 +60,7 @@ export function SessionResults({ id }: { id: string }) {
   const { meta } = session.data;
   const axes = [...new Set(meta.segments.map((s) => s.axis))];
   const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
+  const baseline = baselineFor(meta, axis ?? "X");
 
   return (
     <div className="space-y-4">
@@ -79,11 +81,17 @@ export function SessionResults({ id }: { id: string }) {
             id={id}
             meta={meta}
             axis={axis}
-            params={params}
+            params={applied ?? baseline.params}
             overrides={overrides}
             onOverridesChange={setOverrides}
           />
-          <FitSettingsForm onApply={setParams} />
+          <FitSettingsForm
+            key={applied ? "applied" : axis}
+            baseline={baseline}
+            applied={applied}
+            onApply={setApplied}
+            onReset={() => setApplied(null)}
+          />
         </>
       )}
       <MetaPanel meta={meta} />

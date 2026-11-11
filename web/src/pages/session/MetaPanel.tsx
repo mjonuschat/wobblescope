@@ -50,6 +50,10 @@ export function MetaPanel({ meta }: { meta: SessionMeta }) {
         {row("Outcome", outcomeText(meta.outcome))}
         {row("Printer", meta.printer?.name ?? "Not recorded")}
         {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version)}
+        {meta.printer?.square_corner_velocity != null &&
+          row("Square corner velocity", `${meta.printer.square_corner_velocity} mm/s`)}
+        {meta.printer?.damping_ratio_x != null && row("Damping ratio X", String(meta.printer.damping_ratio_x))}
+        {meta.printer?.damping_ratio_y != null && row("Damping ratio Y", String(meta.printer.damping_ratio_y))}
         {meta.printer &&
           meta.printer.mcu_firmware.length > 0 &&
           row(

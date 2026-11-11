@@ -12,6 +12,9 @@ describe("the session details", () => {
       name: "buster",
       klipper_version: "v0.13.0-820-g0cee841e",
       mcu_firmware: ["ebb36: v0.13.0-820-g0cee841e", "mcu: v0.13.0-658-gbd09e017"],
+      square_corner_velocity: null,
+      damping_ratio_x: null,
+      damping_ratio_y: null,
     };
     meta.chips[1].axes_map = "x,z,-y";
     render(<MetaPanel meta={meta} />);
@@ -22,6 +25,22 @@ describe("the session details", () => {
     expect(within(rows[2]).getByText("x,z,-y")).toBeTruthy();
     // A chip whose config sets no axes map shows a dash.
     expect(within(rows[1]).getAllByText("–").length).toBeGreaterThan(0);
+  });
+
+  it("shows the printer's corner velocity and damping ratios when they were recorded", () => {
+    const meta = twoAxisMeta();
+    meta.printer = {
+      name: "buster",
+      klipper_version: null,
+      mcu_firmware: [],
+      square_corner_velocity: 8,
+      damping_ratio_x: 0.12,
+      damping_ratio_y: null,
+    };
+    render(<MetaPanel meta={meta} />);
+    expect(screen.getByText("8 mm/s")).toBeTruthy();
+    expect(screen.getByText("Damping ratio X")).toBeTruthy();
+    expect(screen.queryByText("Damping ratio Y")).toBeNull();
   });
 
   it("shows no firmware row when none was recorded", () => {

@@ -1,4 +1,6 @@
+import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
+import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { parseNumber } from "@/lib/parse";
 
 /** Klipper's own fit: square corner velocity 5 mm/s and every other setting left to `core`. */
@@ -20,12 +22,38 @@ export interface FitDraft {
   max_vibrations: string;
 }
 
-export const defaultDraft: FitDraft = {
-  scv: String(defaultFitParams.scv),
-  damping_ratio: "",
-  max_smoothing: "",
-  max_vibrations: "",
-};
+/** The form text for `params`: an unset value is an empty field. */
+export function draftFrom(params: FitParams): FitDraft {
+  const text = (value: number | null) => (value === null ? "" : String(value));
+  return {
+    scv: String(params.scv),
+    damping_ratio: text(params.damping_ratio),
+    max_smoothing: text(params.max_smoothing),
+    max_vibrations: text(params.max_vibrations),
+  };
+}
+
+export const defaultDraft: FitDraft = draftFrom(defaultFitParams);
+
+/** The fit a session starts from, and which of its values came from the printer. */
+export interface FitBaseline {
+  params: FitParams;
+  recorded: { scv: boolean; damping: boolean };
+}
+
+/**
+ * The fit to start from for `axis`: the printer's own square corner velocity and damping ratio
+ * when the session recorded them, Klipper's defaults otherwise.
+ */
+export function baselineFor(meta: SessionMeta, axis: Axis): FitBaseline {
+  const printer = meta.printer;
+  const scv = printer?.square_corner_velocity ?? null;
+  const damping = (axis === "X" ? printer?.damping_ratio_x : printer?.damping_ratio_y) ?? null;
+  return {
+    params: { ...defaultFitParams, scv: scv ?? defaultFitParams.scv, damping_ratio: damping },
+    recorded: { scv: scv !== null, damping: damping !== null },
+  };
+}
 
 export type DraftResult = { params: FitParams } | { invalid: keyof FitDraft };
 

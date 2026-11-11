@@ -304,6 +304,26 @@ describe("the session view", () => {
     expect(screen.queryByRole("tab", { name: "All Chips" })).toBeNull();
   });
 
+  it("analyses with the printer's recorded corner velocity and damping, until the user applies others", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
+    const meta = twoAxisMeta();
+    meta.printer = {
+      name: null,
+      klipper_version: null,
+      mcu_firmware: [],
+      square_corner_velocity: 8,
+      damping_ratio_x: 0.12,
+      damping_ratio_y: null,
+    };
+    serve(meta);
+    renderRoute("/sessions/s1");
+    await screen.findByRole("region", { name: "Recommended Input Shaper" });
+    expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: 0.12 });
+    fireEvent.change(screen.getByLabelText(/Square corner velocity/), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(fake.analyze.mock.calls.at(-1)?.[0].params).toMatchObject({ scv: 3 }));
+  });
+
   it("shows an analysis error while the metadata stays visible", async () => {
     fake.analyze.mockImplementation(() => Promise.reject(new Error("c0-s0.zst holds 999 samples, metadata says 1000")));
     serve();

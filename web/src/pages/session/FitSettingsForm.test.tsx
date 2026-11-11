@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { FitSettingsForm } from "./FitSettingsForm";
+import { defaultFitParams } from "./fit";
 
 const field = (label: RegExp) => screen.getByLabelText(label);
 
@@ -30,5 +31,35 @@ describe("FitSettingsForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 5, max_smoothing: null }));
     expect((field(/Smoothing limit/) as HTMLInputElement).value).toBe("");
+  });
+
+  it("starts from the printer's recorded values, says so, and Reset goes back to them", () => {
+    const onApply = vi.fn();
+    const baseline = {
+      params: { ...defaultFitParams, scv: 8, damping_ratio: 0.12 },
+      recorded: { scv: true, damping: true },
+    };
+    render(<FitSettingsForm baseline={baseline} onApply={onApply} />);
+    expect((field(/Square corner velocity/) as HTMLInputElement).value).toBe("8");
+    expect((field(/Damping ratio/) as HTMLInputElement).value).toBe("0.12");
+    expect(screen.getByText("From the printer when it was tested.")).toBeTruthy();
+    fireEvent.change(field(/Square corner velocity/), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect((field(/Square corner velocity/) as HTMLInputElement).value).toBe("8");
+    expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 8, damping_ratio: 0.12 }));
+  });
+
+  it("says Klipper's default is used when nothing was recorded", () => {
+    render(<FitSettingsForm onApply={vi.fn()} />);
+    expect(screen.getByText("Klipper's default. Not recorded for this session.")).toBeTruthy();
+  });
+
+  it("lets a parent handle Reset", () => {
+    const onApply = vi.fn();
+    const onReset = vi.fn();
+    render(<FitSettingsForm onApply={onApply} onReset={onReset} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(onReset).toHaveBeenCalledOnce();
+    expect(onApply).not.toHaveBeenCalled();
   });
 });
