@@ -41,11 +41,19 @@ const done: FinishedTest = {
   motion_uncertain: false,
 };
 
+/** The start button once the printer is known to be homed. */
+async function enabledRun() {
+  const button = (await screen.findByRole("button", { name: "Run Test" })) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  return button;
+}
+
 function api(start: Reply = { status: 202, body: { id: "test-1" } }) {
   return stubApiWithStatus((call: ApiCall) => {
     const path = apiPath(call);
     if (path === "settings") return { body: printerSettings() };
     if (path === "chips") return { body: chipsSnapshot() };
+    if (path === "printer") return { body: { homed_axes: "xyz" } };
     if (path === "tests") return start;
     return { status: 404, body: { error: "not_found", message: "no" } };
   });
@@ -287,7 +295,7 @@ describe("starting a test", () => {
     api();
     renderRoute("/run/shaper");
     // The socket is never opened, as when a proxy refuses the upgrade.
-    fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
+    fireEvent.click(await enabledRun());
     expect(await screen.findByText("Starting…")).toBeTruthy();
     expect(screen.getByText(/The live view is not connected/)).toBeTruthy();
   });
@@ -298,7 +306,7 @@ describe("starting a test", () => {
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
     act(() => FakeSocket.latest.open());
     send({ test: null, last: null });
-    fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
+    fireEvent.click(await enabledRun());
     expect(await screen.findByText("Starting…")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
 

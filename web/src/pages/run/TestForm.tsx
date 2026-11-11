@@ -14,15 +14,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
-import { useStartTest } from "@/lib/api/queries";
+import { usePrinterState, useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
 import type { CheckFailure } from "@/lib/generated/CheckFailure";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { parseNumber } from "@/lib/parse";
+import { homedTone } from "@/components/PrinterControls";
 
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 
@@ -103,6 +105,7 @@ function ChoiceRow({ label, error, children }: { label: string; error: ReactNode
 /** The run form: chips, axes, mode, settings, points, and the start button. */
 export function TestForm({ settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
+  const printer = usePrinterState(true);
   const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
   const [texts, setTexts] = useState<Partial<Record<OverrideKey, string>>>({});
@@ -133,6 +136,12 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   );
 
   let problem = blocked;
+  if (!problem && printer.isPending) problem = "Checking whether the printer is homed…";
+  if (!problem && printer.data && homedTone(printer.data.homed_axes) !== "full") {
+    const axes = printer.data.homed_axes ?? "";
+    const notHomed = ["X", "Y", "Z"].filter((a) => !axes.toLowerCase().includes(a.toLowerCase()));
+    problem = `Home the printer first. Not homed: ${notHomed.join(", ")}.`;
+  }
   if (!problem && chips.length === 0) problem = "Choose at least one chip.";
   if (!problem && axes.length === 0) problem = "Choose at least one axis.";
   if (!problem && !pointsValid) problem = "Give every test point an X, Y and Z.";
@@ -418,16 +427,21 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
           )}
           {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
         </div>
-        <Button type="submit" size="lg" className="ml-auto px-5" disabled={problem !== null || start.isPending}>
-          {start.isPending ? (
-            "Checking printer…"
-          ) : (
-            <>
-              <PlayIcon data-icon="inline-start" />
-              Run Test
-            </>
-          )}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger render={<span className="ml-auto" />}>
+            <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
+              {start.isPending ? (
+                "Checking printer…"
+              ) : (
+                <>
+                  <PlayIcon data-icon="inline-start" />
+                  Run Test
+                </>
+              )}
+            </Button>
+          </TooltipTrigger>
+          {problem && <TooltipContent side="top">{problem}</TooltipContent>}
+        </Tooltip>
       </div>
     </form>
   );

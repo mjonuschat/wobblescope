@@ -14,15 +14,18 @@ interface Options {
   settings?: PrinterSettings;
   chips?: ChipsSnapshot;
   checked?: ChipsSnapshot;
+  /** The axes Klipper reports as homed. */
+  homed?: string | null;
   start?: Reply | ((call: ApiCall) => Reply);
 }
 
-function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, start }: Options = {}) {
+function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, start, homed = "xyz" }: Options = {}) {
   return stubApiWithStatus((call) => {
     const path = apiPath(call);
     if (path === "settings") return { body: settings };
     if (path === "chips") return { body: chips };
     if (path === "chips/check") return { body: checked ?? chips };
+    if (path === "printer") return { body: { homed_axes: homed } };
     if (path === "tests" && call.method === "POST") {
       const reply = typeof start === "function" ? start(call) : start;
       return reply ?? { status: 202, body: { id: "test-1" } };
@@ -31,7 +34,7 @@ function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, s
   });
 }
 
-const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ });
+const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ }) as HTMLButtonElement;
 const thumb = (index: number) => document.querySelectorAll<HTMLInputElement>('input[type="range"]')[index];
 const mode = () => screen.getByRole("combobox", { name: "Mode" }).textContent;
 async function chooseMode(name: "Pulse" | "Sweep") {
@@ -49,11 +52,25 @@ async function open(options?: Options) {
   const calls = api(options);
   renderRoute("/run/shaper");
   await screen.findByRole("button", { name: "Run Test" });
+  await waitFor(() => expect(screen.queryByText(/Checking whether the printer is homed/)).toBeNull());
   return calls;
 }
 
 describe("the run screen", () => {
   beforeEach(() => stubWebSocket());
+
+  it("disables Start and says why while the printer is not fully homed", async () => {
+    api({ homed: "xy" });
+    renderRoute("/run/shaper");
+    expect(await screen.findByText("Home the printer first. Not homed: Z.")).toBeTruthy();
+    expect(startButton().disabled).toBe(true);
+  });
+
+  it("names every axis when none is homed", async () => {
+    api({ homed: null });
+    renderRoute("/run/shaper");
+    expect(await screen.findByText("Home the printer first. Not homed: X, Y, Z.")).toBeTruthy();
+  });
 
   it("fills the fields with the printer values, preselects the mode and enables Start", async () => {
     await open();
@@ -152,12 +169,21 @@ describe("the run screen", () => {
           posts += 1;
           return pending;
         }
-        const body = path === "status" ? healthyStatus : path === "settings" ? printerSettings() : chipsSnapshot();
+        const body =
+          path === "status"
+            ? healthyStatus
+            : path === "settings"
+              ? printerSettings()
+              : path === "printer"
+                ? { homed_axes: "xyz" }
+                : chipsSnapshot();
         return new Response(JSON.stringify(body), { status: 200 });
       }),
     );
     renderRoute("/run/shaper");
-    fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
+    const run = (await screen.findByRole("button", { name: "Run Test" })) as HTMLButtonElement;
+    await waitFor(() => expect(run.disabled).toBe(false));
+    fireEvent.click(run);
     const busy = await screen.findByRole("button", { name: "Checking printer…" });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(busy);
