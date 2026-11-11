@@ -215,3 +215,13 @@ async fn a_subscribe_is_refused_while_moonraker_is_not_connected() {
     assert_eq!(refused["chip"], "adxl345");
     assert_eq!(rig.sim.bridge().open_on("adxl345"), 0);
 }
+
+#[tokio::test]
+async fn a_console_notification_reaches_the_viewer_unchanged() {
+    let rig = rig().await;
+    let mut socket = connect(&rig).await;
+    text_of(&mut socket, "hello").await;
+    rig.sim.fake.push("notify_gcode_response", json!(["!! b"]));
+    let console = text_of(&mut socket, "console").await;
+    assert_eq!(console, json!({"type": "console", "lines": ["!! b"]}));
+}

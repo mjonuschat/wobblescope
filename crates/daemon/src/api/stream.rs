@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::response::Response;
-use tokio::sync::{Notify, watch};
+use tokio::sync::{Notify, broadcast, watch};
 use tokio::task::JoinHandle;
 
 use super::ApiState;
@@ -162,6 +162,7 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
     let limits = StreamLimits::from_settings(&settings);
     let outbox = Arc::new(Outbox::new());
     let mut subscriptions = Subscriptions::default();
+    let mut console = moonraker.gcode_lines();
 
     let printing = match moonraker.control() {
         Some(control) => tokio::time::timeout(PRINT_STATE_TIMEOUT, read_printer_state(&control))
@@ -198,6 +199,11 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
                     }
                 }
                 Some(Ok(_)) => {}
+            },
+            line = console.recv() => match line {
+                Ok(line) => outbox.push(Entry::Console(vec![line])),
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(broadcast::error::RecvError::Closed) => console = moonraker.gcode_lines(),
             },
             () = outbox.wake.notified() => {}
         }

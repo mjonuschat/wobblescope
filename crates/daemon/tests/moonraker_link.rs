@@ -649,3 +649,23 @@ async fn the_bridge_url_keeps_the_route_prefix_and_encodes_the_token() {
         format!("ws://{addr}/printer-a/klippysocket?token=a%20b")
     );
 }
+
+#[tokio::test]
+async fn gcode_responses_reach_the_line_receiver_without_non_string_entries() {
+    let fake = FakeMoonraker::start().await;
+    Printer::new(&fake, "ready", one_chip());
+    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    until("ready", || m.status().klippy.state == KlippyState::Ready).await;
+    let mut lines = m.gcode_lines();
+    fake.push("notify_gcode_response", json!(["// a", 7, "!! b"]));
+    let mut got = Vec::new();
+    for _ in 0..2 {
+        got.push(
+            tokio::time::timeout(DEADLINE, lines.recv())
+                .await
+                .expect("a line in time")
+                .unwrap(),
+        );
+    }
+    assert_eq!(got, ["// a", "!! b"]);
+}
