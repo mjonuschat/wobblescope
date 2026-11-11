@@ -92,7 +92,7 @@ describe("a running test", () => {
 
   it("opened mid-test goes straight to progress", async () => {
     await mount({ test: running, last: null });
-    expect(await screen.findByText("Test running")).toBeTruthy();
+    expect(await screen.findByText("Progress")).toBeTruthy();
     expect(currentStep()).toContain("Measuring");
     expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
   });
@@ -155,7 +155,7 @@ describe("a running test", () => {
 
   it("keeps the last state and the stop button when the socket drops, and a new snapshot clears the mark", async () => {
     const calls = await mount({ test: running, last: null });
-    await screen.findByText("Test running");
+    await screen.findByText("Progress");
     act(() => FakeSocket.latest.drop());
     expect(await screen.findByText(/Connection lost, this may be out of date/)).toBeTruthy();
     expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
@@ -267,7 +267,7 @@ describe("starting a test", () => {
     expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
 
     send({ test: running, last: null });
-    expect(await screen.findByText("Test running")).toBeTruthy();
+    expect(await screen.findByText("Progress")).toBeTruthy();
     expect(screen.queryByText("Starting…")).toBeNull();
   });
 });

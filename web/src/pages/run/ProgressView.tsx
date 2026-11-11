@@ -1,6 +1,11 @@
 import { Link } from "@tanstack/react-router";
 
+import { LoaderCircleIcon } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { useEmergencyStop } from "@/lib/api/queries";
 import type { ChipLive } from "@/lib/generated/ChipLive";
 import type { FinishedOutcome } from "@/lib/generated/FinishedOutcome";
@@ -29,25 +34,41 @@ const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
 export const SHUTDOWN_NOTICE =
   "Emergency stop sent. Klipper is in shutdown and needs a FIRMWARE_RESTART before it moves again.";
 
-/** The red button. It never asks for confirmation and stays enabled while it can matter. */
+/** The red button, at the right under a separator. It never asks for confirmation. */
 function StopButton({ id }: { id: string }) {
   const stop = useEmergencyStop();
   return (
-    <div className="space-y-2">
-      <Button type="button" variant="destructive" onClick={() => stop.mutate(id)}>
-        Emergency stop
-      </Button>
-      {stop.isSuccess && (
-        <p role="status" className="text-sm">
-          {SHUTDOWN_NOTICE}
-        </p>
-      )}
-      {stop.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {stop.error.message}
-        </p>
-      )}
-    </div>
+    <>
+      <Separator />
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          {stop.isSuccess && (
+            <p role="status" className="text-sm">
+              {SHUTDOWN_NOTICE}
+            </p>
+          )}
+          {stop.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {stop.error.message}
+            </p>
+          )}
+        </div>
+        <Button type="button" variant="destructive" size="lg" className="ml-auto px-5" onClick={() => stop.mutate(id)}>
+          Emergency stop
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function PanelCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -68,12 +89,12 @@ function LevelBar({ chip }: { chip: ChipLive }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(percent)}
-        className="h-2 rounded bg-neutral-800"
+        className="h-2 overflow-hidden rounded-full bg-muted"
       >
-        <div className="h-2 rounded bg-emerald-500" style={{ width: `${percent}%` }} />
+        <div className="h-2 rounded-full bg-primary" style={{ width: `${percent}%` }} />
       </div>
       {chip.warnings.length > 0 && (
-        <ul className="list-disc pl-5 text-sm text-amber-300">
+        <ul className="list-disc pl-5 text-sm text-amber-400">
           {chip.warnings.map((w) => (
             <li key={w}>{w}</li>
           ))}
@@ -95,31 +116,30 @@ export function ProgressView({ test, connected }: ProgressProps) {
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-xl font-semibold">Test running</h1>
+    <div className="space-y-4">
       {!connected && (
-        <p role="status" className="text-sm text-amber-300">
+        <p role="status" className="text-sm text-amber-400">
           Connection lost, this may be out of date.
         </p>
       )}
-      <div className="space-y-2">
-        <p className="text-lg">{PHASE_WORDS[test.phase]}</p>
-        <p className="text-sm">
-          Segment {test.segment} of {test.segments}
-          {where}
-        </p>
+      <PanelCard title="Progress">
+        <div className="space-y-1">
+          <p className="font-medium">{PHASE_WORDS[test.phase]}</p>
+          <p className="text-sm">
+            Segment {test.segment} of {test.segments}
+            {where}
+          </p>
+        </div>
+        <Progress value={percent} aria-label="Segment progress" />
         <p className="text-sm text-muted-foreground">
           {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}
         </p>
-        <div className="h-2 rounded bg-neutral-800">
-          <div className="h-2 rounded bg-sky-500" style={{ width: `${percent}%` }} />
-        </div>
-      </div>
-      <div className="space-y-3">
+      </PanelCard>
+      <PanelCard title="Signal">
         {test.chips.map((chip) => (
           <LevelBar key={chip.chip} chip={chip} />
         ))}
-      </div>
+      </PanelCard>
       <StopButton id={test.id} />
     </div>
   );
@@ -139,15 +159,18 @@ interface StartingProps {
  */
 export function StartingView({ id, connected }: StartingProps) {
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <p role="status" className="text-lg">
-        Starting…
-      </p>
-      {!connected && (
-        <p className="text-sm text-amber-300">
-          The live view is not connected. The test is running, but its progress cannot be shown.
+    <div className="space-y-4">
+      <PanelCard title="Progress">
+        <p role="status" className="flex items-center gap-2">
+          <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" />
+          Starting…
         </p>
-      )}
+        {!connected && (
+          <p className="text-sm text-amber-400">
+            The live view is not connected. The test is running, but its progress cannot be shown.
+          </p>
+        )}
+      </PanelCard>
       <StopButton id={id} />
     </div>
   );
@@ -180,7 +203,7 @@ export function ResultView({ last, onNewTest }: ResultProps) {
       )}
       {last.motion_uncertain && (
         <div className="space-y-2">
-          <p role="alert" className="text-sm text-amber-300">
+          <p role="alert" className="text-sm text-amber-400">
             The printer may still be moving.
           </p>
           <StopButton id={last.id} />
