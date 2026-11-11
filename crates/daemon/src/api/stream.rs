@@ -183,11 +183,7 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
             }
         }
         if outbox.overflowed.load(Ordering::Acquire) {
-            let close = CloseFrame {
-                code: close_code::POLICY,
-                reason: TOO_SLOW.into(),
-            };
-            let _ = socket.send(Message::Close(Some(close))).await;
+            let _ = socket.send(too_slow_close()).await;
             return;
         }
         tokio::select! {
@@ -208,6 +204,14 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
             () = outbox.wake.notified() => {}
         }
     }
+}
+
+/// The close message for a viewer whose queue overflowed.
+fn too_slow_close() -> Message {
+    Message::Close(Some(CloseFrame {
+        code: close_code::POLICY,
+        reason: TOO_SLOW.into(),
+    }))
 }
 
 fn wire(entry: Entry) -> Message {
@@ -413,5 +417,31 @@ mod tests {
         }
         assert!(dropped.is_some_and(|n| n >= 3), "{dropped:?}");
         assert!(!outbox.overflowed.load(Ordering::Acquire));
+    }
+
+    /// A socket-level test cannot reach this: the handler pops and sends every entry it queues
+    /// before it reads the next client message, so only a blocked socket lets reliable entries
+    /// pile up, and a blocked handler accepts no new subscriptions to produce them.
+    #[test]
+    fn a_queue_full_of_reliable_entries_overflows_into_a_too_slow_close() {
+        let outbox = Outbox::new();
+        let refusal = || {
+            Entry::Reliable(ServerMessage::Refused {
+                chip: "adxl345".to_owned(),
+                reason: "no such accelerometer".to_owned(),
+            })
+        };
+        for _ in 0..QUEUE_CAPACITY {
+            outbox.push(refusal());
+        }
+        assert!(!outbox.overflowed.load(Ordering::Acquire));
+        outbox.push(refusal());
+        assert!(outbox.overflowed.load(Ordering::Acquire));
+
+        let Message::Close(Some(close)) = too_slow_close() else {
+            panic!("a close message with a frame");
+        };
+        assert_eq!(close.code, close_code::POLICY);
+        assert_eq!(close.reason.as_str(), "viewer too slow");
     }
 }
