@@ -3,4 +3,5 @@
 //! The service sends short pieces of plain G-code moves over the Moonraker connection, paced on
 //! the host clock, under the same one-test slot a sweep uses.
 
+pub mod pacer;
 pub mod pieces;
