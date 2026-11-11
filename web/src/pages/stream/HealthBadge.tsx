@@ -49,12 +49,12 @@ export function HealthBadge({ chip, state, error }: Props) {
     <Tooltip>
       <TooltipTrigger
         render={
-          <span
+          <fieldset
             data-testid={`health-${chip}`}
             data-tone={tone}
             aria-label={lines.join(". ")}
             tabIndex={0}
-            className="inline-flex items-center gap-2 text-sm"
+            className="m-0 inline-flex min-w-0 items-center gap-2 border-0 p-0 text-sm"
           />
         }
       >
