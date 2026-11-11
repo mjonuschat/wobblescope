@@ -20,6 +20,7 @@ const running: TestState = {
   position: [150, 150, 20],
   expected_segment_seconds: 100,
   elapsed_seconds: 0,
+  frequency_hz: null,
   chips: [{ chip: "adxl345", level: null, warnings: [] }],
 };
 

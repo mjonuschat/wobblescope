@@ -13,6 +13,7 @@ import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
 import type { TestState } from "@/lib/generated/TestState";
 
+import { LiveChart } from "./LiveChart";
 import { formatDuration, formatPoint } from "./planning";
 
 const PHASE_WORDS: Record<Phase, string> = {
@@ -72,35 +73,18 @@ function PanelCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-/** A bar for a chip's signal on a log scale, so a quiet and a loud chip are both visible. */
-function LevelBar({ chip }: { chip: ChipLive }) {
-  const peak = chip.level ? Math.max(...chip.level) : 0;
-  const percent = Math.min(100, (Math.log10(1 + peak) / 4) * 100);
+/** Health warnings the chips have raised during the test. */
+function Warnings({ chips }: { chips: ChipLive[] }) {
+  const warnings = chips.flatMap((chip) => chip.warnings.map((w) => ({ chip: chip.chip, text: w })));
+  if (warnings.length === 0) return null;
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-sm">
-        <span>{chip.chip}</span>
-        <span className="text-muted-foreground">{chip.level ? `${peak.toFixed(0)} mm/s²` : "no signal yet"}</span>
-      </div>
-      {/* biome-ignore lint/a11y/useSemanticElements: a styled bar; <meter> cannot be styled to match */}
-      <div
-        role="meter"
-        aria-label={`${chip.chip} signal level`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-        className="h-2 overflow-hidden rounded-full bg-muted"
-      >
-        <div className="h-2 rounded-full bg-primary" style={{ width: `${percent}%` }} />
-      </div>
-      {chip.warnings.length > 0 && (
-        <ul className="list-disc pl-5 text-sm text-amber-400">
-          {chip.warnings.map((w) => (
-            <li key={w}>{w}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <ul className="list-disc pl-5 text-sm text-amber-400">
+      {warnings.map((w) => (
+        <li key={`${w.chip}-${w.text}`}>
+          {w.chip}: {w.text}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -136,9 +120,8 @@ export function ProgressView({ test, connected }: ProgressProps) {
         </p>
       </PanelCard>
       <PanelCard title="Signal">
-        {test.chips.map((chip) => (
-          <LevelBar key={chip.chip} chip={chip} />
-        ))}
+        <LiveChart test={test} />
+        <Warnings chips={test.chips} />
       </PanelCard>
       <StopButton id={test.id} />
     </div>

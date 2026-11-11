@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { TestState } from "@/lib/generated/TestState";
@@ -8,6 +8,10 @@ import type { ApiCall, Reply } from "@/test/http";
 import { renderRoute } from "@/test/render";
 import { apiPath, stubApiWithStatus } from "@/test/status";
 import { FakeSocket, stubWebSocket } from "@/test/websocket";
+
+vi.mock("@/components/charts/EChart", () => ({
+  EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
+}));
 
 const running: TestState = {
   id: "test-1",
@@ -18,6 +22,7 @@ const running: TestState = {
   position: [150.5, 154, 20],
   expected_segment_seconds: 145,
   elapsed_seconds: 12,
+  frequency_hz: 17,
   chips: [
     { chip: "adxl345", level: [120, 40, 8], warnings: [] },
     { chip: "lis2dw ebb36", level: null, warnings: [] },
@@ -63,31 +68,15 @@ beforeEach(() => stubWebSocket());
 const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent;
 
 describe("a running test", () => {
-  it("shows the segment, the elapsed time and a level bar per chip that follow the latest event", async () => {
+  it("shows the segment and the elapsed time and follows the latest event", async () => {
     await mount({ test: running, last: null });
     expect(await screen.findByText("Segment 3 of 4 (X at 150.5, 154, 20)")).toBeTruthy();
     expect(screen.getByText("12 s of about 2 min 25 s")).toBeTruthy();
-    const bar = screen.getByRole("meter", { name: "adxl345 signal level" });
-    const before = Number(bar.getAttribute("aria-valuenow"));
-    expect(before).toBeGreaterThan(0);
-    expect(screen.getByText("no signal yet")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Signal against frequency/ })).toBeTruthy();
 
-    send({
-      test: {
-        ...running,
-        segment: 4,
-        chips: [
-          { chip: "adxl345", level: [3000, 1, 1], warnings: [] },
-          { chip: "lis2dw ebb36", level: [10, 1, 1], warnings: [] },
-        ],
-      },
-      last: null,
-    });
+    send({ test: { ...running, segment: 4, elapsed_seconds: 30 }, last: null });
     expect(screen.getByText(/Segment 4 of 4/)).toBeTruthy();
-    expect(
-      Number(screen.getByRole("meter", { name: "adxl345 signal level" }).getAttribute("aria-valuenow")),
-    ).toBeGreaterThan(before);
-    expect(screen.queryByText("no signal yet")).toBeNull();
+    expect(screen.getByText("30 s of about 2 min 25 s")).toBeTruthy();
   });
 
   it("opened mid-test goes straight to progress", async () => {
@@ -126,7 +115,7 @@ describe("a running test", () => {
     expect((screen.getByRole("button", { name: "Emergency stop" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("keeps a health warning under its chip", async () => {
+  it("keeps a health warning listed with its chip", async () => {
     await mount({ test: running, last: null });
     send({
       test: {
@@ -138,7 +127,7 @@ describe("a running test", () => {
       },
       last: null,
     });
-    expect(screen.getByText("the chip's errors counter rose by 3")).toBeTruthy();
+    expect(screen.getByText("adxl345: the chip's errors counter rose by 3")).toBeTruthy();
     send({
       test: {
         ...running,
@@ -150,7 +139,7 @@ describe("a running test", () => {
       },
       last: null,
     });
-    expect(screen.getByText("the chip's errors counter rose by 3")).toBeTruthy();
+    expect(screen.getByText("adxl345: the chip's errors counter rose by 3")).toBeTruthy();
   });
 
   it("keeps the last state and the stop button when the socket drops, and a new snapshot clears the mark", async () => {
