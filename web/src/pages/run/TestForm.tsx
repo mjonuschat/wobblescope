@@ -178,7 +178,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <FormCard title="Test">
+      <FormCard title="Setup">
         <div className="space-y-5">
           <ChoiceRow label="Chips" error={<FieldError name="chips" text={errorFor("chips")} />}>
             {chipList.chips.length === 0 ? (
@@ -253,7 +253,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         </div>
       </FormCard>
 
-      <FormCard title="Settings">
+      <FormCard title="Parameters">
         <p className="mb-4 text-sm text-muted-foreground">
           Leave a field empty to use the printer's value, shown in the field.
         </p>
@@ -262,7 +262,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         </div>
       </FormCard>
 
-      <FormCard title="Test points">
+      <FormCard title="Points">
         <div className="space-y-3">
           {points.map((row, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
