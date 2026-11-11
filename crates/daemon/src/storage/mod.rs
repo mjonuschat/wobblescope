@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
@@ -219,6 +220,10 @@ struct Inner {
     sessions_dir: PathBuf,
     results_dir: PathBuf,
     save_hook: Mutex<Option<SaveHook>>,
+    /// Outcome of the last verification of each result file, so a read does not hash it again.
+    /// Held only to read or write an entry, never while verifying.
+    verified: Mutex<HashMap<PathBuf, results::VerifiedEntry>>,
+    verifications: AtomicU64,
     pins_path: PathBuf,
     cap_bytes: u64,
     headroom_bytes: u64,
@@ -271,6 +276,8 @@ impl Storage {
                 sessions_dir,
                 results_dir,
                 save_hook: Mutex::new(None),
+                verified: Mutex::new(HashMap::new()),
+                verifications: AtomicU64::new(0),
                 pins_path,
                 cap_bytes: settings.retention_cap_bytes,
                 headroom_bytes: settings.free_space_headroom_bytes,

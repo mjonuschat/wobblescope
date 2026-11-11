@@ -9,6 +9,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::UNIX_EPOCH;
 
 use time::OffsetDateTime;
 use wobblescope_session::meta::validate_session_id;
@@ -132,7 +133,77 @@ fn summary_of(record: &ResultRecord, size_bytes: u64) -> ResultSummary {
     }
 }
 
+/// What identifies the bytes of a result file between two reads. Results are never edited
+/// after their rename, so a change in either value means a different file.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FileKey {
+    len: u64,
+    modified_nanos: u128,
+}
+
+/// The outcome of verifying the file that had `key`: `Ok` or the reason it is unusable.
+pub(super) struct VerifiedEntry {
+    key: FileKey,
+    outcome: Result<(), String>,
+}
+
+fn file_key(path: &Path) -> Result<Option<FileKey>, ResultError> {
+    let meta = fs::metadata(path)?;
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok());
+    Ok(modified.map(|d| FileKey {
+        len: meta.len(),
+        modified_nanos: d.as_nanos(),
+    }))
+}
+
 impl Storage {
+    /// Test hook: how many times a result file has been hashed and decoded.
+    #[doc(hidden)]
+    pub fn verification_count(&self) -> u64 {
+        self.inner.verifications.load(Ordering::SeqCst)
+    }
+
+    /// Opens the result at `path` and verifies it unless the same file was verified before.
+    /// The outer error is a failure to read the file other than a bad checksum, which is not
+    /// remembered. The inner
+    /// result is the verification outcome, which is. The state is not locked while hashing,
+    /// so two reads of one new file may both verify it.
+    fn open_checked(&self, path: &Path) -> Result<(ResultFile, Result<(), String>), ResultError> {
+        let key = file_key(path)?;
+        let file = ResultFile::open(path)?;
+        if let Some(key) = key {
+            let cached = crate::lock::lock(&self.inner.verified)
+                .get(path)
+                .filter(|entry| entry.key == key)
+                .map(|entry| entry.outcome.clone());
+            if let Some(outcome) = cached {
+                return Ok((file, outcome));
+            }
+        }
+        self.inner.verifications.fetch_add(1, Ordering::SeqCst);
+        let outcome = match file.verify() {
+            Ok(()) => Ok(()),
+            // A failed checksum surfaces as InvalidData. Other I/O errors may pass.
+            Err(ResultError::Io(e)) if e.kind() != io::ErrorKind::InvalidData => {
+                return Err(ResultError::Io(e));
+            }
+            Err(e) => Err(e.to_string()),
+        };
+        if let Some(key) = key {
+            crate::lock::lock(&self.inner.verified).insert(
+                path.to_owned(),
+                VerifiedEntry {
+                    key,
+                    outcome: outcome.clone(),
+                },
+            );
+        }
+        Ok((file, outcome))
+    }
+
     /// Test hook: `hook` runs during every save, after the space is reserved and before the
     /// write starts, with no storage lock held.
     #[doc(hidden)]
@@ -283,6 +354,7 @@ impl Storage {
     pub fn list_results(&self) -> Result<Vec<ResultSummary>, StorageError> {
         let mut usable = Vec::new();
         let mut unusable = Vec::new();
+        let mut present = std::collections::HashSet::new();
         for entry in fs::read_dir(&self.inner.results_dir)? {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -290,27 +362,30 @@ impl Storage {
                 continue;
             };
             let size_bytes = fs::symlink_metadata(entry.path())?.len();
-            let opened = ResultFile::open(&entry.path()).and_then(|file| {
-                file.verify()?;
-                Ok(file)
-            });
+            present.insert(entry.path());
+            let opened = match self.open_checked(&entry.path()) {
+                Ok((file, Ok(()))) => Ok(file),
+                Ok((_, Err(reason))) => Err(reason),
+                Err(e) => Err(e.to_string()),
+            };
             match opened {
                 Ok(file) => {
                     let mut summary = summary_of(file.record(), size_bytes);
                     summary.id = id.to_owned();
                     usable.push(summary);
                 }
-                Err(e) => unusable.push(ResultSummary {
+                Err(reason) => unusable.push(ResultSummary {
                     id: id.to_owned(),
                     label: None,
                     created_at: None,
                     session_id: None,
                     core_version: None,
                     size_bytes,
-                    unusable: Some(e.to_string()),
+                    unusable: Some(reason),
                 }),
             }
         }
+        crate::lock::lock(&self.inner.verified).retain(|path, _| present.contains(path));
         usable.sort_by(|a, b| {
             b.created_at
                 .cmp(&a.created_at)
@@ -325,9 +400,13 @@ impl Storage {
     fn open_verified(&self, id: &str) -> Result<ResultFile, StorageError> {
         validate_result_id(id)?;
         let path = self.inner.results_dir.join(format!("{id}.zip"));
-        let file = ResultFile::open(&path).map_err(|e| read_error(id, e))?;
-        file.verify().map_err(|e| read_error(id, e))?;
-        Ok(file)
+        match self.open_checked(&path).map_err(|e| read_error(id, e))? {
+            (file, Ok(())) => Ok(file),
+            (_, Err(reason)) => Err(StorageError::ResultUnusable {
+                id: id.to_owned(),
+                reason,
+            }),
+        }
     }
 
     /// The record and session metadata of one result, after verifying the manifest.
@@ -374,8 +453,11 @@ impl Storage {
     /// [`StorageError::ResultNotFound`] or an I/O error.
     pub fn delete_result(&self, id: &str) -> Result<(), StorageError> {
         validate_result_id(id)?;
-        match fs::remove_file(self.inner.results_dir.join(format!("{id}.zip"))) {
-            Ok(()) => {}
+        let path = self.inner.results_dir.join(format!("{id}.zip"));
+        match fs::remove_file(&path) {
+            Ok(()) => {
+                crate::lock::lock(&self.inner.verified).remove(&path);
+            }
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 return Err(StorageError::ResultNotFound(id.to_owned()));
             }

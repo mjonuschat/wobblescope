@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
 use common::{Spec, probe, seal_in, sessions_dir, settings, source};
 use tempfile::TempDir;
@@ -176,10 +177,20 @@ fn survives_session_delete_and_eviction() {
     assert!(!storage.result_sample(&id, 0, 0).unwrap().is_empty());
 }
 
+/// Flips the byte at `at` and gives the file a modification time no earlier flip had, so a
+/// coarse filesystem clock cannot make the changed file look unchanged.
 fn flip(path: &Path, at: usize) {
+    static FLIPS: AtomicU64 = AtomicU64::new(1);
     let mut bytes = fs::read(path).unwrap();
     bytes[at] ^= 0xFF;
     fs::write(path, bytes).unwrap();
+    let later = SystemTime::now() + Duration::from_secs(FLIPS.fetch_add(1, Ordering::SeqCst));
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(later)
+        .unwrap();
 }
 
 #[test]
@@ -421,4 +432,71 @@ fn stores_the_session_meta_byte_for_byte() {
         bytes
     };
     assert_eq!(stored, odd.as_bytes());
+}
+
+#[test]
+fn verifies_a_result_once_across_reads() {
+    let (_dir, storage) = with_session(u64::MAX / 4, plenty());
+    let id = save(&storage);
+    assert_eq!(storage.verification_count(), 0);
+    storage.result(&id).unwrap();
+    storage.result_sample(&id, 0, 0).unwrap();
+    storage.result_sample(&id, 1, 0).unwrap();
+    assert_eq!(storage.verification_count(), 1);
+    storage.list_results().unwrap();
+    assert_eq!(storage.verification_count(), 1);
+}
+
+#[test]
+fn reverifies_when_the_file_changes() {
+    let (dir, storage) = with_session(u64::MAX / 4, plenty());
+    let id = save(&storage);
+    storage.result(&id).unwrap();
+    assert_eq!(storage.verification_count(), 1);
+
+    flip(&results_dir(dir.path()).join(format!("{id}.zip")), 100);
+    assert!(matches!(
+        storage.result(&id),
+        Err(StorageError::ResultUnusable { .. })
+    ));
+    assert_eq!(storage.verification_count(), 2);
+}
+
+#[test]
+fn a_cached_unusable_result_serves_nothing() {
+    let (dir, storage) = with_session(u64::MAX / 4, plenty());
+    let id = save(&storage);
+    flip(&results_dir(dir.path()).join(format!("{id}.zip")), 100);
+    for _ in 0..2 {
+        assert!(matches!(
+            storage.result(&id),
+            Err(StorageError::ResultUnusable { .. })
+        ));
+        assert!(matches!(
+            storage.result_sample(&id, 0, 0),
+            Err(StorageError::ResultUnusable { .. })
+        ));
+    }
+    assert!(storage.list_results().unwrap()[0].unusable.is_some());
+    assert_eq!(storage.verification_count(), 1);
+}
+
+#[test]
+fn deleting_a_result_drops_its_cache_entry() {
+    let (dir, storage) = with_session(u64::MAX / 4, plenty());
+    let id = save(&storage);
+    let path = results_dir(dir.path()).join(format!("{id}.zip"));
+    let kept = fs::read(&path).unwrap();
+    storage.result(&id).unwrap();
+    storage.delete_result(&id).unwrap();
+    assert!(matches!(
+        storage.result(&id),
+        Err(StorageError::ResultNotFound(_))
+    ));
+
+    // The same bytes under a new modification time are verified again, not served from the
+    // entry the deleted file left.
+    fs::write(&path, kept).unwrap();
+    storage.result(&id).unwrap();
+    assert_eq!(storage.verification_count(), 2);
 }
