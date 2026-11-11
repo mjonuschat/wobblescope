@@ -1,7 +1,8 @@
 //! The bounded queue between a viewer's chip tasks and its websocket.
 //!
 //! Producers never wait on it. When it is full, the oldest binary frame is dropped, then the
-//! oldest replaceable text; replaceable text also coalesces with what is already queued.
+//! oldest replaceable text to admit replaceable text or reliable messages (a frame evicts only
+//! frames, and is itself dropped when there is none); replaceable text also coalesces with what is already queued.
 //! Messages that must arrive are never dropped, so a queue full of them reports overflow.
 
 use std::collections::VecDeque;
@@ -31,6 +32,9 @@ pub enum Push {
     Queued,
     /// The entry replaced or merged into a queued one.
     Coalesced,
+    /// A frame arrived with no older frame to evict, so the incoming frame was dropped and
+    /// counted. This is not an overflow.
+    Dropped,
     /// The queue holds its capacity of entries that can be neither dropped nor coalesced, and
     /// the entry was not queued.
     Overflow,
@@ -59,8 +63,15 @@ impl OutQueue {
         if self.coalesce(&entry) {
             return Push::Coalesced;
         }
-        if self.entries.len() >= self.capacity && !self.make_room() {
-            return Push::Overflow;
+        if self.entries.len() >= self.capacity {
+            let is_frame = matches!(entry, Entry::Frame(_));
+            if is_frame && !self.evict_frame() {
+                self.dropped_frames += 1;
+                return Push::Dropped;
+            }
+            if !is_frame && !self.evict_frame() && !self.evict_text() {
+                return Push::Overflow;
+            }
         }
         self.entries.push_back(entry);
         Push::Queued
@@ -105,17 +116,22 @@ impl OutQueue {
         }
     }
 
-    /// Evicts the oldest frame, else the oldest replaceable text. False when neither exists.
-    fn make_room(&mut self) -> bool {
-        if let Some(at) = self
+    /// Evicts the oldest frame and counts it. False when no frame is queued.
+    fn evict_frame(&mut self) -> bool {
+        let Some(at) = self
             .entries
             .iter()
             .position(|e| matches!(e, Entry::Frame(_)))
-        {
-            self.entries.remove(at);
-            self.dropped_frames += 1;
-            return true;
-        }
+        else {
+            return false;
+        };
+        self.entries.remove(at);
+        self.dropped_frames += 1;
+        true
+    }
+
+    /// Evicts the oldest replaceable text. False when none is queued.
+    fn evict_text(&mut self) -> bool {
         let text = self
             .entries
             .iter()

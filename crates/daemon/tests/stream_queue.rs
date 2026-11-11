@@ -64,7 +64,6 @@ fn reliable_entries_are_never_dropped_and_overflow_is_reported() {
         assert_eq!(queue.push(reliable(i)), Push::Queued);
     }
     assert_eq!(queue.push(reliable(4)), Push::Overflow);
-    assert_eq!(queue.push(Entry::Frame(vec![0])), Push::Overflow);
     assert_eq!(drain(&mut queue), (0..4).map(reliable).collect::<Vec<_>>());
 }
 
@@ -78,4 +77,22 @@ fn a_frame_makes_room_by_evicting_only_frames() {
     assert_eq!(queue.push(reliable(3)), Push::Queued);
     assert_eq!(queue.dropped_frames(), 1);
     assert_eq!(drain(&mut queue), (0..4).map(reliable).collect::<Vec<_>>());
+}
+
+#[test]
+fn a_frame_never_evicts_text_and_never_overflows() {
+    let mut queue = OutQueue::new(3);
+    queue.push(reliable(0));
+    queue.push(health("a", 1.0));
+    queue.push(Entry::Console(vec!["x".to_owned()]));
+    assert_eq!(queue.push(Entry::Frame(vec![0])), Push::Dropped);
+    assert_eq!(queue.dropped_frames(), 1);
+    assert_eq!(
+        drain(&mut queue),
+        vec![
+            reliable(0),
+            health("a", 1.0),
+            Entry::Console(vec!["x".to_owned()])
+        ]
+    );
 }
