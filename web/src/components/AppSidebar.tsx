@@ -39,7 +39,7 @@ const pages: Page[] = [
     icon: FlaskConicalIcon,
     children: [
       { to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon },
-      { to: "/stream", label: "Live view", icon: AudioLinesIcon },
+      { to: "/stream", label: "Live View", icon: AudioLinesIcon },
     ],
   },
   { to: "/sessions", label: "History", icon: FolderClockIcon },

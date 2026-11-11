@@ -25,7 +25,7 @@ interface Props {
 const DEFAULT_MAX_CHIPS = 4;
 const DEFAULT_WINDOW_SECONDS = 1;
 
-/** The Stream page shows live signals and spectra of up to a few chips. It is read only. */
+/** The Live View page shows live signals and spectra of up to a few chips. It is read only. */
 export function StreamPage({ createWorker }: Props) {
   const stream = useStream();
   const chipList = useChips().data;
@@ -93,7 +93,7 @@ export function StreamPage({ createWorker }: Props) {
   if (!stream.state.connected) {
     return (
       <section className="mx-auto max-w-5xl space-y-4">
-        <h1 className="text-xl font-semibold">Stream</h1>
+        <h1 className="text-xl font-semibold">Live View</h1>
         <p className="text-sm text-muted-foreground">Not connected to the daemon. The stream starts when it is.</p>
       </section>
     );
@@ -101,7 +101,7 @@ export function StreamPage({ createWorker }: Props) {
 
   return (
     <section className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-xl font-semibold">Stream</h1>
+      <h1 className="text-xl font-semibold">Live View</h1>
       {hello?.printing && <p className="text-sm text-amber-400">A print is running: showing a lower update rate</p>}
       {hello && (
         <Panel title="Display">

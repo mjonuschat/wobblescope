@@ -365,10 +365,10 @@ describe("the stream page", () => {
     expect(screen.getByText("!! Move out of range").className).toContain("text-destructive");
   });
 
-  it("has a Live view link under Measure in the sidebar", async () => {
+  it("has a Live View link under Measure in the sidebar", async () => {
     stubApiWithStatus(() => ({ status: 404, body: { error: "not_found", message: "no" } }));
     renderRoute("/sessions");
-    const link = await screen.findByRole("link", { name: "Live view" });
+    const link = await screen.findByRole("link", { name: "Live View" });
     expect(link.getAttribute("href")).toBe("/stream");
   });
 });
