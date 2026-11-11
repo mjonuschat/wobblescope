@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Availability } from "@/lib/generated/Availability";
 import type { Chip } from "@/lib/generated/Chip";
@@ -48,15 +49,16 @@ export function ChipPicker({ chips, selected, maxChips, axes, onToggle, onAxes, 
         return (
           <li key={chip.section} className="space-y-2 rounded-md border p-3">
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Checkbox
+                  id={`stream-${chip.section}`}
                   aria-label={`Stream ${chip.section}`}
                   checked={on}
                   disabled={blocked}
                   onCheckedChange={() => onToggle(chip.section)}
                 />
-                {chip.section}
-              </label>
+                <Label htmlFor={`stream-${chip.section}`}>{chip.section}</Label>
+              </div>
               <Badge variant="outline">{chip.chip_type}</Badge>
               <span className="text-sm text-muted-foreground">
                 {chip.nominal_rate_hz === null ? "rate unknown" : `${chip.nominal_rate_hz} Hz`}

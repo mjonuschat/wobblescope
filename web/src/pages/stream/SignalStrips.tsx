@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import type { ChipSignal } from "./useSignalBuffers";
 
@@ -91,18 +92,19 @@ export function SignalStrips({ chips, paused }: Props) {
           <div className="flex items-center gap-2 text-sm">
             <span className="inline-block size-3 rounded-sm" style={{ background: color }} />
             <span className="font-medium">{chip}</span>
-            <label className="ml-auto flex items-center gap-1">
-              Scale
+            <div className="ml-auto flex items-center gap-1">
+              <Label htmlFor={`${chip}-scale`}>Scale</Label>
               <Input
                 type="number"
                 min={0}
                 placeholder="auto"
+                id={`${chip}-scale`}
                 aria-label={`${chip} scale`}
                 className="h-7 w-24"
                 value={scales[chip] ?? ""}
                 onChange={(event) => setScales((old) => ({ ...old, [chip]: event.target.value }))}
               />
-            </label>
+            </div>
           </div>
           {AXES.map((axis) => (
             <canvas
@@ -111,7 +113,7 @@ export function SignalStrips({ chips, paused }: Props) {
               height={HEIGHT}
               role="img"
               aria-label={`${chip} ${axis.toUpperCase()} signal`}
-              className="w-full"
+              className="w-full rounded-md border bg-background"
               ref={(element) => {
                 if (element) canvases.current.set(`${chip}/${axis}`, element);
                 else canvases.current.delete(`${chip}/${axis}`);

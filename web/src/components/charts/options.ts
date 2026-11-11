@@ -210,9 +210,10 @@ export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): ECharts
     });
   });
   return {
-    ...base("Live spectrum", maxHz),
-    legend: { type: "scroll", top: 28, textStyle: { color: text } },
-    yAxis: { type: "value", name: "PSD" },
+    ...base(null, maxHz),
+    grid: { top: 64, left: 64, right: 24, bottom: 40 },
+    legend: { type: "scroll", top: 0, left: 56, textStyle: { color: text } },
+    yAxis: { type: "value", name: "PSD", splitLine },
     series,
   };
 }

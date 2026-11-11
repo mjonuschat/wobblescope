@@ -130,7 +130,7 @@ export function Spectrogram({ chip, color, spectrum, now = () => performance.now
         height={HEIGHT}
         role="img"
         aria-label={`${chip} spectrogram`}
-        className="w-full"
+        className="w-full rounded-md border bg-background"
       />
     </figure>
   );
