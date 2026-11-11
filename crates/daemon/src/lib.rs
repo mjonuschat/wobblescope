@@ -12,4 +12,5 @@ pub mod results;
 pub mod setup;
 pub mod startup;
 pub mod storage;
+pub mod stream;
 pub mod web;
