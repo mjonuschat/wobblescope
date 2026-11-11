@@ -59,7 +59,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         overrides={overrides}
         onOverridesChange={onOverridesChange}
       />
-      {analysis.per_chip.length > 1 && (
+      {shown && (
         <Tabs value={shown.chip} onValueChange={setChipName}>
           <TabsList variant="line">
             {analysis.per_chip.map((c) => (

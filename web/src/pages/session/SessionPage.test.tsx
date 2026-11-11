@@ -239,7 +239,7 @@ describe("the session view", () => {
     expect(quality.textContent).not.toContain("Left out");
   });
 
-  it("shows one chip at a time, with a tab for each chip when there are several", async () => {
+  it("shows one chip at a time, with a tab for each chip", async () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
     serve();
     renderRoute("/sessions/s1");
@@ -251,7 +251,7 @@ describe("the session view", () => {
     expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
   });
 
-  it("shows no chip tabs for a single chip", async () => {
+  it("shows the tab even for a single chip, so the page looks the same", async () => {
     const a = analysis();
     a.per_chip = [{ ...a.per_chip[0], chip: "adxl345" }];
     a.eligibility.decisions = [decision("adxl345", "Included")];
@@ -259,7 +259,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Chip adxl345" });
-    expect(screen.queryByRole("tab", { name: "adxl345" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "adxl345" })).toBeTruthy();
   });
 
   it("shows an analysis error while the metadata stays visible", async () => {
