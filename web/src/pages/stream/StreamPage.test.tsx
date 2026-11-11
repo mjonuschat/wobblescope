@@ -187,7 +187,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Update rate", "5 per second");
+    await choose("Refresh rate", "5 Hz");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 5 });
   });
 

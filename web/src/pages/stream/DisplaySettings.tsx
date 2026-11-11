@@ -65,14 +65,14 @@ function Choice({
   );
 }
 
-/** The display choices: update rate, range, spectrum window, pause and peak-hold reset. */
+/** The display choices: refresh rate, range, spectrum window, pause and peak-hold reset. */
 export function DisplaySettings(props: Props) {
-  const rateText = (r: number) => `${r} per second`;
+  const rateText = (r: number) => `${r} Hz`;
   const rangeText = (range: Range) => (range === "full" ? `Full (${props.fullHz} Hz)` : `${range} Hz`);
   return (
     <div className="flex flex-wrap items-end gap-4">
       <Choice
-        label="Update rate"
+        label="Refresh rate"
         value={String(props.updatesPerSecond)}
         text={rateText(props.updatesPerSecond)}
         onChange={(value) => props.onUpdatesPerSecond(Number(value))}
