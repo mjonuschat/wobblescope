@@ -1,5 +1,3 @@
-//! The saved-result zip: a round trip, and one hostile archive per refusal.
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -88,7 +86,6 @@ fn manifest_of(entries: &[(&str, Vec<u8>)]) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// The entries of a well-formed result, `result.json` excluded.
 fn good_entries() -> Vec<(&'static str, Vec<u8>)> {
     vec![
         ("meta.json", meta_bytes()),
@@ -261,7 +258,6 @@ fn detects_a_flipped_sample_byte() {
     }
 }
 
-/// A sample file holding `n` zero samples, with or without the frame checksum.
 fn frame(n: u64, checksum: bool) -> Vec<u8> {
     let mut payload = b"WSSAMPLE".to_vec();
     payload.extend_from_slice(&1u32.to_le_bytes());

@@ -17,7 +17,7 @@ export interface WorkerLike {
 }
 
 export interface AnalysisJob {
-  /** The cache key for the worker's files; the fetch route when `resultId` is not set. */
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
   sessionId: string
   /** A saved result whose own sample files are fetched instead of the session's. */
   resultId?: string

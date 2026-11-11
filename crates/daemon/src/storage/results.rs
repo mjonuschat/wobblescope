@@ -77,7 +77,6 @@ pub(super) fn sweep_temporaries(dir: &Path) -> io::Result<Vec<String>> {
     Ok(swept)
 }
 
-/// The number and total size of the result files in `dir`.
 pub(super) fn scan_usage(dir: &Path) -> io::Result<(usize, u64)> {
     let mut count = 0;
     let mut bytes = 0u64;
@@ -146,7 +145,7 @@ impl Storage {
     ///
     /// The session is leased before anything is read and stays leased until the zip is
     /// renamed into place. Space for the zip plus headroom is reserved against free space
-    /// minus every outstanding reservation; nothing is evicted and the retention cap is not
+    /// minus every outstanding reservation. Nothing is evicted and the retention cap is not
     /// consulted. The state lock is not held while writing.
     ///
     /// # Errors
@@ -208,12 +207,14 @@ impl Storage {
                 axes: request.axes.clone(),
                 manifest: Default::default(),
             };
-            let json_len = serde_json::to_vec(&record).map_or(0, |j| j.len());
+            let json_len = serde_json::to_vec(&record)
+                .map_err(|e| StorageError::BadRequest(e.to_string()))?
+                .len();
             let bound = size_bound(json_len, meta_bytes.len() as u64, &sample_sizes);
-            (record, bound)
+            Ok((record, bound))
         })?;
-        let (record, id) = (reservation.1, reservation.0.id.clone());
-        let _reservation = reservation.0;
+        let (_reservation, record) = reservation;
+        let id = _reservation.id.clone();
 
         let hook = crate::lock::lock(&inner.save_hook).clone();
         if let Some(hook) = hook {
@@ -239,7 +240,7 @@ impl Storage {
     fn reserve_result(
         &self,
         now: OffsetDateTime,
-        build: impl FnOnce(&str) -> (ResultRecord, u64),
+        build: impl FnOnce(&str) -> Result<(ResultRecord, u64), StorageError>,
     ) -> Result<(ResultReservation, ResultRecord), StorageError> {
         let inner = &self.inner;
         let stamp: String = iso_utc(now).chars().filter(char::is_ascii_digit).collect();
@@ -253,7 +254,7 @@ impl Storage {
                 break id;
             }
         };
-        let (record, bound) = build(&id);
+        let (record, bound) = build(&id)?;
         let free = (inner.probe)(&inner.results_dir)?;
         let available = free
             .saturating_sub(reserved_total(&st))

@@ -3,19 +3,4 @@ import type { Analysis } from "./Analysis";
 import type { Axis } from "./Axis";
 import type { Snippets } from "./Snippets";
 
-/**
- * One axis of a saved result: the analysis as computed and its snippets.
- */
-export type AxisSnapshot = { 
-/**
- * The axis analysed.
- */
-axis: Axis, 
-/**
- * The analysis result.
- */
-analysis: Analysis, 
-/**
- * The snippets shown with it.
- */
-snippets: Snippets, };
+export type AxisSnapshot = { axis: Axis, analysis: Analysis, snippets: Snippets, };

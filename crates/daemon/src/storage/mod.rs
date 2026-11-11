@@ -109,21 +109,12 @@ pub enum StorageError {
         /// Segment position asked for.
         segment: usize,
     },
-    /// The session a result was computed from no longer matches the one the browser analysed.
     #[error("session {0} was replaced since it was analysed")]
     SessionChanged(String),
-    /// No saved result has this id.
     #[error("no result {0}")]
     ResultNotFound(String),
-    /// The result file is damaged, unreadable or from a newer version.
     #[error("result {id} is unusable: {reason}")]
-    ResultUnusable {
-        /// The result.
-        id: String,
-        /// What is wrong with it.
-        reason: String,
-    },
-    /// The request to save a result is inconsistent or too large to write.
+    ResultUnusable { id: String, reason: String },
     #[error("cannot save result: {0}")]
     BadRequest(String),
     /// The session to store does not match its reservation or cannot be indexed.
@@ -211,7 +202,6 @@ pub struct Usage {
     pub session_count: usize,
     /// Number of saved result files. Results are outside the retention cap.
     pub result_count: usize,
-    /// Bytes used by saved result files.
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub result_bytes: u64,
 }

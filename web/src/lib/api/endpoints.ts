@@ -110,7 +110,6 @@ export async function fetchSample(
   return response.arrayBuffer()
 }
 
-/** Saves the analysis the app shows as a result of the session. */
 export function saveResult(sessionId: string, body: SaveRequest) {
   return apiJson<ResultSummary>(`sessions/${encodeURIComponent(sessionId)}/results`, {
     method: 'POST',

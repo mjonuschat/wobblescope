@@ -1,5 +1,3 @@
-//! Saving, listing, reading and deleting results through `Storage`.
-
 mod common;
 
 use std::fs;
@@ -62,7 +60,6 @@ fn plenty() -> Probe {
     probe(u64::MAX / 4)
 }
 
-/// Seals `s1` with two chips and opens storage over it.
 fn with_session(cap: u64, p: Probe) -> (TempDir, Storage) {
     let dir = TempDir::new().unwrap();
     seal_in(
@@ -179,7 +176,6 @@ fn survives_session_delete_and_eviction() {
     assert!(!storage.result_sample(&id, 0, 0).unwrap().is_empty());
 }
 
-/// Flips the byte at `at` in the zip.
 fn flip(path: &Path, at: usize) {
     let mut bytes = fs::read(path).unwrap();
     bytes[at] ^= 0xFF;
@@ -197,7 +193,8 @@ fn lists_a_damaged_file_as_unusable() {
         .id;
     let path = results_dir(dir.path()).join(format!("{bad}.zip"));
 
-    // Offset 100 lies in the first entry, meta.json. A flipped byte there fails the manifest: marked unusable with a reason, the rest intact.
+    // Offset 100 lies in the first entry, meta.json. A flipped byte there fails the manifest.
+    // The result is listed as unusable with a reason and the others stay intact.
     flip(&path, 100);
     let list = storage.list_results().unwrap();
     assert_eq!(list.len(), 2);

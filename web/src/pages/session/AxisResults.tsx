@@ -21,7 +21,6 @@ interface Props {
   meta: SessionMeta
   overrides: string[]
   onOverridesChange?: (overrides: string[]) => void
-  /** Shows the overrides without letting the user change them. */
   readOnly?: boolean
 }
 

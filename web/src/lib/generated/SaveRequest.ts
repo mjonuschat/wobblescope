@@ -2,31 +2,8 @@
 import type { AxisSnapshot } from "./AxisSnapshot";
 import type { FitParams } from "./FitParams";
 
-/**
- * What the web app sends to save a result.
- */
-export type SaveRequest = { 
-/**
- * Optional user label.
- */
-label: string | null, 
-/**
- * `wobblescope-core` version that computed the axes.
- */
-core_version: string, 
+export type SaveRequest = { label: string | null, core_version: string, 
 /**
  * The session's `created_at`, so the daemon can tell the session changed.
  */
-session_created_at: string, 
-/**
- * The fit parameters the analysis used.
- */
-fit_params: FitParams, 
-/**
- * Dataset overrides the user applied.
- */
-overrides: Array<string>, 
-/**
- * One snapshot per analysed axis.
- */
-axes: Array<AxisSnapshot>, };
+session_created_at: string, fit_params: FitParams, overrides: Array<string>, axes: Array<AxisSnapshot>, };

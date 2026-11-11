@@ -1,5 +1,3 @@
-//! The saved-result routes.
-
 mod common;
 
 use axum::body::Body;

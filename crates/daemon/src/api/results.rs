@@ -1,5 +1,3 @@
-//! Saved analysis results: save, list, read, download and delete.
-
 use axum::Json;
 use axum::http::StatusCode;
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
@@ -19,7 +17,6 @@ pub struct ResultList {
     pub results: Vec<ResultSummary>,
 }
 
-/// `POST /api/sessions/{id}/results`: stores the browser's analysis of a session.
 pub(super) async fn save(
     Store(storage): Store,
     ApiPath(id): ApiPath<String>,
@@ -30,13 +27,11 @@ pub(super) async fn save(
     Ok((StatusCode::CREATED, Json(summary)))
 }
 
-/// `GET /api/results`.
 pub(super) async fn list(Store(storage): Store) -> Result<Json<ResultList>, ApiError> {
     let results = blocking(move || Ok(storage.list_results()?)).await?;
     Ok(Json(ResultList { results }))
 }
 
-/// `GET /api/results/{rid}`.
 pub(super) async fn detail(
     Store(storage): Store,
     ApiPath(rid): ApiPath<String>,
@@ -61,7 +56,6 @@ pub(super) async fn download(
         .into_response())
 }
 
-/// `DELETE /api/results/{rid}`.
 pub(super) async fn delete(
     Store(storage): Store,
     ApiPath(rid): ApiPath<String>,

@@ -2,15 +2,4 @@
 import type { ResultRecord } from "./ResultRecord";
 import type { SessionMeta } from "./SessionMeta";
 
-/**
- * A saved result with the session metadata it carries.
- */
-export type ResultDetail = { 
-/**
- * The record.
- */
-record: ResultRecord, 
-/**
- * The session metadata from `meta.json`.
- */
-meta: SessionMeta, };
+export type ResultDetail = { record: ResultRecord, meta: SessionMeta, };

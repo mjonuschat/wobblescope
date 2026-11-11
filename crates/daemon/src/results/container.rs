@@ -1,7 +1,7 @@
 //! The saved-result zip: `result.json`, `meta.json` and `samples/<name>`, all stored.
 //!
-//! Entries are stored, not compressed: sample files are already one zstd frame, and a reader
-//! that never inflates cannot be fed a zip bomb. `result.json` carries a SHA-256 manifest of
+//! Entries are stored without compression. Sample files are already one zstd frame, and a
+//! reader that never inflates cannot be fed a zip bomb. `result.json` carries a SHA-256 manifest of
 //! every other entry. [`ResultFile::open`] checks the structure cheaply; [`ResultFile::verify`]
 //! hashes and decodes everything.
 
@@ -20,13 +20,9 @@ use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 use super::record::{RESULT_VERSION, ResultRecord};
 
-/// Most entries a result may hold.
 pub const MAX_ENTRIES: usize = 1024;
-/// Largest `result.json`.
 pub const MAX_RECORD_BYTES: u64 = 16 << 20;
-/// Largest `meta.json`.
 pub const MAX_META_BYTES: u64 = 4 << 20;
-/// Largest sample file.
 pub const MAX_SAMPLE_BYTES: u64 = 256 << 20;
 
 const RECORD_NAME: &str = "result.json";
@@ -37,22 +33,16 @@ const PER_ENTRY_OVERHEAD: u64 = 1024;
 const PER_ENTRY_MANIFEST: u64 = 256;
 const SLACK: u64 = 4096;
 
-/// Why a result zip could not be written or read.
 #[derive(Debug, Error)]
 pub enum ResultError {
-    /// The file could not be read or written.
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
-    /// The zip breaks a structural rule.
     #[error("not a valid result: {0}")]
     Format(String),
-    /// The record was written by a newer version.
     #[error("result version {0} is newer than this daemon understands")]
     TooNew(u32),
-    /// An entry does not match the manifest or the metadata.
     #[error("result is damaged: {0}")]
     Corrupt(String),
-    /// A JSON document in the zip is invalid.
     #[error("invalid JSON in result: {0}")]
     Json(#[from] serde_json::Error),
 }
@@ -66,11 +56,10 @@ impl From<ZipError> for ResultError {
     }
 }
 
-/// A conservative upper bound on the finished zip, for admission before writing: the payload,
-/// 1 KiB per entry for headers and names, 256 bytes per entry for the manifest lines the
-/// writer adds to the record, and 4 KiB.
+/// A conservative upper bound on the finished zip, used to admit a save before writing. It
+/// adds the payload, 1 KiB per entry for headers and names, 256 bytes per entry for the
+/// manifest lines the writer adds to the record, and 4 KiB.
 pub fn size_bound(record_json_len: usize, meta_len: u64, sample_sizes: &[u64]) -> u64 {
-    // Entries: result.json, meta.json and the samples.
     let entries = sample_sizes.len() as u64 + 2;
     record_json_len as u64
         + meta_len
@@ -192,7 +181,6 @@ fn is_allowed_name(name: &str) -> bool {
     digits(chip) && digits(segment)
 }
 
-/// True when `extra` holds a zip64 extended information field (header id 1).
 fn has_zip64_field(extra: &[u8]) -> bool {
     let mut rest = extra;
     while rest.len() >= 4 {
@@ -206,7 +194,6 @@ fn has_zip64_field(extra: &[u8]) -> bool {
     false
 }
 
-/// True when the file ends with a zip64 end-of-central-directory locator.
 fn has_zip64_locator(file: &mut File) -> io::Result<bool> {
     const EOCD: [u8; 4] = *b"PK\x05\x06";
     const LOCATOR: [u8; 4] = *b"PK\x06\x07";
@@ -308,7 +295,6 @@ impl ResultFile {
         })
     }
 
-    /// The parsed `result.json`.
     pub fn record(&self) -> &ResultRecord {
         &self.record
     }
@@ -387,8 +373,8 @@ impl ResultFile {
         parse_meta(&bytes)
     }
 
-    /// The raw bytes of one sample file, such as `c0-s0.zst`. Not hashed; see
-    /// [`ResultFile::verify`].
+    /// The raw bytes of one sample file, such as `c0-s0.zst`. This does not
+    /// hash the file. [`ResultFile::verify`] does.
     ///
     /// # Errors
     /// [`ResultError::Format`] when the zip has no such sample.

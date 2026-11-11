@@ -39,7 +39,6 @@ use crate::storage::Storage;
 /// 430 seconds at 3.2 kHz.
 const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
 
-/// The largest saved-result body a save accepts.
 const RESULT_LIMIT: usize = 16 * 1024 * 1024;
 
 /// Lets one import run at a time. Cloning shares the gate.

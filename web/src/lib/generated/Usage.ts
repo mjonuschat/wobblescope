@@ -31,8 +31,4 @@ session_count: number,
 /**
  * Number of saved result files. Results are outside the retention cap.
  */
-result_count: number, 
-/**
- * Bytes used by saved result files.
- */
-result_bytes: number, };
+result_count: number, result_bytes: number, };

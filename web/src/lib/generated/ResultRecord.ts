@@ -17,35 +17,7 @@ id: string,
 /**
  * Save time as an RFC 3339 UTC string.
  */
-created_at: string, 
-/**
- * Optional user label.
- */
-label: string | null, 
-/**
- * Id of the session the result was computed from.
- */
-session_id: string, 
-/**
- * `wobblescope-core` version that computed the analysis.
- */
-core_version: string, 
-/**
- * Version of the daemon that wrote the result.
- */
-daemon_version: string, 
-/**
- * The fit parameters the analysis used.
- */
-fit_params: FitParams, 
-/**
- * Dataset overrides the user applied.
- */
-overrides: Array<string>, 
-/**
- * One snapshot per analysed axis.
- */
-axes: Array<AxisSnapshot>, 
+created_at: string, label: string | null, session_id: string, core_version: string, daemon_version: string, fit_params: FitParams, overrides: Array<string>, axes: Array<AxisSnapshot>, 
 /**
  * SHA-256 of every other entry in the zip, as lowercase hex, keyed by entry name.
  */

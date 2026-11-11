@@ -2,7 +2,7 @@ import type { Analysis } from '@/lib/generated/Analysis'
 import type { CalibrationResult } from '@/lib/generated/CalibrationResult'
 import type { Recommendation } from '@/lib/generated/Recommendation'
 
-/** Relative tolerance for numbers; the same core on the same data should match far closer. */
+/** Relative tolerance for numbers. The same core on the same data should match far closer. */
 const TOLERANCE = 1e-6
 
 function close(a: number, b: number): boolean {
@@ -41,8 +41,9 @@ function compareRecommendation(
 }
 
 /**
- * Compares what a result saved with a fresh analysis of the same samples: the worst case's
- * `best` and each chip's `best`. Spectra and the full candidate lists are not compared.
+ * Compares what a result saved with a fresh analysis of the same samples. It checks the
+ * worst case's `best` and each chip's `best`, and does not compare spectra or the full
+ * candidate lists.
  */
 export function compareAnalyses(
   saved: Analysis,

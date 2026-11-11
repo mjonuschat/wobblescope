@@ -230,7 +230,7 @@ impl From<ImportError> for ApiError {
 }
 
 /// `axum::Json` that rejects with the JSON error body. A body that does not parse, has the
-/// wrong shape or lacks a JSON content type is a 400; one over the route's limit is a 413.
+/// wrong shape or lacks a JSON content type is a 400. One over the route's limit is a 413.
 pub struct ApiJson<T>(pub T);
 
 impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for ApiJson<T> {
