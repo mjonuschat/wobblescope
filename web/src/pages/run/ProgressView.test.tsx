@@ -72,7 +72,7 @@ async function mount(snapshot: { test: TestState | null; last: FinishedTest | nu
 const send = (snapshot: { test: TestState | null; last: FinishedTest | null }) =>
   act(() => FakeSocket.latest.send(snapshot));
 
-beforeEach(() => stubWebSocket());
+beforeEach(() => stubWebSocket({ idle: true }));
 
 const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent;
 
@@ -290,12 +290,27 @@ describe("a finished test", () => {
   });
 });
 
+describe("a page opened without a live socket", () => {
+  it("does not offer the form, says why, and opens a new socket on Try again", async () => {
+    stubWebSocket();
+    api();
+    renderRoute("/run/shaper");
+    expect(await screen.findByText("Connecting to the live view…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+    const before = FakeSocket.instances.length;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(FakeSocket.instances.length).toBe(before + 1));
+  });
+});
+
 describe("starting a test", () => {
   it("says the live view is not connected when the socket never delivers a snapshot", async () => {
     api();
     renderRoute("/run/shaper");
-    // The socket is never opened, as when a proxy refuses the upgrade.
-    fireEvent.click(await enabledRun());
+    const run = await enabledRun();
+    // The socket drops after the form is up, as when a proxy cuts it.
+    act(() => FakeSocket.latest.drop());
+    fireEvent.click(run);
     expect(await screen.findByText("Starting…")).toBeTruthy();
     expect(screen.getByText(/The live view is not connected/)).toBeTruthy();
   });

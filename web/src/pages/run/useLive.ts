@@ -52,10 +52,12 @@ function parse(data: unknown): LiveSnapshot | null {
  * Follows the daemon's live socket. It reconnects with a growing wait and treats each snapshot
  * as the whole truth. A finished test refreshes the sessions list and the storage usage.
  */
-export function useLive(): LiveState {
+export function useLive(): LiveState & { retry: () => void } {
   const queryClient = useQueryClient();
   const [state, setState] = useState<LiveState>(INITIAL);
   const lastSeen = useRef<string | null | undefined>(undefined);
+  // Raised by `retry` to open a new socket at once instead of waiting out the reconnect delay.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let closed = false;
@@ -94,7 +96,7 @@ export function useLive(): LiveState {
       clearTimeout(timer);
       socket?.close();
     };
-  }, [queryClient]);
+  }, [queryClient, attempt]);
 
-  return state;
+  return { ...state, retry: () => setAttempt((n) => n + 1) };
 }

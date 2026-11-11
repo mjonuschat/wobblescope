@@ -57,7 +57,7 @@ async function open(options?: Options) {
 }
 
 describe("the run screen", () => {
-  beforeEach(() => stubWebSocket());
+  beforeEach(() => stubWebSocket({ idle: true }));
 
   it("disables Start and says why while the printer is not fully homed", async () => {
     api({ homed: "xy" });

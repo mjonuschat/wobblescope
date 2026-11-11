@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { TestState } from "@/lib/generated/TestState";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Steps } from "@/components/Steps";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
@@ -76,7 +77,24 @@ export function RunPage() {
     live.test || starting || holding ? "measuring" : showResult ? "results" : "setup";
 
   let body: ReactNode;
-  if (live.test) {
+  if (!live.known && startedId === null) {
+    // Until the first snapshot the page cannot tell whether a test is running, so it must not offer
+    // the form: starting a second test would be refused, and the running one would stay hidden.
+    body = live.connected ? (
+      <p className="text-sm text-muted-foreground">Reading the live state…</p>
+    ) : (
+      <div className="space-y-3 text-sm">
+        <p className="text-muted-foreground">Connecting to the live view…</p>
+        <p>
+          If this stays, the page cannot reach the daemon's live socket, so it cannot tell whether a test is running.
+          The printer is not affected, and the stop button above still works.
+        </p>
+        <Button variant="outline" onClick={live.retry}>
+          Try again
+        </Button>
+      </div>
+    );
+  } else if (live.test) {
     body = <ProgressView test={live.test} connected={live.connected} ended={null} onNext={() => {}} />;
   } else if (holding && lastSeen && finished) {
     body = (

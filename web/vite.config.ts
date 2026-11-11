@@ -46,6 +46,11 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq) => {
             if (proxyReq.getHeader('origin')) proxyReq.setHeader('origin', apiTarget)
           })
+          // The live socket is an upgrade request, which has its own event. Its Origin is checked
+          // like a write's, so it needs the same rewrite.
+          proxy.on('proxyReqWs', (proxyReq) => {
+            if (proxyReq.getHeader('origin')) proxyReq.setHeader('origin', apiTarget)
+          })
         },
       },
     },
