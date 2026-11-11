@@ -15,8 +15,13 @@ import { StreamPage } from "./StreamPage";
 
 // The chart is a canvas, so the test reads the props the page gives it.
 vi.mock("./SpectrumChart", () => ({
-  SpectrumChart: (props: { chips: unknown[]; maxHz: number }) => (
-    <pre data-testid="spectrum-chart">{JSON.stringify(props)}</pre>
+  SpectrumChart: (props: { chips: unknown[]; maxHz: number; onResetPeakHold: () => void }) => (
+    <div>
+      <pre data-testid="spectrum-chart">{JSON.stringify({ chips: props.chips, maxHz: props.maxHz })}</pre>
+      <button type="button" onClick={props.onResetPeakHold}>
+        Reset Peak Hold
+      </button>
+    </div>
   ),
 }));
 vi.mock("./SignalStrips", () => ({ SignalStrips: () => <div data-testid="strips" /> }));

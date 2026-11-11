@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { PauseIcon, PlayIcon } from "lucide-react";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** The range choice. It is a fixed top frequency, or the most each chip can show. */
@@ -41,9 +43,6 @@ interface Props {
   onRange: (value: Range) => void;
   windowSeconds: number;
   onWindowSeconds: (value: number) => void;
-  paused: boolean;
-  onPaused: (value: boolean) => void;
-  onResetPeakHold: () => void;
 }
 
 function Choice({
@@ -116,12 +115,27 @@ export function DisplaySettings(props: Props) {
           </SelectItem>
         ))}
       </Choice>
-      <Button type="button" variant="outline" aria-pressed={props.paused} onClick={() => props.onPaused(!props.paused)}>
-        {props.paused ? "Resume" : "Pause"}
-      </Button>
-      <Button type="button" variant="outline" onClick={props.onResetPeakHold}>
-        Reset Peak Hold
-      </Button>
     </div>
+  );
+}
+
+const PAUSE_COLOURS =
+  "border-orange-500/40 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300";
+const RESUME_COLOURS = "border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300";
+
+/** Freezes the charts, or lets them run again. The connection stays open either way. */
+export function PauseButton({ paused, onPaused }: { paused: boolean; onPaused: (value: boolean) => void }) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      aria-pressed={paused}
+      className={paused ? RESUME_COLOURS : PAUSE_COLOURS}
+      onClick={() => onPaused(!paused)}
+    >
+      {paused ? <PlayIcon /> : <PauseIcon />}
+      {paused ? "Resume" : "Pause"}
+    </Button>
   );
 }

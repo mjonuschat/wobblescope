@@ -10,7 +10,7 @@ import type { Axis3 } from "./axes";
 import { chipColor } from "./colors";
 import { ChipPicker } from "./ChipPicker";
 import { ConsoleCard } from "./ConsoleCard";
-import { DisplaySettings, type Range } from "./DisplaySettings";
+import { DisplaySettings, PauseButton, type Range } from "./DisplaySettings";
 import { HealthBadge } from "./HealthBadge";
 import { SignalStrips } from "./SignalStrips";
 import { Spectrogram } from "./Spectrogram";
@@ -100,7 +100,7 @@ export function StreamPage({ createWorker }: Props) {
       <h1 className="text-xl font-semibold">Live View</h1>
       {hello?.printing && <p className="text-sm text-amber-400">A print is running: showing a lower update rate</p>}
       {hello && (
-        <Panel title="Settings">
+        <Panel title="Settings" action={<PauseButton paused={paused} onPaused={pause} />}>
           <DisplaySettings
             updatesPerSecond={updatesPerSecond}
             rateLimit={hello.limits.max_updates_per_second}
@@ -110,9 +110,6 @@ export function StreamPage({ createWorker }: Props) {
             onRange={setRange}
             windowSeconds={windowSeconds}
             onWindowSeconds={setWindowSeconds}
-            paused={paused}
-            onPaused={pause}
-            onResetPeakHold={() => resetPeakHold()}
           />
         </Panel>
       )}
