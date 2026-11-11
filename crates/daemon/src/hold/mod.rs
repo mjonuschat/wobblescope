@@ -5,3 +5,4 @@
 
 pub mod pacer;
 pub mod pieces;
+pub mod settings;
