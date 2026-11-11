@@ -1,0 +1,79 @@
+import { useState } from 'react'
+
+import type { AnalysisResult } from '@/analysis/protocol'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useSaveResult } from '@/lib/api/queries'
+import type { Axis } from '@/lib/generated/Axis'
+import type { FitParams } from '@/lib/generated/FitParams'
+import type { SaveRequest } from '@/lib/generated/SaveRequest'
+import type { SessionMeta } from '@/lib/generated/SessionMeta'
+
+interface Props {
+  sessionId: string
+  meta: SessionMeta
+  axis: Axis
+  params: FitParams
+  overrides: string[]
+  result: AnalysisResult
+}
+
+/** Saves the shown axis, as the worker computed it, so the daemon keeps what the user saw. */
+export function SaveResultDialog({ sessionId, meta, axis, params, overrides, result }: Props) {
+  const [label, setLabel] = useState('')
+  const save = useSaveResult()
+
+  function submit() {
+    const trimmed = label.trim()
+    const body: SaveRequest = {
+      label: trimmed === '' ? null : trimmed,
+      // The version that computed the axes, which can differ from this app's own version.
+      core_version: result.analysis.core_version,
+      session_created_at: meta.created_at,
+      fit_params: params,
+      overrides,
+      axes: [
+        {
+          axis,
+          analysis: result.analysis,
+          snippets: {
+            worst_case: result.snippets.worstCase,
+            per_chip: result.snippets.perChip,
+          },
+        },
+      ],
+    }
+    save.mutate({ sessionId, body })
+  }
+
+  return (
+    <section aria-label="Save result" className="flex flex-wrap items-end gap-3">
+      <div className="space-y-1">
+        <Label htmlFor="save-result-label">Label</Label>
+        <Input
+          id="save-result-label"
+          value={label}
+          placeholder="Optional"
+          onChange={(event) => setLabel(event.target.value)}
+        />
+      </div>
+      <Button onClick={submit} disabled={save.isPending}>
+        {save.isPending ? 'Saving…' : 'Save result'}
+      </Button>
+      {save.isSuccess && (
+        <p className="text-sm">
+          Saved as {save.data.id}{' '}
+          <a href={`#/results/${encodeURIComponent(save.data.id)}`} className="underline">
+            Open
+          </a>
+        </p>
+      )}
+      {save.isError && (
+        <p role="alert" className="w-full text-sm text-destructive">
+          {save.error.message}
+        </p>
+      )}
+    </section>
+  )
+}

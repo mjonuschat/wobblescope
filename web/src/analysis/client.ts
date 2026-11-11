@@ -1,7 +1,10 @@
 import type { Axis } from '@/lib/generated/Axis'
 import type { FitParams } from '@/lib/generated/FitParams'
 import type { SessionMeta } from '@/lib/generated/SessionMeta'
-import { fetchSample as fetchSampleFile } from '@/lib/api/endpoints'
+import {
+  fetchResultSample as fetchResultSampleFile,
+  fetchSample as fetchSampleFile,
+} from '@/lib/api/endpoints'
 
 import type { AnalysisResult, WorkerRequest, WorkerResponse } from './protocol'
 
@@ -14,7 +17,10 @@ export interface WorkerLike {
 }
 
 export interface AnalysisJob {
+  /** The cache key for the worker's files; the fetch route when `resultId` is not set. */
   sessionId: string
+  /** A saved result whose own sample files are fetched instead of the session's. */
+  resultId?: string
   meta: SessionMeta
   axis: Axis
   params: FitParams
@@ -39,6 +45,7 @@ export interface AnalysisClient {
 interface Options {
   createWorker: () => WorkerLike
   fetchSample?: typeof fetchSampleFile
+  fetchResultSample?: typeof fetchResultSampleFile
 }
 
 interface Queued {
@@ -73,6 +80,7 @@ function filesFor(meta: SessionMeta, axis: Axis) {
 export function createAnalysisClient({
   createWorker,
   fetchSample = fetchSampleFile,
+  fetchResultSample = fetchResultSampleFile,
 }: Options): AnalysisClient {
   let worker: WorkerLike | null = null
   let heldSession: string | null = null
@@ -123,7 +131,11 @@ export function createAnalysisClient({
     const alreadyHeld = sameSession ? held : new Set<string>()
     const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name))
     const buffers = await Promise.all(
-      missing.map((f) => fetchSample(job.sessionId, f.chip, f.segment, signal)),
+      missing.map((f) =>
+        job.resultId !== undefined
+          ? fetchResultSample(job.resultId, f.chip, f.segment, signal)
+          : fetchSample(job.sessionId, f.chip, f.segment, signal),
+      ),
     )
     if (signal?.aborted) throw abortError()
     // The worker failed to load while the files were downloading, so nothing can answer.

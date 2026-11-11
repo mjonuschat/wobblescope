@@ -1,3 +1,4 @@
+import type { SaveRequest } from '@/lib/generated/SaveRequest'
 import { describe, expect, it } from 'vitest'
 
 import { setBase, stubFetch } from '@/test/http'
@@ -7,12 +8,14 @@ import {
   checkChips,
   deleteSession,
   emergencyStop,
+  fetchResultSample,
   fetchSample,
   getChips,
   getSettings,
   importCsv,
   listSessions,
   pinSession,
+  saveResult,
   startTest,
 } from './endpoints'
 
@@ -132,5 +135,23 @@ describe('endpoints', () => {
       'homed',
       'klipper_ready',
     ])
+  })
+
+  it('saveResult posts the JSON with the client header', async () => {
+    const http = stubFetch({ status: 201, body: { id: 'r1' } })
+    const body = { label: 'after belt swap' } as unknown as SaveRequest
+    await saveResult('s 1', body)
+    expect(http.url()).toMatch(/\/api\/sessions\/s%201\/results$/)
+    expect(http.init().method).toBe('POST')
+    expect(http.init().body).toBe(JSON.stringify(body))
+    expect(new Headers(http.init().headers).get('Content-Type')).toBe('application/json')
+    expect(http.header(0, 'X-Wobblescope-Client')).toBe('1')
+  })
+
+  it('fetchResultSample requests results/{id}/samples/{chip}/{segment}', async () => {
+    const http = stubFetch({ bytes: new Uint8Array([7]).buffer })
+    const got = await fetchResultSample('r1', 1, 2)
+    expect(http.url()).toMatch(/\/api\/results\/r1\/samples\/1\/2$/)
+    expect([...new Uint8Array(got)]).toEqual([7])
   })
 })

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnalysisResult } from '@/analysis/protocol'
 import type { Analysis } from '@/lib/generated/Analysis'
+import type { SaveRequest } from '@/lib/generated/SaveRequest'
 import { analysis, decision, recommendation, twoAxisMeta } from '@/test/fixtures'
 import { stubApiWithStatus as stubApi } from '@/test/status'
 import { renderRoute } from '@/test/render'
@@ -296,5 +297,59 @@ describe('the session view', () => {
     renderRoute('/sessions/other')
     expect(await screen.findByText('no such session')).toBeTruthy()
     expect(fake.analyze).not.toHaveBeenCalled()
+  })
+
+  it('saves the shown analysis with the label, the worker\u2019s core version and the session\u2019s created_at', async () => {
+    const a = analysis()
+    a.core_version = '9.9.9'
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]))
+    const meta = twoAxisMeta()
+    const calls = stubApi(({ url, method }) => {
+      if (method === 'POST' && url.pathname.endsWith('/sessions/s1/results')) {
+        return { status: 201, body: { id: 'r-1' } }
+      }
+      return url.pathname.endsWith('/sessions/s1')
+        ? { body: { summary: summary('s1'), meta } }
+        : { status: 404, body: { error: 'not_found', message: 'no such session' } }
+    })
+    renderRoute('/sessions/s1')
+    fireEvent.change(await screen.findByLabelText('Label'), { target: { value: 'after belts' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save result' }))
+    expect(await screen.findByText(/Saved as r-1/)).toBeTruthy()
+    const post = calls.find((c) => c.method === 'POST')!
+    const expected: SaveRequest = {
+      label: 'after belts',
+      core_version: '9.9.9',
+      session_created_at: meta.created_at,
+      fit_params: fake.analyze.mock.calls[0][0].params,
+      overrides: [],
+      axes: [
+        {
+          axis: 'X',
+          analysis: a,
+          snippets: { worst_case: SNIPPET, per_chip: [SNIPPET, null] },
+        },
+      ],
+    }
+    expect(JSON.parse(post.body as string)).toEqual(expected)
+  })
+
+  it('shows the daemon\u2019s refusal when the session changed', async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]))
+    stubApi(({ url, method }) => {
+      if (method === 'POST') {
+        return {
+          status: 409,
+          body: { error: 'session_changed', message: 'the session changed since it was analysed' },
+        }
+      }
+      return url.pathname.endsWith('/sessions/s1')
+        ? { body: { summary: summary('s1'), meta: twoAxisMeta() } }
+        : { status: 404, body: { error: 'not_found', message: 'no such session' } }
+    })
+    renderRoute('/sessions/s1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Save result' }))
+    const alert = await screen.findByText('the session changed since it was analysed')
+    expect(alert.closest('[role="alert"]')).toBeTruthy()
   })
 })

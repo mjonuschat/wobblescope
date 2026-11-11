@@ -9,6 +9,7 @@ import { useEffect } from 'react'
 
 import type { Axis } from '@/lib/generated/Axis'
 import type { FitParams } from '@/lib/generated/FitParams'
+import type { SaveRequest } from '@/lib/generated/SaveRequest'
 import type { SessionDetail } from '@/lib/generated/SessionDetail'
 
 import { getAnalysisClient } from '@/analysis/client'
@@ -19,16 +20,20 @@ import {
   type SessionFilters,
   type StartTestRequest,
   checkChips,
+  deleteResult,
   deleteSession,
   emergencyStop,
   getChips,
+  getResult,
   getSession,
   getSettings,
   getStatus,
   getStorage,
   importCsv,
+  listResults,
   listSessions,
   pinSession,
+  saveResult,
   startTest,
 } from './endpoints'
 
@@ -36,6 +41,8 @@ export const queryKeys = {
   sessionLists: ['sessions', 'list'] as const,
   sessionList: (filters: SessionFilters) => ['sessions', 'list', filters] as const,
   session: (id: string) => ['sessions', 'detail', id] as const,
+  results: ['results'] as const,
+  result: (id: string) => ['results', id] as const,
   storage: ['storage'] as const,
   settings: ['settings'] as const,
   chips: ['chips'] as const,
@@ -81,6 +88,20 @@ export function useStorage() {
   return useQuery({
     queryKey: queryKeys.storage,
     queryFn: ({ signal }) => getStorage(signal),
+  })
+}
+
+export function useResults() {
+  return useQuery({
+    queryKey: queryKeys.results,
+    queryFn: ({ signal }) => listResults(signal),
+  })
+}
+
+export function useResult(id: string) {
+  return useQuery({
+    queryKey: queryKeys.result(id),
+    queryFn: ({ signal }) => getResult(id, signal),
   })
 }
 
@@ -215,4 +236,28 @@ export function useStartTest() {
 
 export function useEmergencyStop() {
   return useMutation({ mutationFn: (id: string) => emergencyStop(id) })
+}
+
+export function useSaveResult() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, body }: { sessionId: string; body: SaveRequest }) =>
+      saveResult(sessionId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.results })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storage })
+    },
+  })
+}
+
+export function useDeleteResult() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => deleteResult(id),
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.result(id) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.results })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storage })
+    },
+  })
 }

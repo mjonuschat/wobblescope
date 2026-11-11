@@ -11,6 +11,7 @@ import type { SessionMeta } from '@/lib/generated/SessionMeta'
 import { AxisResults } from './AxisResults'
 import { FitSettingsForm } from './FitSettingsForm'
 import { MetaPanel } from './MetaPanel'
+import { SaveResultDialog } from './SaveResultDialog'
 import { defaultFitParams } from './fit'
 
 interface AnalysisProps {
@@ -34,12 +35,24 @@ function Analysis({ id, meta, axis, params, overrides, onOverridesChange }: Anal
       </p>
     )
   }
-  return <AxisResults
-      result={analysis.data}
-      meta={meta}
-      overrides={overrides}
-      onOverridesChange={onOverridesChange}
-    />
+  return (
+    <div className="space-y-4">
+      <SaveResultDialog
+        sessionId={id}
+        meta={meta}
+        axis={axis}
+        params={params}
+        overrides={overrides}
+        result={analysis.data}
+      />
+      <AxisResults
+        result={analysis.data}
+        meta={meta}
+        overrides={overrides}
+        onOverridesChange={onOverridesChange}
+      />
+    </div>
+  )
 }
 
 export function SessionPage({ id }: { id: string }) {

@@ -24,4 +24,6 @@ export const usage: Usage = {
   cap_bytes: 2 * 1024 ** 3,
   free_bytes: 10 * 1024 ** 3,
   session_count: 12,
+  result_count: 0,
+  result_bytes: 0,
 }

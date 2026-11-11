@@ -259,4 +259,27 @@ describe('the analysis client', () => {
     worker.answer(worker.analyses()[0].id)
     await expect(next).resolves.toBeTruthy()
   })
+
+  it('the client fetches a result job\u2019s samples from the result route', async () => {
+    const worker = new FakeWorker()
+    const fetchSample = vi.fn(async () => new Uint8Array([1]).buffer)
+    const fetchResultSample = vi.fn(async () => new Uint8Array([2]).buffer)
+    const client = createAnalysisClient({ createWorker: () => worker, fetchSample, fetchResultSample })
+    const pending = client.analyze({
+      sessionId: 's1',
+      resultId: 'r1',
+      meta: twoAxisMeta('s1'),
+      axis: 'X',
+      params: defaultParams,
+      overrides: [],
+    })
+    await flush()
+    expect(fetchSample).not.toHaveBeenCalled()
+    expect(fetchResultSample.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+      ['r1', 0, 0],
+      ['r1', 1, 0],
+    ])
+    worker.answer(1)
+    await pending
+  })
 })

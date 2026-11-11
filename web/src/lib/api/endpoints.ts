@@ -3,6 +3,10 @@ import type { ChipsSnapshot } from '@/lib/generated/ChipsSnapshot'
 import type { Mode } from '@/lib/generated/Mode'
 import type { Overrides } from '@/lib/generated/Overrides'
 import type { PrinterSettings } from '@/lib/generated/PrinterSettings'
+import type { ResultDetail } from '@/lib/generated/ResultDetail'
+import type { ResultList } from '@/lib/generated/ResultList'
+import type { ResultSummary } from '@/lib/generated/ResultSummary'
+import type { SaveRequest } from '@/lib/generated/SaveRequest'
 import type { SessionDetail } from '@/lib/generated/SessionDetail'
 import type { SessionList } from '@/lib/generated/SessionList'
 import type { StartedTest } from '@/lib/generated/StartedTest'
@@ -101,6 +105,41 @@ export async function fetchSample(
 ): Promise<ArrayBuffer> {
   const response = await apiFetch(
     `sessions/${encodeURIComponent(id)}/samples/${chip}/${segment}`,
+    { signal },
+  )
+  return response.arrayBuffer()
+}
+
+/** Saves the analysis the app shows as a result of the session. */
+export function saveResult(sessionId: string, body: SaveRequest) {
+  return apiJson<ResultSummary>(`sessions/${encodeURIComponent(sessionId)}/results`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function listResults(signal?: AbortSignal) {
+  return apiJson<ResultList>('results', { signal })
+}
+
+export function getResult(id: string, signal?: AbortSignal) {
+  return apiJson<ResultDetail>(`results/${encodeURIComponent(id)}`, { signal })
+}
+
+export function deleteResult(id: string) {
+  return apiJson<void>(`results/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** The stored, compressed sample file of one recording, as the saved result holds it. */
+export async function fetchResultSample(
+  id: string,
+  chip: number,
+  segment: number,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  const response = await apiFetch(
+    `results/${encodeURIComponent(id)}/samples/${chip}/${segment}`,
     { signal },
   )
   return response.arrayBuffer()
