@@ -305,16 +305,35 @@ impl Storage {
         Ok(summary_of(&record, size))
     }
 
-    pub fn session_zip(&self, session_id: &str) -> Result<Vec<u8>, StorageError> {
-        use std::io::Write;
+    /// Writes the session as a zip of `meta.json` and the sample files to an unlinked temporary
+    /// file and returns it, rewound. The archive is never held in memory, and the session is no
+    /// longer leased once this returns.
+    ///
+    /// # Errors
+    /// [`StorageError::NotFound`] for an unknown session, or an I/O error.
+    pub fn session_zip(&self, session_id: &str) -> Result<fs::File, StorageError> {
+        use std::io::{Seek, SeekFrom, Write};
         use zip::write::SimpleFileOptions;
         use zip::{CompressionMethod, ZipWriter};
 
         let _lease = self.lease(session_id)?;
         let session = self.open_sealed(session_id)?;
         let dir = self.inner.sessions_dir.join(session_id);
+        let n = RESULT_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temp_path = self
+            .inner
+            .results_dir
+            .join(format!(".download-{}-{n}.zip.tmp", std::process::id()));
+        let temp = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)?;
+        // The name is only needed to create the file; the open handle keeps the data.
+        fs::remove_file(&temp_path)?;
+
         let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
-        let mut zip = ZipWriter::new(io::Cursor::new(Vec::new()));
+        let mut zip = ZipWriter::new(temp);
         let zip_error = |e: zip::result::ZipError| io::Error::other(e.to_string());
 
         let meta_path = dir.join("meta.json");
@@ -331,7 +350,9 @@ impl Storage {
                 .map_err(zip_error)?;
             io::copy(&mut input, &mut zip)?;
         }
-        Ok(zip.finish().map_err(zip_error)?.into_inner())
+        let mut finished = zip.finish().map_err(zip_error)?;
+        finished.seek(SeekFrom::Start(0))?;
+        Ok(finished)
     }
 
     fn reserve_result(

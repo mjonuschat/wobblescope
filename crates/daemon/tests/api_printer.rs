@@ -118,3 +118,14 @@ async fn home_is_refused_while_a_test_runs() {
     assert_eq!(body["error"], "preflight_failed");
     assert_eq!(body["failures"][0]["check"], "no_test_running");
 }
+
+#[tokio::test]
+async fn home_is_refused_while_the_last_test_may_still_be_moving() {
+    let rig = rig().await;
+    rig.slot.set_motion_uncertain("test-1");
+    let (status, body) = answer(&rig, ui_post("/api/printer/home")).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["failures"][0]["check"], "no_uncertain_motion");
+    assert!(rig.sim.fake.requests_for("printer.gcode.script").is_empty());
+    assert!(!rig.slot.is_held());
+}

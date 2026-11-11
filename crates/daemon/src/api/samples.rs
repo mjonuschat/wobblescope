@@ -2,8 +2,10 @@
 
 use std::io::Read;
 
-use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
+use axum::body::{Body, Bytes};
+use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
+use tokio::io::AsyncReadExt;
 
 use super::error::{ApiError, ApiPath};
 use super::{Store, blocking};
@@ -33,22 +35,40 @@ pub(super) async fn download(
         .into_response())
 }
 
+/// `GET /api/sessions/{id}/download`: the session as a zip with its `meta.json` and sample files,
+/// streamed from a temporary file so a large session does not sit in memory.
 pub(super) async fn download_session(
     Store(storage): Store,
     ApiPath(id): ApiPath<String>,
 ) -> Result<Response, ApiError> {
     let name = id.clone();
-    let bytes = blocking(move || Ok(storage.session_zip(&id)?)).await?;
+    let file = blocking(move || Ok(storage.session_zip(&id)?)).await?;
+    let length = file
+        .metadata()
+        .map_err(|e| ApiError::internal(format!("reading the archive failed: {e}")))?
+        .len();
+    let stream = futures_util::stream::unfold(tokio::fs::File::from_std(file), |mut file| async {
+        let mut chunk = vec![0u8; 64 * 1024];
+        match file.read(&mut chunk).await {
+            Ok(0) => None,
+            Ok(n) => {
+                chunk.truncate(n);
+                Some((Ok::<_, std::io::Error>(Bytes::from(chunk)), file))
+            }
+            Err(e) => Some((Err(e), file)),
+        }
+    });
     Ok((
         [
             (CONTENT_TYPE, "application/zip".to_owned()),
             (CACHE_CONTROL, "no-store".to_owned()),
+            (CONTENT_LENGTH, length.to_string()),
             (
                 CONTENT_DISPOSITION,
                 format!("attachment; filename=\"{name}.zip\""),
             ),
         ],
-        bytes,
+        Body::from_stream(stream),
     )
         .into_response())
 }

@@ -92,12 +92,20 @@ pub(super) async fn emergency_stop(
     Ok(Json(StopDispatched { dispatched: true }))
 }
 
-/// Homes all axes. It waits for the move to finish, and is refused while a test runs.
+/// Homes all axes. It waits for the move to finish, and is refused while a test runs or the last
+/// test may still be moving the toolhead. It holds the test slot meanwhile, so no test starts
+/// during the move.
 pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, ApiError> {
-    if state.capture.slot.is_held() {
+    let Some(_permit) = state.capture.slot.try_acquire() else {
         return Err(ApiError::preflight(vec![CheckFailure::new(
             "no_test_running",
             "a test is running; the printer cannot home until it ends",
+        )]));
+    };
+    if state.capture.slot.motion_uncertain().is_some() {
+        return Err(ApiError::preflight(vec![CheckFailure::new(
+            "no_uncertain_motion",
+            "the printer may still be moving; stop it first",
         )]));
     }
     let control = control(&state)?;
