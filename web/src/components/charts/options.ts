@@ -165,7 +165,7 @@ const SPECTRUM_VALUES = {
 } as const
 
 /**
- * The live spectra: one line per chip and chosen axis in the chip's colour, a faint peak-hold
+ * The live spectra. One line per chip and chosen axis in the chip's colour, a faint peak-hold
  * line per chip (the summed spectrum's hold) and the chip's peaks marked on its first line.
  */
 export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): EChartsCoreOption {

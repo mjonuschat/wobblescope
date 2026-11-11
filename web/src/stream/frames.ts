@@ -1,7 +1,6 @@
-/** The bytes before the samples: u16 index, u16 zero, f64 t0, u32 count. */
+/** The bytes before the samples (u16 index, u16 zero, f64 t0, u32 count). */
 const HEADER_BYTES = 16
 
-/** One decoded binary frame. */
 export interface DecodedFrame {
   /** The index a `stream` message gave the chip. */
   index: number

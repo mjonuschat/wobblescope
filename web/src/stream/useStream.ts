@@ -9,7 +9,6 @@ import { type DecodedFrame, decodeFrame } from './frames'
 export type Hello = Extract<ServerMessage, { type: 'hello' }>
 export type Health = Extract<ServerMessage, { type: 'health' }>
 
-/** The most console lines kept. */
 const CONSOLE_LINES = 5
 
 /** What the socket tells the page about one chip. */
@@ -44,7 +43,7 @@ export interface StreamApi {
 
 const INITIAL: StreamState = { connected: false, hello: null, chips: {}, console: [] }
 
-/** The websocket URL: `api/stream` below the document base, with `ws` or `wss`. */
+/** The websocket URL. It is `api/stream` below the document base, with `ws` or `wss`. */
 export function streamUrl(): string {
   const url = new URL('api/stream', document.baseURI)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -56,7 +55,7 @@ function parse(data: string): ServerMessage | null {
     const value: unknown = JSON.parse(data)
     if (typeof value === 'object' && value !== null && 'type' in value) return value as ServerMessage
   } catch {
-    // Not JSON: ignore the message.
+    // Not JSON, so ignore the message.
   }
   return null
 }

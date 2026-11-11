@@ -16,7 +16,7 @@ export const SPAN_MS = 60_000
 const WIDTH = 640
 const HEIGHT = 160
 
-/** Bins kept per spectrum for the colour scale: enough for percentiles, cheap to sort. */
+/** Bins kept per spectrum for the colour scale. That is enough for percentiles and cheap to sort. */
 const SAMPLES_PER_SPECTRUM = 32
 /** The colour scale is recomputed once per this many spectra. */
 const SCALE_EVERY = 10

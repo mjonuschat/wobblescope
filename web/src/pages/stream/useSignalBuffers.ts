@@ -33,7 +33,7 @@ function appendLatest(old: Float32Array, added: Float32Array, limit: number): Fl
 
 /**
  * Keeps the latest samples and a trail of recent frames per chip and axis. Frames go into a
- * ref; React state only holds a counter that moves at most once per animation frame, so a
+ * ref. React state only holds a counter that moves at most once per animation frame, so a
  * burst of frames costs one render.
  */
 export function useSignalBuffers(

@@ -78,7 +78,7 @@ describe('SignalStrips', () => {
     const strokes = calls.filter(([n]) => n === 'beginPath').length
     expect(strokes).toBeGreaterThan(0)
     const xs = calls.filter(([n]) => n === 'lineTo').map((c) => c[1] as number)
-    // x axis: trail (3 samples) draws first, then the 7 latest samples; both end at the right edge
+    // x axis. The trail (3 samples) draws first, then the 7 latest samples. Both end at the right edge
     expect(xs.slice(0, 2)).toEqual([320, 640])
     expect(xs.slice(2, 8)[5]).toBe(640)
   })
@@ -136,7 +136,7 @@ describe('Spectrogram', () => {
   it('maps log10 power, from the 5th to the 99th percentile, onto the ramp', () => {
     render(props(() => 0, spectrum([1, 10, 100])))
     const image = put()[0][1]
-    // bins 0..2 are log10 0..2: the lowest is the dark end, the highest the pale end, 1 is mid ramp
+    // bins 0..2 are log10 0..2. The lowest is the dark end, the highest the pale end, 1 is mid ramp
     expect(pixel(image, 159)).toEqual([10, 10, 60, 255])
     expect(pixel(image, 80)).toEqual([200, 60, 60, 255])
     expect(pixel(image, 0)).toEqual([255, 250, 200, 255])

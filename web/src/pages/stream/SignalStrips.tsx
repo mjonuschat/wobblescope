@@ -40,7 +40,7 @@ function line(context: CanvasRenderingContext2D, values: Float32Array, scale: nu
 }
 
 /**
- * Draws one axis: the recent frame buffers as a faint trail, each spanning the full width like an
+ * Draws one axis. The recent frame buffers are a faint trail, each spanning the full width like an
  * oscilloscope's persistence, and the latest samples on top. `manual` of 0 or less means auto.
  */
 function drawStrip(
@@ -65,7 +65,7 @@ function drawStrip(
   line(context, latest, scale)
 }
 
-/** Three canvases per chip (X, Y, Z) with a scale box: empty means automatic. */
+/** Three canvases per chip (X, Y, Z) with a scale box. Empty means automatic. */
 export function SignalStrips({ chips, paused }: Props) {
   const [drawn, setDrawn] = useState(chips)
   if (!paused && drawn !== chips) setDrawn(chips)

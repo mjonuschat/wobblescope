@@ -13,7 +13,7 @@ import { renderRoute } from '@/test/render'
 
 import { StreamPage } from './StreamPage'
 
-// The chart is a canvas; the test reads the props the page gives it.
+// The chart is a canvas, so the test reads the props the page gives it.
 vi.mock('./SpectrumChart', () => ({
   SpectrumChart: (props: { chips: unknown[]; maxHz: number }) => (
     <pre data-testid="spectrum-chart">{JSON.stringify(props)}</pre>

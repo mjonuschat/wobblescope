@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 
-/** The range choice: a fixed top frequency or the most the chips allow. */
+/** The range choice. It is a fixed top frequency or the most the chips allow. */
 export type Range = number | 'full'
 
 const WINDOW_SECONDS = [0.5, 1, 2, 4]

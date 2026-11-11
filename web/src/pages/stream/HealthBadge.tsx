@@ -17,7 +17,7 @@ function count(value: bigint | null | undefined): string {
   return value === null || value === undefined ? 'not reported' : String(value)
 }
 
-/** One chip's stream health: amber for a warning, red for a closed or refused chip. */
+/** One chip's stream health. Amber is a warning and red is a closed or refused chip. */
 export function HealthBadge({ chip, state, error }: Props) {
   if (!state) return <p className="text-xs text-neutral-400">Waiting for {chip}…</p>
   const { health } = state

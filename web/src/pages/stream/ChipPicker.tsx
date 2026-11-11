@@ -20,7 +20,6 @@ interface Props {
   axes: Record<string, Axis3[]>
   onToggle: (section: string) => void
   onAxes: (section: string, axes: Axis3[]) => void
-  /** The health badge shown under a selected chip. */
   badge: (section: string) => ReactNode
 }
 

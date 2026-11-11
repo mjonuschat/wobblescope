@@ -23,7 +23,7 @@ interface Props {
 const DEFAULT_MAX_CHIPS = 4
 const DEFAULT_WINDOW_SECONDS = 1
 
-/** The Stream page: live signals and spectra of up to a few chips, read only. */
+/** The Stream page shows live signals and spectra of up to a few chips. It is read only. */
 export function StreamPage({ createWorker }: Props) {
   const stream = useStream()
   const chipList = useChips().data
@@ -40,7 +40,7 @@ export function StreamPage({ createWorker }: Props) {
   const { spectra, resetPeakHold } = useSpectra(stream, windowSeconds, updatesPerSecond, createWorker, paused)
   const signals = useSignalBuffers(stream)
 
-  // A paused view keeps the data it had. The socket keeps running; the worker is not fed while paused.
+  // A paused view keeps the data it had. The socket keeps running and the worker is not fed while paused.
   const [frozen, setFrozen] = useState<{ spectra: SpectraState; signals: typeof signals } | null>(null)
   const shownSpectra = frozen?.spectra ?? spectra
   const shownSignals = frozen?.signals ?? signals

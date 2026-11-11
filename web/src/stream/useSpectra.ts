@@ -41,7 +41,7 @@ function spacingOf(spectrum: Spectrum): number {
  * Feeds the stream's frames to the spectrum worker and returns the latest spectrum, peaks and
  * peak hold per chip. A chip is configured when its stream header arrives, and again when its
  * rate or maximum frequency, `windowSeconds` or `updatesPerSecond` change. While `paused`, frames
- * are not sent to the worker and its replies are dropped; the stream itself keeps running.
+ * are not sent to the worker and its replies are dropped. The stream itself keeps running.
  */
 export function useSpectra(
   stream: StreamApi,
@@ -98,7 +98,7 @@ export function useSpectra(
     }
     const stop = onFrame((chip, frame) => {
       if (pausedRef.current) return
-      // Transfer a copy: other onFrame subscribers share this frame and still need its samples.
+      // Transfer a copy. Other onFrame subscribers share this frame and still need its samples.
       const xyz = frame.xyz.slice()
       worker.postMessage({ type: 'frame', chip, t0: frame.t0, xyz }, [xyz.buffer as ArrayBuffer])
     })
