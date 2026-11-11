@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { UnitInput } from "@/components/UnitInput";
 
 import type { ChipSignal } from "./useSignalBuffers";
 
@@ -56,6 +57,12 @@ function line(context: CanvasRenderingContext2D, values: Float32Array, scale: nu
   context.stroke();
 }
 
+/** The scale the strips of a chip would pick for themselves, as the largest of their three. */
+function autoPeak(signal: ChipSignal | undefined): number {
+  if (!signal) return 0;
+  return Math.max(...AXES.map((axis) => peak([signal[axis], ...signal.trail[axis].slice(-MAX_TRAIL)])));
+}
+
 /**
  * Draws one axis. The recent frame buffers are a faint trail, each spanning the full width like an
  * oscilloscope's persistence, and the latest samples on top. `manual` of 0 or less means auto.
@@ -82,16 +89,17 @@ function drawStrip(
   line(context, latest, scale);
 }
 
-/** Three canvases per chip (X, Y, Z) with a scale box. Empty means automatic. */
+/** Three canvases per chip (X, Y, Z). Each chip has an automatic scale or a fixed one in mm/s². */
 export function SignalStrips({ chips, paused }: Props) {
   const [drawn, setDrawn] = useState(chips);
   if (!paused && drawn !== chips) setDrawn(chips);
   const canvases = useRef(new Map<string, HTMLCanvasElement>());
-  const [scales, setScales] = useState<Record<string, string>>({});
+  const [scales, setScales] = useState<Record<string, { auto: boolean; text: string }>>({});
 
   useEffect(() => {
     for (const { chip, color, signal } of drawn) {
-      const manual = Number(scales[chip] ?? "");
+      const fixed = scales[chip];
+      const manual = fixed && !fixed.auto ? Number(fixed.text) : 0;
       for (const axis of AXES) {
         const canvas = canvases.current.get(`${chip}/${axis}`);
         if (canvas) drawStrip(canvas, signal, axis, color, Number.isFinite(manual) ? manual : 0);
@@ -101,22 +109,40 @@ export function SignalStrips({ chips, paused }: Props) {
 
   return (
     <div className="space-y-4">
-      {chips.map(({ chip, color }) => (
+      {chips.map(({ chip, color, signal }) => (
         <section key={chip} aria-label={`${chip} signal`} className="space-y-1">
           <div className="flex items-center gap-2 text-sm">
             <span className="inline-block size-3 rounded-sm" style={{ background: color }} />
             <span className="font-medium">{chip}</span>
-            <div className="ml-auto flex items-center gap-1">
-              <Label htmlFor={`${chip}-scale`}>Scale</Label>
-              <Input
-                type="number"
+            <div className="ml-auto flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={`${chip}-auto-scale`}
+                  aria-label={`${chip} auto scale`}
+                  checked={scales[chip]?.auto ?? true}
+                  onCheckedChange={(auto) =>
+                    setScales((old) => ({
+                      ...old,
+                      [chip]: {
+                        auto,
+                        text: old[chip]?.text || String(Math.max(1, Math.round(autoPeak(signal)))),
+                      },
+                    }))
+                  }
+                />
+                <Label htmlFor={`${chip}-auto-scale`}>Auto Scale</Label>
+              </div>
+              <UnitInput
+                unit="mm/s²"
                 min={0}
-                placeholder="auto"
                 id={`${chip}-scale`}
                 aria-label={`${chip} scale`}
-                className="h-7 w-24"
-                value={scales[chip] ?? ""}
-                onChange={(event) => setScales((old) => ({ ...old, [chip]: event.target.value }))}
+                className="w-36"
+                disabled={scales[chip]?.auto ?? true}
+                value={scales[chip]?.text ?? ""}
+                onChange={(event) =>
+                  setScales((old) => ({ ...old, [chip]: { auto: old[chip]?.auto ?? false, text: event.target.value } }))
+                }
               />
             </div>
           </div>

@@ -72,6 +72,7 @@ describe("SignalStrips", () => {
     render(<SignalStrips chips={chips} paused={false} />);
     const lineYs = () => calls.filter(([n]) => n === "lineTo").map((c) => c[2] as number);
     const auto = lineYs()[0];
+    fireEvent.click(screen.getByRole("switch", { name: "a auto scale" }));
     calls = [];
     fireEvent.change(screen.getByLabelText("a scale"), { target: { value: "10" } });
     expect(lineYs()[0]).not.toBe(auto);
@@ -98,11 +99,24 @@ describe("SignalStrips", () => {
     const biased = signal(0);
     biased.x = Float32Array.from([9800, 9810, 9790]);
     render(<SignalStrips chips={[{ chip: "a", color: "#fff", signal: biased }]} paused={false} />);
+    fireEvent.click(screen.getByRole("switch", { name: "a auto scale" }));
     calls = [];
     fireEvent.change(screen.getByLabelText("a scale"), { target: { value: "20" } });
     const ys = calls.filter(([n]) => n === "lineTo").map((c) => c[2] as number);
     expect(ys[0]).toBeCloseTo(45 - (10 / 20) * 45);
     expect(ys[1]).toBeCloseTo(45 + (10 / 20) * 45);
+  });
+
+  it("starts on auto with the number box disabled, and fills it from the auto scale when switched off", () => {
+    const biased = signal(0);
+    biased.x = Float32Array.from([100, 140, 60]);
+    render(<SignalStrips chips={[{ chip: "a", color: "#fff", signal: biased }]} paused={false} />);
+    const box = screen.getByLabelText("a scale") as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(screen.getByText("mm/s²")).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "a auto scale" }));
+    expect(box.disabled).toBe(false);
+    expect(box.value).toBe("40");
   });
 
   it("labels the X, Y and Z strips of each chip", () => {
