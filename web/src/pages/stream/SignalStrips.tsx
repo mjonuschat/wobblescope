@@ -27,7 +27,9 @@ function peak(buffers: Float32Array[]): number {
   return max
 }
 
-function line(context: CanvasRenderingContext2D, values: Float32Array, scale: number, step: number) {
+/** Draws the samples across the full canvas width. */
+function line(context: CanvasRenderingContext2D, values: Float32Array, scale: number) {
+  const step = WIDTH / Math.max(values.length - 1, 1)
   context.beginPath()
   values.forEach((value, i) => {
     const y = HEIGHT / 2 - (value / scale) * (HEIGHT / 2)
@@ -38,7 +40,7 @@ function line(context: CanvasRenderingContext2D, values: Float32Array, scale: nu
 }
 
 /**
- * Draws one axis: the recent frame buffers as a faint trail, each from the left edge like an
+ * Draws one axis: the recent frame buffers as a faint trail, each spanning the full width like an
  * oscilloscope's persistence, and the latest samples on top. `manual` of 0 or less means auto.
  */
 function drawStrip(
@@ -55,13 +57,12 @@ function drawStrip(
   const latest = signal[axis]
   const trail = signal.trail[axis].slice(-MAX_TRAIL)
   const scale = manual > 0 ? manual : Math.max(peak([latest, ...trail]), 1e-9)
-  const step = WIDTH / Math.max(latest.length - 1, 1)
   context.globalAlpha = 0.08
   context.strokeStyle = color
   context.lineWidth = 1
-  for (const buffer of trail) line(context, buffer, scale, step)
+  for (const buffer of trail) line(context, buffer, scale)
   context.globalAlpha = 1
-  line(context, latest, scale, step)
+  line(context, latest, scale)
 }
 
 /** Three canvases per chip (X, Y, Z) with a scale box: empty means automatic. */
