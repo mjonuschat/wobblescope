@@ -121,14 +121,16 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
   };
 }
 
-/** The sum of the eligible chips' PSDs. It is for looking at; no recommendation comes from it. */
+/** The sum of the eligible chips' vibration. It is for looking at; no recommendation comes from it. */
 export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
   return {
-    ...base("Summed PSD (display only)", maxFreq),
-    yAxis: { type: "value", name: "Frequency-normalised PSD", splitLine },
+    ...base(null, maxFreq),
+    // One axis and no legend, so the plot can start nearer the top and reach the right edge.
+    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    yAxis: { type: "value", name: "Vibration Strength", splitLine },
     series: [
       {
-        name: "Summed PSD",
+        name: "All Chips",
         type: "line",
         showSymbol: false,
         data: zip(summed.freq_bins, summed.psd),

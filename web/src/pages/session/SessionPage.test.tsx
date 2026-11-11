@@ -277,6 +277,33 @@ describe("the session view", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("has an All Chips tab, last, when there are several chips, and it explains what it shows", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
+    serve();
+    renderRoute("/sessions/s1");
+    const tabs = await screen.findAllByRole("tab", { name: /^(a|b|All Chips)$/ });
+    expect(tabs.map((t) => t.textContent)).toEqual(["a", "b", "All Chips"]);
+    fireEvent.click(tabs[2]);
+    const all = await screen.findByRole("region", { name: "All chips" });
+    expect(all.textContent).toContain("adds the chips together");
+    expect(all.textContent).toContain("only for looking");
+    expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
+    // Back to a chip.
+    fireEvent.click(screen.getByRole("tab", { name: "a" }));
+    expect(await screen.findByRole("region", { name: "Chip a" })).toBeTruthy();
+  });
+
+  it("has no All Chips tab for a single chip", async () => {
+    const a = analysis();
+    a.per_chip = [{ ...a.per_chip[0], chip: "adxl345" }];
+    a.eligibility.decisions = [decision("adxl345", "Included")];
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET]));
+    serve();
+    renderRoute("/sessions/s1");
+    await screen.findByRole("region", { name: "Chip adxl345" });
+    expect(screen.queryByRole("tab", { name: "All Chips" })).toBeNull();
+  });
+
   it("shows an analysis error while the metadata stays visible", async () => {
     fake.analyze.mockImplementation(() => Promise.reject(new Error("c0-s0.zst holds 999 samples, metadata says 1000")));
     serve();

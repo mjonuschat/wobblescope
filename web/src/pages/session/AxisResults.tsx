@@ -1,16 +1,21 @@
 import { useState } from "react";
 
 import { Panel } from "@/components/Panel";
-import { EChart } from "@/components/charts/EChart";
-import { summedOption } from "@/components/charts/options";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { AnalysisResult } from "@/analysis/protocol";
 
 import { ChipResult } from "./ChipResult";
+import { CombinedResult } from "./CombinedResult";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { RecommendationCard } from "./RecommendationCard";
+
+/** The value of the tab that shows all the chips added together. */
+const ALL_CHIPS = "*all-chips*";
+
+/** True in the dev server when the URL asks for fake data, so the combined view can be looked at. */
+const previewing = () => import.meta.env.DEV && /[?&]preview=/.test(window.location.hash);
 
 function effectiveSettings(analysis: Analysis) {
   return (
@@ -36,6 +41,25 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
     analysis.per_chip.findIndex((c) => c.chip === chipName),
   );
   const shown = analysis.per_chip[shownIndex];
+  // The tab that adds the chips together is for several chips; the dev preview shows it for one.
+  const showAllTab = analysis.summed !== null && (analysis.per_chip.length >= 2 || previewing());
+  const showAll = showAllTab && chipName === ALL_CHIPS;
+  const switcher = shown && (
+    <Tabs value={showAll ? ALL_CHIPS : shown.chip} onValueChange={setChipName}>
+      <TabsList variant="line">
+        {analysis.per_chip.map((c) => (
+          <TabsTrigger key={c.chip} value={c.chip} className="after:bg-primary">
+            {c.chip}
+          </TabsTrigger>
+        ))}
+        {showAllTab && (
+          <TabsTrigger value={ALL_CHIPS} className="after:bg-primary">
+            All Chips
+          </TabsTrigger>
+        )}
+      </TabsList>
+    </Tabs>
+  );
   return (
     <div className="space-y-4">
       {analysis.worst_case ? (
@@ -59,37 +83,18 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         overrides={overrides}
         onOverridesChange={onOverridesChange}
       />
-      {shown && (
-        <ChipResult
-          chip={shown}
-          switcher={
-            <Tabs value={shown.chip} onValueChange={setChipName}>
-              <TabsList variant="line">
-                {analysis.per_chip.map((c) => (
-                  <TabsTrigger key={c.chip} value={c.chip} className="after:bg-primary">
-                    {c.chip}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          }
-          snippets={snippets.perChip[shownIndex]}
-          maxFreq={maxFreq}
-          decisions={analysis.eligibility.decisions}
-        />
-      )}
-      {analysis.summed && (
-        <Panel title="Summed PSD" label="Summed PSD">
-          <EChart
-            option={summedOption(analysis.summed, maxFreq)}
-            label="Summed PSD of the eligible chips, for display only"
+      {showAll && analysis.summed ? (
+        <CombinedResult summed={analysis.summed} maxFreq={maxFreq} switcher={switcher} />
+      ) : (
+        shown && (
+          <ChipResult
+            chip={shown}
+            switcher={switcher}
+            snippets={snippets.perChip[shownIndex]}
+            maxFreq={maxFreq}
+            decisions={analysis.eligibility.decisions}
           />
-          <p className="text-xs text-muted-foreground">
-            The sum is for looking at. No recommendation comes from it. Like every spectrum on this page it is
-            frequency-normalised (divided by frequency plus 0.1 Hz, damped below 10 Hz), as in Klipper's graphs, so its
-            values are not raw PSD and chips of different sensitivity add up unevenly.
-          </p>
-        </Panel>
+        )
       )}
       <p className="text-xs text-muted-foreground">
         Analysed with core {analysis.core_version}

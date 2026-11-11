@@ -119,9 +119,10 @@ describe("pointLabel", () => {
 });
 
 describe("summedOption", () => {
-  it("has one series and says in its title that it is for display only", () => {
+  it("has one series, no heading of its own and a plain axis name", () => {
     const option = summedOption(analysis().summed!, 200);
     expect(series(option)).toHaveLength(1);
-    expect((option as { title: { text: string } }).title.text).toContain("display only");
+    expect((option as { title?: unknown }).title).toBeUndefined();
+    expect((option as { yAxis: { name: string } }).yAxis.name).toBe("Vibration Strength");
   });
 });
