@@ -53,7 +53,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         <ChipResult
           key={chip.chip}
           chip={chip}
-          snippet={snippets.perChip[i]}
+          snippets={snippets.perChip[i]}
           probePoints={meta.probe_points}
           maxFreq={maxFreq}
           decisions={analysis.eligibility.decisions}

@@ -23,7 +23,7 @@ function setup() {
       const response: WorkerResponse = {
         type: "result",
         id: message.id,
-        result: { analysis: analysis(), snippets: { worstCase: "s", perChip: ["s", null] } },
+        result: { analysis: analysis(), snippets: { worstCase: "s", perChip: [["s"], null] } },
       };
       queueMicrotask(() => this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>));
     },

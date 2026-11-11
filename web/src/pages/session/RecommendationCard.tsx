@@ -18,8 +18,6 @@ interface Props {
   snippet: string | null;
   datasetVibrations?: DatasetVibration[];
   probePoints?: ProbePoint[];
-  /** Without a card of its own, for use inside another one. */
-  bare?: boolean;
 }
 
 export function RecommendationCard({
@@ -28,7 +26,6 @@ export function RecommendationCard({
   snippet,
   datasetVibrations = [],
   probePoints = [],
-  bare = false,
 }: Props) {
   const { best } = recommendation;
   const largest = Math.max(0, ...datasetVibrations.map((v) => v.vibrs));
@@ -69,17 +66,6 @@ export function RecommendationCard({
       )}
     </>
   );
-  if (bare) {
-    return (
-      <section aria-label={title} className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
-          {copy}
-        </div>
-        {body}
-      </section>
-    );
-  }
   return (
     <Panel title={title} action={copy}>
       {body}

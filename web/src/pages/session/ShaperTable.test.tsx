@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { candidate } from "@/test/fixtures";
 import type { Recommendation } from "@/lib/generated/Recommendation";
@@ -28,5 +28,25 @@ describe("ShaperTable", () => {
     expect(highlighted[0].textContent).toContain("mzv");
     expect(highlighted[0].textContent).toContain("48.2 Hz");
     expect(highlighted[0].textContent).toContain("3.2%");
+  });
+
+  it("has a copy button on each row that copies that shaper's snippet", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    try {
+      const rec = recommendation();
+      render(<ShaperTable recommendation={rec} snippets={["snippet zv", "snippet mzv"]} />);
+      const buttons = screen.getAllByRole("button", { name: "Copy" });
+      expect(buttons).toHaveLength(rec.all.length);
+      fireEvent.click(buttons[0]);
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith("snippet zv"));
+    } finally {
+      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    }
+  });
+
+  it("has no copy buttons without snippets", () => {
+    render(<ShaperTable recommendation={recommendation()} />);
+    expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
   });
 });

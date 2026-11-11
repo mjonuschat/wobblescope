@@ -54,11 +54,14 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     }
     const analysis = current!.handle.analyze(request.axis, request.params, request.overrides);
     const snippet = (r: Recommendation | null) => (r ? module.config_snippet(r, request.axis) : null);
+    // A candidate's snippet is the recommendation's with that candidate as the best.
+    const candidates = (r: Recommendation | null) =>
+      r ? r.all.map((candidate) => module.config_snippet({ ...r, best: candidate }, request.axis)) : null;
     const result: AnalysisResult = {
       analysis,
       snippets: {
         worstCase: snippet(analysis.worst_case),
-        perChip: analysis.per_chip.map((chip) => snippet(chip.recommendation)),
+        perChip: analysis.per_chip.map((chip) => candidates(chip.recommendation)),
       },
     };
     return result;

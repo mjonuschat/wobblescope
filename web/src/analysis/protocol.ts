@@ -25,13 +25,16 @@ export interface ForgetRequest {
 
 export type WorkerRequest = AnalyzeRequest | ForgetRequest;
 
-/** The analysis plus the `[input_shaper]` text for each recommendation in it. */
+/** The analysis plus the `[input_shaper]` text for each recommendation and each candidate shaper in it. */
 export interface AnalysisResult {
   analysis: Analysis;
   snippets: {
     worstCase: string | null;
-    /** One entry per `analysis.per_chip` entry; null for a chip without a recommendation. */
-    perChip: (string | null)[];
+    /**
+     * One entry per `analysis.per_chip` entry: null for a chip without a recommendation, else the
+     * snippet of each shaper in that recommendation's `all`, in the same order.
+     */
+    perChip: (string[] | null)[];
   };
 }
 

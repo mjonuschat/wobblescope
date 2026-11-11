@@ -1,24 +1,23 @@
 import { Panel } from "@/components/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { psdOption } from "@/components/charts/options";
-import { Separator } from "@/components/ui/separator";
 import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
 import type { ProbePoint } from "@/lib/generated/ProbePoint";
 
-import { RecommendationCard } from "./RecommendationCard";
 import { ShaperTable } from "./ShaperTable";
 
 interface Props {
   chip: ChipAnalysis;
-  snippet: string | null;
+  /** The `[input_shaper]` snippet of each shaper in the recommendation, in order. */
+  snippets: string[] | null;
   probePoints: ProbePoint[];
   maxFreq: number;
   decisions: DatasetDecision[];
 }
 
-export function ChipResult({ chip, snippet, probePoints, maxFreq, decisions }: Props) {
+export function ChipResult({ chip, snippets, probePoints, maxFreq, decisions }: Props) {
   const rec = chip.recommendation;
   const reasons = decisions
     .filter((d) => d.chip === chip.chip)
@@ -34,11 +33,7 @@ export function ChipResult({ chip, snippet, probePoints, maxFreq, decisions }: P
         Spectra are frequency-normalised as in Klipper's graphs, not raw PSD.
       </p>
       {rec ? (
-        <>
-          <ShaperTable recommendation={rec} />
-          <Separator />
-          <RecommendationCard title={`Recommendation for ${chip.chip}`} recommendation={rec} snippet={snippet} bare />
-        </>
+        <ShaperTable recommendation={rec} snippets={snippets} />
       ) : (
         <p className="text-sm">
           No recommendation for this chip{reasons.length > 0 && `: ${[...new Set(reasons)].join("; ")}`}.

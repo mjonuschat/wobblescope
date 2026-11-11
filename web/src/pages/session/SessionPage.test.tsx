@@ -20,8 +20,17 @@ vi.mock("@/components/charts/EChart", () => ({
 
 const SNIPPET = "[input_shaper]\nshaper_type_x: mzv\nshaper_freq_x: 48.2\ndamping_ratio_x: 0.1\n";
 
+/** `perChip` holds the snippet of each chip's recommended shaper, which every candidate row repeats. */
 function result(a: Analysis, perChip: (string | null)[]): AnalysisResult {
-  return { analysis: a, snippets: { worstCase: a.worst_case ? SNIPPET : null, perChip } };
+  return {
+    analysis: a,
+    snippets: {
+      worstCase: a.worst_case ? SNIPPET : null,
+      perChip: perChip.map((snippet, i) =>
+        snippet === null ? null : (a.per_chip[i]?.recommendation?.all.map(() => snippet) ?? [snippet]),
+      ),
+    },
+  };
 }
 
 function serve(meta = twoAxisMeta()) {

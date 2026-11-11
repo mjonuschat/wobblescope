@@ -89,7 +89,8 @@ describe("the worker handler", () => {
     const result = (response as { result: { snippets: unknown } }).result;
     expect(result.snippets).toEqual({
       worstCase: "snippet mzv X",
-      perChip: ["snippet mzv X", null],
+      // One snippet for each shaper in the recommendation, in its order.
+      perChip: [["snippet zv X", "snippet mzv X"], null],
     });
   });
 
