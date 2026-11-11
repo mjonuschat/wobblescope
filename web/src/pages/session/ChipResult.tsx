@@ -29,18 +29,26 @@ function ChipDetails({
   maxFreq,
   decisions,
   chartHeight,
-}: Omit<Props, "switcher"> & { chartHeight?: number | string }) {
+  corner,
+}: Omit<Props, "switcher"> & {
+  chartHeight?: number | string;
+  /** A control for the top right corner of the chart, beside the legend. */
+  corner?: ReactNode;
+}) {
   const rec = chip.recommendation;
   const reasons = decisions
     .filter((d) => d.chip === chip.chip)
     .flatMap((d) => (d.decision === "Excluded" ? d.reasons : d.dropped !== null ? [d.dropped] : []));
   return (
     <>
-      <EChart
-        option={psdOption({ chip, recommendation: rec, maxFreq })}
-        label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
-        height={chartHeight}
-      />
+      <div className="relative">
+        <EChart
+          option={psdOption({ chip, recommendation: rec, maxFreq })}
+          label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
+          height={chartHeight}
+        />
+        {corner && <div className="absolute top-0 right-0">{corner}</div>}
+      </div>
       {rec ? (
         <ShaperTable recommendation={rec} snippets={snippets} />
       ) : (
@@ -54,30 +62,27 @@ function ChipDetails({
 
 export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Props) {
   const details = { chip, snippets, maxFreq, decisions };
+  const expand = (
+    <Dialog>
+      <DialogTrigger
+        render={<Button type="button" variant="outline" size="icon" aria-label="Expand the chart and table" />}
+      >
+        <Maximize2Icon />
+      </DialogTrigger>
+      <DialogContent className="h-[calc(100vh-4rem)] gap-4 overflow-auto sm:max-w-[calc(100vw-4rem)]">
+        <DialogHeader>
+          <DialogTitle>Resonance and Shapers: {chip.chip}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <ChipDetails {...details} chartHeight="min(60vh, 640px)" />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
   return (
-    <Panel
-      title="Resonance and Shapers"
-      label={`Chip ${chip.chip}`}
-      action={
-        <Dialog>
-          <DialogTrigger
-            render={<Button type="button" variant="outline" size="icon" aria-label="Expand the chart and table" />}
-          >
-            <Maximize2Icon />
-          </DialogTrigger>
-          <DialogContent className="h-[calc(100vh-4rem)] gap-4 overflow-auto sm:max-w-[calc(100vw-4rem)]">
-            <DialogHeader>
-              <DialogTitle>Resonance and Shapers: {chip.chip}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <ChipDetails {...details} chartHeight="min(60vh, 640px)" />
-            </div>
-          </DialogContent>
-        </Dialog>
-      }
-    >
+    <Panel title="Resonance and Shapers" label={`Chip ${chip.chip}`}>
       {switcher}
-      <ChipDetails {...details} />
+      <ChipDetails {...details} corner={chip.recommendation ? expand : undefined} />
     </Panel>
   );
 }
