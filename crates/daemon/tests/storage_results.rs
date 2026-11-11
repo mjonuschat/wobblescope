@@ -197,10 +197,14 @@ fn lists_a_damaged_file_as_unusable() {
         .id;
     let path = results_dir(dir.path()).join(format!("{bad}.zip"));
 
-    // A flipped sample byte passes the structural check but fails the manifest.
+    // A flipped sample byte fails the manifest: marked unusable with a reason, the rest intact.
     flip(&path, 100);
     let list = storage.list_results().unwrap();
     assert_eq!(list.len(), 2);
+    assert!(list[0].unusable.is_none());
+    assert_eq!(list[0].id, good);
+    assert_eq!(list[1].id, bad);
+    assert!(list[1].unusable.as_deref().is_some_and(|r| !r.is_empty()));
     assert!(matches!(
         storage.result(&bad),
         Err(StorageError::ResultUnusable { .. })

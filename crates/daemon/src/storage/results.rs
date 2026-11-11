@@ -265,9 +265,9 @@ impl Storage {
         ))
     }
 
-    /// Every saved result, newest first by `created_at`. A file that cannot be opened is
-    /// listed last with `unusable` set. Only the zip's structure and `result.json` are
-    /// checked here; [`Storage::result`] verifies the manifest.
+    /// Every saved result, newest first by `created_at`. A file that cannot be opened or
+    /// verified is listed last with `unusable` set. Every file is verified against its manifest, so the cost
+    /// grows with the stored bytes.
     ///
     /// # Errors
     /// [`StorageError::Io`] when the directory cannot be read.
@@ -281,7 +281,11 @@ impl Storage {
                 continue;
             };
             let size_bytes = fs::symlink_metadata(entry.path())?.len();
-            match ResultFile::open(&entry.path()) {
+            let opened = ResultFile::open(&entry.path()).and_then(|file| {
+                file.verify()?;
+                Ok(file)
+            });
+            match opened {
                 Ok(file) => {
                     let mut summary = summary_of(file.record(), size_bytes);
                     summary.id = id.to_owned();
