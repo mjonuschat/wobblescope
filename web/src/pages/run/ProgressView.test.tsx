@@ -60,6 +60,8 @@ const send = (snapshot: { test: TestState | null; last: FinishedTest | null }) =
 
 beforeEach(() => stubWebSocket());
 
+const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent;
+
 describe("a running test", () => {
   it("shows the segment, the elapsed time and a level bar per chip that follow the latest event", async () => {
     await mount({ test: running, last: null });
@@ -91,6 +93,7 @@ describe("a running test", () => {
   it("opened mid-test goes straight to progress", async () => {
     await mount({ test: running, last: null });
     expect(await screen.findByText("Test running")).toBeTruthy();
+    expect(currentStep()).toContain("Measuring");
     expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
   });
 
@@ -217,12 +220,26 @@ describe("a finished test", () => {
   it("stays on screen until New test is clicked, and a reload after the end shows it too", async () => {
     await mount({ test: null, last: done });
     expect(await screen.findByText("The test finished.")).toBeTruthy();
+    expect(currentStep()).toContain("Results");
     // Nothing else on the page takes it away.
     send({ test: null, last: done });
     expect(screen.getByText("The test finished.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New test" }));
     expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
     expect(screen.queryByText("The test finished.")).toBeNull();
+    expect(currentStep()).toContain("Setup");
+  });
+
+  it("goes back to setup when the Setup step is clicked on the results", async () => {
+    await mount({ test: null, last: done });
+    fireEvent.click(await screen.findByRole("button", { name: /Setup/ }));
+    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
+  });
+
+  it("does not let the Setup step be clicked while the printer may still be moving", async () => {
+    await mount({ test: null, last: { ...done, outcome: "failed", reason: "x", motion_uncertain: true } });
+    await screen.findByText("The printer may still be moving.");
+    expect(screen.queryByRole("button", { name: /Setup/ })).toBeNull();
   });
 });
 

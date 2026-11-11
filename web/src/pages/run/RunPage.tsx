@@ -1,11 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { Steps } from "@/components/Steps";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
+
+const STEPS = [
+  { id: "setup", label: "Setup" },
+  { id: "measuring", label: "Measuring" },
+  { id: "results", label: "Results" },
+];
 
 /** The Input Shaper test screen. */
 export function RunPage() {
@@ -26,6 +33,10 @@ export function RunPage() {
   // starting would keep its error or its empty chip list. Read both again when the printer
   // becomes ready.
   const queryClient = useQueryClient();
+  function newTest() {
+    if (live.last) setDismissed(live.last.id);
+    setStartedId(null);
+  }
   const wasReady = useRef<boolean | null>(null);
   useEffect(() => {
     if (status.data === undefined) return;
@@ -48,48 +59,58 @@ export function RunPage() {
     (s) => chipList?.chips.find((c) => c.section === s)?.availability.state !== "unavailable",
   );
 
-  if (live.test) return <ProgressView test={live.test} connected={live.connected} />;
   const finished = live.last;
-  if (startedId && finished?.id !== startedId) {
-    return <StartingView id={startedId} connected={live.connected} />;
-  }
-  if (finished && finished.id !== dismissed) {
-    return (
-      <ResultView
-        last={finished}
-        onNewTest={() => {
-          setDismissed(finished.id);
-          setStartedId(null);
-        }}
-      />
+  const starting = startedId !== null && finished?.id !== startedId;
+  const showResult = !live.test && !starting && finished !== null && finished.id !== dismissed;
+  const step: "setup" | "measuring" | "results" =
+    live.test || starting ? "measuring" : showResult ? "results" : "setup";
+
+  let body: ReactNode;
+  if (live.test) {
+    body = <ProgressView test={live.test} connected={live.connected} />;
+  } else if (starting && startedId) {
+    body = <StartingView id={startedId} connected={live.connected} />;
+  } else if (showResult && finished) {
+    body = <ResultView last={finished} onNewTest={newTest} />;
+  } else {
+    body = (
+      <>
+        {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
+        {chips.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {chips.error.message}
+          </p>
+        )}
+        {settings.isPending && <p className="text-sm text-muted-foreground">Reading settings…</p>}
+        {settings.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {settings.error.message}
+          </p>
+        )}
+        {settings.data && chipList && (
+          <TestForm
+            settings={settings.data}
+            chipList={chipList}
+            chips={usable}
+            onChipsChange={setChosen}
+            blocked={notReady}
+            onStarted={setStartedId}
+          />
+        )}
+      </>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto max-w-4xl space-y-6">
       <h1 className="text-xl font-semibold">Input Shaper</h1>
-      {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
-      {chips.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {chips.error.message}
-        </p>
-      )}
-      {settings.isPending && <p className="text-sm text-muted-foreground">Reading settings…</p>}
-      {settings.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {settings.error.message}
-        </p>
-      )}
-      {settings.data && chipList && (
-        <TestForm
-          settings={settings.data}
-          chipList={chipList}
-          chips={usable}
-          onChipsChange={setChosen}
-          blocked={notReady}
-          onStarted={setStartedId}
-        />
-      )}
+      <Steps
+        steps={STEPS}
+        current={step}
+        selectable={step === "results" && !finished?.motion_uncertain ? ["setup"] : []}
+        onSelect={() => newTest()}
+      />
+      {body}
     </div>
   );
 }
