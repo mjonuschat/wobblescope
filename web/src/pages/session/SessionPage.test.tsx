@@ -170,7 +170,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
-    expect(screen.getByText(/Include b anyway/).textContent).toContain("395 Hz");
+    expect(screen.getByRole("region", { name: "Data Quality" }).textContent).toContain("395 Hz");
     fireEvent.click(box);
     await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
     expect(fake.analyze.mock.calls[1][0].overrides).toEqual(["b"]);

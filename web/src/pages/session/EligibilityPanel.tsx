@@ -1,19 +1,20 @@
+import { CircleCheckIcon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
+
 import { Panel } from "@/components/Panel";
 import { pointLabel } from "@/components/charts/options";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import type { Analysis } from "@/lib/generated/Analysis";
+import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
 import type { ProbePoint } from "@/lib/generated/ProbePoint";
 
 /** The chips with a dataset that health or coverage excludes, or that an override includes. */
 function overridable(analysis: Analysis) {
-  const chips = new Map<string, { overridden: boolean; reasons: string[] }>();
+  const chips = new Map<string, { overridden: boolean }>();
   for (const d of analysis.eligibility.decisions) {
     if (d.decision === "Included") continue;
-    const entry = chips.get(d.chip) ?? { overridden: false, reasons: [] };
+    const entry = chips.get(d.chip) ?? { overridden: false };
     entry.overridden ||= d.decision === "Overridden";
-    for (const reason of d.reasons) if (!entry.reasons.includes(reason)) entry.reasons.push(reason);
     chips.set(d.chip, entry);
   }
   return chips;
@@ -23,23 +24,28 @@ function overridable(analysis: Analysis) {
 export function explainReason(reason: string): string {
   if (reason === "degraded capture health") return "The chip dropped or garbled samples during the capture.";
   if (reason === "unknown capture health") {
-    return "Health unknown. This recording has no record of whether samples were dropped, so it cannot be checked.";
+    return "An imported file has no record of whether samples were dropped.";
   }
   const missing = /^incomplete coverage: (.*)$/.exec(reason)?.[1];
   if (missing) return `The capture is incomplete: ${missing}`;
   return reason;
 }
 
-/** Where a recording was made, as "test point (x, y, z)". */
-function whereText(point: number, probePoints: ProbePoint[]): string {
-  const label = pointLabel(point, probePoints);
-  return label.startsWith("(") ? `test point ${label}` : label;
+type Tone = "good" | "warn" | "bad";
+
+/** What a decision comes to for the reader: how it went, and why. */
+export function verdict(d: DatasetDecision): { tone: Tone; headline: string; detail: string } {
+  const detail = d.reasons.map(explainReason).join(" ");
+  if (d.decision === "Excluded") return { tone: "bad", headline: "Left out", detail };
+  if (d.decision === "Overridden") return { tone: "warn", headline: "Included at your request", detail };
+  if (d.reasons.length > 0) return { tone: "warn", headline: "Cannot be checked", detail };
+  return { tone: "good", headline: "Good data", detail: "" };
 }
 
-const STATUS = {
-  Included: { text: "Used", className: "border-emerald-500/50 text-emerald-400" },
-  Overridden: { text: "Included by you", className: "border-amber-500/50 text-amber-400" },
-  Excluded: { text: "Left out", className: "border-red-500/50 text-red-400" },
+const TONES = {
+  good: { Icon: CircleCheckIcon, className: "text-emerald-400" },
+  warn: { Icon: TriangleAlertIcon, className: "text-amber-400" },
+  bad: { Icon: OctagonXIcon, className: "text-red-400" },
 } as const;
 
 export function EligibilityPanel({
@@ -55,52 +61,43 @@ export function EligibilityPanel({
 }) {
   const { decisions } = analysis.eligibility;
   if (decisions.length === 0 && analysis.failures.length === 0) return null;
+  // The test point only tells recordings apart when there is more than one.
+  const manyPoints = new Set(decisions.map((d) => d.point)).size > 1;
   return (
     <Panel title="Data Quality">
-      <p className="text-sm text-muted-foreground">
-        How good the recordings are, and which of them went into the recommendation. A recording with a problem is left
-        out unless you include it.
-      </p>
       <ul className="space-y-3">
         {decisions.map((d) => {
-          const { text, className } = STATUS[d.decision];
+          const { tone, headline, detail } = verdict(d);
+          const { Icon, className } = TONES[tone];
           return (
-            <li key={`${d.chip}-${d.point}`} className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono font-medium">{d.chip}</span>
-                <span className="text-sm text-muted-foreground">{whereText(d.point, probePoints)}</span>
-                <Badge variant="outline" className={className}>
-                  {text}
-                </Badge>
-              </div>
-              {d.reasons.map((reason) => (
-                <p
-                  key={reason}
-                  className={`text-sm ${d.decision === "Excluded" ? "text-red-400" : "text-muted-foreground"}`}
-                >
-                  {explainReason(reason)}
+            <li key={`${d.chip}-${d.point}`} className="flex items-start gap-3">
+              <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
+              <div className="space-y-0.5">
+                <p>
+                  <span className="font-mono font-medium">{d.chip}</span>
+                  {manyPoints && (
+                    <span className="text-sm text-muted-foreground"> at {pointLabel(d.point, probePoints)}</span>
+                  )}
+                  : {headline}
                 </p>
-              ))}
-              {d.dropped !== null && <p className="text-sm text-amber-400">Could not be analysed: {d.dropped}</p>}
+                {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
+                {d.dropped !== null && <p className="text-sm text-amber-400">Could not be analysed: {d.dropped}</p>}
+              </div>
             </li>
           );
         })}
       </ul>
-      {[...overridable(analysis)].map(([chip, { overridden, reasons }]) => (
-        <div key={chip} className="flex items-start gap-2 text-sm">
+      {[...overridable(analysis)].map(([chip, { overridden }]) => (
+        <div key={chip} className="flex items-center gap-2 text-sm">
           <Checkbox
             id={`include-${chip}`}
-            className="mt-0.5"
             checked={overridden}
             onCheckedChange={(checked) =>
               onOverridesChange(checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
             }
           />
-          <Label htmlFor={`include-${chip}`} className="items-start font-normal">
-            <span>
-              Include {chip} anyway
-              <span className="text-muted-foreground"> ({reasons.join("; ")})</span>
-            </span>
+          <Label htmlFor={`include-${chip}`} className="font-normal">
+            Include {chip} anyway
           </Label>
         </div>
       ))}

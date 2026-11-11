@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { explainReason } from "./EligibilityPanel";
+import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
+
+import { explainReason, verdict } from "./EligibilityPanel";
 
 describe("explainReason", () => {
   it("puts the analysis's health reasons in plain words", () => {
@@ -17,5 +19,37 @@ describe("explainReason", () => {
   it("leaves a reason it does not know as it was written", () => {
     const rate = "samples arrive at 395 Hz, under half the 1600 Hz Klipper configures";
     expect(explainReason(rate)).toBe(rate);
+  });
+});
+
+const decision = (over: Partial<DatasetDecision>): DatasetDecision => ({
+  chip: "a",
+  point: 0,
+  decision: "Included",
+  reasons: [],
+  dropped: null,
+  ...over,
+});
+
+describe("verdict", () => {
+  it("calls an included recording with nothing to say about it good", () => {
+    expect(verdict(decision({}))).toEqual({ tone: "good", headline: "Good data", detail: "" });
+  });
+
+  it("says an included recording with unknown health cannot be checked", () => {
+    const v = verdict(decision({ reasons: ["unknown capture health"] }));
+    expect(v.tone).toBe("warn");
+    expect(v.headline).toBe("Cannot be checked");
+  });
+
+  it("says why a recording was left out, and when it was included by the user", () => {
+    expect(verdict(decision({ decision: "Excluded", reasons: ["degraded capture health"] }))).toEqual({
+      tone: "bad",
+      headline: "Left out",
+      detail: "The chip dropped or garbled samples during the capture.",
+    });
+    expect(verdict(decision({ decision: "Overridden", reasons: ["degraded capture health"] })).headline).toBe(
+      "Included at your request",
+    );
   });
 });
