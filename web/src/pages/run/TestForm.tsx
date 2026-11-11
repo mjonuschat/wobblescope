@@ -155,25 +155,36 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
             {chipList.chips.length === 0 ? (
               <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
             ) : (
-              <ToggleGroup
-                multiple
-                variant="outline"
-                aria-label="Chips"
-                value={chips}
-                onValueChange={(value) => onChipsChange(value as string[])}
-              >
-                {chipList.chips.map((chip) => (
-                  <ToggleGroupItem
-                    key={chip.section}
-                    value={chip.section}
-                    disabled={chip.availability.state === "unavailable"}
-                    title={chip.availability.state === "unavailable" ? chip.availability.reason : undefined}
-                    className="font-mono"
-                  >
-                    {chip.section}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+              <div className="flex flex-wrap gap-x-6 gap-y-3">
+                {chipList.chips.map((chip, index) => {
+                  const unavailable = chip.availability.state === "unavailable";
+                  return (
+                    <div
+                      key={chip.section}
+                      className="flex items-center gap-2"
+                      title={chip.availability.state === "unavailable" ? chip.availability.reason : undefined}
+                    >
+                      <Switch
+                        id={`chip-${index}`}
+                        checked={chips.includes(chip.section)}
+                        disabled={unavailable}
+                        onCheckedChange={(on) =>
+                          onChipsChange(
+                            on
+                              ? chipList.chips
+                                  .map((c) => c.section)
+                                  .filter((n) => n === chip.section || chips.includes(n))
+                              : chips.filter((n) => n !== chip.section),
+                          )
+                        }
+                      />
+                      <Label htmlFor={`chip-${index}`} className="font-mono">
+                        {chip.section}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </ChoiceRow>
           <ChoiceRow label="Axes" error={<FieldError name="axes" text={errorFor("axes")} />}>

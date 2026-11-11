@@ -33,6 +33,7 @@ function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, s
 
 const startButton = () => screen.getByRole("button", { name: /Start test|Checking printer/ });
 const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed") === "true";
+const isOn = (name: string) => screen.getByRole("switch", { name }).getAttribute("aria-checked") === "true";
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
 const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && apiPath(c) === "tests");
 
@@ -51,8 +52,8 @@ describe("the run screen", () => {
     expect(field(/End frequency/).placeholder).toBe("135");
     expect(field(/Acceleration per Hz/).placeholder).toBe("60");
     expect(pressed("Sweep")).toBe(true);
-    expect(pressed("lis2dw ebb36")).toBe(true);
-    expect(pressed("adxl345")).toBe(false);
+    expect(isOn("lis2dw ebb36")).toBe(true);
+    expect(isOn("adxl345")).toBe(false);
     expect((startButton() as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -190,23 +191,23 @@ describe("the run screen", () => {
 
   it("lets chips be toggled and refuses to start with none", async () => {
     const calls = await open();
-    fireEvent.click(screen.getByRole("button", { name: "adxl345" }));
-    expect(pressed("adxl345")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "lis2dw ebb36" }));
-    fireEvent.click(screen.getByRole("button", { name: "adxl345" }));
+    fireEvent.click(screen.getByRole("switch", { name: "adxl345" }));
+    expect(isOn("adxl345")).toBe(true);
+    fireEvent.click(screen.getByRole("switch", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("switch", { name: "adxl345" }));
     expect(screen.getByText("Choose at least one chip.")).toBeTruthy();
     expect((startButton() as HTMLButtonElement).disabled).toBe(true);
     expect(posted(calls)).toHaveLength(0);
   });
 
-  it("disables the toggle of an unavailable chip", async () => {
+  it("disables the switch of an unavailable chip", async () => {
     await open({
       chips: chipsSnapshot({
         chips: [chip("adxl345"), chip("lis2dw ebb36", { availability: { state: "unavailable", reason: "gone" } })],
       }),
     });
-    expect((screen.getByRole("button", { name: "lis2dw ebb36" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "adxl345" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole("switch", { name: "lis2dw ebb36" }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("switch", { name: "adxl345" }).getAttribute("aria-disabled")).not.toBe("true");
   });
 
   it("shows the form once the printer becomes ready after the page opened during startup", async () => {
@@ -241,7 +242,7 @@ describe("the run screen", () => {
     ready = true;
     await client.invalidateQueries({ queryKey: queryKeys.status });
     expect(await screen.findByRole("button", { name: "Start test" })).toBeTruthy();
-    expect(pressed("lis2dw ebb36")).toBe(true);
+    expect(isOn("lis2dw ebb36")).toBe(true);
   });
 });
 
