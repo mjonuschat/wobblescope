@@ -25,6 +25,13 @@ describe("psdOption", () => {
     expect(Object.values(selected).every((v) => v === false)).toBe(true);
   });
 
+  it("names each shaper curve by the shaper alone", () => {
+    const names = series(option)
+      .filter((s) => s.yAxisIndex === 1)
+      .map((s) => s.name);
+    expect(names).toEqual(rec.all.map((c) => c.name));
+  });
+
   it("draws one right-axis series per fitted shaper and marks the recommended frequency", () => {
     expect(series(option).filter((s) => s.yAxisIndex === 1)).toHaveLength(rec.all.length);
     const marked = series(option).flatMap((s) => s.markLine?.data ?? []);

@@ -79,7 +79,7 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
   const grid = recommendation?.freq_bins ?? [];
   for (const candidate of recommendation?.all ?? []) {
     series.push({
-      name: `${candidate.name} ${formatHz(candidate.freq)} Hz`,
+      name: candidate.name,
       type: "line",
       yAxisIndex: 1,
       showSymbol: false,
