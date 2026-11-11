@@ -9,6 +9,6 @@ export type StreamDefaults = {
  */
 max_hz: number, 
 /**
- * Display updates per second: the printing value while printing, else the idle one.
+ * Display updates per second. This is the printing value while printing, else the idle one.
  */
 updates_per_second: number, };

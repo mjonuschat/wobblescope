@@ -71,7 +71,7 @@ overflows: bigint | null,
  */
 errors: bigint | null, 
 /**
- * Frames dropped from the outgoing queue. The websocket handler fills this in; the
+ * Frames dropped from the outgoing queue. The websocket handler fills this in. The
  * pipeline emits 0.
  */
 dropped_frames: bigint, 
