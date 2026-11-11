@@ -5,7 +5,6 @@ import { Panel } from "@/components/Panel";
 import { UnitInput } from "@/components/UnitInput";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FitParams } from "@/lib/generated/FitParams";
 
@@ -56,11 +55,17 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   return (
     <div className="space-y-1">
       <Tooltip>
-        <TooltipTrigger render={<span className="block w-fit cursor-help" />}>
-          <Label htmlFor={id} className="cursor-help">
-            {label}
-            <InfoIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
-          </Label>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label={`About ${label.toLowerCase()}`}
+              className="-m-1 flex cursor-help items-center gap-1 rounded p-1 text-sm leading-none font-medium"
+            />
+          }
+        >
+          {label}
+          <InfoIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-64">
           {hint}
@@ -71,6 +76,7 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
         unit={unit}
         step={step}
         value={value}
+        aria-label={label}
         aria-invalid={invalid}
         aria-describedby={`${id}-hint`}
         onChange={(e) => onChange(e.target.value)}
