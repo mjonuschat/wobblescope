@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::response::Response;
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, watch};
 use tokio::task::JoinHandle;
 
 use super::ApiState;
@@ -34,6 +34,8 @@ const QUEUE_CAPACITY: usize = 32;
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(5);
 /// How often a chip task lets its pipeline flush a due frame and report health.
 const TICK: Duration = Duration::from_millis(25);
+/// How long `Hello` waits for the printer state before assuming no print is running.
+const PRINT_STATE_TIMEOUT: Duration = Duration::from_secs(2);
 /// Why a viewer that cannot keep up is disconnected.
 const TOO_SLOW: &str = "viewer too slow";
 
@@ -121,7 +123,7 @@ impl Outbox {
 struct Subscription {
     task: JoinHandle<()>,
     index: u16,
-    settings: mpsc::UnboundedSender<(f64, f64)>,
+    settings: watch::Sender<(f64, f64)>,
     requested: (f64, f64),
 }
 
@@ -162,9 +164,9 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
     let mut subscriptions = Subscriptions::default();
 
     let printing = match moonraker.control() {
-        Some(control) => read_printer_state(&control)
+        Some(control) => tokio::time::timeout(PRINT_STATE_TIMEOUT, read_printer_state(&control))
             .await
-            .is_ok_and(|state| is_printing(state.print_state.as_deref())),
+            .is_ok_and(|read| read.is_ok_and(|state| is_printing(state.print_state.as_deref()))),
         None => false,
     };
     outbox.push(Entry::Reliable(ServerMessage::Hello {
@@ -268,7 +270,7 @@ fn handle(
                 ));
             }
             let index = subscriptions.free_index();
-            let (settings, changes) = mpsc::unbounded_channel();
+            let (settings, changes) = watch::channel(requested);
             let task = tokio::spawn(run_chip(
                 ChipRun {
                     chip: known,
@@ -302,11 +304,7 @@ struct ChipRun {
 }
 
 /// Runs one chip's stream and, when it ends for a reason the viewer should see, reports it.
-async fn run_chip(
-    run: ChipRun,
-    requested: (f64, f64),
-    changes: mpsc::UnboundedReceiver<(f64, f64)>,
-) {
+async fn run_chip(run: ChipRun, requested: (f64, f64), changes: watch::Receiver<(f64, f64)>) {
     if let Some(reason) = drive(&run, requested, changes).await {
         run.outbox.push(Entry::Reliable(ServerMessage::Closed {
             chip: run.chip.section.clone(),
@@ -320,7 +318,7 @@ async fn run_chip(
 async fn drive(
     run: &ChipRun,
     requested: (f64, f64),
-    mut changes: mpsc::UnboundedReceiver<(f64, f64)>,
+    mut changes: watch::Receiver<(f64, f64)>,
 ) -> Option<String> {
     let mut bridge = match open_bridge(run).await {
         Ok(bridge) => bridge,
@@ -336,12 +334,12 @@ async fn drive(
                 Event::Batch(batch) => pipe.push(&batch, Instant::now()),
                 Event::Closed(reason) => return Some(reason),
             },
-            change = changes.recv() => match change {
-                Some(values) => {
-                    pipe = pipeline(values);
+            changed = changes.changed() => match changed {
+                Ok(()) => {
+                    pipe = pipeline(*changes.borrow_and_update());
                     continue;
                 }
-                None => return None,
+                Err(_) => return None,
             },
             _ = ticker.tick() => pipe.tick(Instant::now()),
         };
@@ -379,4 +377,35 @@ async fn open_bridge(run: &ChipRun) -> Result<Bridge, String> {
         BridgeError::Subscribe(message) => message,
         other => other.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn health_carries_the_frames_the_queue_dropped() {
+        let outbox = Outbox::new();
+        let frames = (0..QUEUE_CAPACITY + 3)
+            .map(|_| Output::Frame(vec![0]))
+            .collect();
+        outbox.emit(frames);
+        outbox.emit(vec![Output::Message(ServerMessage::Health {
+            chip: "adxl345".to_owned(),
+            measured_rate_hz: 0.0,
+            configured_rate_hz: None,
+            overflows: None,
+            errors: None,
+            dropped_frames: 0,
+            warnings: vec![],
+        })]);
+        let mut dropped = None;
+        while let Some(entry) = outbox.pop() {
+            if let Entry::Health(_, ServerMessage::Health { dropped_frames, .. }) = entry {
+                dropped = Some(dropped_frames);
+            }
+        }
+        assert!(dropped.is_some_and(|n| n >= 3), "{dropped:?}");
+        assert!(!outbox.overflowed.load(Ordering::Acquire));
+    }
 }
