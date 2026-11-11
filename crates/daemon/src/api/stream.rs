@@ -136,7 +136,7 @@ impl Outbox {
     }
 }
 
-/// A subscribed chip: its task, the way to change its settings, and the values it runs with.
+/// A subscribed chip. Holds its task, the way to change its settings and the values it runs with.
 struct Subscription {
     task: JoinHandle<()>,
     index: u16,
