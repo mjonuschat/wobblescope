@@ -7,9 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,7 +26,6 @@ import { parseNumber } from "@/lib/parse";
 import {
   OVERRIDE_FIELDS,
   type OverrideKey,
-  POINT_MARGIN_MM,
   POINT_PATTERNS,
   type PointPattern,
   formatDuration,
@@ -396,11 +393,6 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                         <ChevronDownIcon />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-64">
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel>
-                            Spread over the bed, {POINT_MARGIN_MM} mm from the limits, at Z {patternZ}
-                          </DropdownMenuLabel>
-                        </DropdownMenuGroup>
                         {POINT_PATTERNS.map(({ value, label }) => (
                           <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
                             {label}
