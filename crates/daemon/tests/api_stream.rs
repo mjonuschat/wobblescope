@@ -162,3 +162,56 @@ async fn a_second_subscribe_changes_the_settings_without_reopening_the_bridge() 
     assert_eq!(second["max_hz"], 100.0);
     assert_eq!(rig.sim.bridge().subscribes(), 1);
 }
+
+#[tokio::test]
+async fn dropping_the_client_aborts_every_bridge_task() {
+    let rig = rig().await;
+    let mut socket = connect(&rig).await;
+    text(&mut socket).await;
+    subscribe(&mut socket, "adxl345", 200.0, 10.0).await;
+    rig.until("the bridge opens", || {
+        rig.sim.bridge().open_on("adxl345") == 1
+    })
+    .await;
+    drop(socket);
+    rig.until("the bridge closes", || {
+        rig.sim.bridge().open_on("adxl345") == 0
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_closed_chip_reports_closed_while_the_others_keep_streaming() {
+    let rig = rig_with_extra_chips(&["adxl345 b"]).await;
+    let mut socket = connect(&rig).await;
+    text(&mut socket).await;
+    subscribe(&mut socket, "adxl345", 200.0, 10.0).await;
+    subscribe(&mut socket, "adxl345 b", 200.0, 10.0).await;
+    rig.until("both bridges open", || rig.bridges_open() == 2)
+        .await;
+
+    rig.sim.bridge().drop_sensor("adxl345");
+    let closed = text_of(&mut socket, "closed").await;
+    assert_eq!(closed["chip"], "adxl345");
+
+    push_seconds(&rig, "b", 10.0, 1.0);
+    let stream = text_of(&mut socket, "stream").await;
+    assert_eq!(stream["chip"], "adxl345 b");
+}
+
+#[tokio::test]
+async fn a_subscribe_is_refused_while_moonraker_is_not_connected() {
+    let rig = rig().await;
+    let mut socket = connect(&rig).await;
+    text(&mut socket).await;
+    rig.sim.fake.set_accepting(false);
+    rig.sim.fake.close_connections();
+    rig.until("Moonraker to disconnect", || {
+        rig.moonraker.control().is_none()
+    })
+    .await;
+    subscribe(&mut socket, "adxl345", 200.0, 10.0).await;
+    let refused = text_of(&mut socket, "refused").await;
+    assert_eq!(refused["chip"], "adxl345");
+    assert_eq!(rig.sim.bridge().open_on("adxl345"), 0);
+}
