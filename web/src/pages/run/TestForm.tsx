@@ -2,10 +2,10 @@ import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
 import { useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
@@ -157,11 +157,12 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     return (
       <div key={key} className="space-y-1">
         <Label htmlFor={`override-${key}`}>
-          {label} ({unit}){required ? " *" : ""}
+          {label}
+          {required ? " *" : ""}
         </Label>
-        <Input
+        <UnitInput
           id={`override-${key}`}
-          inputMode="decimal"
+          unit={unit}
           placeholder={placeholder}
           value={texts[key] ?? ""}
           disabled={!setting.overridable}
@@ -269,12 +270,12 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
               {(["x", "y", "z"] as const).map((axis) => (
                 <div key={axis} className="space-y-1">
                   <Label htmlFor={`point-${i}-${axis}`}>
-                    Point {i + 1} {axis.toUpperCase()} (mm)
+                    Point {i + 1} {axis.toUpperCase()}
                   </Label>
-                  <Input
+                  <UnitInput
                     id={`point-${i}-${axis}`}
-                    inputMode="decimal"
-                    className="w-28"
+                    unit="mm"
+                    className="w-32"
                     value={row[axis]}
                     onChange={(e) =>
                       setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
