@@ -319,7 +319,6 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
       <FormCard title="Points">
         <div className="space-y-2">
           {points.map((row, i) => {
-            const last = i === points.length - 1;
             return (
               // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
               <div key={i} className="flex items-end gap-2">
@@ -355,9 +354,10 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                     type="button"
                     variant="outline"
                     size="icon"
-                    aria-label="Add a point"
-                    className={last ? undefined : "invisible"}
-                    onClick={() => setPoints((old) => [...old, rowFrom(settings.default_point)])}
+                    aria-label={`Add a point after point ${i + 1}`}
+                    onClick={() =>
+                      setPoints((old) => [...old.slice(0, i + 1), rowFrom(settings.default_point), ...old.slice(i + 1)])
+                    }
                   >
                     <PlusIcon />
                   </Button>

@@ -90,7 +90,7 @@ describe("the run screen", () => {
 
   it("shows two points and two axes as 4 segments and changes the time when hz_per_sec is overridden", async () => {
     await open();
-    fireEvent.click(screen.getByRole("button", { name: "Add a point" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a point after point 1" }));
     // 130 s of sweep plus 15 s of overhead per segment.
     expect(screen.getByText(/4 segments · about 9 min 40 s/)).toBeTruthy();
     fireEvent.change(field(/Hz per second/), { target: { value: "2" } });
@@ -217,19 +217,22 @@ describe("the run screen", () => {
     expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({ freq_end: 90 });
   });
 
-  it("adds a point with the plus on the last row and removes one with the minus", async () => {
+  it("adds a point after any row with its plus and removes one with the minus", async () => {
     await open();
-    const rows = () => document.querySelectorAll('input[id^="point-"][id$="-x"]').length;
+    const xs = () =>
+      [...document.querySelectorAll<HTMLInputElement>('input[id^="point-"][id$="-x"]')].map((i) => i.value);
     const hidden = (el: Element) => el.className.includes("invisible");
-    // One point: the minus is there but hidden, the plus is shown.
-    expect(hidden(screen.getByRole("button", { name: "Remove point 1", hidden: true }))).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Add a point" }));
-    expect(rows()).toBe(2);
-    expect(hidden(screen.getByRole("button", { name: "Remove point 1", hidden: true }))).toBe(false);
-    // Only the last row keeps its plus.
-    expect(screen.getAllByRole("button", { name: "Add a point", hidden: true }).map(hidden)).toEqual([true, false]);
+    // One point: the minus keeps its space but is hidden.
+    expect(hidden(screen.getByRole("button", { name: "Remove point 1" }))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Add a point after point 1" }));
+    fireEvent.change(document.getElementById("point-1-x") as HTMLInputElement, { target: { value: "200" } });
+    expect(xs()).toEqual(["150.5", "200"]);
+    expect(hidden(screen.getByRole("button", { name: "Remove point 1" }))).toBe(false);
+    // The plus of the first row inserts between the two.
+    fireEvent.click(screen.getByRole("button", { name: "Add a point after point 1" }));
+    expect(xs()).toEqual(["150.5", "150.5", "200"]);
     fireEvent.click(screen.getByRole("button", { name: "Remove point 2" }));
-    expect(rows()).toBe(1);
+    expect(xs()).toEqual(["150.5", "200"]);
   });
 
   it("hides the sweeping fields in pulse mode", async () => {
