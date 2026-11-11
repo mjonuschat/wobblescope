@@ -188,7 +188,7 @@ describe("a running test", () => {
       await mount({ test: running, last: null });
       send({ test: warned(), last: null });
       await screen.findByText("the chip's errors counter rose by 3");
-      fireEvent.click(screen.getByRole("link", { name: "Sessions" }));
+      fireEvent.click(screen.getByRole("link", { name: "History" }));
       await waitFor(() => expect(warning()).toHaveLength(0), { timeout: 3000 });
     });
   });

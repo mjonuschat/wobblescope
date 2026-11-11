@@ -11,14 +11,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ApiClientError } from "@/lib/api/client";
 import type { SessionFilters as Filters } from "@/lib/api/endpoints";
 import { sessionDownloadUrl } from "@/lib/api/endpoints";
-import { usePinSession, useSessions, useStorage } from "@/lib/api/queries";
+import { usePinSession, useSessions } from "@/lib/api/queries";
 import { formatBytes, formatTime } from "@/lib/format";
 import type { OutcomeKind } from "@/lib/generated/OutcomeKind";
 
 import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { ImportDialog } from "./ImportDialog";
 import { SessionFilters } from "./SessionFilters";
-import { StorageUsage } from "./StorageUsage";
 
 const PIN_HINTS = {
   pin: "Never delete this session to make room for new ones.",
@@ -83,7 +82,6 @@ export function SessionsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const list = useSessions(filters);
   const all = useSessions({});
-  const storage = useStorage();
   const pin = usePinSession();
   const filtered = Object.values(filters).some((v) => v !== undefined);
 
@@ -182,9 +180,8 @@ export function SessionsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Sessions</h1>
+    <div className="space-y-4">
+      <div className="flex justify-end">
         <Button onClick={() => setImporting(true)}>
           <UploadIcon data-icon="inline-start" />
           Import CSV
@@ -196,7 +193,6 @@ export function SessionsPage() {
         )}
         {body}
       </Panel>
-      {storage.data && <StorageUsage usage={storage.data} />}
       <ImportDialog open={importing} onOpenChange={setImporting} />
       <DeleteSessionDialog sessionId={deleting} onClose={() => setDeleting(null)} />
     </div>

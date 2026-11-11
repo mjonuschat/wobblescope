@@ -113,8 +113,7 @@ export function ResultsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-xl font-semibold">Results</h1>
+    <div className="space-y-4">
       <Panel title="Saved results">{body}</Panel>
       <DeleteResultDialog id={deleting} onClose={() => setDeleting(null)} />
     </div>

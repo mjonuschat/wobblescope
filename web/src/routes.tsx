@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, redirect } from "@tanstack/react-router";
 
 import { RootLayout } from "@/components/RootLayout";
+import { HistoryLayout } from "@/pages/history/HistoryLayout";
 import { PrinterPage } from "@/pages/printer/PrinterPage";
 import { ResultRoute } from "@/pages/results/ResultRoute";
 import { ResultsPage } from "@/pages/results/ResultsPage";
@@ -30,8 +31,14 @@ const shaperRoute = createRoute({
   component: RunPage,
 });
 
-const sessionsRoute = createRoute({
+const historyRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: "history",
+  component: HistoryLayout,
+});
+
+const sessionsRoute = createRoute({
+  getParentRoute: () => historyRoute,
   path: "/sessions",
   component: SessionsPage,
 });
@@ -43,7 +50,7 @@ const sessionRoute = createRoute({
 });
 
 const resultsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => historyRoute,
   path: "/results",
   component: ResultsPage,
 });
@@ -58,8 +65,7 @@ export const routeTree = rootRoute.addChildren([
   printerRoute,
   runRoute,
   shaperRoute,
-  sessionsRoute,
+  historyRoute.addChildren([sessionsRoute, resultsRoute]),
   sessionRoute,
-  resultsRoute,
   resultRoute,
 ]);

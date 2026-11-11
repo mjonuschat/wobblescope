@@ -1,5 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import { ActivityIcon, FlaskConicalIcon, FolderClockIcon, PrinterIcon, SaveIcon, type LucideIcon } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { ActivityIcon, FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -33,12 +33,12 @@ const pages: Page[] = [
     icon: FlaskConicalIcon,
     children: [{ to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon }],
   },
-  { to: "/sessions", label: "Sessions", icon: FolderClockIcon },
-  { to: "/results", label: "Results", icon: SaveIcon },
+  { to: "/sessions", label: "History", icon: FolderClockIcon },
 ];
 
 export function AppSidebar() {
   const version = useStatus().data?.version;
+  const path = useRouterState({ select: (state) => state.location.pathname });
   return (
     <Sidebar
       collapsible="none"
@@ -51,6 +51,7 @@ export function AppSidebar() {
               {pages.map(({ to, label, icon: Icon, children }) => (
                 <SidebarMenuItem key={label}>
                   <SidebarMenuButton
+                    isActive={to === "/sessions" ? /\/(sessions|results)(\/|$)/.test(path) : undefined}
                     render={
                       <Link
                         to={to}
