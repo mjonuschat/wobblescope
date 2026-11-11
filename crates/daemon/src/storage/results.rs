@@ -6,6 +6,7 @@
 
 use std::fs;
 use std::io;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -134,11 +135,16 @@ fn summary_of(record: &ResultRecord, size_bytes: u64) -> ResultSummary {
 }
 
 /// What identifies the bytes of a result file between two reads. Results are never edited
-/// after their rename, so a change in either value means a different file.
+/// after their rename, so a change in any value means a different file. The change time and
+/// inode matter because length and modification time alone can be restored after an in-place
+/// edit, while the change time cannot be set from userspace.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct FileKey {
     len: u64,
     modified_nanos: u128,
+    inode: u64,
+    changed_secs: i64,
+    changed_nanos: i64,
 }
 
 /// The outcome of verifying the file that had `key`: `Ok` or the reason it is unusable.
@@ -156,6 +162,9 @@ fn file_key(path: &Path) -> Result<Option<FileKey>, ResultError> {
     Ok(modified.map(|d| FileKey {
         len: meta.len(),
         modified_nanos: d.as_nanos(),
+        inode: meta.ino(),
+        changed_secs: meta.ctime(),
+        changed_nanos: meta.ctime_nsec(),
     }))
 }
 

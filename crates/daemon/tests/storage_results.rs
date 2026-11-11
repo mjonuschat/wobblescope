@@ -177,8 +177,9 @@ fn survives_session_delete_and_eviction() {
     assert!(!storage.result_sample(&id, 0, 0).unwrap().is_empty());
 }
 
-/// Flips the byte at `at` and gives the file a modification time no earlier flip had, so a
-/// coarse filesystem clock cannot make the changed file look unchanged.
+/// Flips the byte at `at` and gives the file a modification time no earlier flip had. The
+/// storage cache also keys on the change time, so this only keeps the key distinct on every
+/// clock.
 fn flip(path: &Path, at: usize) {
     static FLIPS: AtomicU64 = AtomicU64::new(1);
     let mut bytes = fs::read(path).unwrap();
@@ -498,5 +499,36 @@ fn deleting_a_result_drops_its_cache_entry() {
     // entry the deleted file left.
     fs::write(&path, kept).unwrap();
     storage.result(&id).unwrap();
+    assert_eq!(storage.verification_count(), 2);
+}
+
+#[test]
+fn reverifies_when_a_byte_changes_but_length_and_mtime_do_not() {
+    let (dir, storage) = with_session(u64::MAX / 4, plenty());
+    let id = save(&storage);
+    let sample = storage.result_sample(&id, 0, 0).unwrap();
+    let path = results_dir(dir.path()).join(format!("{id}.zip"));
+    let before = fs::metadata(&path).unwrap();
+
+    // Let the change time of the edit differ from the one the verification saw.
+    std::thread::sleep(Duration::from_millis(50));
+    let mut bytes = fs::read(&path).unwrap();
+    let at = bytes
+        .windows(sample.len())
+        .position(|w| w == sample.as_slice())
+        .unwrap()
+        + sample.len() / 2;
+    bytes[at] ^= 0xFF;
+    let file = fs::File::options().write(true).open(&path).unwrap();
+    fs::write(&path, bytes).unwrap();
+    file.set_modified(before.modified().unwrap()).unwrap();
+
+    let after = fs::metadata(&path).unwrap();
+    assert_eq!(after.len(), before.len());
+    assert_eq!(after.modified().unwrap(), before.modified().unwrap());
+    assert!(matches!(
+        storage.result_sample(&id, 0, 0),
+        Err(StorageError::ResultUnusable { .. })
+    ));
     assert_eq!(storage.verification_count(), 2);
 }
