@@ -15,4 +15,17 @@ klipper_version: string | null,
 /**
  * Firmware versions reported by the MCUs, one string per MCU.
  */
-mcu_firmware: Array<string>, };
+mcu_firmware: Array<string>, 
+/**
+ * The toolhead's square corner velocity in mm/s when the test ran. The smoothing estimate
+ * depends on it.
+ */
+square_corner_velocity: number | null, 
+/**
+ * `damping_ratio_x` of the printer's `[input_shaper]` section, when it sets one.
+ */
+damping_ratio_x: number | null, 
+/**
+ * `damping_ratio_y` of the printer's `[input_shaper]` section, when it sets one.
+ */
+damping_ratio_y: number | null, };

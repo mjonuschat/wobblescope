@@ -77,6 +77,16 @@ pub struct PrinterInfo {
     /// Firmware versions reported by the MCUs, one string per MCU.
     #[serde(default)]
     pub mcu_firmware: Vec<String>,
+    /// The toolhead's square corner velocity in mm/s when the test ran. The smoothing estimate
+    /// depends on it.
+    #[serde(default)]
+    pub square_corner_velocity: Option<f64>,
+    /// `damping_ratio_x` of the printer's `[input_shaper]` section, when it sets one.
+    #[serde(default)]
+    pub damping_ratio_x: Option<f64>,
+    /// `damping_ratio_y` of the printer's `[input_shaper]` section, when it sets one.
+    #[serde(default)]
+    pub damping_ratio_y: Option<f64>,
 }
 
 /// How a session ended.

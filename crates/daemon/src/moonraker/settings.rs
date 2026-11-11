@@ -228,6 +228,39 @@ fn parse_machine(
     }
 }
 
+/// What shapes a printer's corner smoothing and its configured input shaper, read when a test
+/// runs so the analysis can start from the printer's own values. Each is `None` when Klipper
+/// did not report it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Shaping {
+    /// The toolhead's `square_corner_velocity`, in mm/s.
+    pub square_corner_velocity: Option<f64>,
+    /// `damping_ratio_x` of `[input_shaper]`.
+    pub damping_ratio_x: Option<f64>,
+    /// `damping_ratio_y` of `[input_shaper]`.
+    pub damping_ratio_y: Option<f64>,
+}
+
+/// Reads [`Shaping`] from the answer to a `toolhead` and `configfile.settings` query.
+#[must_use]
+pub fn parse_shaping(query: &Value) -> Shaping {
+    let status = query.get("status");
+    let velocity = status
+        .and_then(|s| s.get("toolhead"))
+        .and_then(|t| t.get("square_corner_velocity"))
+        .and_then(number);
+    let shaper = status
+        .and_then(|s| s.get("configfile"))
+        .and_then(|c| c.get("settings"))
+        .and_then(|s| s.get("input_shaper"));
+    let damping = |key: &str| shaper.and_then(|s| s.get(key)).and_then(number);
+    Shaping {
+        square_corner_velocity: velocity,
+        damping_ratio_x: damping("damping_ratio_x"),
+        damping_ratio_y: damping("damping_ratio_y"),
+    }
+}
+
 /// A number, or text that holds one; anything else, and anything not finite, is unreadable.
 fn number(value: &Value) -> Option<f64> {
     let n = match value {

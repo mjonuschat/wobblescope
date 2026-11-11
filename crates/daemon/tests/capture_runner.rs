@@ -76,6 +76,29 @@ async fn two_chips_two_axes_one_point_finish_as_a_complete_session() {
     assert!(!rig.slot.is_held());
 }
 
+#[tokio::test]
+async fn the_session_records_the_printers_corner_velocity_and_damping_ratios() {
+    let rig = rig().await;
+    let mut settings = common::fake_printer::fixture("real_settings.json")["status"]["configfile"]
+        ["settings"]
+        .clone();
+    settings["input_shaper"] = json!({"damping_ratio_x": 0.12});
+    rig.sim.printer.set_settings(settings);
+    rig.sim
+        .printer
+        .set_field("toolhead", "square_corner_velocity", json!(8.0));
+    let plan = test_plan(&CHIPS, &[Axis::X]);
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    let id = finished.session_id.unwrap();
+    let (_, meta) = rig.storage.session(&id).unwrap();
+    let printer = meta.printer.unwrap();
+    assert_eq!(printer.square_corner_velocity, Some(8.0));
+    assert_eq!(printer.damping_ratio_x, Some(0.12));
+    assert_eq!(printer.damping_ratio_y, None);
+}
+
 // ---- helpers ----
 
 /// Starts `plan` and returns its task.

@@ -27,6 +27,7 @@ use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
+use crate::moonraker::settings::{Shaping, parse_shaping};
 use crate::moonraker::status::{KlippyState, Status};
 use crate::storage::Reservation;
 use crate::storage::capture::Capture;
@@ -872,11 +873,35 @@ async fn printer_info(control: &Rpc, mcus: &mut Vec<String>) -> Option<PrinterIn
     mcus.push("mcu".to_owned());
     mcus.sort();
     mcus.dedup();
+    let shaping = read_shaping(control).await;
     Some(PrinterInfo {
         name: text("hostname"),
         klipper_version: text("software_version"),
         mcu_firmware: mcu_firmware(control, mcus).await,
+        square_corner_velocity: shaping.square_corner_velocity,
+        damping_ratio_x: shaping.damping_ratio_x,
+        damping_ratio_y: shaping.damping_ratio_y,
     })
+}
+
+/// The printer's square corner velocity and configured damping ratios, best effort: a failed
+/// call leaves them unknown.
+async fn read_shaping(control: &Rpc) -> Shaping {
+    let query = json!({"objects": {
+        "toolhead": ["square_corner_velocity"],
+        "configfile": ["settings"],
+    }});
+    match control
+        .call(
+            "printer.objects.query",
+            Some(query),
+            Duration::from_secs(15),
+        )
+        .await
+    {
+        Ok(answer) => parse_shaping(&answer),
+        Err(_) => Shaping::default(),
+    }
 }
 
 /// `<mcu>: <version>` for each of `mcus`, as Klipper reports it. The main MCU is `mcu`, another
