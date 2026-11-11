@@ -104,7 +104,7 @@ export function StreamPage({ createWorker }: Props) {
       <h1 className="text-xl font-semibold">Live View</h1>
       {hello?.printing && <p className="text-sm text-amber-400">A print is running: showing a lower update rate</p>}
       {hello && (
-        <Panel title="Display">
+        <Panel title="Settings">
           <DisplaySettings
             updatesPerSecond={updatesPerSecond}
             rateLimit={hello.limits.max_updates_per_second}
