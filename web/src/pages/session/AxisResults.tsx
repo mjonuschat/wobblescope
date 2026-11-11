@@ -74,7 +74,6 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
             </Tabs>
           }
           snippets={snippets.perChip[shownIndex]}
-          probePoints={meta.probe_points}
           maxFreq={maxFreq}
           decisions={analysis.eligibility.decisions}
         />

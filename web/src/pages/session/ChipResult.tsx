@@ -6,7 +6,6 @@ import { psdOption } from "@/components/charts/options";
 import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
-import type { ProbePoint } from "@/lib/generated/ProbePoint";
 
 import { ShaperTable } from "./ShaperTable";
 
@@ -16,17 +15,16 @@ interface Props {
   switcher: ReactNode;
   /** The `[input_shaper]` snippet of each shaper in the recommendation, in order. */
   snippets: string[] | null;
-  probePoints: ProbePoint[];
   maxFreq: number;
   decisions: DatasetDecision[];
 }
 
-export function ChipResult({ chip, switcher, snippets, probePoints, maxFreq, decisions }: Props) {
+export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Props) {
   const rec = chip.recommendation;
   const reasons = decisions
     .filter((d) => d.chip === chip.chip)
     .flatMap((d) => (d.decision === "Excluded" ? d.reasons : d.dropped !== null ? [d.dropped] : []));
-  const option = psdOption({ chip, recommendation: rec, probePoints, maxFreq });
+  const option = psdOption({ chip, recommendation: rec, maxFreq });
   return (
     <Panel title="Resonance and Shapers" label={`Chip ${chip.chip}`}>
       {switcher}

@@ -36,7 +36,6 @@ function base(title: string | null, maxFreq: number): EChartsCoreOption {
 interface PsdInput {
   chip: ChipAnalysis;
   recommendation: Recommendation | null;
-  probePoints: ProbePoint[];
   /** The largest frequency the fit considered, in Hz. */
   maxFreq: number;
 }
@@ -46,13 +45,15 @@ interface PsdInput {
  * legend) and every fitted shaper's response on the right axis, with the recommended
  * frequency marked. Every curve is `core`'s array as returned.
  */
-export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInput): EChartsCoreOption {
+export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = [];
   const selected: Record<string, boolean> = {};
+  // The curves of a chip are told apart by their test point only when it has more than one.
+  const many = chip.datasets.length > 1;
+  const named = (point: number, what: string) => (many ? `Point ${point + 1} ${what}` : what);
   for (const [point, data] of chip.datasets) {
-    const label = pointLabel(point, probePoints);
     series.push({
-      name: `${label} total`,
+      name: named(point, "Total"),
       type: "line",
       showSymbol: false,
       data: zip(data.freq_bins, data.psd_sum),
@@ -62,7 +63,7 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
       ["Y", data.psd_y],
       ["Z", data.psd_z],
     ] as const) {
-      const name = `${label} ${axis}`;
+      const name = named(point, axis);
       selected[name] = false;
       series.push({ name, type: "line", showSymbol: false, data: zip(data.freq_bins, values) });
     }

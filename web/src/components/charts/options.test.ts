@@ -14,15 +14,14 @@ describe("psdOption", () => {
   const option = psdOption({
     chip,
     recommendation: rec,
-    probePoints: [{ position: null }],
     maxFreq: 200,
   });
 
   it("draws one total series per probe point and keeps X, Y and Z hidden in the legend", () => {
     const left = series(option).filter((s) => s.yAxisIndex === undefined);
-    expect(left.filter((s) => s.name.endsWith("total"))).toHaveLength(1);
+    expect(left.map((s) => s.name)).toEqual(["Total", "X", "Y", "Z"]);
     const selected = (option as { legend: { selected: Record<string, boolean> } }).legend.selected;
-    expect(Object.keys(selected).sort()).toEqual(["point 0 X", "point 0 Y", "point 0 Z"]);
+    expect(Object.keys(selected).sort()).toEqual(["X", "Y", "Z"]);
     expect(Object.values(selected).every((v) => v === false)).toBe(true);
   });
 
@@ -40,7 +39,6 @@ describe("psdOption", () => {
     const bare = psdOption({
       chip,
       recommendation: null,
-      probePoints: [],
       maxFreq: 200,
     });
     expect(series(bare).some((s) => s.markLine || s.yAxisIndex === 1)).toBe(false);
@@ -56,6 +54,20 @@ describe("psdOption", () => {
   });
 });
 
+describe("psdOption with several test points", () => {
+  it("numbers the curves by point, from 1, and uses no coordinates", () => {
+    const one = analysis().per_chip[0];
+    const chip = { ...one, datasets: [one.datasets[0], [1, one.datasets[0][1]] as (typeof one.datasets)[number]] };
+    const names = series(psdOption({ chip, recommendation: null, maxFreq: 200 }))
+      .filter((s) => s.yAxisIndex === undefined)
+      .map((s) => s.name);
+    expect(names).toContain("Point 1 Total");
+    expect(names).toContain("Point 2 Total");
+    expect(names).toContain("Point 2 Z");
+    expect(names.some((n) => n.includes("("))).toBe(false);
+  });
+});
+
 describe("psdOption shaper curves", () => {
   it("plots each shaper on the recommendation grid, up to its own last value", () => {
     const short = candidate("zv", 55, { vals: [0.9, 0.5] });
@@ -63,7 +75,6 @@ describe("psdOption shaper curves", () => {
     const option = psdOption({
       chip: analysis().per_chip[0],
       recommendation: rec,
-      probePoints: [{ position: null }],
       maxFreq: 200,
     });
     const curves = series(option).filter((s) => s.yAxisIndex === 1) as unknown as { data: number[][] }[];
