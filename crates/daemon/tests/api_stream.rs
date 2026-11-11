@@ -3,9 +3,12 @@ mod common;
 use std::time::Duration;
 
 use common::sim_printer::{Rig, rig, rig_with_extra_chips, serve};
+use common::test_plan;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
+use wobblescope::capture::live::FinishedOutcome;
+use wobblescope_core::fit::Axis;
 
 type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -16,6 +19,57 @@ async fn connect(rig: &Rig) -> Socket {
         .await
         .unwrap();
     socket
+}
+
+/// A connection whose socket buffers are as small as the system allows (about 400 KB on a macOS
+/// loopback), so that a client which stops reading backs the server's writes up soon.
+async fn connect_with_small_buffers(rig: &Rig) -> Socket {
+    const BUFFER: u32 = 4096;
+    let server = tokio::net::TcpSocket::new_v4().unwrap();
+    server.set_send_buffer_size(BUFFER).unwrap();
+    server.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let listener = server.listen(8).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = rig.app();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    let client = tokio::net::TcpSocket::new_v4().unwrap();
+    client.set_recv_buffer_size(BUFFER).unwrap();
+    let stream = client.connect(addr).await.unwrap();
+    let (socket, _) = tokio_tungstenite::client_async(
+        format!("ws://{addr}/api/stream"),
+        tokio_tungstenite::MaybeTlsStream::Plain(stream),
+    )
+    .await
+    .unwrap();
+    socket
+}
+
+/// Everything the socket delivers until it has been quiet for `quiet`.
+async fn drain(socket: &mut Socket, quiet: Duration) -> Vec<Message> {
+    let mut messages = Vec::new();
+    while let Ok(Some(message)) = tokio::time::timeout(quiet, socket.next()).await {
+        messages.push(message.unwrap());
+    }
+    messages
+}
+
+fn texts(messages: &[Message]) -> Vec<Value> {
+    messages
+        .iter()
+        .filter_map(|m| match m {
+            Message::Text(text) => Some(serde_json::from_str(text).unwrap()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn frame_count(messages: &[Message]) -> usize {
+    messages
+        .iter()
+        .filter(|m| matches!(m, Message::Binary(_)))
+        .count()
 }
 
 async fn frame(socket: &mut Socket) -> Message {
@@ -224,4 +278,149 @@ async fn a_console_notification_reaches_the_viewer_unchanged() {
     rig.sim.fake.push("notify_gcode_response", json!(["!! b"]));
     let console = text_of(&mut socket, "console").await;
     assert_eq!(console, json!({"type": "console", "lines": ["!! b"]}));
+}
+
+/// Pushes `seconds` of 3200 Hz data to every sensor in `sensors` in real time, 160 samples every
+/// 50 ms, so each chip's pipeline cuts a frame on every update interval.
+async fn push_in_real_time(rig: &Rig, sensors: &[&str], t0: f64, seconds: f64) {
+    for b in 0..(seconds * 20.0) as usize {
+        let rows: Vec<[f64; 4]> = (0..160)
+            .map(|i| {
+                let t = t0 + (b * 160 + i) as f64 / 3200.0;
+                [t, (t * 300.0).sin(), 0.0, 9800.0]
+            })
+            .collect();
+        for sensor in sensors {
+            rig.sim.bridge().push(sensor, &rows, Some((0, 0)));
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+#[tokio::test]
+async fn a_slow_reader_gets_dropped_frames_not_a_growing_queue() {
+    let rig = rig_with_extra_chips(&["adxl345 b", "adxl345 c", "adxl345 d"]).await;
+    let mut socket = connect_with_small_buffers(&rig).await;
+    text_of(&mut socket, "hello").await;
+    for chip in ["adxl345", "adxl345 b", "adxl345 c", "adxl345 d"] {
+        subscribe(&mut socket, chip, 1600.0, 20.0).await;
+    }
+    rig.until("four bridges open", || rig.bridges_open() == 4)
+        .await;
+
+    // The client reads nothing while four chips produce about 800 frames, far more than the
+    // socket buffers and the queue hold.
+    push_in_real_time(&rig, &["adxl345", "b", "c", "d"], 10.0, 10.0).await;
+
+    let messages = drain(&mut socket, Duration::from_millis(500)).await;
+    let health = texts(&messages)
+        .into_iter()
+        .rfind(|m| m["type"] == "health")
+        .expect("a health message");
+    assert!(health["dropped_frames"].as_u64().unwrap() > 0, "{health}");
+    let frames = frame_count(&messages);
+    assert!(frames < 700, "{frames} of about 800 frames were delivered");
+}
+
+#[tokio::test]
+async fn a_stalled_reader_with_only_text_traffic_stays_bounded() {
+    let rig = rig_with_extra_chips(&["adxl345 b"]).await;
+    let mut socket = connect_with_small_buffers(&rig).await;
+    text_of(&mut socket, "hello").await;
+    subscribe(&mut socket, "adxl345", 200.0, 0.5).await;
+    subscribe(&mut socket, "adxl345 b", 200.0, 0.5).await;
+    rig.until("both bridges open", || rig.bridges_open() == 2)
+        .await;
+
+    // 200 console notifications of 50 KB each, with both chips reporting health.
+    let line = "x".repeat(50_000);
+    for b in 0..50 {
+        let t0 = 10.0 + b as f64 * 0.05;
+        let rows: Vec<[f64; 4]> = (0..160)
+            .map(|i| [t0 + i as f64 / 3200.0, 0.0, 0.0, 9800.0])
+            .collect();
+        for sensor in ["adxl345", "b"] {
+            rig.sim.bridge().push(sensor, &rows, Some((0, 0)));
+        }
+        for n in 0..4 {
+            let last = b * 4 + n == 199;
+            let text = if last {
+                "last".to_owned()
+            } else {
+                line.clone()
+            };
+            rig.sim.fake.push("notify_gcode_response", json!([text]));
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let messages = drain(&mut socket, Duration::from_millis(500)).await;
+    assert!(
+        !messages.iter().any(|m| matches!(m, Message::Close(_))),
+        "the connection was closed"
+    );
+    let consoles: Vec<Value> = texts(&messages)
+        .into_iter()
+        .filter(|m| m["type"] == "console")
+        .collect();
+    assert!(consoles.len() < 100, "{} console messages", consoles.len());
+    let lines = consoles.last().unwrap()["lines"].as_array().unwrap();
+    assert_eq!(lines.last().unwrap(), "last");
+    assert!(messages.len() < 100, "{} entries", messages.len());
+}
+
+#[tokio::test]
+async fn a_second_viewer_is_independent() {
+    let rig = rig().await;
+    let mut wide = connect(&rig).await;
+    let mut narrow = connect(&rig).await;
+    text(&mut wide).await;
+    text(&mut narrow).await;
+    subscribe(&mut wide, "adxl345", 200.0, 10.0).await;
+    subscribe(&mut narrow, "adxl345", 100.0, 10.0).await;
+    rig.until("both bridges open", || {
+        rig.sim.bridge().open_on("adxl345") == 2
+    })
+    .await;
+    push_seconds(&rig, "adxl345", 10.0, 1.0);
+
+    let wide_stream = text_of(&mut wide, "stream").await;
+    let narrow_stream = text_of(&mut narrow, "stream").await;
+    assert_ne!(wide_stream["factor"], narrow_stream["factor"]);
+
+    drop(narrow);
+    rig.until("one bridge closes", || {
+        rig.sim.bridge().open_on("adxl345") == 1
+    })
+    .await;
+    push_seconds(&rig, "adxl345", 20.0, 1.0);
+    loop {
+        if let Message::Binary(bytes) = frame(&mut wide).await
+            && sample_count(&bytes) > 0
+        {
+            break;
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_sweep_and_a_stream_share_a_chip() {
+    let rig = rig().await;
+    let mut socket = connect(&rig).await;
+    text(&mut socket).await;
+    let plan = test_plan(&["adxl345", "lis2dw ebb36"], &[Axis::X]);
+    let Ok(task) = rig.start(&plan).await else {
+        panic!("pre-flight must pass");
+    };
+    subscribe(&mut socket, "adxl345", 200.0, 10.0).await;
+
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    assert_eq!(rig.sessions().len(), 1);
+    text_of(&mut socket, "stream").await;
+
+    drop(socket);
+    rig.until("the viewer's bridge closes", || rig.bridges_open() == 0)
+        .await;
 }
