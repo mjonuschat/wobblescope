@@ -112,16 +112,6 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
           row("Square corner velocity", `${meta.printer.square_corner_velocity} mm/s`)}
         {meta.printer?.damping_ratio_x != null && row("Damping ratio X", String(meta.printer.damping_ratio_x))}
         {meta.printer?.damping_ratio_y != null && row("Damping ratio Y", String(meta.printer.damping_ratio_y))}
-        {meta.printer &&
-          meta.printer.mcu_firmware.length > 0 &&
-          row(
-            "MCU firmware",
-            <ul>
-              {meta.printer.mcu_firmware.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>,
-          )}
         <Field label="Probe Points">
           <ProbePoints points={meta.probe_points} />
         </Field>

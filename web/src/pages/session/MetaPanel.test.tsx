@@ -6,7 +6,7 @@ import { twoAxisMeta } from "@/test/fixtures";
 import { MetaPanel } from "./MetaPanel";
 
 describe("the session details", () => {
-  it("lists the firmware of each MCU and each chip's axes map", () => {
+  it("shows each chip's axes map and not the MCU firmware", () => {
     const meta = twoAxisMeta();
     meta.printer = {
       name: "buster",
@@ -18,9 +18,8 @@ describe("the session details", () => {
     };
     meta.chips[1].axes_map = "x,z,-y";
     render(<MetaPanel meta={meta} />);
-    expect(screen.getByText("MCU firmware")).toBeTruthy();
-    expect(screen.getByText("ebb36: v0.13.0-820-g0cee841e")).toBeTruthy();
-    expect(screen.getByText("mcu: v0.13.0-658-gbd09e017")).toBeTruthy();
+    expect(screen.queryByText("MCU firmware")).toBeNull();
+    expect(screen.queryByText("mcu: v0.13.0-658-gbd09e017")).toBeNull();
     const rows = screen.getAllByRole("row");
     expect(within(rows[2]).getByText("x,z,-y")).toBeTruthy();
     // A chip whose config sets no axes map shows a dash.
