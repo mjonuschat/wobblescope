@@ -25,6 +25,10 @@ pub const MAX_RECORD_BYTES: u64 = 16 << 20;
 pub const MAX_META_BYTES: u64 = 4 << 20;
 pub const MAX_SAMPLE_BYTES: u64 = 256 << 20;
 
+/// Largest sum of entry sizes. Sessions come from imports capped at 64 MiB of CSV, so 1 GiB
+/// leaves a wide margin and still bounds what one request can make the daemon read.
+pub const MAX_TOTAL_BYTES: u64 = 1 << 30;
+
 const RECORD_NAME: &str = "result.json";
 const META_NAME: &str = "meta.json";
 const SAMPLES_PREFIX: &str = "samples/";
@@ -155,12 +159,14 @@ struct Limits {
     record: u64,
     meta: u64,
     sample: u64,
+    total: u64,
 }
 
 const LIMITS: Limits = Limits {
     record: MAX_RECORD_BYTES,
     meta: MAX_META_BYTES,
     sample: MAX_SAMPLE_BYTES,
+    total: MAX_TOTAL_BYTES,
 };
 
 /// `result.json`, `meta.json` or `samples/c<chip>-s<segment>.zst`.
@@ -241,6 +247,7 @@ impl ResultFile {
             return Err(ResultError::Format("duplicate entry names".to_owned()));
         }
         let mut entries = BTreeSet::new();
+        let mut total = 0u64;
         for index in 0..archive.len() {
             let entry = archive.by_index_raw(index)?;
             let name = std::str::from_utf8(entry.name_raw())
@@ -270,6 +277,12 @@ impl ResultFile {
                 return Err(ResultError::Format(format!(
                     "{name} has an unacceptable size"
                 )));
+            }
+            total = total.saturating_add(entry.size());
+            if total > limits.total {
+                return Err(ResultError::Format(
+                    "entries are too large in total".to_owned(),
+                ));
             }
             if !entries.insert(name.clone()) {
                 return Err(ResultError::Format(format!("duplicate entry {name}")));
@@ -320,42 +333,47 @@ impl ResultFile {
             )));
         }
         let mut archive = self.archive()?;
-        let mut contents = BTreeMap::new();
-        for (name, hash) in &self.record.manifest {
-            let bytes = read_entry(&mut archive, name, LIMITS.sample)?;
-            if sha256_hex(&bytes) != *hash {
-                return Err(ResultError::Corrupt(format!("{name} fails its hash")));
-            }
-            contents.insert(name.as_str(), bytes);
+        let meta_hash =
+            self.record.manifest.get(META_NAME).ok_or_else(|| {
+                ResultError::Corrupt("meta.json is not in the manifest".to_owned())
+            })?;
+        let meta_bytes = read_entry(&mut archive, META_NAME, LIMITS.meta)?;
+        if sha256_hex(&meta_bytes) != *meta_hash {
+            return Err(ResultError::Corrupt(format!("{META_NAME} fails its hash")));
         }
-        let meta_bytes = contents
-            .get(META_NAME)
-            .ok_or_else(|| ResultError::Corrupt("meta.json is not in the manifest".to_owned()))?;
-        let meta = parse_meta(meta_bytes).map_err(|e| ResultError::Corrupt(e.to_string()))?;
+        let meta = parse_meta(&meta_bytes).map_err(|e| ResultError::Corrupt(e.to_string()))?;
         let counts: BTreeMap<String, u32> = meta
             .segments
             .iter()
             .flat_map(|s| &s.files)
             .map(|f| (format!("{SAMPLES_PREFIX}{}", f.sample_file), f.sample_count))
             .collect();
-        for (name, bytes) in &contents {
+        if let Some(name) = counts
+            .keys()
+            .find(|n| !self.record.manifest.contains_key(n.as_str()))
+        {
+            return Err(ResultError::Corrupt(format!("{name} is missing")));
+        }
+        // One sample at a time: its bytes are dropped before the next entry is read.
+        for (name, hash) in &self.record.manifest {
             if !name.starts_with(SAMPLES_PREFIX) {
                 continue;
             }
-            let count = counts.get(*name).ok_or_else(|| {
+            let bytes = read_entry(&mut archive, name, LIMITS.sample)?;
+            if sha256_hex(&bytes) != *hash {
+                return Err(ResultError::Corrupt(format!("{name} fails its hash")));
+            }
+            let count = counts.get(name).ok_or_else(|| {
                 ResultError::Corrupt(format!("{name} is not listed in meta.json"))
             })?;
             let samples =
-                decode_samples(bytes).map_err(|e| ResultError::Corrupt(format!("{name}: {e}")))?;
+                decode_samples(&bytes).map_err(|e| ResultError::Corrupt(format!("{name}: {e}")))?;
             if samples.t.len() != *count as usize {
                 return Err(ResultError::Corrupt(format!(
                     "{name} holds {} samples, meta.json says {count}",
                     samples.t.len()
                 )));
             }
-        }
-        if let Some(name) = counts.keys().find(|n| !contents.contains_key(n.as_str())) {
-            return Err(ResultError::Corrupt(format!("{name} is missing")));
         }
         Ok(())
     }
@@ -438,6 +456,28 @@ mod tests {
         zip.finish().unwrap();
         let limits = Limits {
             sample: 99,
+            ..LIMITS
+        };
+        assert!(matches!(
+            ResultFile::open_with(&path, limits),
+            Err(ResultError::Format(_))
+        ));
+    }
+
+    #[test]
+    fn refuses_an_archive_over_the_total_limit() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("total.zip");
+        let mut zip = ZipWriter::new(File::create(&path).unwrap());
+        for name in ["samples/c0-s0.zst", "samples/c0-s1.zst"] {
+            zip.start_file(name, entry_options()).unwrap();
+            zip.write_all(&[0u8; 60]).unwrap();
+        }
+        zip.start_file(RECORD_NAME, entry_options()).unwrap();
+        zip.write_all(b"{}").unwrap();
+        zip.finish().unwrap();
+        let limits = Limits {
+            total: 100,
             ..LIMITS
         };
         assert!(matches!(
