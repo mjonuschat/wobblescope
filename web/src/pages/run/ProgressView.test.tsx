@@ -115,31 +115,45 @@ describe("a running test", () => {
     expect((screen.getByRole("button", { name: "Emergency stop" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("keeps a health warning listed with its chip", async () => {
-    await mount({ test: running, last: null });
-    send({
-      test: {
-        ...running,
-        chips: [
-          { chip: "adxl345", level: [1, 1, 1], warnings: ["the chip's errors counter rose by 3"] },
-          running.chips[1],
-        ],
-      },
-      last: null,
+  describe("chip warnings", () => {
+    const warned = (segment = 3): TestState => ({
+      ...running,
+      segment,
+      chips: [
+        { chip: "adxl345", level: [1, 1, 1], warnings: ["the chip's errors counter rose by 3"] },
+        running.chips[1],
+      ],
     });
-    expect(screen.getByText("adxl345: the chip's errors counter rose by 3")).toBeTruthy();
-    send({
-      test: {
-        ...running,
-        segment: 4,
-        chips: [
-          { chip: "adxl345", level: [1, 1, 1], warnings: ["the chip's errors counter rose by 3"] },
-          running.chips[1],
-        ],
-      },
-      last: null,
+    const warning = () => screen.queryAllByText("the chip's errors counter rose by 3");
+
+    it("shows a warning once as a toast with its chip's name", async () => {
+      await mount({ test: running, last: null });
+      send({ test: warned(), last: null });
+      expect(await screen.findByText("the chip's errors counter rose by 3")).toBeTruthy();
+      expect(screen.getByText("adxl345")).toBeTruthy();
+      send({ test: warned(4), last: null });
+      send({ test: warned(4), last: null });
+      expect(warning()).toHaveLength(1);
     });
-    expect(screen.getByText("adxl345: the chip's errors counter rose by 3")).toBeTruthy();
+
+    it("stays when the test ends and goes when it is closed", async () => {
+      await mount({ test: running, last: null });
+      send({ test: warned(), last: null });
+      await screen.findByText("the chip's errors counter rose by 3");
+      send({ test: null, last: done });
+      expect(await screen.findByText("The test finished.")).toBeTruthy();
+      expect(warning()).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: /close/i }));
+      await waitFor(() => expect(warning()).toHaveLength(0), { timeout: 3000 });
+    });
+
+    it("goes when the user moves to another page", async () => {
+      await mount({ test: running, last: null });
+      send({ test: warned(), last: null });
+      await screen.findByText("the chip's errors counter rose by 3");
+      fireEvent.click(screen.getByRole("link", { name: "Sessions" }));
+      await waitFor(() => expect(warning()).toHaveLength(0), { timeout: 3000 });
+    });
   });
 
   it("keeps the last state and the stop button when the socket drops, and a new snapshot clears the mark", async () => {

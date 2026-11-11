@@ -1,15 +1,24 @@
-import { Link, Outlet } from "@tanstack/react-router";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { toast } from "sonner";
 
 import { AppSidebar } from "@/components/AppSidebar";
 import { PrinterControls } from "@/components/PrinterControls";
 import { StatusBanner } from "@/components/StatusBanner";
 import { StatusDots } from "@/components/StatusDots";
+import { Toaster } from "@/components/ui/sonner";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useRecoverStorage } from "@/lib/api/queries";
 
 /** The frame of every page: the header, the sidebar, the status banner and the page itself. */
 export function RootLayout() {
   useRecoverStorage();
+  // Toasts belong to the page that raised them.
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new path is the trigger
+  useEffect(() => {
+    toast.dismiss();
+  }, [path]);
   return (
     <SidebarProvider className="min-h-screen flex-col [--header-height:--spacing(14)]">
       <header className="sticky top-0 z-50 flex h-(--header-height) items-center border-b bg-background text-sm">
@@ -32,6 +41,7 @@ export function RootLayout() {
           </main>
         </div>
       </div>
+      <Toaster position="bottom-left" />
     </SidebarProvider>
   );
 }

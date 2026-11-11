@@ -7,13 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useEmergencyStop } from "@/lib/api/queries";
-import type { ChipLive } from "@/lib/generated/ChipLive";
 import type { FinishedOutcome } from "@/lib/generated/FinishedOutcome";
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
 import type { TestState } from "@/lib/generated/TestState";
 
 import { LiveChart } from "./LiveChart";
+import { useWarningToasts } from "./useWarningToasts";
 import { formatDuration, formatPoint } from "./planning";
 
 const PHASE_WORDS: Record<Phase, string> = {
@@ -73,21 +73,6 @@ function PanelCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-/** Health warnings the chips have raised during the test. */
-function Warnings({ chips }: { chips: ChipLive[] }) {
-  const warnings = chips.flatMap((chip) => chip.warnings.map((w) => ({ chip: chip.chip, text: w })));
-  if (warnings.length === 0) return null;
-  return (
-    <ul className="list-disc pl-5 text-sm text-amber-400">
-      {warnings.map((w) => (
-        <li key={`${w.chip}-${w.text}`}>
-          {w.chip}: {w.text}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 interface ProgressProps {
   test: TestState;
   /** Whether the live socket is open. */
@@ -96,6 +81,7 @@ interface ProgressProps {
 
 /** A running test: where it is, how long it has run, each chip's signal and the stop button. */
 export function ProgressView({ test, connected }: ProgressProps) {
+  useWarningToasts(test.id, test.chips);
   const where = test.axis && test.position ? ` (${test.axis} at ${formatPoint(test.position)})` : "";
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
@@ -121,7 +107,6 @@ export function ProgressView({ test, connected }: ProgressProps) {
       </PanelCard>
       <PanelCard title="Signal">
         <LiveChart test={test} />
-        <Warnings chips={test.chips} />
       </PanelCard>
       <StopButton id={test.id} />
     </div>
