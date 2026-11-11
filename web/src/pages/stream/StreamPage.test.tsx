@@ -16,8 +16,27 @@ import { StreamPage } from "./StreamPage";
 
 // The chart is a canvas, so the test reads the props the page gives it.
 vi.mock("./SpectrumChart", () => ({
-  SpectrumChart: (props: { chips: unknown[]; maxHz: number }) => (
-    <pre data-testid="spectrum-chart">{JSON.stringify({ chips: props.chips, maxHz: props.maxHz })}</pre>
+  SpectrumChart: (props: {
+    chips: unknown[];
+    maxHz: number;
+    frequencyOfInterest: number | null;
+    onPick: (hz: number) => void;
+  }) => (
+    <div>
+      <pre data-testid="spectrum-chart">
+        {JSON.stringify({ chips: props.chips, maxHz: props.maxHz, frequencyOfInterest: props.frequencyOfInterest })}
+      </pre>
+      <button type="button" onClick={() => props.onPick(52.4)}>
+        pick a peak
+      </button>
+    </div>
+  ),
+}));
+vi.mock("./EnergyStrip", () => ({
+  EnergyStrip: (props: { frequencyOfInterest: number; chips: { chip: string }[] }) => (
+    <pre data-testid="energy-strip">
+      {JSON.stringify({ f: props.frequencyOfInterest, chips: props.chips.map((c) => c.chip) })}
+    </pre>
   ),
 }));
 vi.mock("./SignalStrips", () => ({ SignalStrips: () => <div data-testid="strips" /> }));
@@ -132,6 +151,52 @@ describe("the stream page", () => {
     await connect();
     expect(screen.getByRole("region", { name: "Held Excitation" })).toBeTruthy();
     expect(FakeSocket.instances).toHaveLength(1);
+  });
+
+  it("marks a picked frequency, shows the strip and offers it to the hold panel", async () => {
+    open();
+    await connect();
+    pick("a1");
+    server(streamHeader("a1", 0));
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    expect(chartProps().frequencyOfInterest).toBeNull();
+    expect(screen.queryByTestId("energy-strip")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "pick a peak" }));
+    expect(chartProps().frequencyOfInterest).toBe(52.4);
+    expect(JSON.parse(screen.getByTestId("energy-strip").textContent ?? "")).toEqual({ f: 52.4, chips: ["a1"] });
+    expect((screen.getByLabelText("Frequency (Hz)") as HTMLInputElement).value).toBe("52.4");
+  });
+
+  it("follows a running hold's frequency and keeps the last one after it ends", async () => {
+    open();
+    await connect();
+    pick("a1");
+    server(streamHeader("a1", 0));
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    fireEvent.change(screen.getByLabelText("Acceleration per Hz"), { target: { value: "60" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    const hold = FakeSocket.latest;
+    expect(FakeSocket.instances).toHaveLength(2);
+    act(() => hold.open());
+    act(() => hold.send({ type: "started", id: "hold-1" }));
+    const state = (frequency: number) => ({
+      type: "state",
+      phase: "holding",
+      elapsed_seconds: 1,
+      frequency,
+      axis: "X",
+      acceleration: 60 * frequency,
+      accel_limit: 60 * frequency,
+    });
+    act(() => hold.send(state(25)));
+    expect(chartProps().frequencyOfInterest).toBe(25);
+    act(() => hold.send(state(40)));
+    expect(chartProps().frequencyOfInterest).toBe(40);
+    fireEvent.click(screen.getByRole("button", { name: "pick a peak" }));
+    expect(hold.sent.map((m) => JSON.parse(m)).at(-1)).toEqual({ type: "set", frequency: 52.4 });
+    act(() => hold.send(state(52.4)));
+    act(() => hold.send({ type: "ended", reason: "stopped", restore: "done" }));
+    expect(chartProps().frequencyOfInterest).toBe(52.4);
   });
 
   it("offers no chip before Hello arrives, then subscribes with the Hello defaults", async () => {

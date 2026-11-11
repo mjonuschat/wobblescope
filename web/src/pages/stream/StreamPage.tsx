@@ -17,6 +17,7 @@ import { chipColor } from "./colors";
 import { ChipPicker } from "./ChipPicker";
 import { ConsoleCard } from "./ConsoleCard";
 import { DisplaySettings, PauseButton, type Range } from "./DisplaySettings";
+import { EnergyStrip } from "./EnergyStrip";
 import { HealthBadge } from "./HealthBadge";
 import { HoldPanel } from "./HoldPanel";
 import { SignalStrips } from "./SignalStrips";
@@ -37,8 +38,21 @@ const DEFAULT_WINDOW_SECONDS = 1;
 export function StreamPage({ createWorker }: Props) {
   const stream = useStream();
   const hold = useHold();
+  const [frequencyOfInterest, setFrequencyOfInterest] = useState<number | null>(null);
   const chipList = useChips().data;
   const { hello, chips: streams } = stream.state;
+
+  // While a hold runs its frequency is the frequency of interest, ramps included. It stays at the last one afterwards.
+  const holdFrequency = hold.status === "running" ? (hold.state?.frequency ?? null) : null;
+  useEffect(() => {
+    if (holdFrequency !== null) setFrequencyOfInterest(holdFrequency);
+  }, [holdFrequency]);
+
+  function pickFrequency(hz: number) {
+    setFrequencyOfInterest(hz);
+    if (hold.status === "running") hold.set({ frequency: hz });
+  }
+
   const { subscribe } = stream;
   const [selected, setSelected] = useState<string[]>([]);
   const [axes, setAxes] = useState<Axis3[]>(["sum"]);
@@ -148,7 +162,7 @@ export function StreamPage({ createWorker }: Props) {
           />
         </Panel>
       )}
-      <HoldPanel hold={hold} frequencyOfInterest={null} />
+      <HoldPanel hold={hold} frequencyOfInterest={frequencyOfInterest} />
       {chipList && !hello && <Waiting>Waiting for the daemon's defaults.</Waiting>}
       {hello && chipList && chipList.chips.length > 0 && selected.length === 0 && (
         <Card>
@@ -192,6 +206,8 @@ export function StreamPage({ createWorker }: Props) {
         >
           <SpectrumChart
             maxHz={axisHz}
+            frequencyOfInterest={frequencyOfInterest}
+            onPick={pickFrequency}
             chips={shown.map(({ chip, index, entry, spectrum }) => ({
               chip,
               colorIndex: index,
@@ -200,6 +216,14 @@ export function StreamPage({ createWorker }: Props) {
               peakHold: entry.peakHold,
               axes,
             }))}
+          />
+        </Panel>
+      )}
+      {frequencyOfInterest !== null && shown.length > 0 && (
+        <Panel title="Energy at the Frequency of Interest">
+          <EnergyStrip
+            chips={shown.map(({ chip, index, spectrum }) => ({ chip, color: chipColor(index), spectrum }))}
+            frequencyOfInterest={frequencyOfInterest}
           />
         </Panel>
       )}

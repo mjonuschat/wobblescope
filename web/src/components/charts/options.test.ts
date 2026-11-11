@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { chipColor } from "@/pages/stream/colors";
 import { analysis, candidate, recommendation } from "@/test/fixtures";
 
-import { liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
+import { bandEnergyOption, liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
 
 type Series = { name: string; yAxisIndex?: number; markLine?: { data: { xAxis: number }[] } };
 
@@ -206,5 +206,62 @@ describe("liveSpectrumOption", () => {
   it("uses an axis tooltip and the requested frequency limit", () => {
     expect((option as { tooltip: { trigger: string } }).tooltip.trigger).toBe("axis");
     expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200);
+  });
+});
+
+describe("the frequency of interest on the live spectrum", () => {
+  const spectrum = {
+    freq_bins: [0, 10, 20],
+    psd_x: [1, 2, 3],
+    psd_y: [1, 2, 3],
+    psd_z: [1, 2, 3],
+    psd_sum: [3, 6, 9],
+  };
+  const chips = [{ chip: "a", spectrum, peaks: [], peakHold: [3, 6, 9], axes: ["sum" as const] }];
+
+  it("marks it with a vertical line on the first series", () => {
+    const option = liveSpectrumOption({ chips, maxHz: 200, frequencyOfInterest: 52 });
+    const first = series(option)[0] as unknown as { markLine?: { data: { xAxis: number }[] } };
+    expect(first.markLine?.data[0].xAxis).toBe(52);
+  });
+
+  it("has no marker without one", () => {
+    const first = series(liveSpectrumOption({ chips, maxHz: 200 }))[0] as unknown as { markLine?: unknown };
+    expect(first.markLine).toBeUndefined();
+  });
+});
+
+describe("bandEnergyOption", () => {
+  const chips = [
+    {
+      chip: "a",
+      color: "#fff",
+      points: [
+        { t: 10, v: 1 },
+        { t: 40, v: 2 },
+      ],
+    },
+    { chip: "b", color: "#000", points: [] },
+  ];
+
+  it("draws one line per chip against seconds ago over the last minute", () => {
+    const option = bandEnergyOption({ chips, centre: 52, halfWidth: 2 }) as unknown as {
+      xAxis: { min: number; max: number };
+      series: { name: string; data: number[][] }[];
+    };
+    expect(option.series.map((s) => s.name)).toEqual(["a", "b"]);
+    expect(option.series[0].data).toEqual([
+      [-30, 1],
+      [0, 2],
+    ]);
+    expect(option.xAxis.min).toBe(-60);
+    expect(option.xAxis.max).toBe(0);
+  });
+
+  it("says which band it shows", () => {
+    const option = bandEnergyOption({ chips, centre: 52, halfWidth: 2 }) as unknown as {
+      yAxis: { name: string };
+    };
+    expect(option.yAxis.name).toBe("Energy 50.0 to 54.0 Hz");
   });
 });

@@ -155,6 +155,8 @@ interface LiveSpectrumInput {
   /** `colorIndex` is the chip's place in the page's selection, so its colour matches the other charts. */
   chips: { chip: string; colorIndex?: number; spectrum: Spectrum; peaks: Peak[]; peakHold: number[]; axes: Axis3[] }[];
   maxHz: number;
+  /** The frequency to mark with a vertical line, in Hz. */
+  frequencyOfInterest?: number | null;
 }
 
 const SPECTRUM_VALUES = {
@@ -168,7 +170,7 @@ const SPECTRUM_VALUES = {
  * The live spectra. One line per chip and chosen axis in the chip's colour, a faint peak-hold
  * line per chip (the summed spectrum's hold) and the chip's peaks marked on its first line.
  */
-export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): EChartsCoreOption {
+export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSpectrumInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = [];
   chips.forEach(({ chip, colorIndex, spectrum, peaks, peakHold, axes }, index) => {
     const color = chipColor(colorIndex ?? index);
@@ -198,6 +200,15 @@ export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): ECharts
           })),
         };
       }
+      if (n === 0 && index === 0 && frequencyOfInterest != null) {
+        line.markLine = {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: text, type: "dashed", width: 1 },
+          label: { formatter: `${formatHz(frequencyOfInterest)} Hz`, color: text, fontSize: 10 },
+          data: [{ xAxis: frequencyOfInterest }],
+        };
+      }
       series.push(line);
     });
     series.push({
@@ -215,5 +226,37 @@ export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): ECharts
     legend: { type: "scroll", top: 0, left: 56, textStyle: { color: text } },
     yAxis: { type: "value", name: "PSD", splitLine },
     series,
+  };
+}
+
+interface BandEnergyInput {
+  /** Each chip's energy readings, with `t` in seconds on one clock. */
+  chips: { chip: string; color: string; points: { t: number; v: number }[] }[];
+  centre: number;
+  halfWidth: number;
+}
+
+/** The energy in a band around one frequency over the last minute, one line per chip. */
+export function bandEnergyOption({ chips, centre, halfWidth }: BandEnergyInput): EChartsCoreOption {
+  const latest = Math.max(0, ...chips.flatMap((c) => c.points.map((p) => p.t)));
+  return {
+    backgroundColor: "transparent",
+    textStyle: { color: text },
+    tooltip: { trigger: "axis" },
+    grid: { top: 24, left: 64, right: 24, bottom: 40 },
+    xAxis: { type: "value", name: "s", min: -60, max: 0, splitLine },
+    yAxis: {
+      type: "value",
+      name: `Energy ${formatHz(centre - halfWidth)} to ${formatHz(centre + halfWidth)} Hz`,
+      splitLine,
+    },
+    series: chips.map(({ chip, color, points }) => ({
+      name: chip,
+      type: "line",
+      showSymbol: false,
+      color,
+      lineStyle: { color, width: 1.5 },
+      data: points.map((p) => [p.t - latest, p.v]),
+    })),
   };
 }
