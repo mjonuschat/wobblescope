@@ -8,6 +8,7 @@ use serde_json::json;
 use super::tests::StopDispatched;
 use super::{ApiError, ApiState};
 use crate::capture::CheckFailure;
+use crate::capture::preflight::quarantine_duration;
 use crate::capture::preflight::read_printer_state;
 use crate::capture::runner::watch_idle;
 use crate::moonraker::rpc::RpcError;
@@ -127,6 +128,11 @@ pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, A
         // user stops the printer.
         if !matches!(e, RpcError::Moonraker { .. }) {
             state.capture.slot.set_motion_uncertain(HOMING_MARK);
+            // The quarantine is what keeps test admission from treating the printer as idle.
+            state
+                .capture
+                .slot
+                .start_quarantine(quarantine_duration(state.capture.max_segment_seconds));
             watch_idle(
                 state.moonraker.clone(),
                 state.capture.slot.clone(),

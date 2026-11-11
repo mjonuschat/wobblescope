@@ -141,6 +141,11 @@ async fn a_home_that_loses_its_answer_keeps_motion_blocked() {
     let (status, body) = answer(&rig, ui_post("/api/printer/home")).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["failures"][0]["check"], "no_uncertain_motion");
+
+    let request = json!({"chips": ["adxl345", "lis2dw ebb36"], "axes": ["X"], "mode": "Pulse"});
+    let (status, body) = answer(&rig, post_json("/api/tests", &request)).await;
+    assert_ne!(status, StatusCode::ACCEPTED, "{body}");
+    assert!(rig.slot.quarantine_remaining().is_some());
 }
 
 #[tokio::test]

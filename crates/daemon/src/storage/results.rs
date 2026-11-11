@@ -352,17 +352,17 @@ impl Storage {
             bound += session.open_sample(file)?.metadata()?.len() + ZIP_ENTRY_OVERHEAD;
         }
         let need = bound.saturating_add(inner.headroom_bytes);
-        let available = {
+        let n = RESULT_COUNTER.fetch_add(1, Ordering::Relaxed);
+        {
             let st = inner.lock();
-            (inner.probe)(&inner.results_dir)?
+            let available = (inner.probe)(&inner.results_dir)?
                 .saturating_sub(reserved_total(&st))
-                .saturating_sub(result_reserved_total(&st))
-        };
-        if available < need {
-            return Err(StorageError::InsufficientDisk { need, available });
+                .saturating_sub(result_reserved_total(&st));
+            if available < need {
+                return Err(StorageError::InsufficientDisk { need, available });
+            }
         }
 
-        let n = RESULT_COUNTER.fetch_add(1, Ordering::Relaxed);
         let temp_path = inner
             .results_dir
             .join(format!(".download-{}-{n}.zip.tmp", std::process::id()));
