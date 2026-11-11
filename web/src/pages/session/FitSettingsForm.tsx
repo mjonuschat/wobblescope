@@ -53,7 +53,7 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   const { label, unit, step } = FIELDS[name];
   const id = `fit-${name}`;
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <Tooltip>
         <TooltipTrigger
           render={
