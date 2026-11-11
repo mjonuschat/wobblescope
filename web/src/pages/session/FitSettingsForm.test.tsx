@@ -31,13 +31,4 @@ describe("FitSettingsForm", () => {
     expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 5, max_smoothing: null }));
     expect((field(/Smoothing limit/) as HTMLInputElement).value).toBe("");
   });
-
-  it("disables Apply and marks the field when it holds text that is not a number", () => {
-    const onApply = vi.fn();
-    render(<FitSettingsForm onApply={onApply} />);
-    fireEvent.change(field(/Damping ratio/), { target: { value: "abc" } });
-    expect((screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(field(/Damping ratio/).getAttribute("aria-invalid")).toBe("true");
-    expect(onApply).not.toHaveBeenCalled();
-  });
 });

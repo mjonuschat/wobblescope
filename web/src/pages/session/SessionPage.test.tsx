@@ -92,7 +92,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
-    expect((box as HTMLInputElement).checked).toBe(false);
+    expect(box.getAttribute("aria-checked")).toBe("false");
     expect(screen.queryByRole("checkbox", { name: /Include a anyway/ })).toBeNull();
     expect(fake.analyze.mock.calls[0][0].overrides).toEqual([]);
     fireEvent.click(box);
@@ -107,7 +107,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
-    expect((box as HTMLInputElement).checked).toBe(true);
+    expect(box.getAttribute("aria-checked")).toBe("true");
   });
 
   it("explains an axis without any eligible dataset and shows no snippet", async () => {
@@ -172,7 +172,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
-    expect(box.closest("label")!.textContent).toContain("395 Hz");
+    expect(screen.getByText(/Include b anyway/).textContent).toContain("395 Hz");
     fireEvent.click(box);
     await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
     expect(fake.analyze.mock.calls[1][0].overrides).toEqual(["b"]);
@@ -204,11 +204,11 @@ describe("the session view", () => {
       "No recommendation for this chip: flat signal: no vibration power to analyse",
     );
     const box = screen.getByRole("checkbox", { name: /Include b anyway/ });
-    expect((box as HTMLInputElement).checked).toBe(true);
+    expect(box.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(box);
     // Back to the earlier key, whose result is cached, so there is no new analysis to wait for.
     await waitFor(() =>
-      expect((screen.getByRole("checkbox", { name: /Include b anyway/ }) as HTMLInputElement).checked).toBe(false),
+      expect(screen.getByRole("checkbox", { name: /Include b anyway/ }).getAttribute("aria-checked")).toBe("false"),
     );
   });
 

@@ -16,15 +16,19 @@ export function pointLabel(index: number, probePoints: ProbePoint[]): string {
 const zip = (xs: number[], ys: number[]) => ys.map((y, i) => [xs[i], y]);
 
 const text = "#d4d4d4";
+const GRID = "rgba(255, 255, 255, 0.08)";
+const PALETTE = ["#ff7a33", "#4da3ff", "#7ee081", "#ffd166", "#c792ea", "#ef5b7b", "#5eead4", "#f59e0b"];
+const splitLine = { lineStyle: { color: GRID } };
 
 function base(title: string, maxFreq: number): EChartsCoreOption {
   return {
     backgroundColor: "transparent",
     textStyle: { color: text },
-    title: { text: title, textStyle: { color: text, fontSize: 14 } },
+    color: PALETTE,
+    title: { text: title, left: 0, textStyle: { color: text, fontSize: 13, fontWeight: 500 } },
     tooltip: { trigger: "axis" },
-    grid: { top: 80, left: 64, right: 64, bottom: 40 },
-    xAxis: { type: "value", name: "Hz", min: 0, max: maxFreq },
+    grid: { top: 92, left: 64, right: 64, bottom: 40 },
+    xAxis: { type: "value", name: "Hz", min: 0, max: maxFreq, splitLine },
   };
 }
 
@@ -83,9 +87,9 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
   }
   return {
     ...base(`${chip.chip}: PSD and shaper response`, maxFreq),
-    legend: { type: "scroll", top: 28, selected, textStyle: { color: text } },
+    legend: { type: "scroll", top: 34, selected, textStyle: { color: text } },
     yAxis: [
-      { type: "value", name: "Frequency-normalised PSD" },
+      { type: "value", name: "Frequency-normalised PSD", splitLine },
       { type: "value", name: "Shaper response", min: 0, max: 1, splitLine: { show: false } },
     ],
     series,
@@ -96,7 +100,7 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
 export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
   return {
     ...base("Summed PSD (display only)", maxFreq),
-    yAxis: { type: "value", name: "Frequency-normalised PSD" },
+    yAxis: { type: "value", name: "Frequency-normalised PSD", splitLine },
     series: [
       {
         name: "Summed PSD",

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Field, Fields } from "@/components/Fields";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiClientError } from "@/lib/api/client";
 import { useCheckChips, useChips, useSettings, useStatus } from "@/lib/api/queries";
@@ -18,15 +19,6 @@ export function measure(value: number | null | undefined, unit: string, digits =
   return unit ? `${text} ${unit}` : text;
 }
 
-function Field({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
-  return (
-    <div className={className}>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="font-mono text-sm">{children}</dd>
-    </div>
-  );
-}
-
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card>
@@ -36,10 +28,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <CardContent>{children}</CardContent>
     </Card>
   );
-}
-
-function Fields({ children }: { children: ReactNode }) {
-  return <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">{children}</dl>;
 }
 
 /** The firmware's display name: Klipper for mainline, Kalico for its fork. */

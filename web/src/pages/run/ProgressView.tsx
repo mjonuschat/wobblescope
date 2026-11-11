@@ -1,16 +1,25 @@
 import { Link } from "@tanstack/react-router";
 
-import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CircleCheckIcon,
+  LoaderCircleIcon,
+  type LucideIcon,
+  OctagonXIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import type { FinishedOutcome } from "@/lib/generated/FinishedOutcome";
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
 import type { TestState } from "@/lib/generated/TestState";
+
+import { SessionResults } from "@/pages/session/SessionResults";
 
 import { LiveChart } from "./LiveChart";
 import { useWarningToasts } from "./useWarningToasts";
@@ -34,17 +43,6 @@ const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
 /** What the user is told after an emergency stop. */
 export const SHUTDOWN_NOTICE =
   "Emergency stop sent. Klipper is in shutdown and needs a FIRMWARE_RESTART before it moves again.";
-
-function PanelCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
-    </Card>
-  );
-}
 
 /** How long the page waits after a test ends before it moves on to the results, in seconds. */
 export const AUTO_CONTINUE_SECONDS = 5;
@@ -93,7 +91,7 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
           Connection lost, this may be out of date.
         </p>
       )}
-      <PanelCard title="Progress">
+      <Panel title="Progress">
         <div className="space-y-1">
           <p className="font-medium">{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</p>
           <p className="text-sm">
@@ -105,10 +103,10 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
         <p className="text-sm text-muted-foreground">
           {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}
         </p>
-      </PanelCard>
-      <PanelCard title="Signal">
+      </Panel>
+      <Panel title="Signal">
         <LiveChart test={test} />
-      </PanelCard>
+      </Panel>
       <Separator />
       <div className="flex items-center justify-between gap-4">
         <p role="status" className="text-sm text-muted-foreground">
@@ -138,7 +136,7 @@ interface StartingProps {
 export function StartingView({ connected }: StartingProps) {
   return (
     <div className="space-y-4">
-      <PanelCard title="Progress">
+      <Panel title="Progress">
         <p role="status" className="flex items-center gap-2">
           <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" />
           Starting…
@@ -148,7 +146,7 @@ export function StartingView({ connected }: StartingProps) {
             The live view is not connected. The test is running, but its progress cannot be shown.
           </p>
         )}
-      </PanelCard>
+      </Panel>
     </div>
   );
 }
@@ -158,43 +156,67 @@ interface ResultProps {
   onNewTest: () => void;
 }
 
-/** How a test ended, and a way to the session. It stays until the user asks for a new test. */
+const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: string }> = {
+  complete: { Icon: CircleCheckIcon, className: "text-emerald-400" },
+  incomplete: { Icon: TriangleAlertIcon, className: "text-amber-400" },
+  failed: { Icon: OctagonXIcon, className: "text-red-400" },
+  no_session: { Icon: OctagonXIcon, className: "text-red-400" },
+};
+
+/**
+ * How a test ended, with a way to the session and to a new test. A test that recorded data also
+ * shows its results below. It stays until the user asks for a new test.
+ */
 export function ResultView({ last, onNewTest }: ResultProps) {
+  const { Icon, className } = OUTCOME_ICON[last.outcome];
+  const analysed = last.session_id !== null && (last.outcome === "complete" || last.outcome === "incomplete");
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-xl font-semibold">{OUTCOME_WORDS[last.outcome]}</h1>
-      {last.reason && <p className="text-sm">{last.reason}</p>}
-      {last.reason === "emergency stop" && (
-        <p role="status" className="text-sm">
-          {SHUTDOWN_NOTICE}
-        </p>
-      )}
-      {last.session_id ? (
-        <p className="text-sm">
-          <Link to="/sessions/$id" params={{ id: last.session_id }} className="underline">
-            Open the session
-          </Link>
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground">No session was saved.</p>
-      )}
-      {last.motion_uncertain && (
-        <div className="space-y-1">
-          <p role="alert" className="text-sm text-amber-400">
-            The printer may still be moving.
-          </p>
-          <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
-        </div>
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onNewTest}
-        disabled={last.motion_uncertain}
-        title={last.motion_uncertain ? "Stop the printer first: it may still be moving." : undefined}
+    <div className="space-y-4">
+      <Panel
+        title="Result"
+        label="Test result"
+        action={
+          <div className="flex items-center gap-2">
+            {last.session_id && (
+              <Button render={<Link to="/sessions/$id" params={{ id: last.session_id }} />} variant="outline">
+                Open the session
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onNewTest}
+              disabled={last.motion_uncertain}
+              title={last.motion_uncertain ? "Stop the printer first: it may still be moving." : undefined}
+            >
+              New test
+            </Button>
+          </div>
+        }
       >
-        New test
-      </Button>
+        <div className="flex items-start gap-3">
+          <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
+          <div className="space-y-1">
+            <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
+            {last.reason && <p className="text-sm">{last.reason}</p>}
+            {last.reason === "emergency stop" && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {SHUTDOWN_NOTICE}
+              </p>
+            )}
+            {!last.session_id && <p className="text-sm text-muted-foreground">No session was saved.</p>}
+          </div>
+        </div>
+        {last.motion_uncertain && (
+          <div className="space-y-1">
+            <p role="alert" className="text-sm text-amber-400">
+              The printer may still be moving.
+            </p>
+            <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
+          </div>
+        )}
+      </Panel>
+      {analysed && last.session_id && <SessionResults id={last.session_id} details={false} />}
     </div>
   );
 }

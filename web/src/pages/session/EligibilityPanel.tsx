@@ -1,4 +1,7 @@
+import { Panel } from "@/components/Panel";
 import { pointLabel } from "@/components/charts/options";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { ProbePoint } from "@/lib/generated/ProbePoint";
 
@@ -29,8 +32,7 @@ export function EligibilityPanel({
   const { decisions } = analysis.eligibility;
   if (decisions.length === 0 && analysis.failures.length === 0) return null;
   return (
-    <section className="space-y-2 rounded-lg border p-4" aria-label="Capture health and eligibility">
-      <h2 className="font-medium">Capture health and eligibility</h2>
+    <Panel title="Capture health and eligibility">
       <ul className="space-y-1 text-sm">
         {decisions.map((d) => (
           <li key={`${d.chip}-${d.point}`}>
@@ -50,20 +52,22 @@ export function EligibilityPanel({
         ))}
       </ul>
       {[...overridable(analysis)].map(([chip, { overridden, reasons }]) => (
-        <label key={chip} className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
+        <div key={chip} className="flex items-start gap-2 text-sm">
+          <Checkbox
+            id={`include-${chip}`}
+            className="mt-0.5"
             checked={overridden}
-            onChange={(e) =>
-              onOverridesChange(e.target.checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
+            onCheckedChange={(checked) =>
+              onOverridesChange(checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
             }
           />
-          <span>
-            Include {chip} anyway
-            <span className="text-muted-foreground"> ({reasons.join("; ")})</span>
-          </span>
-        </label>
+          <Label htmlFor={`include-${chip}`} className="items-start font-normal">
+            <span>
+              Include {chip} anyway
+              <span className="text-muted-foreground"> ({reasons.join("; ")})</span>
+            </span>
+          </Label>
+        </div>
       ))}
       {analysis.failures.length > 0 && (
         <ul className="space-y-1 text-sm text-destructive">
@@ -74,6 +78,6 @@ export function EligibilityPanel({
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }

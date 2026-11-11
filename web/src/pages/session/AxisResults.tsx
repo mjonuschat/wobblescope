@@ -1,3 +1,4 @@
+import { Panel } from "@/components/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { summedOption } from "@/components/charts/options";
 import type { Analysis } from "@/lib/generated/Analysis";
@@ -36,9 +37,11 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
           probePoints={meta.probe_points}
         />
       ) : (
-        <p role="status" className="rounded-lg border p-4 text-sm">
-          No recommendation for this axis: none of its recordings could be used. The reasons are listed below.
-        </p>
+        <Panel title="Recommendation">
+          <p role="status" className="text-sm">
+            No recommendation for this axis: none of its recordings could be used. The reasons are listed below.
+          </p>
+        </Panel>
       )}
       <EligibilityPanel
         analysis={analysis}
@@ -57,7 +60,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         />
       ))}
       {analysis.summed && (
-        <section className="space-y-2 rounded-lg border p-4" aria-label="Summed PSD">
+        <Panel title="Summed PSD" label="Summed PSD">
           <EChart
             option={summedOption(analysis.summed, maxFreq)}
             label="Summed PSD of the eligible chips, for display only"
@@ -67,7 +70,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
             frequency-normalised (divided by frequency plus 0.1 Hz, damped below 10 Hz), as in Klipper's graphs, so its
             values are not raw PSD and chips of different sensitivity add up unevenly.
           </p>
-        </section>
+        </Panel>
       )}
       <p className="text-xs text-muted-foreground">
         Analysed with core {analysis.core_version}
