@@ -5,6 +5,7 @@ import type { AnalysisResult } from "@/analysis/protocol";
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
 import { ArrowLeftIcon } from "lucide-react";
 
+import { Waiting } from "@/components/Waiting";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useResult } from "@/lib/api/queries";
@@ -88,7 +89,7 @@ export function ResultPage({ rid }: { rid: string }) {
   const query = useResult(rid);
   const [selected, setSelected] = useState<Axis | null>(null);
 
-  if (query.isPending) return <p className="text-sm text-muted-foreground">Loading result…</p>;
+  if (query.isPending) return <Waiting>Loading result…</Waiting>;
   if (query.isError) {
     return (
       <div className="space-y-2">

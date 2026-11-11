@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
+import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
@@ -30,7 +31,7 @@ function AnalysisView({
   onOverridesChange: (overrides: string[]) => void;
 }) {
   if (query.isPending) {
-    return <p className="text-sm text-muted-foreground">Analysing axis {axis}…</p>;
+    return <Waiting>Analysing axis {axis}…</Waiting>;
   }
   if (query.isError) {
     return (
@@ -53,7 +54,7 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
     return (
       <div className="space-y-4">
         {header(null)}
-        <p className="text-sm text-muted-foreground">Loading session…</p>
+        <Waiting>Loading session…</Waiting>
       </div>
     );
   }
