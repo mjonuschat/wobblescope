@@ -60,20 +60,19 @@ export function AxisResults({ result, meta, overrides, onOverridesChange }: Prop
         onOverridesChange={onOverridesChange}
       />
       {shown && (
-        <Tabs value={shown.chip} onValueChange={setChipName}>
-          <TabsList variant="line">
-            {analysis.per_chip.map((c) => (
-              <TabsTrigger key={c.chip} value={c.chip} className="after:bg-primary">
-                {c.chip}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
-      {shown && (
         <ChipResult
-          key={shown.chip}
           chip={shown}
+          switcher={
+            <Tabs value={shown.chip} onValueChange={setChipName}>
+              <TabsList variant="line">
+                {analysis.per_chip.map((c) => (
+                  <TabsTrigger key={c.chip} value={c.chip} className="after:bg-primary">
+                    {c.chip}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          }
           snippets={snippets.perChip[shownIndex]}
           probePoints={meta.probe_points}
           maxFreq={maxFreq}
