@@ -60,7 +60,7 @@ function IconAction({
             variant="outline"
             size="icon"
             aria-label={label}
-            className={highlighted ? "border-primary" : undefined}
+            className={highlighted ? "border-primary dark:border-primary" : undefined}
             disabled={disabled}
             onClick={onClick}
             {...(href ? { render: <a href={href} download />, nativeButton: false } : {})}
