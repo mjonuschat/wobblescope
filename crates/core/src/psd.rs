@@ -47,7 +47,8 @@ fn bessel_i0(x: f64) -> f64 {
     sum
 }
 
-fn kaiser(n: usize, beta: f64) -> Vec<f64> {
+/// Kaiser window of length `n` with shape parameter `beta`.
+pub(crate) fn kaiser(n: usize, beta: f64) -> Vec<f64> {
     let half = (n as f64 - 1.0) / 2.0;
     let denom = bessel_i0(beta);
     (0..n)
