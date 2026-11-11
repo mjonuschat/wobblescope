@@ -37,10 +37,10 @@ export function StreamPage({ createWorker }: Props) {
   const [paused, setPaused] = useState(false)
 
   const updatesPerSecond = updates ?? hello?.defaults.updates_per_second ?? 1
-  const { spectra, resetPeakHold } = useSpectra(stream, windowSeconds, updatesPerSecond, createWorker)
+  const { spectra, resetPeakHold } = useSpectra(stream, windowSeconds, updatesPerSecond, createWorker, paused)
   const signals = useSignalBuffers(stream)
 
-  // A paused view keeps the data it had. The socket and the worker keep running.
+  // A paused view keeps the data it had. The socket keeps running; the worker is not fed while paused.
   const [frozen, setFrozen] = useState<{ spectra: SpectraState; signals: typeof signals } | null>(null)
   const shownSpectra = frozen?.spectra ?? spectra
   const shownSignals = frozen?.signals ?? signals
@@ -144,8 +144,9 @@ export function StreamPage({ createWorker }: Props) {
         <SpectrumChart
           maxHz={maxHz}
           onResetPeakHold={() => resetPeakHold()}
-          chips={shown.map(({ chip, entry, spectrum }) => ({
+          chips={shown.map(({ chip, index, entry, spectrum }) => ({
             chip,
+            colorIndex: index,
             spectrum,
             peaks: entry.peaks,
             peakHold: entry.peakHold,

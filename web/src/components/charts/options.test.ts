@@ -180,6 +180,14 @@ describe('liveSpectrumOption', () => {
     for (const name of ['b Z', 'b peak hold']) expect(byName(name).lineStyle.color).toBe(chipColor(1))
   })
 
+  it('colours by colorIndex when given, not by position', () => {
+    const picked = liveSpectrumOption({
+      chips: [{ chip: 'b', colorIndex: 1, spectrum, peaks: [], peakHold: [], axes: ['sum'] }],
+      maxHz: 200,
+    })
+    expect((picked as { series: Live[] }).series[0].lineStyle.color).toBe(chipColor(1))
+  })
+
   it('draws the peak-hold lines faintly and the spectra solidly', () => {
     expect(byName('a peak hold').lineStyle.opacity).toBe(0.3)
     expect(byName('b peak hold').lineStyle.opacity).toBe(0.3)

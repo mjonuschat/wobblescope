@@ -40,18 +40,22 @@ function spacingOf(spectrum: Spectrum): number {
 /**
  * Feeds the stream's frames to the spectrum worker and returns the latest spectrum, peaks and
  * peak hold per chip. A chip is configured when its stream header arrives, and again when its
- * rate or maximum frequency, `windowSeconds` or `updatesPerSecond` change.
+ * rate or maximum frequency, `windowSeconds` or `updatesPerSecond` change. While `paused`, frames
+ * are not sent to the worker and its replies are dropped; the stream itself keeps running.
  */
 export function useSpectra(
   stream: StreamApi,
   windowSeconds: number,
   updatesPerSecond: number,
   createWorker: () => SpectrumWorkerLike = createSpectrumWorker,
+  paused = false,
 ): { spectra: SpectraState; resetPeakHold: (chip?: string) => void } {
   const [spectra, setSpectra] = useState<SpectraState>({})
   const workerRef = useRef<SpectrumWorkerLike | null>(null)
   const holds = useRef(new Map<string, Hold>())
   const configured = useRef(new Map<string, string>())
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
   const { chips } = stream.state
   const { onFrame } = stream
 
@@ -72,6 +76,7 @@ export function useSpectra(
     const known = configured.current
     workerRef.current = worker
     worker.onmessage = (event) => {
+      if (pausedRef.current) return
       const message = event.data
       if (message.type === 'error') {
         setSpectra((previous) => ({
@@ -92,6 +97,7 @@ export function useSpectra(
       setSpectra((previous) => ({ ...previous, [chip]: { spectrum, peaks, peakHold: values, error: null } }))
     }
     const stop = onFrame((chip, frame) => {
+      if (pausedRef.current) return
       // Transfer a copy: other onFrame subscribers share this frame and still need its samples.
       const xyz = frame.xyz.slice()
       worker.postMessage({ type: 'frame', chip, t0: frame.t0, xyz }, [xyz.buffer as ArrayBuffer])

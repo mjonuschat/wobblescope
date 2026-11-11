@@ -52,8 +52,8 @@ function setup() {
       worker.onmessage?.({ data: response } as MessageEvent<SpectrumResponse>)
     })
   const hook = (chips: Record<string, ChipStreamState>, windowSeconds = 2, ups = 10) =>
-    renderHook(({ s, w, u }) => useSpectra(s, w, u, createWorker), {
-      initialProps: { s: api(chips), w: windowSeconds, u: ups },
+    renderHook(({ s, w, u, p }: { s: StreamApi; w: number; u: number; p?: boolean }) => useSpectra(s, w, u, createWorker, p), {
+      initialProps: { s: api(chips), w: windowSeconds, u: ups } as { s: StreamApi; w: number; u: number; p?: boolean },
     })
   const fail = (chip: string, message: string) =>
     act(() => {
@@ -73,6 +73,23 @@ describe('useSpectra', () => {
     const xyz = new Float32Array(3)
     for (const h of handlers) h('a', { index: 0, t0: 5, xyz })
     expect(requests[1]).toEqual({ type: 'frame', chip: 'a', t0: 5, xyz })
+  })
+
+  it('does not post frames or take replies while paused, and does again after', () => {
+    const { requests, reply, hook, api, handlers } = setup()
+    const chips = { a: chipState() }
+    const { result, rerender } = hook(chips)
+    const xyz = new Float32Array(3)
+    rerender({ s: api(chips), w: 2, u: 10, p: true })
+    for (const h of handlers) h('a', { index: 0, t0: 1, xyz })
+    reply('a', spectrumOf([1, 1, 1]))
+    expect(requests.filter((r) => r.type === 'frame')).toHaveLength(0)
+    expect(result.current.spectra.a).toBeUndefined()
+    rerender({ s: api(chips), w: 2, u: 10, p: false })
+    for (const h of handlers) h('a', { index: 0, t0: 2, xyz })
+    reply('a', spectrumOf([2, 2, 2]))
+    expect(requests.filter((r) => r.type === 'frame')).toHaveLength(1)
+    expect(result.current.spectra.a.peakHold).toEqual([2, 2, 2])
   })
 
   it('keeps a running maximum and clears it on reset', () => {

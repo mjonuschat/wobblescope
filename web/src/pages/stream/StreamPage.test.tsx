@@ -67,7 +67,10 @@ const spectrum = (level: number): Spectrum => ({
 
 class FakeWorker implements SpectrumWorkerLike {
   onmessage: SpectrumWorkerLike['onmessage'] = null
-  postMessage() {}
+  posted: unknown[] = []
+  postMessage(message: unknown) {
+    this.posted.push(message)
+  }
   terminate() {}
   emit(message: SpectrumResponse) {
     this.onmessage?.({ data: message } as MessageEvent<SpectrumResponse>)
@@ -203,7 +206,64 @@ describe('the stream page', () => {
     act(() => worker.emit({ type: 'spectrum', chip: 'a1', spectrum: spectrum(5), peaks: [] }))
     expect(chartProps().chips[0].spectrum.psd_sum).toEqual([1, 1, 1])
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
-    expect(chartProps().chips[0].spectrum.psd_sum).toEqual([5, 5, 5])
+    act(() => worker.emit({ type: 'spectrum', chip: 'a1', spectrum: spectrum(7), peaks: [] }))
+    expect(chartProps().chips[0].spectrum.psd_sum).toEqual([7, 7, 7])
+  })
+
+  it('stops feeding the worker while paused and keeps the socket', async () => {
+    open()
+    await connect()
+    pick('a1')
+    server(streamHeader('a1', 0))
+    const frame = () => {
+      const buffer = new ArrayBuffer(28)
+      const view = new DataView(buffer)
+      view.setUint16(0, 0, true)
+      view.setUint32(12, 1, true)
+      act(() => socket().sendBinary(buffer))
+    }
+    const frames = () => worker.posted.filter((m) => (m as { type: string }).type === 'frame').length
+    frame()
+    expect(frames()).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    frame()
+    expect(frames()).toBe(1)
+    expect(socket().closed).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    frame()
+    expect(frames()).toBe(2)
+  })
+
+  it('carries the selected index as the colour of a chip whose earlier chip has no spectrum', async () => {
+    open()
+    await connect()
+    pick('a1')
+    pick('a2')
+    server(streamHeader('a1', 0))
+    server(streamHeader('a2', 1))
+    act(() => worker.emit({ type: 'spectrum', chip: 'a2', spectrum: spectrum(1), peaks: [] }))
+    expect(chartProps().chips).toHaveLength(1)
+    expect(chartProps().chips[0]).toMatchObject({ chip: 'a2', colorIndex: 1 })
+  })
+
+  it('makes full half of the chip input rate when that is below the limit', async () => {
+    open()
+    await connect()
+    pick('a1')
+    server({ ...streamHeader('a1', 0), input_rate_hz: 400 })
+    fireEvent.change(screen.getByLabelText('Frequency range'), { target: { value: 'full' } })
+    expect(sent().at(-1).max_hz).toBe(200)
+  })
+
+  it('makes full follow the slowest of several chips', async () => {
+    open()
+    await connect()
+    pick('a1')
+    pick('a2')
+    server({ ...streamHeader('a1', 0), input_rate_hz: 1000 })
+    server({ ...streamHeader('a2', 1), input_rate_hz: 600 })
+    fireEvent.change(screen.getByLabelText('Frequency range'), { target: { value: 'full' } })
+    expect(sent().at(-1).max_hz).toBe(300)
   })
 
   it('says a print is running only while one is', async () => {

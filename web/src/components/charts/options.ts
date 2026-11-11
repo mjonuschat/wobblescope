@@ -152,7 +152,8 @@ export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOpt
 }
 
 interface LiveSpectrumInput {
-  chips: { chip: string; spectrum: Spectrum; peaks: Peak[]; peakHold: number[]; axes: Axis3[] }[]
+  /** `colorIndex` is the chip's place in the page's selection, so its colour matches the other charts. */
+  chips: { chip: string; colorIndex?: number; spectrum: Spectrum; peaks: Peak[]; peakHold: number[]; axes: Axis3[] }[]
   maxHz: number
 }
 
@@ -169,8 +170,8 @@ const SPECTRUM_VALUES = {
  */
 export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = []
-  chips.forEach(({ chip, spectrum, peaks, peakHold, axes }, index) => {
-    const color = chipColor(index)
+  chips.forEach(({ chip, colorIndex, spectrum, peaks, peakHold, axes }, index) => {
+    const color = chipColor(colorIndex ?? index)
     axes.forEach((axis, n) => {
       const line: Record<string, unknown> = {
         name: `${chip} ${axis.toUpperCase()}`,
