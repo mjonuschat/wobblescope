@@ -11,6 +11,8 @@ export interface ChipSpectrum {
   peaks: Peak[]
   /** The running maximum of `psd_sum` per bin. */
   peakHold: number[]
+  /** The latest worker failure for this chip, cleared by the next successful spectrum. */
+  error: string | null
 }
 
 export type SpectraState = Record<string, ChipSpectrum>
@@ -53,13 +55,31 @@ export function useSpectra(
   const { chips } = stream.state
   const { onFrame } = stream
 
+  const resetPeakHold = useCallback((chip?: string) => {
+    if (chip === undefined) holds.current.clear()
+    else holds.current.delete(chip)
+    setSpectra((previous) => {
+      const next: SpectraState = {}
+      for (const [name, value] of Object.entries(previous)) {
+        next[name] = chip === undefined || chip === name ? { ...value, peakHold: [] } : value
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     const worker = createWorker()
     const known = configured.current
     workerRef.current = worker
     worker.onmessage = (event) => {
       const message = event.data
-      if (message.type !== 'spectrum') return
+      if (message.type === 'error') {
+        setSpectra((previous) => ({
+          ...previous,
+          [message.chip]: { ...(previous[message.chip] ?? { spectrum: null, peaks: [], peakHold: [] }), error: message.message },
+        }))
+        return
+      }
       const { chip, spectrum, peaks } = message
       const spacing = spacingOf(spectrum)
       const old = holds.current.get(chip)
@@ -69,10 +89,12 @@ export function useSpectra(
         ? spectrum.psd_sum.map((level, i) => Math.max(level, old.values[i]))
         : [...spectrum.psd_sum]
       holds.current.set(chip, { values, spacing })
-      setSpectra((previous) => ({ ...previous, [chip]: { spectrum, peaks, peakHold: values } }))
+      setSpectra((previous) => ({ ...previous, [chip]: { spectrum, peaks, peakHold: values, error: null } }))
     }
     const stop = onFrame((chip, frame) => {
-      worker.postMessage({ type: 'frame', chip, t0: frame.t0, xyz: frame.xyz }, [frame.xyz.buffer as ArrayBuffer])
+      // Transfer a copy: other onFrame subscribers share this frame and still need its samples.
+      const xyz = frame.xyz.slice()
+      worker.postMessage({ type: 'frame', chip, t0: frame.t0, xyz }, [xyz.buffer as ArrayBuffer])
     })
     return () => {
       stop()
@@ -91,7 +113,7 @@ export function useSpectra(
       const key = `${state.rateHz}/${state.maxHz}/${windowSeconds}/${minIntervalMs}`
       if (configured.current.get(chip) === key) continue
       configured.current.set(chip, key)
-      holds.current.delete(chip)
+      resetPeakHold(chip)
       worker.postMessage({
         type: 'configure',
         chip,
@@ -101,19 +123,7 @@ export function useSpectra(
         minIntervalMs,
       })
     }
-  }, [chips, windowSeconds, updatesPerSecond, onFrame])
-
-  const resetPeakHold = useCallback((chip?: string) => {
-    if (chip === undefined) holds.current.clear()
-    else holds.current.delete(chip)
-    setSpectra((previous) => {
-      const next: SpectraState = {}
-      for (const [name, value] of Object.entries(previous)) {
-        next[name] = chip === undefined || chip === name ? { ...value, peakHold: [] } : value
-      }
-      return next
-    })
-  }, [])
+  }, [chips, windowSeconds, updatesPerSecond, resetPeakHold])
 
   return { spectra, resetPeakHold }
 }

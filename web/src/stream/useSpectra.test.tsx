@@ -22,13 +22,19 @@ function spectrumOf(psd: number[], step = 1): Spectrum {
 
 function setup() {
   const requests: SpectrumRequest[] = []
+  const transfers: (Transferable[] | undefined)[] = []
+  let terminated = 0
   const worker: SpectrumWorkerLike = {
     onmessage: null,
-    terminate() {},
-    postMessage(message) {
+    terminate() {
+      terminated += 1
+    },
+    postMessage(message, transfer) {
       requests.push(message)
+      transfers.push(transfer)
     },
   }
+  const createWorker = () => worker
   const handlers = new Set<(chip: string, frame: DecodedFrame) => void>()
   const onFrame: StreamApi['onFrame'] = (handler) => {
     handlers.add(handler)
@@ -46,10 +52,15 @@ function setup() {
       worker.onmessage?.({ data: response } as MessageEvent<SpectrumResponse>)
     })
   const hook = (chips: Record<string, ChipStreamState>, windowSeconds = 2, ups = 10) =>
-    renderHook(({ s, w, u }) => useSpectra(s, w, u, () => worker), {
+    renderHook(({ s, w, u }) => useSpectra(s, w, u, createWorker), {
       initialProps: { s: api(chips), w: windowSeconds, u: ups },
     })
-  return { requests, reply, hook, api, handlers }
+  const fail = (chip: string, message: string) =>
+    act(() => {
+      const response: SpectrumResponse = { type: 'error', chip, message }
+      worker.onmessage?.({ data: response } as MessageEvent<SpectrumResponse>)
+    })
+  return { requests, transfers, terminated: () => terminated, fail, reply, hook, api, handlers }
 }
 
 describe('useSpectra', () => {
@@ -108,5 +119,44 @@ describe('useSpectra', () => {
     expect(requests).toHaveLength(1)
     rerender({ s: api(chips), w: 4, u: 20 })
     expect(requests[1]).toMatchObject({ type: 'configure', windowSeconds: 4, minIntervalMs: 50 })
+  })
+
+  it('keeps the error of a failed chip until its next spectrum', () => {
+    const { reply, fail, hook } = setup()
+    const { result } = hook({ a: chipState() })
+    fail('a', 'wasm failed')
+    expect(result.current.spectra.a.error).toBe('wasm failed')
+    expect(result.current.spectra.a.spectrum).toBeNull()
+    reply('a', spectrumOf([1, 2]))
+    expect(result.current.spectra.a.error).toBeNull()
+    expect(result.current.spectra.a.peakHold).toEqual([1, 2])
+  })
+
+  it('transfers a copy so other frame subscribers keep their samples', () => {
+    const { requests, transfers, hook, handlers } = setup()
+    hook({ a: chipState() })
+    const xyz = new Float32Array([1, 2, 3])
+    for (const h of handlers) h('a', { index: 0, t0: 0, xyz })
+    const sent = requests[1] as Extract<SpectrumRequest, { type: 'frame' }>
+    expect(sent.xyz).not.toBe(xyz)
+    expect(transfers[1]).toEqual([sent.xyz.buffer])
+    expect(Array.from(xyz)).toEqual([1, 2, 3])
+  })
+
+  it('clears the shown peak hold when a chip is reconfigured', () => {
+    const { reply, hook, api } = setup()
+    const { result, rerender } = hook({ a: chipState() })
+    reply('a', spectrumOf([9, 9, 9]))
+    rerender({ s: api({ a: chipState({ rateHz: 400 }) }), w: 2, u: 10 })
+    expect(result.current.spectra.a.peakHold).toEqual([])
+  })
+
+  it('terminates the worker and unsubscribes from frames on unmount', () => {
+    const { terminated, hook, handlers } = setup()
+    const { unmount } = hook({ a: chipState() })
+    expect(handlers.size).toBe(1)
+    unmount()
+    expect(terminated()).toBe(1)
+    expect(handlers.size).toBe(0)
   })
 })
