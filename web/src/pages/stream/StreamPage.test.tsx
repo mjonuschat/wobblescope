@@ -117,6 +117,16 @@ describe('the stream page', () => {
     expect(sent()).toEqual([{ type: 'subscribe', chip: 'a1', max_hz: 200, updates_per_second: 10 }])
   })
 
+  it('offers no chip before Hello arrives, then subscribes with the Hello defaults', async () => {
+    open()
+    act(() => socket().open())
+    await screen.findByText(/Waiting for the daemon/)
+    expect(screen.queryByLabelText('Stream a1')).toBeNull()
+    server(HELLO)
+    pick('a1')
+    expect(sent()).toEqual([{ type: 'subscribe', chip: 'a1', max_hz: 200, updates_per_second: 10 }])
+  })
+
   it('shows an empty state without a connection', async () => {
     open()
     expect(screen.getByText(/Not connected to the daemon/)).toBeTruthy()

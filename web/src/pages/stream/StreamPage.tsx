@@ -120,7 +120,7 @@ export function StreamPage({ createWorker }: Props) {
       {chipList && chipList.chips.length === 0 && (
         <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
       )}
-      {chipList && (
+      {chipList && hello && (
         <ChipPicker
           chips={chipList.chips}
           selected={selected}
@@ -133,6 +133,7 @@ export function StreamPage({ createWorker }: Props) {
           )}
         />
       )}
+      {chipList && !hello && <p className="text-sm text-neutral-400">Waiting for the daemon's defaults.</p>}
       {selected.length === 0 && <p className="text-sm text-neutral-400">Pick a chip to see its signal.</p>}
       {selected.length > 0 && (
         <SignalStrips
