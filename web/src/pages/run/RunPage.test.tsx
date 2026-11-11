@@ -31,7 +31,7 @@ function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, s
   });
 }
 
-const startButton = () => screen.getByRole("button", { name: /Start test|Checking printer/ });
+const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ });
 const thumb = (index: number) => document.querySelectorAll<HTMLInputElement>('input[type="range"]')[index];
 const mode = () => screen.getByRole("combobox", { name: "Mode" }).textContent;
 async function chooseMode(name: "Pulse" | "Sweep") {
@@ -48,7 +48,7 @@ const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && 
 async function open(options?: Options) {
   const calls = api(options);
   renderRoute("/run/shaper");
-  await screen.findByRole("button", { name: "Start test" });
+  await screen.findByRole("button", { name: "Run Test" });
   return calls;
 }
 
@@ -157,7 +157,7 @@ describe("the run screen", () => {
       }),
     );
     renderRoute("/run/shaper");
-    fireEvent.click(await screen.findByRole("button", { name: "Start test" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
     const busy = await screen.findByRole("button", { name: "Checking printer…" });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(busy);
@@ -291,11 +291,11 @@ describe("the run screen", () => {
     );
     const { client } = renderRoute("/run/shaper");
     expect(await screen.findByText("the daemon is not connected to Moonraker")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
 
     ready = true;
     await client.invalidateQueries({ queryKey: queryKeys.status });
-    expect(await screen.findByRole("button", { name: "Start test" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
     expect(isOn("lis2dw ebb36")).toBe(true);
   });
 });

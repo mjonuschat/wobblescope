@@ -91,7 +91,7 @@ describe("a running test", () => {
   it("opened mid-test goes straight to progress", async () => {
     await mount({ test: running, last: null });
     expect(await screen.findByText("Test running")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
   });
 
   it("stops with one click and no dialog, and a failed finish shows the shutdown notice", async () => {
@@ -221,7 +221,7 @@ describe("a finished test", () => {
     send({ test: null, last: done });
     expect(screen.getByText("The test finished.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New test" }));
-    expect(await screen.findByRole("button", { name: "Start test" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
     expect(screen.queryByText("The test finished.")).toBeNull();
   });
 });
@@ -231,7 +231,7 @@ describe("starting a test", () => {
     const calls = api();
     renderRoute("/run/shaper");
     // The socket is never opened, as when a proxy refuses the upgrade.
-    fireEvent.click(await screen.findByRole("button", { name: "Start test" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
     expect(await screen.findByText("Starting…")).toBeTruthy();
     expect(screen.getByText(/The live view is not connected/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Emergency stop" }));
@@ -245,9 +245,9 @@ describe("starting a test", () => {
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
     act(() => FakeSocket.latest.open());
     send({ test: null, last: null });
-    fireEvent.click(await screen.findByRole("button", { name: "Start test" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run Test" }));
     expect(await screen.findByText("Starting…")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
 
     send({ test: running, last: null });
     expect(await screen.findByText("Test running")).toBeTruthy();

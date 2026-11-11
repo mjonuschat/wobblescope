@@ -1,4 +1,4 @@
-import { ChevronDownIcon, MinusIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -419,7 +419,14 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
           {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
         </div>
         <Button type="submit" size="lg" className="ml-auto px-5" disabled={problem !== null || start.isPending}>
-          {start.isPending ? "Checking printer…" : "Start test"}
+          {start.isPending ? (
+            "Checking printer…"
+          ) : (
+            <>
+              <PlayIcon data-icon="inline-start" />
+              Run Test
+            </>
+          )}
         </Button>
       </div>
     </form>
