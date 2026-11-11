@@ -1,5 +1,6 @@
 import { LineChart } from "echarts/charts";
 import {
+  GraphicComponent,
   GridComponent,
   LegendComponent,
   MarkLineComponent,
@@ -13,6 +14,7 @@ import { useEffect, useRef } from "react";
 
 echarts.use([
   LineChart,
+  GraphicComponent,
   GridComponent,
   LegendComponent,
   MarkLineComponent,

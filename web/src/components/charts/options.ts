@@ -16,6 +16,7 @@ export function pointLabel(index: number, probePoints: ProbePoint[]): string {
 const zip = (xs: number[], ys: number[]) => ys.map((y, i) => [xs[i], y]);
 
 const text = "#d4d4d4";
+const MUTED = "#a3a3a3";
 const GRID = "rgba(255, 255, 255, 0.08)";
 const PALETTE = ["#ff7a33", "#4da3ff", "#7ee081", "#ffd166", "#c792ea", "#ef5b7b", "#5eead4", "#f59e0b"];
 const splitLine = { lineStyle: { color: GRID } };
@@ -87,9 +88,23 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
       data: zip(grid, candidate.vals),
     });
   }
+  // The axes curves and the shapers get a row each, so it is clear which is which.
+  const measured = series.filter((s) => s.yAxisIndex === undefined).map((s) => s.name as string);
+  const shapers = series.filter((s) => s.yAxisIndex === 1).map((s) => s.name as string);
+  const rowLabel = (label: string, top: number) => ({
+    type: "text",
+    left: 0,
+    top: top + 4,
+    style: { text: label, fill: MUTED, fontSize: 12 },
+  });
   return {
     ...base(null, maxFreq),
-    legend: { type: "scroll", top: 0, selected, textStyle: { color: text } },
+    grid: { top: shapers.length > 0 ? 84 : 52, left: 64, right: 64, bottom: 40 },
+    legend: [
+      { data: measured, top: 0, left: 56, selected, textStyle: { color: text } },
+      ...(shapers.length > 0 ? [{ data: shapers, top: 28, left: 56, textStyle: { color: text } }] : []),
+    ],
+    graphic: [rowLabel("Axes", 0), ...(shapers.length > 0 ? [rowLabel("Shapers", 28)] : [])],
     yAxis: [
       { type: "value", name: "Vibration Strength", splitLine },
       {

@@ -20,9 +20,21 @@ describe("psdOption", () => {
   it("draws one total series per probe point and keeps X, Y and Z hidden in the legend", () => {
     const left = series(option).filter((s) => s.yAxisIndex === undefined);
     expect(left.map((s) => s.name)).toEqual(["Total", "X", "Y", "Z"]);
-    const selected = (option as { legend: { selected: Record<string, boolean> } }).legend.selected;
+    const selected = (option as { legend: { selected: Record<string, boolean> }[] }).legend[0].selected;
     expect(Object.keys(selected).sort()).toEqual(["X", "Y", "Z"]);
     expect(Object.values(selected).every((v) => v === false)).toBe(true);
+  });
+
+  it("puts the measured curves and the shapers in a legend of their own each", () => {
+    const legends = (option as { legend: { data: string[] }[] }).legend;
+    expect(legends).toHaveLength(2);
+    expect(legends[0].data).toEqual(["Total", "X", "Y", "Z"]);
+    expect(legends[1].data).toEqual(rec.all.map((c) => c.name));
+  });
+
+  it("has only the measured legend without a recommendation", () => {
+    const bare = psdOption({ chip, recommendation: null, maxFreq: 200 });
+    expect((bare as { legend: unknown[] }).legend).toHaveLength(1);
   });
 
   it("names each shaper curve by the shaper alone", () => {
