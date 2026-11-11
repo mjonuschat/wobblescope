@@ -9,7 +9,7 @@ describe("SpectrumChart", () => {
   it("calls onResetPeakHold from its button", () => {
     const reset = vi.fn();
     render(<SpectrumChart chips={[]} maxHz={200} onResetPeakHold={reset} />);
-    fireEvent.click(screen.getByRole("button", { name: "Reset peak hold" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset Peak Hold" }));
     expect(reset).toHaveBeenCalledOnce();
   });
 });

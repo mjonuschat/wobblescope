@@ -179,7 +179,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Frequency range", "400 Hz");
+    await choose("Frequency Range", "400 Hz");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 400, updates_per_second: 10 });
   });
 
@@ -187,7 +187,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Refresh rate", "5 Hz");
+    await choose("Refresh Rate", "5 Hz");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 5 });
   });
 
@@ -195,7 +195,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Frequency range", "Max");
+    await choose("Frequency Range", "Max");
     expect(sent().at(-1).max_hz).toBe(800);
   });
 
@@ -207,7 +207,7 @@ describe("the stream page", () => {
     act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(9), peaks: [] }));
     act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(2), peaks: [] }));
     expect(chartProps().chips[0].peakHold).toEqual([9, 9, 9]);
-    fireEvent.click(screen.getByRole("button", { name: "Reset peak hold" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset Peak Hold" }));
     act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(2), peaks: [] }));
     expect(chartProps().chips[0].peakHold).toEqual([2, 2, 2]);
   });
@@ -233,7 +233,7 @@ describe("the stream page", () => {
     server(streamHeader("a1", 0));
     const configure = worker.posted.find((m) => (m as { type: string }).type === "configure");
     expect(configure).toMatchObject({ chip: "a1", windowSeconds: 1 });
-    expect(screen.getByRole("combobox", { name: "Spectrum window" }).textContent).toContain("1 s");
+    expect(screen.getByRole("combobox", { name: "Averaging Time" }).textContent).toContain("1 s");
   });
 
   it("stops feeding the worker while paused and keeps the socket", async () => {
@@ -286,7 +286,7 @@ describe("the stream page", () => {
   it("offers 100, 200, 400, 800 and Max", async () => {
     open();
     await connect();
-    fireEvent.click(screen.getByRole("combobox", { name: "Frequency range" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Frequency Range" }));
     const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(names).toEqual(expect.arrayContaining(["100 Hz", "200 Hz", "400 Hz", "800 Hz", "Max"]));
   });

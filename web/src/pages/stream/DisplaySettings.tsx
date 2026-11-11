@@ -7,13 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 /** The range choice. It is a fixed top frequency, or the most each chip can show. */
 export type Range = number | "max";
 
-const WINDOW_SECONDS = [0.5, 1, 2, 4];
+const WINDOWS = [
+  { seconds: 0.5, name: "Fast" },
+  { seconds: 1, name: "Balanced" },
+  { seconds: 2, name: "Detailed" },
+  { seconds: 4, name: "Very Detailed" },
+];
 const RANGES_HZ = [100, 200, 400, 800];
 const RATES = [1, 2, 5, 10, 20];
 
 /** The update rates up to the daemon's limit, which is the top choice. */
 function rateOptions(limit: number, current: number): number[] {
   return [...new Set([...RATES.filter((r) => r < limit), limit, current])].sort((a, b) => a - b);
+}
+
+function windowText(seconds: number): string {
+  const name = WINDOWS.find((w) => w.seconds === seconds)?.name;
+  return name ? `${name} (${seconds} s)` : `${seconds} s`;
 }
 
 /** The fixed ranges, with the daemon's default when it is not one of them. */
@@ -70,7 +80,7 @@ export function DisplaySettings(props: Props) {
   return (
     <div className="flex flex-wrap items-end gap-4">
       <Choice
-        label="Refresh rate"
+        label="Refresh Rate"
         value={String(props.updatesPerSecond)}
         text={rateText(props.updatesPerSecond)}
         onChange={(value) => props.onUpdatesPerSecond(Number(value))}
@@ -82,7 +92,7 @@ export function DisplaySettings(props: Props) {
         ))}
       </Choice>
       <Choice
-        label="Frequency range"
+        label="Frequency Range"
         value={String(props.range)}
         text={rangeText(props.range)}
         onChange={(value) => props.onRange(value === "max" ? "max" : Number(value))}
@@ -95,14 +105,14 @@ export function DisplaySettings(props: Props) {
         <SelectItem value="max">{rangeText("max")}</SelectItem>
       </Choice>
       <Choice
-        label="Spectrum window"
+        label="Averaging Time"
         value={String(props.windowSeconds)}
-        text={`${props.windowSeconds} s`}
+        text={windowText(props.windowSeconds)}
         onChange={(value) => props.onWindowSeconds(Number(value))}
       >
-        {WINDOW_SECONDS.map((s) => (
-          <SelectItem key={s} value={String(s)}>
-            {s} s
+        {WINDOWS.map(({ seconds }) => (
+          <SelectItem key={seconds} value={String(seconds)}>
+            {windowText(seconds)}
           </SelectItem>
         ))}
       </Choice>
@@ -110,7 +120,7 @@ export function DisplaySettings(props: Props) {
         {props.paused ? "Resume" : "Pause"}
       </Button>
       <Button type="button" variant="outline" onClick={props.onResetPeakHold}>
-        Reset peak hold
+        Reset Peak Hold
       </Button>
     </div>
   );

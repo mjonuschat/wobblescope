@@ -145,7 +145,7 @@ export function StreamPage({ createWorker }: Props) {
         </Panel>
       )}
       {shown.length > 0 && (
-        <Panel title="Live spectrum">
+        <Panel title="Live Spectrum">
           <SpectrumChart
             maxHz={axisHz}
             onResetPeakHold={() => resetPeakHold()}

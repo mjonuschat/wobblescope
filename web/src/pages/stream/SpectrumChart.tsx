@@ -19,7 +19,7 @@ export function SpectrumChart({ chips, maxHz, onResetPeakHold }: Props) {
     <div className="space-y-2">
       <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={onResetPeakHold}>
-          Reset peak hold
+          Reset Peak Hold
         </Button>
       </div>
       <EChart option={option} label="Live spectrum of the streamed chips" height={420} />
