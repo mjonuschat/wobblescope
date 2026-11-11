@@ -86,8 +86,54 @@ describe("a running test", () => {
   it("shows the shutdown notice when the test ended with an emergency stop", async () => {
     await mount({ test: running, last: null });
     send({ test: null, last: { ...done, outcome: "failed", reason: "emergency stop" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Next" }));
     expect(await screen.findByText("The test failed.")).toBeTruthy();
     expect(screen.getAllByText(/FIRMWARE_RESTART/).length).toBeGreaterThan(0);
+  });
+
+  describe("when the test ends", () => {
+    const nextButton = () => screen.getByRole("button", { name: "Next" }) as HTMLButtonElement;
+
+    it("keeps Next disabled while the test runs", async () => {
+      await mount({ test: running, last: null });
+      await screen.findByText("Progress");
+      expect(nextButton().disabled).toBe(true);
+    });
+
+    it("stays on the measuring step with the last progress, and Next moves on at once", async () => {
+      await mount({ test: running, last: null });
+      await screen.findByText("Progress");
+      send({ test: null, last: done });
+      expect(await screen.findByText("The test finished.")).toBeTruthy();
+      expect(currentStep()).toContain("Measuring");
+      expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
+      expect(screen.getByText("Continuing to the results in 5 s")).toBeTruthy();
+      expect(nextButton().disabled).toBe(false);
+      fireEvent.click(nextButton());
+      await waitFor(() => expect(currentStep()).toContain("Results"));
+      expect(screen.getByRole("link", { name: "Open the session" })).toBeTruthy();
+    });
+
+    it("goes on to the results by itself after five seconds", async () => {
+      await mount({ test: running, last: null });
+      await screen.findByText("Progress");
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        send({ test: null, last: done });
+        expect(screen.getByText("Continuing to the results in 5 s")).toBeTruthy();
+        await act(async () => {
+          vi.advanceTimersByTime(2000);
+        });
+        expect(screen.getByText("Continuing to the results in 3 s")).toBeTruthy();
+        expect(currentStep()).toContain("Measuring");
+        await act(async () => {
+          vi.advanceTimersByTime(3000);
+        });
+        expect(currentStep()).toContain("Results");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it("has no stop button of its own; the header has the printer's", async () => {

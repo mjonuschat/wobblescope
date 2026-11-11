@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import type { TestState } from "@/lib/generated/TestState";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Steps } from "@/components/Steps";
@@ -25,6 +26,13 @@ export function RunPage() {
   const [startedId, setStartedId] = useState<string | null>(null);
   // The finished test whose result the user has dismissed.
   const [dismissed, setDismissed] = useState<string | null>(null);
+  // The running test as last seen, so its progress can stay on screen when it ends.
+  const [lastSeen, setLastSeen] = useState<TestState | null>(null);
+  // The finished test the user has moved on from, by Next or by the countdown.
+  const [advanced, setAdvanced] = useState<string | null>(null);
+  useEffect(() => {
+    if (live.test) setLastSeen(live.test);
+  }, [live.test]);
 
   const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
   const notReady = klippyReady ? null : "Klipper is not ready.";
@@ -61,13 +69,24 @@ export function RunPage() {
 
   const finished = live.last;
   const starting = startedId !== null && finished?.id !== startedId;
-  const showResult = !live.test && !starting && finished !== null && finished.id !== dismissed;
+  const holding =
+    !live.test && !starting && lastSeen !== null && finished?.id === lastSeen.id && advanced !== finished.id;
+  const showResult = !live.test && !starting && !holding && finished !== null && finished.id !== dismissed;
   const step: "setup" | "measuring" | "results" =
-    live.test || starting ? "measuring" : showResult ? "results" : "setup";
+    live.test || starting || holding ? "measuring" : showResult ? "results" : "setup";
 
   let body: ReactNode;
   if (live.test) {
-    body = <ProgressView test={live.test} connected={live.connected} />;
+    body = <ProgressView test={live.test} connected={live.connected} ended={null} onNext={() => {}} />;
+  } else if (holding && lastSeen && finished) {
+    body = (
+      <ProgressView
+        test={lastSeen}
+        connected={live.connected}
+        ended={finished}
+        onNext={() => setAdvanced(finished.id)}
+      />
+    );
   } else if (starting && startedId) {
     body = <StartingView connected={live.connected} />;
   } else if (showResult && finished) {

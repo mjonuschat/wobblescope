@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
 
-import { LoaderCircleIcon } from "lucide-react";
+import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import type { FinishedOutcome } from "@/lib/generated/FinishedOutcome";
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
@@ -44,15 +46,43 @@ function PanelCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
+/** How long the page waits after a test ends before it moves on to the results, in seconds. */
+export const AUTO_CONTINUE_SECONDS = 5;
+
 interface ProgressProps {
   test: TestState;
   /** Whether the live socket is open. */
   connected: boolean;
+  /** How the test ended, once it has. The page then counts down to the results. */
+  ended: FinishedTest | null;
+  /** Moves on to the results. */
+  onNext: () => void;
 }
 
-/** A running test: where it is, how long it has run, each chip's signal and the stop button. */
-export function ProgressView({ test, connected }: ProgressProps) {
+/** Counts down from [`AUTO_CONTINUE_SECONDS`] while `active`, and calls `onDone` at zero. */
+function useCountdown(active: boolean, onDone: () => void): number | null {
+  const [left, setLeft] = useState(AUTO_CONTINUE_SECONDS);
+  useEffect(() => {
+    if (!active) {
+      setLeft(AUTO_CONTINUE_SECONDS);
+      return;
+    }
+    const timer = setInterval(() => setLeft((n) => n - 1), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  useEffect(() => {
+    if (active && left <= 0) onDone();
+  }, [active, left, onDone]);
+  return active ? Math.max(left, 0) : null;
+}
+
+/**
+ * A running test: where it is, how long it has run and each chip's signal. When the test has
+ * ended it stays for a few seconds, so the last of the graph can be seen, and then goes on.
+ */
+export function ProgressView({ test, connected, ended, onNext }: ProgressProps) {
   useWarningToasts(test.id, test.chips);
+  const left = useCountdown(ended !== null, onNext);
   const where = test.axis && test.position ? ` (${test.axis} at ${formatPoint(test.position)})` : "";
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
@@ -65,7 +95,7 @@ export function ProgressView({ test, connected }: ProgressProps) {
       )}
       <PanelCard title="Progress">
         <div className="space-y-1">
-          <p className="font-medium">{PHASE_WORDS[test.phase]}</p>
+          <p className="font-medium">{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</p>
           <p className="text-sm">
             Segment {test.segment} of {test.segments}
             {where}
@@ -79,6 +109,22 @@ export function ProgressView({ test, connected }: ProgressProps) {
       <PanelCard title="Signal">
         <LiveChart test={test} />
       </PanelCard>
+      <Separator />
+      <div className="flex items-center justify-between gap-4">
+        <p role="status" className="text-sm text-muted-foreground">
+          {left !== null ? `Continuing to the results in ${left} s` : ""}
+        </p>
+        <Button
+          type="button"
+          size="lg"
+          className="ml-auto bg-neutral-300 px-5 text-neutral-900 hover:bg-neutral-200"
+          disabled={ended === null}
+          onClick={onNext}
+        >
+          Next
+          <ArrowRightIcon data-icon="inline-end" />
+        </Button>
+      </div>
     </div>
   );
 }
