@@ -1,21 +1,35 @@
 import { Link, Outlet } from "@tanstack/react-router";
 
+import { AppSidebar } from "@/components/AppSidebar";
 import { StatusBanner } from "@/components/StatusBanner";
+import { StatusDots } from "@/components/StatusDots";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { useRecoverStorage } from "@/lib/api/queries";
 
-/** The frame of every page: the navigation, the status banner and the page itself. */
+/** The frame of every page: the header, the sidebar, the status banner and the page itself. */
 export function RootLayout() {
   useRecoverStorage();
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <nav className="flex gap-4 border-b border-neutral-800 px-6 py-3">
-        <Link to="/">Run test</Link>
-        <Link to="/sessions">Sessions</Link>
-      </nav>
-      <StatusBanner />
-      <main className="p-6">
-        <Outlet />
-      </main>
-    </div>
+    <SidebarProvider className="min-h-screen flex-col [--header-height:--spacing(14)]">
+      <header className="sticky top-0 z-50 flex h-(--header-height) items-center border-b bg-background text-sm">
+        <div className="flex h-full w-(--sidebar-width) shrink-0 items-center border-r px-4">
+          <Link to="/" aria-label="Wobblescope">
+            <img src={`${import.meta.env.BASE_URL}logo-dark.svg`} alt="Wobblescope" className="h-11 w-auto" />
+          </Link>
+        </div>
+        <div className="flex flex-1 items-center px-4">
+          <StatusDots />
+        </div>
+      </header>
+      <div className="flex flex-1">
+        <AppSidebar />
+        <div className="min-w-0 flex-1">
+          <StatusBanner />
+          <main className="p-6">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }
