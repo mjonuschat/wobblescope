@@ -25,12 +25,12 @@ describe("FitSettingsForm", () => {
   it("applies a smoothing limit, and Reset applies the defaults again", () => {
     const onApply = vi.fn();
     render(<FitSettingsForm onApply={onApply} />);
-    fireEvent.change(field(/Smoothing limit/), { target: { value: "0.2" } });
+    fireEvent.change(field(/Maximum Corner Rounding/), { target: { value: "0.2" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ max_smoothing: 0.2 }));
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 5, max_smoothing: null }));
-    expect((field(/Smoothing limit/) as HTMLInputElement).value).toBe("");
+    expect((field(/Maximum Corner Rounding/) as HTMLInputElement).value).toBe("");
   });
 
   it("starts from the printer's recorded values, says so, and Reset goes back to them", () => {
@@ -40,18 +40,18 @@ describe("FitSettingsForm", () => {
       recorded: { scv: true, damping: true },
     };
     render(<FitSettingsForm baseline={baseline} onApply={onApply} />);
-    expect((field(/Square corner velocity/) as HTMLInputElement).value).toBe("8");
-    expect((field(/Damping ratio/) as HTMLInputElement).value).toBe("0.12");
-    expect(screen.getByText("From the printer when it was tested.")).toBeTruthy();
-    fireEvent.change(field(/Square corner velocity/), { target: { value: "3" } });
+    expect((field(/Square Corner Velocity/) as HTMLInputElement).value).toBe("8");
+    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("0.12");
+    expect(screen.getByText(/From the printer when it was tested\./)).toBeTruthy();
+    fireEvent.change(field(/Square Corner Velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect((field(/Square corner velocity/) as HTMLInputElement).value).toBe("8");
+    expect((field(/Square Corner Velocity/) as HTMLInputElement).value).toBe("8");
     expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 8, damping_ratio: 0.12 }));
   });
 
   it("says Klipper's default is used when nothing was recorded", () => {
     render(<FitSettingsForm onApply={vi.fn()} />);
-    expect(screen.getByText("Klipper's default. Not recorded for this session.")).toBeTruthy();
+    expect(screen.getByText(/Not recorded for this session\./)).toBeTruthy();
   });
 
   it("lets a parent handle Reset", () => {
@@ -61,5 +61,31 @@ describe("FitSettingsForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(onReset).toHaveBeenCalledOnce();
     expect(onApply).not.toHaveBeenCalled();
+  });
+
+  describe("the advanced limits", () => {
+    const limit = () => screen.getByLabelText(/Maximum Corner Rounding/);
+    const folded = () => limit().closest("[hidden]") !== null;
+
+    it("start folded away and open with the Advanced button", () => {
+      render(<FitSettingsForm onApply={vi.fn()} />);
+      expect(folded()).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+      expect(folded()).toBe(false);
+    });
+
+    it("start open when a limit is in use", () => {
+      const applied = { ...defaultFitParams, max_smoothing: 0.1 };
+      render(<FitSettingsForm applied={applied} onApply={vi.fn()} />);
+      expect(folded()).toBe(false);
+    });
+
+    it("still apply when folded away", () => {
+      const onApply = vi.fn();
+      render(<FitSettingsForm onApply={onApply} />);
+      fireEvent.change(limit(), { target: { value: "0.2" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ max_smoothing: 0.2 }));
+    });
   });
 });

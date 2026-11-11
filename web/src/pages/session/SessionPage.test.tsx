@@ -319,7 +319,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Recommended Input Shaper" });
     expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: 0.12 });
-    fireEvent.change(screen.getByLabelText(/Square corner velocity/), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText(/Square Corner Velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze.mock.calls.at(-1)?.[0].params).toMatchObject({ scv: 3 }));
   });
@@ -355,7 +355,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Recommended Input Shaper" });
-    fireEvent.change(screen.getByLabelText(/Smoothing limit/), { target: { value: "0.1" } });
+    fireEvent.change(screen.getByLabelText(/Maximum Corner Rounding/), { target: { value: "0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
     expect(fake.analyze.mock.calls[1][0].params.max_smoothing).toBe(0.1);
