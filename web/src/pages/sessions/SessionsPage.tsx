@@ -1,18 +1,72 @@
 import { Link } from "@tanstack/react-router";
+import { PinIcon, PinOffIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
+
+import { Panel } from "@/components/Panel";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ApiClientError } from "@/lib/api/client";
 import type { SessionFilters as Filters } from "@/lib/api/endpoints";
 import { usePinSession, useSessions, useStorage } from "@/lib/api/queries";
 import { formatBytes, formatTime } from "@/lib/format";
+import type { OutcomeKind } from "@/lib/generated/OutcomeKind";
 
 import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { ImportDialog } from "./ImportDialog";
 import { SessionFilters } from "./SessionFilters";
 import { StorageUsage } from "./StorageUsage";
+
+const PIN_HINTS = {
+  pin: "Keep this session. The oldest sessions are deleted to make room for new ones, but a pinned session never is, and you cannot delete it until you unpin it.",
+  unpin: "Allow this session to be deleted again, by you or automatically when space is needed.",
+};
+
+const OUTCOME_CLASS: Record<OutcomeKind, string> = {
+  Complete: "border-emerald-500/50 text-emerald-400",
+  Incomplete: "border-amber-500/50 text-amber-400",
+  Failed: "border-red-500/50 text-red-400",
+};
+
+/** An icon button that names itself in a tooltip. */
+function IconAction({
+  label,
+  hint,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  /** What the action does, shown in the tooltip. The label when omitted. */
+  hint?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64">
+        {hint ?? label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function isWaiting(error: unknown): boolean {
   return error instanceof ApiClientError && error.code === "storage_unavailable";
@@ -31,7 +85,7 @@ export function SessionsPage() {
   let body: ReactNode;
   if (isWaiting(list.error)) {
     body = (
-      <p className="rounded-lg border p-4 text-sm">
+      <p className="text-sm">
         The daemon is waiting for Moonraker to report where to store sessions. They appear here once it does.
       </p>
     );
@@ -77,7 +131,7 @@ export function SessionsPage() {
             return (
               <TableRow key={s.id}>
                 <TableCell>
-                  <Link to="/sessions/$id" params={{ id: s.id }} className="font-medium underline">
+                  <Link to="/sessions/$id" params={{ id: s.id }} className="font-mono font-medium underline">
                     {s.id}
                   </Link>
                   <div className="text-xs text-muted-foreground">{formatTime(s.created_at)}</div>
@@ -90,22 +144,26 @@ export function SessionsPage() {
                 <TableCell>{s.source === "CsvImport" ? "CSV" : "Wobblescope"}</TableCell>
                 <TableCell>{s.mode ?? "–"}</TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>
-                <TableCell>{s.outcome}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={OUTCOME_CLASS[s.outcome]}>
+                    {s.outcome}
+                  </Badge>
+                </TableCell>
                 <TableCell>
                   {formatBytes(s.size_bytes)} {s.pinned && <Badge>Pinned</Badge>}
                 </TableCell>
                 <TableCell className="space-x-2 text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <IconAction
+                    label={s.pinned ? "Unpin" : "Pin"}
+                    hint={s.pinned ? PIN_HINTS.unpin : PIN_HINTS.pin}
                     disabled={pinning}
                     onClick={() => pin.mutate({ id: s.id, pinned: !s.pinned })}
                   >
-                    {s.pinned ? "Unpin" : "Pin"}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setDeleting(s.id)}>
-                    Delete
-                  </Button>
+                    {s.pinned ? <PinOffIcon /> : <PinIcon />}
+                  </IconAction>
+                  <IconAction label="Delete" onClick={() => setDeleting(s.id)}>
+                    <Trash2Icon />
+                  </IconAction>
                 </TableCell>
               </TableRow>
             );
@@ -116,16 +174,21 @@ export function SessionsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Sessions</h1>
-        <Button onClick={() => setImporting(true)}>Import CSV</Button>
+        <Button onClick={() => setImporting(true)}>
+          <UploadIcon data-icon="inline-start" />
+          Import CSV
+        </Button>
       </div>
+      <Panel title="Sessions">
+        {!isWaiting(list.error) && (
+          <SessionFilters filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
+        )}
+        {body}
+      </Panel>
       {storage.data && <StorageUsage usage={storage.data} />}
-      {!isWaiting(list.error) && (
-        <SessionFilters filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
-      )}
-      {body}
       <ImportDialog open={importing} onOpenChange={setImporting} />
       <DeleteSessionDialog sessionId={deleting} onClose={() => setDeleting(null)} />
     </div>

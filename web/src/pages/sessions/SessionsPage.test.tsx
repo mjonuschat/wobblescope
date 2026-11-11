@@ -49,7 +49,11 @@ describe("the sessions page", () => {
     const calls = api();
     renderRoute("/sessions");
     await screen.findAllByRole("row");
-    fireEvent.change(screen.getByLabelText("Pinned"), { target: { value: "true" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Pinned" }));
+    const option = await screen.findByRole("option", { name: "Pinned Only" });
+    fireEvent.pointerDown(option);
+    fireEvent.pointerUp(option);
+    fireEvent.click(option);
     await waitFor(() =>
       expect(
         calls.some((c) => c.url.pathname.endsWith("/sessions") && c.url.searchParams.get("pinned") === "true"),
@@ -195,11 +199,35 @@ describe("the sessions page", () => {
     const region = await screen.findByRole("region", { name: "Storage use" });
     expect(region.textContent).toContain("1.6 GiB of 2 GiB used");
     expect(region.textContent).toContain("12 sessions");
-    expect(region.textContent).toContain("Reserved: 100 MiB");
-    expect(region.textContent).toContain("Pinned: 500 MiB");
-    expect(region.textContent).toContain("Free disk: 10 GiB");
+    expect(region.textContent).toContain("100 MiB");
+    expect(region.textContent).toContain("500 MiB");
+    expect(region.textContent).toContain("10 GiB");
     expect(within(region).getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
       String(usage.used_bytes + usage.reserved_bytes),
     );
+  });
+
+  it("puts the storage use under the list of sessions", async () => {
+    api();
+    renderRoute("/sessions");
+    const table = await screen.findByRole("table");
+    const storage = await screen.findByRole("region", { name: "Storage use" });
+    expect(table.compareDocumentPosition(storage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("labels each storage figure", async () => {
+    api();
+    renderRoute("/sessions");
+    const region = await screen.findByRole("region", { name: "Storage use" });
+    for (const label of ["Stored", "Reserved", "Pinned", "Free Disk"]) {
+      expect(within(region).getByText(label)).toBeTruthy();
+    }
+  });
+
+  it("explains in the tooltip what pinning does", async () => {
+    api([summary("s1")]);
+    renderRoute("/sessions");
+    fireEvent.focus(await screen.findByRole("button", { name: "Pin" }));
+    expect(await screen.findByText(/a pinned session never is/)).toBeTruthy();
   });
 });

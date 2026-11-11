@@ -1,3 +1,5 @@
+import { Field, Fields } from "@/components/Fields";
+import { Panel } from "@/components/Panel";
 import { formatBytes } from "@/lib/format";
 import type { Usage } from "@/lib/generated/Usage";
 
@@ -6,41 +8,31 @@ export function StorageUsage({ usage }: { usage: Usage }) {
   const percent = usage.cap_bytes > 0 ? Math.min(100, (committed / usage.cap_bytes) * 100) : 0;
   const pinned = usage.cap_bytes > 0 ? Math.min(100, (usage.pinned_bytes / usage.cap_bytes) * 100) : 0;
   return (
-    <section aria-label="Storage use" className="space-y-2 rounded-lg border p-4">
-      <div className="flex items-baseline justify-between text-sm">
-        <span>
-          {formatBytes(committed)} of {formatBytes(usage.cap_bytes)} used
-        </span>
-        <span className="text-muted-foreground">{usage.session_count} sessions</span>
-      </div>
+    <Panel
+      title="Storage"
+      label="Storage use"
+      action={<span className="text-sm text-muted-foreground">{usage.session_count} sessions</span>}
+    >
+      <p className="text-sm">
+        {formatBytes(committed)} of {formatBytes(usage.cap_bytes)} used
+      </p>
       <div
         role="progressbar"
+        aria-label="Storage used"
         aria-valuemin={0}
         aria-valuemax={usage.cap_bytes}
         aria-valuenow={committed}
-        className="relative h-2 overflow-hidden rounded bg-muted"
+        className="relative h-2 overflow-hidden rounded-full bg-muted"
       >
         <div className="absolute inset-y-0 left-0 bg-primary/60" style={{ width: `${percent}%` }} />
         <div className="absolute inset-y-0 left-0 bg-primary" style={{ width: `${pinned}%` }} />
       </div>
-      <dl className="grid grid-cols-2 gap-x-6 text-sm text-muted-foreground sm:grid-cols-4">
-        <div>
-          <dt className="inline">Stored: </dt>
-          <dd className="inline">{formatBytes(usage.used_bytes)}</dd>
-        </div>
-        <div>
-          <dt className="inline">Reserved: </dt>
-          <dd className="inline">{formatBytes(usage.reserved_bytes)}</dd>
-        </div>
-        <div>
-          <dt className="inline">Pinned: </dt>
-          <dd className="inline">{formatBytes(usage.pinned_bytes)}</dd>
-        </div>
-        <div>
-          <dt className="inline">Free disk: </dt>
-          <dd className="inline">{formatBytes(usage.free_bytes)}</dd>
-        </div>
-      </dl>
-    </section>
+      <Fields className="sm:grid-cols-4 lg:grid-cols-4">
+        <Field label="Stored">{formatBytes(usage.used_bytes)}</Field>
+        <Field label="Reserved">{formatBytes(usage.reserved_bytes)}</Field>
+        <Field label="Pinned">{formatBytes(usage.pinned_bytes)}</Field>
+        <Field label="Free Disk">{formatBytes(usage.free_bytes)}</Field>
+      </Fields>
+    </Panel>
   );
 }
