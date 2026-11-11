@@ -158,7 +158,7 @@ export function StreamPage({ createWorker }: Props) {
                 <EmptyDescription>Please enable at least one chip to stream data from.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button type="button" onClick={enableAll}>
+                <Button type="button" variant="outline" onClick={enableAll}>
                   Enable All
                 </Button>
               </EmptyContent>
