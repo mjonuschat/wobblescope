@@ -17,7 +17,7 @@ import type { OutcomeKind } from "@/lib/generated/OutcomeKind";
 
 import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { ImportDialog } from "./ImportDialog";
-import { SessionFilters } from "./SessionFilters";
+import { ColumnFilter, type FilterColumn } from "./SessionFilters";
 
 const PIN_HINTS = {
   pin: "Never delete this session to make room for new ones.",
@@ -107,10 +107,8 @@ export function SessionsPage() {
         </Button>
       </div>
     );
-  } else if (list.data.sessions.length === 0) {
-    body = filtered ? (
-      <p className="text-sm text-muted-foreground">No sessions match these filters.</p>
-    ) : (
+  } else if (list.data.sessions.length === 0 && !filtered) {
+    body = (
       <div className="space-y-2 text-sm">
         <p>No sessions yet.</p>
         <Button variant="outline" onClick={() => setImporting(true)}>
@@ -119,20 +117,38 @@ export function SessionsPage() {
       </div>
     );
   } else {
+    const head = "h-9 text-xs font-medium uppercase tracking-wide text-muted-foreground";
+    const filter = (column: FilterColumn) => (
+      <ColumnFilter column={column} filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
+    );
     body = (
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Session</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Mode</TableHead>
-            <TableHead>Chips</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Size</TableHead>
-            <TableHead />
+        <TableHeader className="bg-muted/40">
+          <TableRow className="hover:bg-transparent">
+            <TableHead className={head}>Session</TableHead>
+            <TableHead className={head}>Source</TableHead>
+            <TableHead className={head}>Mode</TableHead>
+            <TableHead className={head}>
+              <span className="inline-flex items-center gap-1">Chips {filter("chip")}</span>
+            </TableHead>
+            <TableHead className={head}>
+              <span className="inline-flex items-center gap-1">Printer {filter("printer")}</span>
+            </TableHead>
+            <TableHead className={head}>Outcome</TableHead>
+            <TableHead className={head}>Size</TableHead>
+            <TableHead className={`${head} text-right`}>
+              <span className="inline-flex items-center gap-1">Actions {filter("pinned")}</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
+          {list.data.sessions.length === 0 && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                No sessions match these filters.
+              </TableCell>
+            </TableRow>
+          )}
           {list.data.sessions.map((s) => {
             const pinning = pin.isPending && pin.variables?.id === s.id;
             return (
@@ -151,6 +167,7 @@ export function SessionsPage() {
                 <TableCell>{s.source === "CsvImport" ? "CSV" : "Wobblescope"}</TableCell>
                 <TableCell>{s.mode ?? "–"}</TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>
+                <TableCell>{s.printer ?? "–"}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={OUTCOME_CLASS[s.outcome]}>
                     {s.outcome}
@@ -190,12 +207,7 @@ export function SessionsPage() {
           Import CSV
         </Button>
       </div>
-      <Panel title="Sessions">
-        {!isWaiting(list.error) && (
-          <SessionFilters filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
-        )}
-        {body}
-      </Panel>
+      <Panel title="Sessions">{body}</Panel>
       <ImportDialog open={importing} onOpenChange={setImporting} />
       <DeleteSessionDialog sessionId={deleting} onClose={() => setDeleting(null)} />
     </div>

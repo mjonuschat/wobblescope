@@ -58,7 +58,8 @@ describe("the sessions page", () => {
     const calls = api();
     renderRoute("/sessions");
     await screen.findAllByRole("row");
-    fireEvent.click(screen.getByRole("combobox", { name: "Pinned" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter Pinned" }));
+    fireEvent.click(await screen.findByRole("combobox", { name: "Pinned" }));
     const option = await screen.findByRole("option", { name: "Pinned Only" });
     fireEvent.pointerDown(option);
     fireEvent.pointerUp(option);
@@ -68,6 +69,29 @@ describe("the sessions page", () => {
         calls.some((c) => c.url.pathname.endsWith("/sessions") && c.url.searchParams.get("pinned") === "true"),
       ).toBe(true),
     );
+  });
+
+  it("keeps the column filters when a filter matches nothing, and marks the active one", async () => {
+    stubApi(({ url }) => {
+      const path = url.pathname.replace(/^.*\/api\//, "");
+      if (path === "storage") return { body: usage };
+      if (path === "sessions") {
+        return { body: { sessions: url.searchParams.get("pinned") === "true" ? [] : [summary("s1")] } };
+      }
+      return { status: 404, body: { error: "not_found", message: "no" } };
+    });
+    renderRoute("/sessions");
+    await screen.findByText("s1");
+    fireEvent.click(screen.getByRole("button", { name: "Filter Pinned" }));
+    const option = await screen.findByRole("option", { name: "Pinned Only" }, { timeout: 100 }).catch(async () => {
+      fireEvent.click(await screen.findByRole("combobox", { name: "Pinned" }));
+      return screen.findByRole("option", { name: "Pinned Only" });
+    });
+    fireEvent.pointerDown(option);
+    fireEvent.pointerUp(option);
+    fireEvent.click(option);
+    expect(await screen.findByText("No sessions match these filters.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Filter Pinned" }).className).toContain("text-primary");
   });
 
   it("pins an unpinned row with PATCH and shows it pinned afterwards", async () => {
