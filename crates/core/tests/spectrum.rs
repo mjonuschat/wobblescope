@@ -151,3 +151,18 @@ fn no_false_peak_after_the_decimator_and_the_spectrum() {
         assert!(p.level < peaks[0].level / 1e4, "{p:?}");
     }
 }
+
+#[test]
+fn a_burst_in_the_newest_samples_is_in_the_spectrum() {
+    // 1535 samples with nfft 1024: whole-buffer segmentation would end 511 samples early.
+    let rate = 500.0;
+    let n = 1535;
+    let burst = 50;
+    let mut live = LiveSpectrum::new(rate, 3.07, 200.0).unwrap();
+    live.push_f32(0.0, &vec![0.0; (n - burst) * 3]).unwrap();
+    let tone = interleaved(&[(100.0, 1.0)], rate, n - burst, burst);
+    live.push_f32((n - burst) as f64 / rate, &tone).unwrap();
+    let s = live.spectrum().unwrap();
+    let peak = s.psd_sum.iter().copied().fold(0.0, f64::max);
+    assert!(peak > 0.0, "the newest samples were ignored");
+}

@@ -120,7 +120,10 @@ impl LiveSpectrum {
             return None;
         }
         let psd = |axis: &VecDeque<f64>| {
-            let x: Vec<f64> = axis.iter().copied().collect();
+            // Segment from the newest sample: welch ends on a whole step, so drop the oldest extra.
+            let step = self.nfft / 2;
+            let used = self.nfft + (axis.len() - self.nfft) / step * step;
+            let x: Vec<f64> = axis.iter().skip(axis.len() - used).copied().collect();
             welch(&x, self.rate_hz, self.nfft, &self.window)
         };
         let width = self.rate_hz / self.nfft as f64;
