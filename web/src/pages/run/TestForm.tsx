@@ -425,7 +425,8 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
               </ul>
             </div>
           )}
-          {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
+          {/* The reason Start is disabled shows in its tooltip; this copy is for screen readers. */}
+          {problem && <p className="sr-only">{problem}</p>}
         </div>
         <Tooltip>
           <TooltipTrigger render={<span className="ml-auto" />}>
