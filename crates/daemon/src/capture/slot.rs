@@ -82,6 +82,13 @@ impl TestSlot {
         lock(&self.state).held
     }
 
+    /// The id of the test that holds the slot, once it has named itself.
+    #[must_use]
+    pub fn current_id(&self) -> Option<String> {
+        let s = lock(&self.state);
+        s.id.clone().filter(|_| s.held)
+    }
+
     /// Asks the running test `id` to stop. Returns whether such a test holds the slot.
     #[must_use]
     pub fn request_stop(&self, id: &str) -> bool {

@@ -202,6 +202,19 @@ impl<'a> Deps<'a> {
     }
 }
 
+/// The failed check for a quarantine with `left` still to run.
+#[must_use]
+pub fn quarantine_failure(left: Duration) -> CheckFailure {
+    CheckFailure::new(
+        "quarantine",
+        format!(
+            "a sweep may still be running after a restart or a lost connection; no test can \
+             start for another {} s",
+            left.as_secs() + 1
+        ),
+    )
+}
+
 /// Runs every check for `plan`. `busy` says another test already holds the slot.
 ///
 /// # Errors
@@ -221,14 +234,7 @@ pub async fn run(
         ));
     }
     if let Some(left) = quarantine {
-        failures.push(CheckFailure::new(
-            "quarantine",
-            format!(
-                "a sweep may still be running after a restart or a lost connection; no test can \
-                 start for another {} s",
-                left.as_secs() + 1
-            ),
-        ));
+        failures.push(quarantine_failure(left));
     }
     let Some(storage) = deps.storage.get() else {
         failures.push(CheckFailure::new(

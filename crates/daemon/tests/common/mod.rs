@@ -7,6 +7,7 @@ use std::path::Path;
 pub mod fake_bridge;
 pub mod fake_moonraker;
 pub mod fake_printer;
+pub mod hold_sim;
 pub mod sim_printer;
 
 use wobblescope_core::RawSamples;

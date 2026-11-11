@@ -427,7 +427,7 @@ impl Sim {
     }
 }
 
-fn fast() -> Timings {
+pub fn fast() -> Timings {
     let ms = Duration::from_millis;
     Timings {
         connect: ms(500),

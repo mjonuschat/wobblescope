@@ -1,9 +1,16 @@
 //! The printer's `[resonance_tester]` settings as Klipper will use them, and the toolhead's
 //! limits, parsed from Moonraker's answers.
 
+use std::time::Duration;
+
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use wobblescope_session::meta::Mode;
+
+use crate::moonraker::rpc::Rpc;
+
+/// How long Moonraker may take to answer the settings query, which is large.
+pub const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The z a test point starts at when the toolhead allows it, in mm.
 const DEFAULT_Z: f64 = 20.0;
@@ -129,6 +136,29 @@ pub fn parse_variant(info: &Value) -> Variant {
         Some("Kalico") => Variant::Kalico,
         Some(_) => Variant::Unknown,
     }
+}
+
+/// Reads the settings from Moonraker now.
+///
+/// # Errors
+/// A message when the connection fails or the answer cannot be parsed.
+pub async fn read(control: &Rpc) -> Result<PrinterSettings, String> {
+    let query = json!({"objects": {
+        "configfile": ["settings"],
+        "toolhead": [
+            "axis_minimum", "axis_maximum", "max_velocity", "max_accel",
+            "minimum_cruise_ratio", "square_corner_velocity",
+        ],
+    }});
+    let answer = control
+        .call("printer.objects.query", Some(query), READ_TIMEOUT)
+        .await
+        .map_err(|e| format!("cannot read the printer's settings: {e}"))?;
+    let info = control
+        .call("printer.info", None, READ_TIMEOUT)
+        .await
+        .map_err(|e| format!("cannot read the printer's info: {e}"))?;
+    parse_settings(&answer, &info).map_err(|e| e.to_string())
 }
 
 /// Builds the settings from the answers to the `configfile.settings`/`toolhead` query and
