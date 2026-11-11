@@ -52,7 +52,7 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   const { label, unit, step } = FIELDS[name];
   const id = `fit-${name}`;
   return (
-    <div className="space-y-2.5">
+    <div className="flex flex-col gap-2.5">
       <Tooltip>
         <TooltipTrigger
           render={
@@ -149,18 +149,16 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
           </Tooltip>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid items-end gap-4 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
           {field("scv")}
           {field("damping_ratio")}
           {field("max_smoothing")}
           {field("max_vibrations")}
-        </div>
-        {invalid && <p className="text-sm text-destructive">Enter a number, or leave the field empty.</p>}
-        <div className="flex gap-2">
           <Button type="submit" disabled={invalid !== null}>
             Apply
           </Button>
         </div>
+        {invalid && <p className="text-sm text-destructive">Enter a number, or leave the field empty.</p>}
       </Panel>
     </form>
   );
