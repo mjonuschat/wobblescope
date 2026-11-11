@@ -42,22 +42,26 @@ pub(super) async fn download_session(
     ApiPath(id): ApiPath<String>,
 ) -> Result<Response, ApiError> {
     let name = id.clone();
-    let file = blocking(move || Ok(storage.session_zip(&id)?)).await?;
+    let (file, guard) = blocking(move || Ok(storage.session_zip(&id)?)).await?;
     let length = file
         .metadata()
         .map_err(|e| ApiError::internal(format!("reading the archive failed: {e}")))?
         .len();
-    let stream = futures_util::stream::unfold(tokio::fs::File::from_std(file), |mut file| async {
-        let mut chunk = vec![0u8; 64 * 1024];
-        match file.read(&mut chunk).await {
-            Ok(0) => None,
-            Ok(n) => {
-                chunk.truncate(n);
-                Some((Ok::<_, std::io::Error>(Bytes::from(chunk)), file))
+    // The guard lives as long as the stream, so the next archive waits until this one is sent.
+    let stream = futures_util::stream::unfold(
+        (tokio::fs::File::from_std(file), guard),
+        |(mut file, guard)| async {
+            let mut chunk = vec![0u8; 64 * 1024];
+            match file.read(&mut chunk).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    chunk.truncate(n);
+                    Some((Ok::<_, std::io::Error>(Bytes::from(chunk)), (file, guard)))
+                }
+                Err(e) => Some((Err(e), (file, guard))),
             }
-            Err(e) => Some((Err(e), file)),
-        }
-    });
+        },
+    );
     Ok((
         [
             (CONTENT_TYPE, "application/zip".to_owned()),

@@ -129,3 +129,27 @@ async fn home_is_refused_while_the_last_test_may_still_be_moving() {
     assert!(rig.sim.fake.requests_for("printer.gcode.script").is_empty());
     assert!(!rig.slot.is_held());
 }
+
+#[tokio::test]
+async fn a_home_that_loses_its_answer_keeps_motion_blocked() {
+    let rig = rig().await;
+    rig.sim.fake.on("printer.gcode.script", Script::Close);
+    let (status, _) = answer(&rig, ui_post("/api/printer/home")).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(rig.slot.motion_uncertain().as_deref(), Some("homing"));
+    assert!(!rig.slot.is_held());
+    let (status, body) = answer(&rig, ui_post("/api/printer/home")).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["failures"][0]["check"], "no_uncertain_motion");
+}
+
+#[tokio::test]
+async fn a_home_moonraker_answers_with_an_error_leaves_motion_unblocked() {
+    let rig = rig().await;
+    rig.sim
+        .fake
+        .on("printer.gcode.script", Script::error(-32601, "no"));
+    let (status, _) = answer(&rig, ui_post("/api/printer/home")).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(rig.slot.motion_uncertain().is_none());
+}

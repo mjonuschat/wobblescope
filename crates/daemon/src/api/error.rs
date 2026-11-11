@@ -196,6 +196,7 @@ impl From<StorageError> for ApiError {
             | StorageError::NoRecording { .. }
             | StorageError::ResultNotFound(_) => Self::NotFound { message },
             StorageError::BadRequest(_) => Self::InvalidRequest { message },
+            StorageError::DownloadBusy => Self::Busy { message },
             StorageError::Pinned(_) => Self::Pinned { message },
             StorageError::InUse(_) => Self::InUse { message },
             StorageError::CapExceeded {

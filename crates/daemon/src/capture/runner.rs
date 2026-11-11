@@ -821,7 +821,13 @@ impl Run {
             self.r.slot.start_quarantine(quarantine_duration(max));
             self.r.slot.set_motion_uncertain(&finished.id);
             finished.motion_uncertain = true;
-            watch_idle(self.r.clone(), finished.id.clone());
+            watch_idle(
+                self.r.moonraker.clone(),
+                self.r.slot.clone(),
+                self.r.hub.clone(),
+                self.r.timings,
+                finished.id.clone(),
+            );
         }
         self.r.hub.update(|s| {
             s.test = None;
@@ -832,13 +838,19 @@ impl Run {
 }
 
 /// Clears the motion-uncertain marker once the toolhead is seen idle twice, or after the cap.
-fn watch_idle(r: Runner, id: String) {
+pub fn watch_idle(
+    moonraker: Moonraker,
+    slot: TestSlot,
+    hub: LiveHub,
+    timings: RunnerTimings,
+    id: String,
+) {
     tokio::spawn(async move {
-        let deadline = Instant::now() + r.timings.uncertain_cap;
+        let deadline = Instant::now() + timings.uncertain_cap;
         let mut idle_reads = 0;
         while Instant::now() < deadline {
-            tokio::time::sleep(r.timings.idle_poll).await;
-            let idle = match r.moonraker.control() {
+            tokio::time::sleep(timings.idle_poll).await;
+            let idle = match moonraker.control() {
                 Some(control) => match super::preflight::read_printer_state(&control).await {
                     Ok(state) => state.idle_state.is_some_and(|s| s != "Printing"),
                     Err(_) => false,
@@ -850,10 +862,10 @@ fn watch_idle(r: Runner, id: String) {
                 break;
             }
         }
-        if r.slot.motion_uncertain().as_deref() == Some(id.as_str()) {
-            r.slot.clear_motion_uncertain();
+        if slot.motion_uncertain().as_deref() == Some(id.as_str()) {
+            slot.clear_motion_uncertain();
         }
-        r.hub.update(|s| {
+        hub.update(|s| {
             if let Some(last) = s.last.as_mut().filter(|l| l.id == id) {
                 last.motion_uncertain = false;
             }

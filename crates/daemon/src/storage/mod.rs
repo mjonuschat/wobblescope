@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
@@ -27,6 +27,7 @@ use wobblescope_session::meta::SessionMeta;
 use wobblescope_session::writer::{Recovery, recover_unsealed};
 
 pub use admission::Reservation;
+pub use results::DownloadGuard;
 
 /// Runs `f` on a blocking thread. The error is the message for a task that panicked or was
 /// cancelled.
@@ -118,6 +119,8 @@ pub enum StorageError {
     ResultUnusable { id: String, reason: String },
     #[error("cannot save result: {0}")]
     BadRequest(String),
+    #[error("another session download is running")]
+    DownloadBusy,
     /// The session to store does not match its reservation or cannot be indexed.
     #[error("cannot store session: {0}")]
     BadSession(String),
@@ -224,6 +227,8 @@ struct Inner {
     /// Held only to read or write an entry, never while verifying.
     verified: Mutex<HashMap<PathBuf, results::VerifiedEntry>>,
     verifications: AtomicU64,
+    /// Whether a session archive is being written or sent.
+    downloading: AtomicBool,
     pins_path: PathBuf,
     cap_bytes: u64,
     headroom_bytes: u64,
@@ -278,6 +283,7 @@ impl Storage {
                 save_hook: Mutex::new(None),
                 verified: Mutex::new(HashMap::new()),
                 verifications: AtomicU64::new(0),
+                downloading: AtomicBool::new(false),
                 pins_path,
                 cap_bytes: settings.retention_cap_bytes,
                 headroom_bytes: settings.free_space_headroom_bytes,

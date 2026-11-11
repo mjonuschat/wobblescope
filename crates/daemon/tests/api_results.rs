@@ -320,3 +320,15 @@ async fn a_session_downloads_as_a_zip_of_its_meta_and_samples() {
 fn get_request(uri: &str) -> Request<Body> {
     Request::builder().uri(uri).body(Body::empty()).unwrap()
 }
+
+#[tokio::test]
+async fn a_second_session_download_is_refused_while_the_first_is_unread() {
+    let (_d, s) = one_session();
+    let (_first, guard) = s.session_zip("s1").unwrap();
+    assert!(matches!(
+        s.session_zip("s1"),
+        Err(wobblescope::storage::StorageError::DownloadBusy)
+    ));
+    drop(guard);
+    assert!(s.session_zip("s1").is_ok());
+}

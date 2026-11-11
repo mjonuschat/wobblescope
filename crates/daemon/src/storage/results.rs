@@ -22,6 +22,18 @@ use crate::results::record::{
     RESULT_VERSION, ResultDetail, ResultRecord, ResultSummary, SaveRequest,
 };
 
+/// Bytes counted for the headers of one entry in a session archive.
+const ZIP_ENTRY_OVERHEAD: u64 = 512;
+
+/// Admits one session archive at a time. Dropping it admits the next.
+pub struct DownloadGuard(Arc<Inner>);
+
+impl Drop for DownloadGuard {
+    fn drop(&mut self) {
+        self.0.downloading.store(false, Ordering::Release);
+    }
+}
+
 static RESULT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 struct ResultReservation {
@@ -306,22 +318,52 @@ impl Storage {
     }
 
     /// Writes the session as a zip of `meta.json` and the sample files to an unlinked temporary
-    /// file and returns it, rewound. The archive is never held in memory, and the session is no
-    /// longer leased once this returns.
+    /// file and returns it, rewound, with the guard that admits no second download until it is
+    /// dropped. The archive is never held in memory, and the session is no longer leased once
+    /// this returns.
     ///
     /// # Errors
-    /// [`StorageError::NotFound`] for an unknown session, or an I/O error.
-    pub fn session_zip(&self, session_id: &str) -> Result<fs::File, StorageError> {
+    /// [`StorageError::NotFound`] for an unknown session, [`StorageError::DownloadBusy`] while
+    /// another archive exists, [`StorageError::InsufficientDisk`] when the archive and the
+    /// headroom do not fit in the free space, or an I/O error.
+    pub fn session_zip(&self, session_id: &str) -> Result<(fs::File, DownloadGuard), StorageError> {
         use std::io::{Seek, SeekFrom, Write};
         use zip::write::SimpleFileOptions;
         use zip::{CompressionMethod, ZipWriter};
 
+        let inner = &self.inner;
+        if inner.downloading.swap(true, Ordering::AcqRel) {
+            return Err(StorageError::DownloadBusy);
+        }
+        let guard = DownloadGuard(inner.clone());
         let _lease = self.lease(session_id)?;
         let session = self.open_sealed(session_id)?;
-        let dir = self.inner.sessions_dir.join(session_id);
+        let dir = inner.sessions_dir.join(session_id);
+        let meta_path = dir.join("meta.json");
+        if !fs::symlink_metadata(&meta_path)?.is_file() {
+            return Err(StorageError::BadRequest(
+                "the session's meta.json is not a regular file".to_owned(),
+            ));
+        }
+        let meta_bytes = fs::read(&meta_path)?;
+
+        let mut bound = meta_bytes.len() as u64;
+        for file in session.meta().segments.iter().flat_map(|s| &s.files) {
+            bound += session.open_sample(file)?.metadata()?.len() + ZIP_ENTRY_OVERHEAD;
+        }
+        let need = bound.saturating_add(inner.headroom_bytes);
+        let available = {
+            let st = inner.lock();
+            (inner.probe)(&inner.results_dir)?
+                .saturating_sub(reserved_total(&st))
+                .saturating_sub(result_reserved_total(&st))
+        };
+        if available < need {
+            return Err(StorageError::InsufficientDisk { need, available });
+        }
+
         let n = RESULT_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let temp_path = self
-            .inner
+        let temp_path = inner
             .results_dir
             .join(format!(".download-{}-{n}.zip.tmp", std::process::id()));
         let temp = fs::OpenOptions::new()
@@ -335,15 +377,8 @@ impl Storage {
         let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
         let mut zip = ZipWriter::new(temp);
         let zip_error = |e: zip::result::ZipError| io::Error::other(e.to_string());
-
-        let meta_path = dir.join("meta.json");
-        if !fs::symlink_metadata(&meta_path)?.is_file() {
-            return Err(StorageError::BadRequest(
-                "the session's meta.json is not a regular file".to_owned(),
-            ));
-        }
         zip.start_file("meta.json", options).map_err(zip_error)?;
-        zip.write_all(&fs::read(&meta_path)?)?;
+        zip.write_all(&meta_bytes)?;
         for file in session.meta().segments.iter().flat_map(|s| &s.files) {
             let mut input = session.open_sample(file)?;
             zip.start_file(format!("samples/{}", file.sample_file), options)
@@ -352,7 +387,7 @@ impl Storage {
         }
         let mut finished = zip.finish().map_err(zip_error)?;
         finished.seek(SeekFrom::Start(0))?;
-        Ok(finished)
+        Ok((finished, guard))
     }
 
     fn reserve_result(

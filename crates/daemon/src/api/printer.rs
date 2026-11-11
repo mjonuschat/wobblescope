@@ -9,6 +9,11 @@ use super::tests::StopDispatched;
 use super::{ApiError, ApiState};
 use crate::capture::CheckFailure;
 use crate::capture::preflight::read_printer_state;
+use crate::capture::runner::watch_idle;
+use crate::moonraker::rpc::RpcError;
+
+/// The id the motion-uncertain marker carries after a homing request of unknown outcome.
+const HOMING_MARK: &str = "homing";
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -109,13 +114,28 @@ pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, A
         )]));
     }
     let control = control(&state)?;
-    control
+    let result = control
         .call(
             "printer.gcode.script",
             Some(json!({"script": "G28"})),
             HOME_TIMEOUT,
         )
-        .await
-        .map_err(|e| unavailable(format!("homing failed: {e}")))?;
+        .await;
+    if let Err(e) = result {
+        // An answer from Moonraker means G28 ended. A timeout or a lost connection does not say
+        // whether the move did, so motion stays blocked until the toolhead is seen idle or the
+        // user stops the printer.
+        if !matches!(e, RpcError::Moonraker { .. }) {
+            state.capture.slot.set_motion_uncertain(HOMING_MARK);
+            watch_idle(
+                state.moonraker.clone(),
+                state.capture.slot.clone(),
+                state.capture.hub.clone(),
+                state.capture.timings,
+                HOMING_MARK.to_owned(),
+            );
+        }
+        return Err(unavailable(format!("homing failed: {e}")));
+    }
     Ok(Json(Homed { homed: true }))
 }
