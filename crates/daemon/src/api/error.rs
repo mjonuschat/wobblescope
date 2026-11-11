@@ -35,6 +35,10 @@ pub enum ApiError {
     Pinned { message: String },
     /// The session is being downloaded.
     InUse { message: String },
+    /// The session was replaced since the browser analysed it.
+    SessionChanged { message: String },
+    /// A saved result is damaged, unreadable or from a newer version; `message` says why.
+    ResultUnusable { message: String },
     /// The retention cap cannot fit the import even after evicting everything eligible.
     CapExceeded {
         message: String,
@@ -120,9 +124,10 @@ impl ApiError {
             Self::InvalidCsv { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Busy { .. } => StatusCode::TOO_MANY_REQUESTS,
-            Self::Pinned { .. } | Self::InUse { .. } | Self::PreflightFailed { .. } => {
-                StatusCode::CONFLICT
-            }
+            Self::Pinned { .. }
+            | Self::InUse { .. }
+            | Self::SessionChanged { .. }
+            | Self::PreflightFailed { .. } => StatusCode::CONFLICT,
             Self::CapExceeded { .. } | Self::InsufficientDisk { .. } => {
                 StatusCode::INSUFFICIENT_STORAGE
             }
@@ -133,7 +138,9 @@ impl ApiError {
             Self::StorageUnavailable { .. }
             | Self::MoonrakerUnavailable { .. }
             | Self::AccessUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
-            Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Internal { .. } | Self::ResultUnusable { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 }
@@ -175,9 +182,9 @@ impl From<StorageError> for ApiError {
             | StorageError::Pins(_)
             | StorageError::Io(_)
             | StorageError::IdTaken(_)
-            | StorageError::BadSession(_)
-            | StorageError::SessionChanged(_)
-            | StorageError::ResultUnusable { .. } => Self::Internal { message },
+            | StorageError::BadSession(_) => Self::Internal { message },
+            StorageError::SessionChanged(_) => Self::SessionChanged { message },
+            StorageError::ResultUnusable { .. } => Self::ResultUnusable { message },
         }
     }
 }

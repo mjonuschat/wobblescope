@@ -5,6 +5,7 @@ mod access;
 mod error;
 mod live;
 mod origin;
+mod results;
 mod samples;
 mod sessions;
 mod settings;
@@ -22,6 +23,7 @@ use axum::routing::{get, post};
 
 pub use access::AccessGuard;
 pub use error::ApiError;
+pub use results::ResultList;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 pub use status::{StatusResponse, StorageState, StorageStatus};
 pub use tests::{StartedTest, StopDispatched};
@@ -36,6 +38,9 @@ use crate::storage::Storage;
 /// The largest CSV an import accepts. A Klipper raw row is about 49 bytes, so this holds about
 /// 430 seconds at 3.2 kHz.
 const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
+
+/// The largest saved-result body a save accepts.
+const RESULT_LIMIT: usize = 16 * 1024 * 1024;
 
 /// Lets one import run at a time. Cloning shares the gate.
 #[derive(Clone, Default)]
@@ -195,6 +200,19 @@ pub fn mount_capture(
         .route(
             "/sessions/{id}/samples/{chip}/{segment}",
             get(samples::download),
+        )
+        .route(
+            "/sessions/{id}/results",
+            post(results::save).layer(DefaultBodyLimit::max(RESULT_LIMIT)),
+        )
+        .route("/results", get(results::list))
+        .route(
+            "/results/{rid}",
+            get(results::detail).delete(results::delete),
+        )
+        .route(
+            "/results/{rid}/samples/{chip}/{segment}",
+            get(results::download),
         )
         .route("/storage", get(sessions::usage))
         .route("/status", get(status::status))
