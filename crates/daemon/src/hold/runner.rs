@@ -102,7 +102,7 @@ pub enum Command {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
-pub enum Phase {
+pub enum HoldPhase {
     /// Moving to the start point.
     Travelling,
     /// Holding the frequency.
@@ -116,7 +116,7 @@ pub enum Phase {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct HoldState {
     /// Where the hold is.
-    pub phase: Phase,
+    pub phase: HoldPhase,
     /// Seconds since the hold began.
     pub elapsed_seconds: f64,
     /// The frequency now, in Hz. It ramps toward a changed target.
@@ -398,7 +398,7 @@ impl Hold {
             ..live.target
         };
         let _ = events.send(HoldEvent::State(HoldState {
-            phase: Phase::Stopping,
+            phase: HoldPhase::Stopping,
             elapsed_seconds: start.elapsed().as_secs_f64(),
             frequency: drive.frequency,
             axis: drive.axis,
@@ -627,7 +627,7 @@ impl Hold {
                 }
             }
             let _ = events.send(HoldEvent::State(HoldState {
-                phase: Phase::Travelling,
+                phase: HoldPhase::Travelling,
                 elapsed_seconds: start.elapsed().as_secs_f64(),
                 frequency: live.working,
                 axis: live.target.axis,
@@ -775,7 +775,7 @@ impl Hold {
             if now - live.last_state >= STATE_INTERVAL {
                 live.last_state = now;
                 let _ = events.send(HoldEvent::State(HoldState {
-                    phase: Phase::Holding,
+                    phase: HoldPhase::Holding,
                     elapsed_seconds: now,
                     frequency: drive.frequency,
                     axis: drive.axis,

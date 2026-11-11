@@ -3,6 +3,7 @@
 
 mod access;
 mod error;
+mod hold;
 mod live;
 mod origin;
 mod printer;
@@ -26,6 +27,7 @@ use axum::routing::{get, post};
 
 pub use access::AccessGuard;
 pub use error::ApiError;
+pub use hold::{HoldClientMessage, HoldServerMessage, HoldSocketTimings};
 pub use printer::{Homed, PrinterState};
 pub use results::ResultList;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
@@ -80,6 +82,8 @@ pub struct CaptureState {
     pub timings: RunnerTimings,
     /// The stream viewer's write and liveness limits.
     pub stream_timings: StreamTimings,
+    /// The hold control socket's keep-alive and the hold's own limits.
+    pub hold: HoldSocketTimings,
 }
 
 /// The limits that drop a stream viewer which is slow or gone.
@@ -119,6 +123,7 @@ impl CaptureState {
             max_segment_seconds,
             timings: RunnerTimings::default(),
             stream_timings: StreamTimings::default(),
+            hold: HoldSocketTimings::default(),
         }
     }
 
@@ -269,6 +274,7 @@ pub fn mount_configured(
         .route("/printer/home", post(printer::home))
         .route("/live", get(live::live))
         .route("/stream", get(stream::stream))
+        .route("/hold", get(hold::hold))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(origin::guard))

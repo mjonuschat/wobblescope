@@ -614,6 +614,7 @@ impl Rig {
                 max_segment_seconds: 600,
                 timings: self.runner.timings,
                 stream_timings: timings,
+                hold: wobblescope::api::HoldSocketTimings::default(),
             },
         )
     }
