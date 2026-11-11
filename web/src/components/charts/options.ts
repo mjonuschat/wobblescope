@@ -90,8 +90,16 @@ export function psdOption({ chip, recommendation, probePoints, maxFreq }: PsdInp
     ...base(null, maxFreq),
     legend: { type: "scroll", top: 0, selected, textStyle: { color: text } },
     yAxis: [
-      { type: "value", name: "Vibration strength", splitLine },
-      { type: "value", name: "Let through by shaper", min: 0, max: 1, splitLine: { show: false } },
+      { type: "value", name: "Vibration Strength", splitLine },
+      {
+        type: "value",
+        name: "Remaining Vibration",
+        min: 0,
+        max: 1,
+        splitLine: { show: false },
+        // The shaper's response is a fraction: 1 lets all the vibration through, 0 none of it.
+        axisLabel: { formatter: (value: number) => `${Math.round(value * 100)}%` },
+      },
     ],
     series,
   };
