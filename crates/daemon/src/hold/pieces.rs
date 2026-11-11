@@ -119,6 +119,12 @@ impl Drive {
                 ));
             }
         }
+        if position[2] < min[2] || position[2] > max[2] {
+            return Err(format!(
+                "Z at {:.3} is outside the machine's limits {} to {}",
+                position[2], min[2], max[2]
+            ));
+        }
         Ok(())
     }
 
@@ -292,6 +298,8 @@ mod tests {
         assert!(a.check_room([100.0, 249.99, 20.0], min, max).is_err());
         assert!(a.check_room([249.99, 100.0, 20.0], min, max).is_err());
         assert!(a.check_room([100.0, 100.0, 20.0], min, max).is_ok());
+        assert!(x.check_room([100.0, 100.0, 300.5], min, max).is_err());
+        assert!(x.check_room([100.0, 100.0, -0.5], min, max).is_err());
     }
 
     #[test]

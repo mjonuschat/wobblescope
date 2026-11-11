@@ -622,3 +622,39 @@ async fn stop_during_travel_ends_between_segments() {
             .contains("RESTORE_GCODE_STATE")
     );
 }
+
+#[tokio::test]
+async fn an_axis_change_is_checked_at_the_frequency_the_ramp_has_reached() {
+    let sim = HoldSim::start().await;
+    sim.set_position([150.0, 307.9, 20.0]);
+    // Y has 0.1 mm of room: enough for a 60 Hz hold (0.0625 mm), not for the 0.1875 mm a 20 Hz
+    // hold needs. The ramp to 60 Hz has not got there yet when the axis changes.
+    let mut slow = at([150.0, 307.9, 20.0]);
+    slow.frequency = 20.0;
+    slow.duration_seconds = Some(3.0);
+    let hold = begin(&deps(&sim, HoldTimings::default()), slow)
+        .await
+        .unwrap();
+    let mut running = spawn(hold);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    running.commands.send(Command::SetFrequency(60.0)).unwrap();
+    running
+        .commands
+        .send(Command::SetAxis(HoldAxis::Y))
+        .unwrap();
+    let ended = (&mut running.handle).await.unwrap();
+    assert_eq!(ended.reason, EndReason::TimeLimit);
+    let events = running.drain();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, HoldEvent::Rejected { .. })),
+        "the axis change should be rejected while the ramp is below 60 Hz"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e, HoldEvent::State(s) if s.axis == HoldAxis::Y)),
+        "no piece may go out on Y at the ramping frequency"
+    );
+}

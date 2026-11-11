@@ -468,12 +468,15 @@ impl Hold {
                 None
             }
             Some(Command::SetAxis(axis)) => {
+                // Pieces use the working frequency until the ramp reaches the target, and the
+                // lower of the two moves farther, so the room is checked at that one.
                 let drive = Drive {
                     axis,
+                    frequency: live.working.min(live.target.frequency),
                     ..live.target
                 };
                 match self.check(&drive, live.point) {
-                    Ok(()) => live.target = drive,
+                    Ok(()) => live.target.axis = axis,
                     Err(message) => rejected(message),
                 }
                 None
