@@ -12,42 +12,56 @@ use crate::fit::{
 use crate::numeric::{arange, interp};
 use crate::psd::{CalibrationData, MAX_FREQ};
 
-/// Display-only sum of several datasets' total PSD on a shared grid. No recommendation is
-/// ever computed from it.
+/// Display-only sum of several datasets' PSDs on a shared grid: the total and each of the
+/// accelerometers' x, y and z directions. No recommendation is ever computed from it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SummedPsd {
     /// Frequency grid in Hz.
     pub freq_bins: Vec<f64>,
-    /// Summed PSD.
+    /// Summed total PSD.
     pub psd: Vec<f64>,
+    /// Summed x-direction PSD.
+    pub psd_x: Vec<f64>,
+    /// Summed y-direction PSD.
+    pub psd_y: Vec<f64>,
+    /// Summed z-direction PSD.
+    pub psd_z: Vec<f64>,
 }
 
-/// Sums every dataset's `psd_sum`, interpolated onto `arange(min_bin, max_freq, 0.2)` where
-/// `min_bin` is the smallest first bin. A dataset contributes only within its own measured
-/// range, so a low-rate chip adds nothing above its Nyquist frequency. `None` for empty input.
+/// Sums every dataset's `psd_sum`, `psd_x`, `psd_y` and `psd_z`, interpolated onto
+/// `arange(min_bin, max_freq, 0.2)` where `min_bin` is the smallest first bin. A dataset
+/// contributes only within its own measured range, so a low-rate chip adds nothing above its
+/// Nyquist frequency. `None` for empty input.
 pub fn summed_psd(data: &[CalibrationData], max_freq: f64) -> Option<SummedPsd> {
     let min_bin = data
         .iter()
         .filter_map(|d| d.freq_bins.first().copied())
         .reduce(f64::min)?;
     let grid = arange(min_bin, max_freq, FREQ_STEP);
-    let mut psd = vec![0.0; grid.len()];
-    for d in data.iter().filter(|d| !d.freq_bins.is_empty()) {
-        let (first, last) = (d.freq_bins[0], d.freq_bins[d.freq_bins.len() - 1]);
-        for ((acc, &f), v) in psd
-            .iter_mut()
-            .zip(&grid)
-            .zip(interp(&grid, &d.freq_bins, &d.psd_sum))
-        {
-            if (first..=last).contains(&f) {
-                *acc += v;
+    let sum = |curve: fn(&CalibrationData) -> &[f64]| {
+        let mut total = vec![0.0; grid.len()];
+        for d in data.iter().filter(|d| !d.freq_bins.is_empty()) {
+            let (first, last) = (d.freq_bins[0], d.freq_bins[d.freq_bins.len() - 1]);
+            for ((acc, &f), v) in
+                total
+                    .iter_mut()
+                    .zip(&grid)
+                    .zip(interp(&grid, &d.freq_bins, curve(d)))
+            {
+                if (first..=last).contains(&f) {
+                    *acc += v;
+                }
             }
         }
-    }
+        total
+    };
     Some(SummedPsd {
-        freq_bins: grid,
-        psd,
+        psd: sum(|d| &d.psd_sum),
+        psd_x: sum(|d| &d.psd_x),
+        psd_y: sum(|d| &d.psd_y),
+        psd_z: sum(|d| &d.psd_z),
+        freq_bins: grid.clone(),
     })
 }
 

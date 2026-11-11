@@ -64,6 +64,14 @@ parity_test! {
         assert_eq!(one.freq_bins, two.freq_bins);
         let doubled: Vec<f64> = one.psd.iter().map(|v| v * 2.0).collect();
         assert_close("summed", &two.psd, &doubled);
+        for (name, one, two) in [
+            ("summed x", &one.psd_x, &two.psd_x),
+            ("summed y", &one.psd_y, &two.psd_y),
+            ("summed z", &one.psd_z, &two.psd_z),
+        ] {
+            let doubled: Vec<f64> = one.iter().map(|v| v * 2.0).collect();
+            assert_close(name, two, &doubled);
+        }
         assert!(summed_psd(&[], 200.0).is_none());
     }
 }
