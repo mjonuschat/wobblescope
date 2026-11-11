@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FlaskConicalIcon, FolderClockIcon, PrinterIcon, type LucideIcon } from "lucide-react";
+import { FlaskConicalIcon, FolderClockIcon, PrinterIcon, WavesIcon, type LucideIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -9,12 +9,30 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { useStatus } from "@/lib/api/queries";
 
-const pages: { to: "/" | "/run" | "/sessions"; label: string; icon: LucideIcon }[] = [
+type Path = "/" | "/run/shaper" | "/sessions";
+
+interface Page {
+  to: Path;
+  label: string;
+  icon: LucideIcon;
+  /** Pages under this one, one for each kind of test. */
+  children?: { to: Path; label: string; icon: LucideIcon }[];
+}
+
+const pages: Page[] = [
   { to: "/", label: "Printer", icon: PrinterIcon },
-  { to: "/run", label: "Run test", icon: FlaskConicalIcon },
+  {
+    to: "/run/shaper",
+    label: "Run Test",
+    icon: FlaskConicalIcon,
+    children: [{ to: "/run/shaper", label: "Input Shaper", icon: WavesIcon }],
+  },
   { to: "/sessions", label: "Sessions", icon: FolderClockIcon },
 ];
 
@@ -29,16 +47,33 @@ export function AppSidebar() {
         <SidebarGroup>
           <nav aria-label="Pages">
             <SidebarMenu>
-              {pages.map(({ to, label, icon: Icon }) => (
-                <SidebarMenuItem key={to}>
+              {pages.map(({ to, label, icon: Icon, children }) => (
+                <SidebarMenuItem key={label}>
                   <SidebarMenuButton
                     render={
-                      <Link to={to} activeOptions={{ exact: to === "/" }} activeProps={{ "data-active": true }} />
+                      <Link
+                        to={to}
+                        activeOptions={{ exact: to === "/" }}
+                        // A page with sub-pages leaves the highlight to the one that is open.
+                        activeProps={children ? undefined : { "data-active": true }}
+                      />
                     }
                   >
                     <Icon />
                     <span>{label}</span>
                   </SidebarMenuButton>
+                  {children && (
+                    <SidebarMenuSub aria-label={`${label} pages`}>
+                      {children.map((child) => (
+                        <SidebarMenuSubItem key={child.to}>
+                          <SidebarMenuSubButton render={<Link to={child.to} activeProps={{ "data-active": true }} />}>
+                            <child.icon />
+                            <span>{child.label}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

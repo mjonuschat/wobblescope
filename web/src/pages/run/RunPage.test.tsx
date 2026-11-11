@@ -37,7 +37,7 @@ const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && 
 
 async function open(options?: Options) {
   const calls = api(options);
-  renderRoute("/run");
+  renderRoute("/run/shaper");
   await screen.findByRole("button", { name: "Start test" });
   return calls;
 }
@@ -153,7 +153,7 @@ describe("the run screen", () => {
         return new Response(JSON.stringify(body), { status: 200 });
       }),
     );
-    renderRoute("/run");
+    renderRoute("/run/shaper");
     fireEvent.click(await screen.findByRole("button", { name: "Start test" }));
     const busy = await screen.findByRole("button", { name: "Checking printer…" });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
@@ -199,7 +199,7 @@ describe("the run screen", () => {
       },
       () => ({ body: ready ? healthyStatus : starting }),
     );
-    const { client } = renderRoute("/run");
+    const { client } = renderRoute("/run/shaper");
     expect(await screen.findByText("the daemon is not connected to Moonraker")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start test" })).toBeNull();
 
@@ -207,5 +207,14 @@ describe("the run screen", () => {
     await client.invalidateQueries({ queryKey: queryKeys.status });
     expect(await screen.findByRole("button", { name: "Start test" })).toBeTruthy();
     expect((screen.getByLabelText("Use lis2dw ebb36") as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe("the run test routes", () => {
+  it("sends /run to the input shaper page", async () => {
+    api();
+    const { router } = renderRoute("/run");
+    await screen.findByRole("heading", { name: "Input Shaper" });
+    expect(router.state.location.pathname).toBe("/run/shaper");
   });
 });

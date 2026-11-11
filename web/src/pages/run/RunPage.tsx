@@ -9,7 +9,7 @@ import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 
-/** The Run test screen: the chips panel and the test form. */
+/** The Input Shaper test screen: the chips panel and the test form. */
 export function RunPage() {
   const status = useStatus();
   const settings = useSettings();
@@ -77,7 +77,7 @@ export function RunPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
-      <h1 className="text-xl font-semibold">Run test</h1>
+      <h1 className="text-xl font-semibold">Input Shaper</h1>
       {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
       {chips.isError && (
         <p role="alert" className="text-sm text-destructive">

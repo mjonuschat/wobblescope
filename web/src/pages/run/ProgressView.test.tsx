@@ -48,7 +48,7 @@ const stops = (calls: ApiCall[]) => calls.filter((c) => apiPath(c).endsWith("/em
 /** Renders the run screen and opens the live socket with `snapshot`. */
 async function mount(snapshot: { test: TestState | null; last: FinishedTest | null }, stop?: Reply) {
   const calls = api(stop);
-  renderRoute("/run");
+  renderRoute("/run/shaper");
   await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
   act(() => FakeSocket.latest.open());
   act(() => FakeSocket.latest.send(snapshot));
@@ -229,7 +229,7 @@ describe("a finished test", () => {
 describe("starting a test", () => {
   it("keeps the stop button when the live socket never delivers a snapshot", async () => {
     const calls = api();
-    renderRoute("/run");
+    renderRoute("/run/shaper");
     // The socket is never opened, as when a proxy refuses the upgrade.
     fireEvent.click(await screen.findByRole("button", { name: "Start test" }));
     expect(await screen.findByText("Starting…")).toBeTruthy();
@@ -241,7 +241,7 @@ describe("starting a test", () => {
 
   it("shows Starting… after the 202 and progress once the live state names the test", async () => {
     api();
-    renderRoute("/run");
+    renderRoute("/run/shaper");
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
     act(() => FakeSocket.latest.open());
     send({ test: null, last: null });
