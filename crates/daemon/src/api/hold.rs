@@ -86,7 +86,7 @@ pub enum HoldServerMessage {
     State(HoldState),
     /// A change was not applied.
     Rejected {
-        /// Why.
+        /// What was wrong with the change.
         message: String,
     },
     /// The hold ended. The socket closes after it.

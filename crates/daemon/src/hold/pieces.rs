@@ -37,7 +37,7 @@ pub enum HoldAxis {
 /// What a hold drives: the axis, the frequency and the acceleration per Hz.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Drive {
-    /// The axis.
+    /// The axis the toolhead moves along.
     pub axis: HoldAxis,
     /// The frequency, in Hz.
     pub frequency: f64,

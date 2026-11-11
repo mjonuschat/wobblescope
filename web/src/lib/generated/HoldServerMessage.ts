@@ -16,6 +16,6 @@ failures: Array<CheckFailure>, } | { "type": "started",
  */
 id: string, } | { "type": "state" } & HoldState | { "type": "rejected", 
 /**
- * Why.
+ * What was wrong with the change.
  */
 message: string, } | { "type": "ended" } & HoldEnded;

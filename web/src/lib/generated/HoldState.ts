@@ -19,7 +19,7 @@ elapsed_seconds: number,
  */
 frequency: number, 
 /**
- * The axis.
+ * The axis being driven now.
  */
 axis: HoldAxis, 
 /**

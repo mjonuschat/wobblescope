@@ -121,7 +121,7 @@ pub struct HoldState {
     pub elapsed_seconds: f64,
     /// The frequency now, in Hz. It ramps toward a changed target.
     pub frequency: f64,
-    /// The axis.
+    /// The axis being driven now.
     pub axis: HoldAxis,
     /// The peak acceleration now, in mm/s².
     pub acceleration: f64,
@@ -171,7 +171,7 @@ pub enum HoldEvent {
     State(HoldState),
     /// A change was not applied.
     Rejected {
-        /// Why.
+        /// What was wrong with the change.
         message: String,
     },
 }
