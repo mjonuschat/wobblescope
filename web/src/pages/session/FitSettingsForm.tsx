@@ -114,6 +114,7 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
 
   return (
     <form
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
         if ("params" in result) onApply(result.params);
