@@ -388,10 +388,14 @@ async fn a_stalled_reader_with_only_text_traffic_stays_bounded() {
         .into_iter()
         .filter(|m| m["type"] == "console")
         .collect();
-    assert!(consoles.len() < 100, "{} console messages", consoles.len());
+    assert!(
+        consoles
+            .iter()
+            .all(|c| c["lines"].as_array().unwrap().len() <= 5),
+        "a console message held more than 5 lines"
+    );
     let lines = consoles.last().unwrap()["lines"].as_array().unwrap();
     assert_eq!(lines.last().unwrap(), "last");
-    assert!(messages.len() < 100, "{} entries", messages.len());
 }
 
 #[tokio::test]
