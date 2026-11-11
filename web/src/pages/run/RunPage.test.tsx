@@ -241,12 +241,12 @@ describe("the run screen", () => {
       [...document.querySelectorAll<HTMLInputElement>('input[id^="point-"][id$="-x"]')].map((i) => i.value);
     expect(screen.getAllByRole("button", { name: /Pattern/ })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: /Pattern/ }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /9 points/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "3 x 3 Grid" }));
     await waitFor(() => expect(xs()).toHaveLength(9));
     expect(xs().slice(0, 3)).toEqual(["20", "150.5", "281"]);
     // A pattern replaces the rows; the 5 point one has five.
     fireEvent.click(screen.getByRole("button", { name: /Pattern/ }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /5 points/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Center + Corners" }));
     await waitFor(() => expect(xs()).toHaveLength(5));
   });
 

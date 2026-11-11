@@ -55,8 +55,8 @@ export type PointPattern = "center" | "five" | "nine";
 
 export const POINT_PATTERNS: { value: PointPattern; label: string }[] = [
   { value: "center", label: "Center" },
-  { value: "five", label: "5 points: center and corners" },
-  { value: "nine", label: "9 points: 3 × 3 grid" },
+  { value: "five", label: "Center + Corners" },
+  { value: "nine", label: "3 x 3 Grid" },
 ];
 
 /** How far a pattern's outer points stay from the travel limits, in mm. */
