@@ -48,7 +48,7 @@ describe("the sessions page", () => {
   it("links each row to the session's zip download", async () => {
     api([summary("s1")]);
     renderRoute("/sessions");
-    const link = (await screen.findByRole("link", { name: "Download" })) as HTMLAnchorElement;
+    const link = (await screen.findByLabelText("Download")) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toMatch(/\/api\/sessions\/s1\/download$/);
     expect(link.hasAttribute("download")).toBe(true);
   });
