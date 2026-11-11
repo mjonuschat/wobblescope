@@ -210,7 +210,7 @@ describe("the session view", () => {
     );
   });
 
-  it("shows the chip\u2019s health on this axis, not its health over the whole test", async () => {
+  it("judges the data on this axis, not the chip\u2019s health over the whole test", async () => {
     const a = analysis();
     a.per_chip = [{ ...a.per_chip[0], chip: "adxl345", health: "Ok" }];
     a.eligibility.decisions = [decision("adxl345", "Included")];
@@ -219,9 +219,9 @@ describe("the session view", () => {
     meta.chips = meta.chips.map((c) => ({ ...c, health: "Degraded" }));
     serve(meta);
     renderRoute("/sessions/s1");
-    const chip = await screen.findByRole("region", { name: "Chip adxl345" });
-    expect(chip.textContent).toContain("Ok");
-    expect(chip.textContent).not.toContain("Degraded");
+    const quality = await screen.findByRole("region", { name: "Data Quality" });
+    expect(quality.textContent).toContain("Good data");
+    expect(quality.textContent).not.toContain("Left out");
   });
 
   it("shows an analysis error while the metadata stays visible", async () => {
