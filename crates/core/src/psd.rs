@@ -59,8 +59,15 @@ pub(crate) fn kaiser(n: usize, beta: f64) -> Vec<f64> {
         .collect()
 }
 
+/// Hann window of length `n`, periodic so that 50% overlapped segments sum to a constant.
+pub(crate) fn hann(n: usize) -> Vec<f64> {
+    (0..n)
+        .map(|i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos())
+        .collect()
+}
+
 /// Welch PSD of one axis; returns one-sided PSD of length `nfft / 2 + 1`.
-fn welch(x: &[f64], fs: f64, nfft: usize, window: &[f64]) -> Vec<f64> {
+pub(crate) fn welch(x: &[f64], fs: f64, nfft: usize, window: &[f64]) -> Vec<f64> {
     let scale = 1.0 / window.iter().map(|w| w * w).sum::<f64>();
     let overlap = nfft / 2;
     let step = nfft - overlap;
