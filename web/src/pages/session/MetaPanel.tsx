@@ -139,7 +139,6 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
       )}
       {analysis && (
         <Fields aria-label="How it was analysed">
-          {fit && row("Shapers Tried", fit.shapers.join(", "))}
           {fit && row("Analysed Up To", `${fit.max_freq} Hz`)}
           {row("Analysis Version", analysis.core_version)}
         </Fields>

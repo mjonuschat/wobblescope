@@ -361,7 +361,7 @@ describe("the session view", () => {
     expect(fake.analyze.mock.calls[1][0].params.max_smoothing).toBe(0.1);
   });
 
-  it("shows how the session was analysed in its details, and no longer a line of jargon", async () => {
+  it("shows how far and with what version the session was analysed in its details, and no list of shapers", async () => {
     const a = analysis();
     a.worst_case = recommendation();
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
@@ -370,7 +370,7 @@ describe("the session view", () => {
     const details = await screen.findByRole("region", { name: "Session details" });
     await waitFor(() => expect(details.textContent).toContain("Analysis Version"));
     expect(details.textContent).toContain("0.1.0");
-    expect(details.textContent).toContain("Shapers Tried");
+    expect(details.textContent).not.toContain("Shapers Tried");
     expect(details.textContent).toContain("200 Hz");
     expect(screen.queryByText(/Analysed with core/)).toBeNull();
   });
