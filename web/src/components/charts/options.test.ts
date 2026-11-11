@@ -169,15 +169,15 @@ describe("liveSpectrumOption", () => {
   const byName = (name: string) => live.find((s) => s.name === name)!;
 
   it("draws a line per chip and axis plus a peak-hold line per chip", () => {
-    expect(live.map((s) => s.name)).toEqual(["a X", "a SUM", "a peak hold", "b Z", "b peak hold"]);
+    expect(live.map((s) => s.name)).toEqual(["a X", "a Total", "a Peak Hold", "b Z", "b Peak Hold"]);
   });
 
   it("colours every line of a chip with that chip\u2019s colour", () => {
-    for (const name of ["a X", "a SUM", "a peak hold"]) {
+    for (const name of ["a X", "a Total", "a Peak Hold"]) {
       expect(byName(name).color).toBe(chipColor(0));
       expect(byName(name).lineStyle.color).toBe(chipColor(0));
     }
-    for (const name of ["b Z", "b peak hold"]) expect(byName(name).lineStyle.color).toBe(chipColor(1));
+    for (const name of ["b Z", "b Peak Hold"]) expect(byName(name).lineStyle.color).toBe(chipColor(1));
   });
 
   it("colours by colorIndex when given, not by position", () => {
@@ -189,8 +189,8 @@ describe("liveSpectrumOption", () => {
   });
 
   it("draws the peak-hold lines faintly and the spectra solidly", () => {
-    expect(byName("a peak hold").lineStyle.opacity).toBe(0.3);
-    expect(byName("b peak hold").lineStyle.opacity).toBe(0.3);
+    expect(byName("a Peak Hold").lineStyle.opacity).toBe(0.3);
+    expect(byName("b Peak Hold").lineStyle.opacity).toBe(0.3);
     expect(byName("a X").lineStyle.opacity).toBeUndefined();
   });
 
@@ -198,8 +198,8 @@ describe("liveSpectrumOption", () => {
     const [point] = byName("a X").markPoint!.data;
     expect(point.coord).toEqual([10, 6]);
     expect(point.label.formatter).toBe("10.0 Hz\n6.0e+0");
-    expect(byName("a SUM").markPoint).toBeUndefined();
-    expect(byName("a peak hold").markPoint).toBeUndefined();
+    expect(byName("a Total").markPoint).toBeUndefined();
+    expect(byName("a Peak Hold").markPoint).toBeUndefined();
     expect(byName("b Z").markPoint?.data).toEqual([]);
   });
 

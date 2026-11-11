@@ -7,7 +7,7 @@ import type { ProbePoint } from "@/lib/generated/ProbePoint";
 import type { Recommendation } from "@/lib/generated/Recommendation";
 import type { Spectrum } from "@/lib/generated/Spectrum";
 import type { SummedPsd } from "@/lib/generated/SummedPsd";
-import type { Axis3 } from "@/pages/stream/axes";
+import { AXIS_LABEL, type Axis3 } from "@/pages/stream/axes";
 import { chipColor } from "@/pages/stream/colors";
 
 /** Where a probe point is, or its number when its position is not known. */
@@ -174,7 +174,7 @@ export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): ECharts
     const color = chipColor(colorIndex ?? index);
     axes.forEach((axis, n) => {
       const line: Record<string, unknown> = {
-        name: `${chip} ${axis.toUpperCase()}`,
+        name: `${chip} ${AXIS_LABEL[axis]}`,
         type: "line",
         showSymbol: false,
         color,
@@ -201,7 +201,7 @@ export function liveSpectrumOption({ chips, maxHz }: LiveSpectrumInput): ECharts
       series.push(line);
     });
     series.push({
-      name: `${chip} peak hold`,
+      name: `${chip} Peak Hold`,
       type: "line",
       showSymbol: false,
       color,
