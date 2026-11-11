@@ -16,13 +16,8 @@ import { StreamPage } from "./StreamPage";
 
 // The chart is a canvas, so the test reads the props the page gives it.
 vi.mock("./SpectrumChart", () => ({
-  SpectrumChart: (props: { chips: unknown[]; maxHz: number; onResetPeakHold: () => void }) => (
-    <div>
-      <pre data-testid="spectrum-chart">{JSON.stringify({ chips: props.chips, maxHz: props.maxHz })}</pre>
-      <button type="button" onClick={props.onResetPeakHold}>
-        Reset Peak Hold
-      </button>
-    </div>
+  SpectrumChart: (props: { chips: unknown[]; maxHz: number }) => (
+    <pre data-testid="spectrum-chart">{JSON.stringify({ chips: props.chips, maxHz: props.maxHz })}</pre>
   ),
 }));
 vi.mock("./SignalStrips", () => ({ SignalStrips: () => <div data-testid="strips" /> }));
@@ -159,7 +154,7 @@ describe("the stream page", () => {
   it("lists each chip in a table with its rate and the highest frequency it can show", async () => {
     open();
     await connect();
-    for (const name of ["Chip", "Type", "Rate", "Max Frequency", "Axes", "Status"]) {
+    for (const name of ["Chip", "Type", "Rate", "Max Frequency", "Status"]) {
       expect(screen.getByRole("columnheader", { name })).toBeTruthy();
     }
     expect(screen.getAllByText("3200 Hz").length).toBeGreaterThan(0);
@@ -175,23 +170,29 @@ describe("the stream page", () => {
     expect(sent()[1]).toEqual({ type: "unsubscribe", chip: "a1" });
   });
 
-  it("passes each chip its own axes to the spectrum chart", async () => {
+  it("passes the chosen spectrum axes to every chip", async () => {
     open();
     await connect();
     pick("a1");
     pick("a2");
     server(streamHeader("a1", 0));
     server(streamHeader("a2", 1));
-    act(() => {
-      worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] });
-      worker.emit({ type: "spectrum", chip: "a2", spectrum: spectrum(1), peaks: [] });
-    });
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    act(() => worker.emit({ type: "spectrum", chip: "a2", spectrum: spectrum(1), peaks: [] }));
     expect(chartProps().chips.map((c: { axes: string[] }) => c.axes)).toEqual([["sum"], ["sum"]]);
-    fireEvent.click(screen.getByLabelText("X of a1"));
-    fireEvent.click(screen.getByLabelText("Total of a1"));
-    fireEvent.click(screen.getByLabelText("Y of a2"));
-    fireEvent.click(screen.getByLabelText("Total of a2"));
-    expect(chartProps().chips.map((c: { axes: string[] }) => c.axes)).toEqual([["x"], ["y"]]);
+    fireEvent.click(screen.getByRole("button", { name: "X" }));
+    fireEvent.click(screen.getByRole("button", { name: "Total" }));
+    expect(chartProps().chips.map((c: { axes: string[] }) => c.axes)).toEqual([["x"], ["x"]]);
+  });
+
+  it("keeps at least one spectrum axis on", async () => {
+    open();
+    await connect();
+    pick("a1");
+    server(streamHeader("a1", 0));
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Total" }));
+    expect(chartProps().chips[0].axes).toEqual(["sum"]);
   });
 
   it("sends Subscribe again when the range changes", async () => {

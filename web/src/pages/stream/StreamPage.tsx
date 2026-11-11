@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Panel } from "@/components/Panel";
+import { Button } from "@/components/ui/button";
 import { Waiting } from "@/components/Waiting";
 import { useChips } from "@/lib/api/queries";
 import { type SpectraState, type SpectrumWorkerLike, useSpectra } from "@/stream/useSpectra";
 import { useStream } from "@/stream/useStream";
 
 import type { Axis3 } from "./axes";
+import { AxisToggles } from "./AxisToggles";
 import { chipColor } from "./colors";
 import { ChipPicker } from "./ChipPicker";
 import { ConsoleCard } from "./ConsoleCard";
@@ -32,7 +34,7 @@ export function StreamPage({ createWorker }: Props) {
   const { hello, chips: streams } = stream.state;
   const { subscribe } = stream;
   const [selected, setSelected] = useState<string[]>([]);
-  const [axes, setAxes] = useState<Record<string, Axis3[]>>({});
+  const [axes, setAxes] = useState<Axis3[]>(["sum"]);
   const [range, setRange] = useState<Range | null>(null);
   const [updates, setUpdates] = useState<number | null>(null);
   const [windowSeconds, setWindowSeconds] = useState(DEFAULT_WINDOW_SECONDS);
@@ -122,9 +124,7 @@ export function StreamPage({ createWorker }: Props) {
             chips={chipList.chips}
             selected={selected}
             maxChips={maxChips}
-            axes={axes}
             onToggle={toggle}
-            onAxes={(section, next) => setAxes((old) => ({ ...old, [section]: next }))}
             badge={(section) => (
               <HealthBadge chip={section} state={streams[section]} error={spectra[section]?.error ?? null} />
             )}
@@ -142,17 +142,26 @@ export function StreamPage({ createWorker }: Props) {
         </Panel>
       )}
       {shown.length > 0 && (
-        <Panel title="Live Spectrum">
+        <Panel
+          title="Live Spectrum"
+          action={
+            <div className="flex items-center gap-2">
+              <AxisToggles axes={axes} onAxes={setAxes} />
+              <Button type="button" variant="outline" size="sm" onClick={() => resetPeakHold()}>
+                Reset Peak Hold
+              </Button>
+            </div>
+          }
+        >
           <SpectrumChart
             maxHz={axisHz}
-            onResetPeakHold={() => resetPeakHold()}
             chips={shown.map(({ chip, index, entry, spectrum }) => ({
               chip,
               colorIndex: index,
               spectrum,
               peaks: entry.peaks,
               peakHold: entry.peakHold,
-              axes: axes[chip] ?? ["sum"],
+              axes,
             }))}
           />
         </Panel>
