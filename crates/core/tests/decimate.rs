@@ -130,3 +130,25 @@ fn reset_makes_the_output_equal_to_a_fresh_decimators() {
     let mut fresh = Decimator::new(FS, 200.0).unwrap();
     assert_eq!(used.process(&input), fresh.process(&input));
 }
+
+#[test]
+fn a_constant_input_is_a_constant_output_from_the_first_sample() {
+    // The filter starts from the first sample, not from zeros, so a signal with a large offset
+    // such as gravity does not begin with a ramp.
+    let n = 3200;
+    let s = RawSamples {
+        t: (0..n).map(|i| i as f64 / 3200.0).collect(),
+        x: vec![9800.0; n],
+        y: vec![-9800.0; n],
+        z: vec![123.0; n],
+    };
+    let out = Decimator::new(3200.0, 200.0).unwrap().process(&s);
+    assert!(!out.x.is_empty());
+    for (v, want) in [(&out.x, 9800.0), (&out.y, -9800.0), (&out.z, 123.0)] {
+        assert!(
+            v.iter().all(|x| (x - want).abs() < 1e-6),
+            "a ramp at the start: {:?}",
+            &v[..3]
+        );
+    }
+}

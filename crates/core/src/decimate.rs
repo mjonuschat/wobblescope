@@ -105,7 +105,7 @@ impl Decimator {
         self.input_rate_hz / self.factor as f64
     }
 
-    /// Forgets the filter history and restarts the phase, as for a new stream.
+    /// Forgets the filter history and restarts the phase, as for a new stream. The next samples start the filter again.
     pub fn reset(&mut self) {
         self.history.iter_mut().for_each(|h| h.fill(0.0));
         self.next_index = 0;
@@ -116,6 +116,13 @@ impl Decimator {
     pub fn process(&mut self, s: &RawSamples) -> RawSamples {
         if self.factor == 1 {
             return s.clone();
+        }
+        if self.next_index == 0 && !s.is_empty() {
+            // Start the filter at the first sample. Zeros would show as a ramp up to any constant
+            // offset, such as gravity, that fills the first seconds of the signal.
+            for (history, first) in self.history.iter_mut().zip([s.x[0], s.y[0], s.z[0]]) {
+                history.fill(first);
+            }
         }
         let first = self.next_index;
         let kept: Vec<usize> = (0..s.len())
