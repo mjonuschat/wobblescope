@@ -325,10 +325,11 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                 {(["x", "y", "z"] as const).map((axis) => (
                   <div key={axis} className="space-y-1">
                     <Label htmlFor={`point-${i}-${axis}`} className={i === 0 ? undefined : "sr-only"}>
-                      Point {i + 1} {axis.toUpperCase()}
+                      {axis.toUpperCase()}
                     </Label>
                     <UnitInput
                       id={`point-${i}-${axis}`}
+                      aria-label={`Point ${i + 1} ${axis.toUpperCase()}`}
                       unit="mm"
                       step={1}
                       className="w-32"
