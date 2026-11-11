@@ -182,8 +182,8 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
                 return;
             }
         }
-        if outbox.overflowed.load(Ordering::Acquire) {
-            let _ = socket.send(too_slow_close()).await;
+        if let Some(close) = overflow_close(&outbox) {
+            let _ = socket.send(close).await;
             return;
         }
         tokio::select! {
@@ -204,6 +204,14 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
             () = outbox.wake.notified() => {}
         }
     }
+}
+
+/// The close message to send when the viewer's queue has overflowed, `None` while it has not.
+fn overflow_close(outbox: &Outbox) -> Option<Message> {
+    outbox
+        .overflowed
+        .load(Ordering::Acquire)
+        .then(too_slow_close)
 }
 
 /// The close message for a viewer whose queue overflowed.
@@ -434,11 +442,10 @@ mod tests {
         for _ in 0..QUEUE_CAPACITY {
             outbox.push(refusal());
         }
-        assert!(!outbox.overflowed.load(Ordering::Acquire));
+        assert!(overflow_close(&outbox).is_none());
         outbox.push(refusal());
-        assert!(outbox.overflowed.load(Ordering::Acquire));
 
-        let Message::Close(Some(close)) = too_slow_close() else {
+        let Some(Message::Close(Some(close))) = overflow_close(&outbox) else {
             panic!("a close message with a frame");
         };
         assert_eq!(close.code, close_code::POLICY);

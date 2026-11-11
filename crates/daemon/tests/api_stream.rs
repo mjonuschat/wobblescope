@@ -309,7 +309,8 @@ async fn a_slow_reader_gets_dropped_frames_not_a_growing_queue() {
         .await;
 
     // The client reads nothing while four chips produce about 800 frames, far more than the
-    // socket buffers and the queue hold.
+    // socket buffers and the queue hold. Each frame is 16 + 12 * samples bytes; the small socket
+    // buffers fill after a few of them, so 10 s is kept as the brief specifies.
     push_in_real_time(&rig, &["adxl345", "b", "c", "d"], 10.0, 10.0).await;
 
     let messages = drain(&mut socket, Duration::from_millis(500)).await;
@@ -387,6 +388,7 @@ async fn a_second_viewer_is_independent() {
     let wide_stream = text_of(&mut wide, "stream").await;
     let narrow_stream = text_of(&mut narrow, "stream").await;
     assert_ne!(wide_stream["factor"], narrow_stream["factor"]);
+    drain(&mut wide, Duration::from_millis(300)).await;
 
     drop(narrow);
     rig.until("one bridge closes", || {
@@ -395,8 +397,11 @@ async fn a_second_viewer_is_independent() {
     .await;
     push_seconds(&rig, "adxl345", 20.0, 1.0);
     loop {
+        // The first push covers t = 10..11 and the second starts at 20, so a frame starting at
+        // or after 20 can only come from the second push.
         if let Message::Binary(bytes) = frame(&mut wide).await
             && sample_count(&bytes) > 0
+            && f64::from_le_bytes(bytes[4..12].try_into().unwrap()) >= 20.0
         {
             break;
         }
