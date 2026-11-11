@@ -230,7 +230,7 @@ impl From<ImportError> for ApiError {
 }
 
 /// `axum::Json` that rejects with the JSON error body. A body that does not parse, has the
-/// wrong shape or lacks a JSON content type is a 400.
+/// wrong shape or lacks a JSON content type is a 400; one over the route's limit is a 413.
 pub struct ApiJson<T>(pub T);
 
 impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for ApiJson<T> {
@@ -240,7 +240,15 @@ impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for ApiJson<T> {
         Json::<T>::from_request(req, state)
             .await
             .map(|j| Self(j.0))
-            .map_err(|r| ApiError::invalid(r.body_text()))
+            .map_err(|r| {
+                if r.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    ApiError::TooLarge {
+                        message: "the request body is over the size limit".to_owned(),
+                    }
+                } else {
+                    ApiError::invalid(r.body_text())
+                }
+            })
     }
 }
 

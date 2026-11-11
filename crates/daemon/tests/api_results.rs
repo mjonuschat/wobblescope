@@ -180,7 +180,13 @@ async fn a_damaged_result_answers_500_result_unusable_and_serves_nothing() {
     let id = save(&app).await;
     let path = d.path().join("results").join(format!("{id}.zip"));
     let mut bytes = std::fs::read(&path).unwrap();
-    bytes[100] ^= 0xFF;
+    let sample =
+        std::fs::read(common::sessions_dir(d.path()).join("s1").join("c1-s0.zst")).unwrap();
+    let at = bytes
+        .windows(sample.len())
+        .position(|w| w == sample)
+        .expect("the sample is stored uncompressed in the zip");
+    bytes[at + sample.len() / 2] ^= 0xFF;
     std::fs::write(&path, bytes).unwrap();
     for uri in [
         format!("/api/results/{id}"),
@@ -233,4 +239,54 @@ async fn results_answer_503_before_storage_opens() {
     .await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(parse(&body)["error"], "storage_unavailable");
+}
+
+#[tokio::test]
+async fn an_oversized_save_body_answers_413_too_large() {
+    let (_d, s) = one_session();
+    let app = app(Some(s));
+    let mut body = save_body(CREATED, "0.1.0");
+    body["label"] = json!("x".repeat(16 * 1024 * 1024 + 1));
+    let (status, _, out) = send(&app, ui_post("/api/sessions/s1/results", &body)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(parse(&out)["error"], "too_large");
+}
+
+#[tokio::test]
+async fn a_save_body_with_an_unknown_field_answers_400() {
+    let (_d, s) = one_session();
+    let app = app(Some(s));
+    let mut body = save_body(CREATED, "0.1.0");
+    body["extra"] = json!(1);
+    let (status, _, out) = send(&app, ui_post("/api/sessions/s1/results", &body)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(parse(&out)["error"], "invalid_request");
+}
+
+#[tokio::test]
+async fn a_result_id_with_path_traversal_is_refused() {
+    let (d, s) = one_session();
+    let app = app(Some(s));
+    let id = save(&app).await;
+    let outside = d.path().join("victim.zip");
+    std::fs::write(&outside, b"keep").unwrap();
+    for rid in ["..", "%2e%2e", "..%2fvictim", "%2e%2e%2fvictim"] {
+        for method in ["GET", "DELETE"] {
+            let req = if method == "GET" {
+                request("GET", &format!("/api/results/{rid}"))
+            } else {
+                ui_delete(&format!("/api/results/{rid}"))
+            };
+            let (status, _, body) = send(&app, req).await;
+            assert!(status.is_client_error(), "{method} {rid}: {status}");
+            let body = parse(&body);
+            assert!(
+                body["error"].is_string() && body["message"].is_string(),
+                "{method} {rid}"
+            );
+        }
+    }
+    assert_eq!(std::fs::read(&outside).unwrap(), b"keep");
+    let (status, _) = json(&app, "GET", &format!("/api/results/{id}")).await;
+    assert_eq!(status, StatusCode::OK);
 }

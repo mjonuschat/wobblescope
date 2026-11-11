@@ -116,6 +116,11 @@ fn read_error(id: &str, error: ResultError) -> StorageError {
     }
 }
 
+/// An id that cannot name a file in the results directory names no result.
+fn validate_result_id(id: &str) -> Result<(), StorageError> {
+    validate_session_id(id).map_err(|_| StorageError::ResultNotFound(id.to_owned()))
+}
+
 fn summary_of(record: &ResultRecord, size_bytes: u64) -> ResultSummary {
     ResultSummary {
         id: record.id.clone(),
@@ -314,7 +319,7 @@ impl Storage {
 
     /// Opens result `id` and verifies its manifest, so no bytes come from an unverified file.
     fn open_verified(&self, id: &str) -> Result<ResultFile, StorageError> {
-        validate_session_id(id)?;
+        validate_result_id(id)?;
         let path = self.inner.results_dir.join(format!("{id}.zip"));
         let file = ResultFile::open(&path).map_err(|e| read_error(id, e))?;
         file.verify().map_err(|e| read_error(id, e))?;
@@ -364,7 +369,7 @@ impl Storage {
     /// # Errors
     /// [`StorageError::ResultNotFound`] or an I/O error.
     pub fn delete_result(&self, id: &str) -> Result<(), StorageError> {
-        validate_session_id(id)?;
+        validate_result_id(id)?;
         match fs::remove_file(self.inner.results_dir.join(format!("{id}.zip"))) {
             Ok(()) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
