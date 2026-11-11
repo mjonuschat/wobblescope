@@ -3,23 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import { chip, chipsSnapshot } from "@/test/capture";
 
-import { ChipsPanel } from "./ChipsPanel";
+import { AccelerometersCard } from "./AccelerometersCard";
 
-function panel(over: Partial<React.ComponentProps<typeof ChipsPanel>> = {}) {
+function panel(over: Partial<React.ComponentProps<typeof AccelerometersCard>> = {}) {
   const props = {
     chips: chipsSnapshot(),
-    selected: ["lis2dw ebb36"],
-    onToggle: vi.fn(),
     onCheck: vi.fn(),
     checking: false,
     checkBlocked: null,
     ...over,
   };
-  render(<ChipsPanel {...props} />);
+  render(<AccelerometersCard {...props} />);
   return props;
 }
 
-describe("the chips panel", () => {
+describe("the accelerometers card", () => {
   it("lists each chip with its type, rate and availability", () => {
     panel({
       chips: chipsSnapshot({
@@ -36,23 +34,14 @@ describe("the chips panel", () => {
     expect(screen.getByText("no valid samples arrived within 3 s")).toBeTruthy();
   });
 
-  it("disables the checkbox of an unavailable chip", () => {
-    panel({
-      chips: chipsSnapshot({
-        chips: [chip("adxl345"), chip("lis2dw ebb36", { availability: { state: "unavailable", reason: "gone" } })],
-      }),
-    });
-    expect((screen.getByLabelText("Use lis2dw ebb36") as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Use adxl345") as HTMLInputElement).disabled).toBe(false);
-  });
-
-  it("shows the defaults per axis and the sections left out with their reasons", () => {
+  it("names the axes each chip is the default for and the sections left out with their reasons", () => {
     panel({
       chips: chipsSnapshot({
         skipped: [{ section: "beacon cartographer", reason: "named Beacon devices are not supported yet" }],
       }),
     });
-    expect(screen.getByText(/X uses lis2dw ebb36; Y uses lis2dw ebb36/)).toBeTruthy();
+    expect(screen.getByText("X and Y")).toBeTruthy();
+    expect(screen.getByText("none")).toBeTruthy();
     expect(screen.getByText("beacon cartographer: named Beacon devices are not supported yet")).toBeTruthy();
   });
 

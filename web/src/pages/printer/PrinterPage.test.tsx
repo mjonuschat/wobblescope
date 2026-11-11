@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { chip, printerSettings } from "@/test/capture";
@@ -8,8 +8,21 @@ import { apiPath, stubApiWithStatus } from "@/test/status";
 import { firmwareName, measure } from "./PrinterPage";
 
 function api() {
-  stubApiWithStatus((call) => {
+  return stubApiWithStatus((call) => {
     switch (apiPath(call)) {
+      case "chips/check":
+        return {
+          body: {
+            known: true,
+            current: true,
+            chips: [
+              chip("adxl345", { availability: { state: "available", observed_rate_hz: 3198.4, checked_at: "x" } }),
+              chip("lis2dw ebb36"),
+            ],
+            skipped: [],
+            defaults: { x: ["lis2dw ebb36"], y: ["lis2dw ebb36"] },
+          },
+        };
       case "settings":
         return { body: printerSettings() };
       case "chips":
@@ -59,6 +72,16 @@ describe("the printer page", () => {
     api();
     renderRoute("/");
     expect(await screen.findByText("Sweeping period")).toBeTruthy();
+  });
+});
+
+describe("checking the chips", () => {
+  it("posts the check and shows what it found", async () => {
+    const calls = api();
+    renderRoute("/");
+    fireEvent.click(await screen.findByRole("button", { name: "Check chips" }));
+    expect(await screen.findByText("available · 3198 Hz")).toBeTruthy();
+    expect(calls.filter((c) => c.method === "POST" && apiPath(c) === "chips/check")).toHaveLength(1);
   });
 });
 

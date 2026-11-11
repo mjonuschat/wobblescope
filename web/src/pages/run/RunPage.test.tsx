@@ -1,10 +1,10 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { queryKeys } from "@/lib/api/queries";
-import { chipsSnapshot, printerSettings } from "@/test/capture";
+import { chip, chipsSnapshot, printerSettings } from "@/test/capture";
 import type { ApiCall, Reply } from "@/test/http";
 import { renderRoute } from "@/test/render";
 import { apiPath, healthyStatus, stubApiWithStatus } from "@/test/status";
@@ -32,6 +32,7 @@ function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, s
 }
 
 const startButton = () => screen.getByRole("button", { name: /Start test|Checking printer/ });
+const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed") === "true";
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
 const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && apiPath(c) === "tests");
 
@@ -49,15 +50,15 @@ describe("the run screen", () => {
     await open();
     expect(field(/End frequency/).placeholder).toBe("135");
     expect(field(/Acceleration per Hz/).placeholder).toBe("60");
-    expect((screen.getByLabelText("Sweep") as HTMLInputElement).checked).toBe(true);
-    expect(field("Use lis2dw ebb36").checked).toBe(true);
-    expect(field("Use adxl345").checked).toBe(false);
+    expect(pressed("Sweep")).toBe(true);
+    expect(pressed("lis2dw ebb36")).toBe(true);
+    expect(pressed("adxl345")).toBe(false);
     expect((startButton() as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("preselects pulse when the printer sweeps with a period of 0", async () => {
     await open({ settings: { ...printerSettings(), default_mode: "Pulse" } });
-    expect((screen.getByLabelText("Pulse") as HTMLInputElement).checked).toBe(true);
+    expect(pressed("Pulse")).toBe(true);
   });
 
   it("shows the emergency stop consequence before a test starts", async () => {
@@ -91,7 +92,7 @@ describe("the run screen", () => {
   it("posts only the overridden fields with the chosen chips and points", async () => {
     const calls = await open();
     fireEvent.change(field(/End frequency/), { target: { value: "100" } });
-    fireEvent.click(screen.getByLabelText("Y"));
+    fireEvent.click(screen.getByRole("switch", { name: "Y" }));
     fireEvent.click(startButton());
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
     expect(JSON.parse(String(posted(calls)[0].body))).toEqual({
@@ -166,12 +167,46 @@ describe("the run screen", () => {
     expect(posts).toBe(1);
   });
 
-  it("keeps the sweeping fields off in pulse mode", async () => {
+  it("turns an axis on and off with a switch and refuses to start with none", async () => {
     await open();
-    fireEvent.click(screen.getByLabelText("Pulse"));
-    expect(field(/Sweeping period/).disabled).toBe(true);
-    expect(field(/Sweeping acceleration/).disabled).toBe(true);
-    expect(within(document.body).getByLabelText(/End frequency/)).toBeTruthy();
+    const x = screen.getByRole("switch", { name: "X" });
+    const y = screen.getByRole("switch", { name: "Y" });
+    expect(x.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(x);
+    expect(x.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(y);
+    expect(screen.getByText("Choose at least one axis.")).toBeTruthy();
+    expect((startButton() as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("hides the sweeping fields in pulse mode", async () => {
+    await open();
+    expect(screen.queryByLabelText(/Sweeping period/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pulse" }));
+    expect(screen.queryByLabelText(/Sweeping period/)).toBeNull();
+    expect(screen.queryByLabelText(/Sweeping acceleration/)).toBeNull();
+    expect(screen.getByLabelText(/End frequency/)).toBeTruthy();
+  });
+
+  it("lets chips be toggled and refuses to start with none", async () => {
+    const calls = await open();
+    fireEvent.click(screen.getByRole("button", { name: "adxl345" }));
+    expect(pressed("adxl345")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("button", { name: "adxl345" }));
+    expect(screen.getByText("Choose at least one chip.")).toBeTruthy();
+    expect((startButton() as HTMLButtonElement).disabled).toBe(true);
+    expect(posted(calls)).toHaveLength(0);
+  });
+
+  it("disables the toggle of an unavailable chip", async () => {
+    await open({
+      chips: chipsSnapshot({
+        chips: [chip("adxl345"), chip("lis2dw ebb36", { availability: { state: "unavailable", reason: "gone" } })],
+      }),
+    });
+    expect((screen.getByRole("button", { name: "lis2dw ebb36" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "adxl345" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("shows the form once the printer becomes ready after the page opened during startup", async () => {
@@ -206,7 +241,7 @@ describe("the run screen", () => {
     ready = true;
     await client.invalidateQueries({ queryKey: queryKeys.status });
     expect(await screen.findByRole("button", { name: "Start test" })).toBeTruthy();
-    expect((screen.getByLabelText("Use lis2dw ebb36") as HTMLInputElement).checked).toBe(true);
+    expect(pressed("lis2dw ebb36")).toBe(true);
   });
 });
 

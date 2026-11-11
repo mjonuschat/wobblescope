@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useChips, useSettings } from "@/lib/api/queries";
+import { ApiClientError } from "@/lib/api/client";
+import { useCheckChips, useChips, useSettings, useStatus } from "@/lib/api/queries";
 import type { AxisLimits } from "@/lib/generated/AxisLimits";
-import type { Chip } from "@/lib/generated/Chip";
-import type { ChipList } from "@/lib/generated/ChipList";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { Setting } from "@/lib/generated/Setting";
+
+import { AccelerometersCard } from "./AccelerometersCard";
 
 const UNKNOWN = "unknown";
 
@@ -136,53 +136,13 @@ function ResonanceSection({ settings }: { settings: PrinterSettings }) {
   );
 }
 
-function defaultAxes(chips: ChipList, chip: Chip): string {
-  return (["x", "y"] as const)
-    .filter((axis) => chips.defaults[axis].includes(chip.section))
-    .map((axis) => axis.toUpperCase())
-    .join(" and ");
-}
-
-function ChipsSection({ chips }: { chips: ChipList }) {
-  return (
-    <Section title="Accelerometers">
-      {chips.chips.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No accelerometers are configured.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Chip</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>MCU</TableHead>
-              <TableHead>Rate</TableHead>
-              <TableHead>Default for</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {chips.chips.map((chip) => {
-              const axes = defaultAxes(chips, chip);
-              return (
-                <TableRow key={chip.section}>
-                  <TableCell className="font-mono">{chip.section}</TableCell>
-                  <TableCell>{chip.chip_type}</TableCell>
-                  <TableCell>{chip.mcu ?? UNKNOWN}</TableCell>
-                  <TableCell className="font-mono">{measure(chip.nominal_rate_hz, "Hz")}</TableCell>
-                  <TableCell>{axes || "none"}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
-    </Section>
-  );
-}
-
 /** What the printer is, how it moves, and how Klipper is set up to test it. */
 export function PrinterPage() {
   const settings = useSettings();
   const chips = useChips();
+  const check = useCheckChips();
+  const status = useStatus();
+  const ready = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <h1 className="text-xl font-semibold">Printer</h1>
@@ -200,7 +160,19 @@ export function PrinterPage() {
           <ResonanceSection settings={settings.data} />
         </>
       )}
-      {chips.data && <ChipsSection chips={chips.data} />}
+      {chips.data && (
+        <AccelerometersCard
+          chips={chips.data}
+          onCheck={() => check.mutate()}
+          checking={check.isPending}
+          checkBlocked={ready ? null : "Klipper is not ready."}
+        />
+      )}
+      {check.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {check.error instanceof ApiClientError ? check.error.message : "The chip check failed."}
+        </p>
+      )}
     </div>
   );
 }

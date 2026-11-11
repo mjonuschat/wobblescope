@@ -1,20 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { ApiClientError } from "@/lib/api/client";
-import { queryKeys, useChips, useCheckChips, useSettings, useStatus } from "@/lib/api/queries";
+import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
-import { ChipsPanel } from "./ChipsPanel";
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 
-/** The Input Shaper test screen: the chips panel and the test form. */
+/** The Input Shaper test screen. */
 export function RunPage() {
   const status = useStatus();
   const settings = useSettings();
   const chips = useChips();
-  const check = useCheckChips();
   const live = useLive();
   const [chosen, setChosen] = useState<string[] | null>(null);
   // The test the form just started, until the live socket names it.
@@ -45,13 +42,6 @@ export function RunPage() {
     (chipList ? [...new Set([...chipList.defaults.x, ...chipList.defaults.y])] : []).filter(
       (section) => chipList?.chips.find((c) => c.section === section)?.availability.state !== "unavailable",
     );
-
-  function toggle(section: string) {
-    setChosen((old) => {
-      const current = old ?? selected;
-      return current.includes(section) ? current.filter((s) => s !== section) : [...current, section];
-    });
-  }
 
   // A chip that turned unavailable cannot record, so it drops out of the selection.
   const usable = selected.filter(
@@ -84,29 +74,21 @@ export function RunPage() {
           {chips.error.message}
         </p>
       )}
-      {chipList && (
-        <ChipsPanel
-          chips={chipList}
-          selected={usable}
-          onToggle={toggle}
-          onCheck={() => check.mutate()}
-          checking={check.isPending}
-          checkBlocked={notReady}
-        />
-      )}
-      {check.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {check.error instanceof ApiClientError ? check.error.message : "The chip check failed."}
-        </p>
-      )}
       {settings.isPending && <p className="text-sm text-muted-foreground">Reading settings…</p>}
       {settings.isError && (
         <p role="alert" className="text-sm text-destructive">
           {settings.error.message}
         </p>
       )}
-      {settings.data && (
-        <TestForm settings={settings.data} chips={usable} blocked={notReady} onStarted={setStartedId} />
+      {settings.data && chipList && (
+        <TestForm
+          settings={settings.data}
+          chipList={chipList}
+          chips={usable}
+          onChipsChange={setChosen}
+          blocked={notReady}
+          onStarted={setStartedId}
+        />
       )}
     </div>
   );

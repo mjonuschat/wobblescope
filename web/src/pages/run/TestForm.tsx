@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ApiClientError } from "@/lib/api/client";
 import { useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
 import type { CheckFailure } from "@/lib/generated/CheckFailure";
+import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { parseNumber } from "@/lib/parse";
@@ -17,6 +21,8 @@ import { OVERRIDE_FIELDS, type OverrideKey, formatDuration, segmentSeconds } fro
 export const STOP_CONSEQUENCE =
   "Emergency stop puts Klipper into shutdown. You will need a FIRMWARE_RESTART afterwards.";
 
+const AXIS_ORDER: Axis[] = ["X", "Y"];
+
 interface PointRow {
   x: string;
   y: string;
@@ -25,8 +31,11 @@ interface PointRow {
 
 interface Props {
   settings: PrinterSettings;
+  /** Every configured chip. */
+  chipList: ChipsSnapshot;
   /** The chips that will record. */
   chips: string[];
+  onChipsChange: (chips: string[]) => void;
   /** Why a test cannot start now, or `null`. */
   blocked: string | null;
   /** Called with the new test's id after the daemon accepted the test. */
@@ -52,8 +61,29 @@ function FieldError({ name, text }: { name: string; text: string | undefined }) 
   );
 }
 
-/** The run form: axes, mode, overrides, points, and the start button. */
-export function TestForm({ settings, chips, blocked, onStarted }: Props) {
+function FormCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+function ChoiceRow({ label, error, children }: { label: string; error: ReactNode; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{label}</p>
+      {children}
+      {error}
+    </div>
+  );
+}
+
+/** The run form: chips, axes, mode, settings, points, and the start button. */
+export function TestForm({ settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
   const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
@@ -102,10 +132,6 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
         : null;
   const errorFor = (field: string) => (named?.field === field ? named.text : undefined);
 
-  function toggleAxis(axis: Axis) {
-    setAxes((old) => (old.includes(axis) ? old.filter((a) => a !== axis) : [...old, axis]));
-  }
-
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (problem || start.isPending) return;
@@ -122,40 +148,77 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6" noValidate>
-      <fieldset className="space-y-2">
-        <legend className="text-lg font-semibold">Axes</legend>
-        <div className="flex gap-4">
-          {(["X", "Y"] as const).map((axis) => (
-            <label key={axis} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={axes.includes(axis)} onChange={() => toggleAxis(axis)} />
-              {axis}
-            </label>
-          ))}
+    <form onSubmit={submit} className="space-y-4" noValidate>
+      <FormCard title="Test">
+        <div className="space-y-5">
+          <ChoiceRow label="Chips" error={<FieldError name="chips" text={errorFor("chips")} />}>
+            {chipList.chips.length === 0 ? (
+              <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
+            ) : (
+              <ToggleGroup
+                multiple
+                variant="outline"
+                aria-label="Chips"
+                value={chips}
+                onValueChange={(value) => onChipsChange(value as string[])}
+              >
+                {chipList.chips.map((chip) => (
+                  <ToggleGroupItem
+                    key={chip.section}
+                    value={chip.section}
+                    disabled={chip.availability.state === "unavailable"}
+                    title={chip.availability.state === "unavailable" ? chip.availability.reason : undefined}
+                    className="font-mono"
+                  >
+                    {chip.section}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            )}
+          </ChoiceRow>
+          <ChoiceRow label="Axes" error={<FieldError name="axes" text={errorFor("axes")} />}>
+            <div className="flex gap-6">
+              {AXIS_ORDER.map((axis) => (
+                <div key={axis} className="flex items-center gap-2">
+                  <Switch
+                    id={`axis-${axis}`}
+                    checked={axes.includes(axis)}
+                    onCheckedChange={(on) =>
+                      setAxes((old) =>
+                        on ? AXIS_ORDER.filter((a) => a === axis || old.includes(a)) : old.filter((a) => a !== axis),
+                      )
+                    }
+                  />
+                  <Label htmlFor={`axis-${axis}`}>{axis}</Label>
+                </div>
+              ))}
+            </div>
+          </ChoiceRow>
+          <ChoiceRow label="Mode" error={<FieldError name="mode" text={errorFor("mode")} />}>
+            <ToggleGroup
+              variant="outline"
+              aria-label="Mode"
+              value={[mode]}
+              onValueChange={(value) => {
+                if (value.length > 0) setChosenMode(value[0] as Mode);
+              }}
+            >
+              {(["Pulse", "Sweep"] as const).map((m) => (
+                <ToggleGroupItem key={m} value={m}>
+                  {m}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </ChoiceRow>
         </div>
-        <FieldError name="axes" text={errorFor("axes")} />
-      </fieldset>
+      </FormCard>
 
-      <fieldset className="space-y-2">
-        <legend className="text-lg font-semibold">Mode</legend>
-        <div className="flex gap-4">
-          {(["Pulse", "Sweep"] as const).map((m) => (
-            <label key={m} className="flex items-center gap-2 text-sm">
-              <input type="radio" name="mode" checked={mode === m} onChange={() => setChosenMode(m)} />
-              {m}
-            </label>
-          ))}
-        </div>
-        <FieldError name="mode" text={errorFor("mode")} />
-      </fieldset>
-
-      <fieldset className="space-y-3">
-        <legend className="text-lg font-semibold">Settings</legend>
-        <p className="text-sm text-muted-foreground">
+      <FormCard title="Settings">
+        <p className="mb-4 text-sm text-muted-foreground">
           Leave a field empty to use the printer's value, shown in the field.
         </p>
         <div className="grid grid-cols-2 gap-4">
-          {OVERRIDE_FIELDS.map(({ key, label, unit }) => {
+          {OVERRIDE_FIELDS.filter(({ key }) => !sweepOnly(key)).map(({ key, label, unit }) => {
             const setting = settings.settings[key];
             const required = setting.needed && setting.value === null;
             const placeholder =
@@ -170,7 +233,7 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
                   inputMode="decimal"
                   placeholder={placeholder}
                   value={texts[key] ?? ""}
-                  disabled={sweepOnly(key) || !setting.overridable}
+                  disabled={!setting.overridable}
                   aria-required={required}
                   aria-invalid={Boolean(typos[key] ?? errorFor(key))}
                   aria-describedby={`error-${key}`}
@@ -181,48 +244,49 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
             );
           })}
         </div>
-      </fieldset>
+      </FormCard>
 
-      <fieldset className="space-y-2">
-        <legend className="text-lg font-semibold">Test points</legend>
-        {points.map((row, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
-          <div key={i} className="flex items-end gap-2">
-            {(["x", "y", "z"] as const).map((axis) => (
-              <div key={axis} className="space-y-1">
-                <Label htmlFor={`point-${i}-${axis}`}>
-                  Point {i + 1} {axis.toUpperCase()} (mm)
-                </Label>
-                <Input
-                  id={`point-${i}-${axis}`}
-                  inputMode="decimal"
-                  className="w-28"
-                  value={row[axis]}
-                  onChange={(e) =>
-                    setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
-                  }
-                />
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={points.length === 1}
-              onClick={() => setPoints((old) => old.filter((_, j) => j !== i))}
-            >
-              Remove point {i + 1}
-            </Button>
-          </div>
-        ))}
-        <FieldError name="points" text={errorFor("points")} />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setPoints((old) => [...old, rowFrom(settings.default_point)])}
-        >
-          Add a point
-        </Button>
-      </fieldset>
+      <FormCard title="Test points">
+        <div className="space-y-3">
+          {points.map((row, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
+            <div key={i} className="flex items-end gap-2">
+              {(["x", "y", "z"] as const).map((axis) => (
+                <div key={axis} className="space-y-1">
+                  <Label htmlFor={`point-${i}-${axis}`}>
+                    Point {i + 1} {axis.toUpperCase()} (mm)
+                  </Label>
+                  <Input
+                    id={`point-${i}-${axis}`}
+                    inputMode="decimal"
+                    className="w-28"
+                    value={row[axis]}
+                    onChange={(e) =>
+                      setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
+                    }
+                  />
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={points.length === 1}
+                onClick={() => setPoints((old) => old.filter((_, j) => j !== i))}
+              >
+                Remove point {i + 1}
+              </Button>
+            </div>
+          ))}
+          <FieldError name="points" text={errorFor("points")} />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPoints((old) => [...old, rowFrom(settings.default_point)])}
+          >
+            Add a point
+          </Button>
+        </div>
+      </FormCard>
 
       <div className="space-y-2">
         <p className="text-sm">
@@ -230,7 +294,6 @@ export function TestForm({ settings, chips, blocked, onStarted }: Props) {
           {seconds !== null && segmentCount > 0 ? ` · about ${formatDuration(seconds * segmentCount)}` : ""}
         </p>
         <p className="text-sm text-muted-foreground">{STOP_CONSEQUENCE}</p>
-        <FieldError name="chips" text={errorFor("chips")} />
         {general && (
           <p role="alert" className="text-sm text-destructive">
             {general}
