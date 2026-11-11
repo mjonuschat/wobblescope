@@ -8,7 +8,7 @@
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
@@ -208,9 +208,38 @@ struct Stored {
 struct Progress {
     levels: mpsc::UnboundedReceiver<Level>,
     chips: Vec<ChipLive>,
+    /// The console lines Klipper writes, for the frequency of the sweep.
+    console: broadcast::Receiver<String>,
+    frequency: Option<f64>,
+}
+
+/// The frequency in a console line such as `// Testing frequency 57 Hz`.
+fn tested_frequency(line: &str) -> Option<f64> {
+    let rest = line.split_once("Testing frequency ")?.1;
+    rest.split_whitespace().next()?.parse().ok()
 }
 
 impl Progress {
+    /// Forgets the frequency and the lines before it, as a new segment begins.
+    fn restart_frequency(&mut self) {
+        self.frequency = None;
+        while self.console.try_recv().is_ok() {}
+    }
+
+    fn frequency(&mut self) -> Option<f64> {
+        loop {
+            match self.console.try_recv() {
+                Ok(line) => {
+                    if let Some(hz) = tested_frequency(&line) {
+                        self.frequency = Some(hz);
+                    }
+                }
+                Err(broadcast::error::TryRecvError::Lagged(_)) => {}
+                Err(_) => return self.frequency,
+            }
+        }
+    }
+
     fn snapshot(&mut self) -> Vec<ChipLive> {
         while let Ok(level) = self.levels.try_recv() {
             if let Some(chip) = self.chips.iter_mut().find(|c| c.chip == level.chip) {
@@ -252,6 +281,7 @@ impl Run {
         } = job;
         let (levels_tx, levels) = mpsc::unbounded_channel();
         let status = r.moonraker.watch_status();
+        let console = r.moonraker.gcode_lines();
         let chips = started
             .chips
             .iter()
@@ -268,7 +298,12 @@ impl Run {
             created_at: started.created_at,
             permit,
             recorders: Vec::new(),
-            progress: Progress { levels, chips },
+            progress: Progress {
+                levels,
+                chips,
+                console,
+                frequency: None,
+            },
             stored: None,
             current: None,
             incomplete: Vec::new(),
@@ -303,6 +338,7 @@ impl Run {
             position: segment.map(|(_, s)| s.position),
             expected_segment_seconds: self.plan.segment_seconds,
             elapsed_seconds: segment.map_or(0.0, |(c, _)| c.began.elapsed().as_secs_f64()),
+            frequency_hz: self.progress.frequency(),
             chips: self.progress.snapshot(),
         };
         self.r.hub.update(|s| s.test = Some(state));
@@ -358,6 +394,7 @@ impl Run {
                 start: None,
                 began: Instant::now(),
             });
+            self.progress.restart_frequency();
             self.publish(Phase::Positioning);
             if index > 0 {
                 self.recheck().await?;
@@ -876,4 +913,22 @@ async fn mcu_firmware(control: &Rpc, mcus: &[String]) -> Vec<String> {
             Some(format!("{name}: {version}"))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tested_frequency;
+
+    #[test]
+    fn reads_the_frequency_of_klippers_console_line() {
+        assert_eq!(tested_frequency("// Testing frequency 57 Hz"), Some(57.0));
+        assert_eq!(tested_frequency("Testing frequency 5 Hz"), Some(5.0));
+    }
+
+    #[test]
+    fn ignores_every_other_line() {
+        assert_eq!(tested_frequency("// Testing axis X"), None);
+        assert_eq!(tested_frequency("// Testing frequency soon"), None);
+        assert_eq!(tested_frequency(""), None);
+    }
 }

@@ -188,6 +188,14 @@ impl Link {
         }
     }
 
+    /// Passes the console lines of a `notify_gcode_response` on to whoever listens.
+    fn forward_gcode(&self, note: &Notification) {
+        let lines = note.params.as_array().into_iter().flatten();
+        for line in lines.filter_map(serde_json::Value::as_str) {
+            self.publisher.publish_gcode(line.to_owned());
+        }
+    }
+
     /// Applies a Klipper notification and returns whether Klipper just became ready.
     fn on_notification(
         &self,
@@ -195,6 +203,10 @@ impl Link {
         note: &Notification,
         next_poll: &mut Instant,
     ) -> bool {
+        if note.method == "notify_gcode_response" {
+            self.forward_gcode(note);
+            return false;
+        }
         let Some(state) = notified_state(note).filter(|s| *s != tracker.state) else {
             return false;
         };

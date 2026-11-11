@@ -40,6 +40,12 @@ expected_segment_seconds: number,
  */
 elapsed_seconds: number, 
 /**
+ * The frequency Klipper last reported testing, in Hz, within the current segment. It is the
+ * whole-number frequency of "Testing frequency N Hz" and runs slightly ahead of the motion,
+ * because Klipper reports it when it queues the move.
+ */
+frequency_hz: number | null, 
+/**
  * Per-chip level and warnings.
  */
 chips: Array<ChipLive>, };

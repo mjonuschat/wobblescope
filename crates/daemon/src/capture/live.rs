@@ -62,6 +62,10 @@ pub struct TestState {
     pub expected_segment_seconds: f64,
     /// How long the current segment has run, in seconds.
     pub elapsed_seconds: f64,
+    /// The frequency Klipper last reported testing, in Hz, within the current segment. It is the
+    /// whole-number frequency of "Testing frequency N Hz" and runs slightly ahead of the motion,
+    /// because Klipper reports it when it queues the move.
+    pub frequency_hz: Option<f64>,
     /// Per-chip level and warnings.
     pub chips: Vec<ChipLive>,
 }

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 use crate::access;
 use crate::access::AccessState;
@@ -77,6 +77,7 @@ pub struct Moonraker {
     chips_writer: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Receiver<Option<Rpc>>,
     access: watch::Receiver<AccessState>,
+    gcode: broadcast::Sender<String>,
     bridge_base: std::sync::Arc<str>,
 }
 
@@ -134,6 +135,13 @@ impl Moonraker {
         self.control.borrow().clone()
     }
 
+    /// The lines Klipper writes to the console, as Moonraker reports them. A receiver sees only
+    /// the lines sent after it subscribed.
+    #[must_use]
+    pub fn gcode_lines(&self) -> broadcast::Receiver<String> {
+        self.gcode.subscribe()
+    }
+
     /// What Moonraker's lists currently say about who may use the daemon.
     #[must_use]
     pub fn access(&self) -> AccessState {
@@ -185,9 +193,16 @@ pub struct Publisher {
     chips: std::sync::Arc<watch::Sender<ChipsSnapshot>>,
     control: watch::Sender<Option<Rpc>>,
     access: std::sync::Arc<watch::Sender<AccessState>>,
+    gcode: broadcast::Sender<String>,
 }
 
 impl Publisher {
+    /// Publishes a line Klipper wrote to the console.
+    pub fn publish_gcode(&self, line: String) {
+        // No receiver is the normal case between tests.
+        let _ = self.gcode.send(line);
+    }
+
     /// Publishes a status.
     pub fn set_status(&self, status: Status) {
         self.status.send_replace(status);
@@ -254,6 +269,9 @@ pub(crate) fn publish_access_if(
     });
 }
 
+/// How many console lines a slow receiver may fall behind before it loses the oldest.
+const GCODE_LINES: usize = 256;
+
 /// A publisher and the handle that reads it, starting from "connecting" and no chips.
 #[must_use]
 pub fn channel() -> (Publisher, Moonraker) {
@@ -263,12 +281,14 @@ pub fn channel() -> (Publisher, Moonraker) {
     let (control_tx, control) = watch::channel(None);
     let (access_tx, access) = watch::channel(AccessState::default());
     let access_tx = std::sync::Arc::new(access_tx);
+    let (gcode_tx, _) = broadcast::channel(GCODE_LINES);
     (
         Publisher {
             status: status_tx,
             chips: chips_tx.clone(),
             control: control_tx,
             access: access_tx,
+            gcode: gcode_tx.clone(),
         },
         Moonraker {
             status,
@@ -276,6 +296,7 @@ pub fn channel() -> (Publisher, Moonraker) {
             chips_writer: chips_tx,
             control,
             access,
+            gcode: gcode_tx,
             bridge_base: Settings::default().moonraker_bridge_base().into(),
         },
     )
