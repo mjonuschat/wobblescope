@@ -129,24 +129,34 @@ struct Subscription {
 
 /// The viewer's subscriptions. Dropping it aborts every chip task, and with them every bridge.
 #[derive(Default)]
-struct Subscriptions(HashMap<String, Subscription>);
+struct Subscriptions {
+    chips: HashMap<String, Subscription>,
+    next_index: u16,
+}
 
 impl Subscriptions {
     /// Forgets chips whose task has ended, for example because its bridge closed.
     fn prune(&mut self) {
-        self.0.retain(|_, s| !s.task.is_finished());
+        self.chips.retain(|_, s| !s.task.is_finished());
     }
 
-    fn free_index(&self) -> u16 {
-        (0..)
-            .find(|i| self.0.values().all(|s| s.index != *i))
-            .unwrap_or(0)
+    /// The next frame index. Indices only count up, so a frame still queued for a chip that
+    /// was unsubscribed is never read as the chip that took its place. Wraps after 65535 and
+    /// skips indices still in use.
+    fn take_index(&mut self) -> u16 {
+        loop {
+            let index = self.next_index;
+            self.next_index = self.next_index.wrapping_add(1);
+            if self.chips.values().all(|s| s.index != index) {
+                return index;
+            }
+        }
     }
 }
 
 impl Drop for Subscriptions {
     fn drop(&mut self) {
-        for subscription in self.0.values() {
+        for subscription in self.chips.values() {
             subscription.task.abort();
         }
     }
@@ -242,7 +252,7 @@ fn handle(
 ) {
     match message {
         ClientMessage::Unsubscribe { chip } => {
-            if let Some(subscription) = subscriptions.0.remove(&chip) {
+            if let Some(subscription) = subscriptions.chips.remove(&chip) {
                 subscription.task.abort();
             }
         }
@@ -271,7 +281,7 @@ fn handle(
                 return refuse("no such accelerometer");
             };
             let requested = clamp_request(max_hz, updates_per_second, f64::INFINITY, limits);
-            if let Some(subscription) = subscriptions.0.get_mut(&chip) {
+            if let Some(subscription) = subscriptions.chips.get_mut(&chip) {
                 if subscription.requested == requested {
                     return;
                 }
@@ -279,15 +289,15 @@ fn handle(
                     subscription.requested = requested;
                     return;
                 }
-                subscriptions.0.remove(&chip);
+                subscriptions.chips.remove(&chip);
             }
-            if subscriptions.0.len() >= limits.max_chips {
+            if subscriptions.chips.len() >= limits.max_chips {
                 return refuse(&format!(
                     "at most {} accelerometers can be streamed at once",
                     limits.max_chips
                 ));
             }
-            let index = subscriptions.free_index();
+            let index = subscriptions.take_index();
             let (settings, changes) = watch::channel(requested);
             let task = tokio::spawn(run_chip(
                 ChipRun {
@@ -300,7 +310,7 @@ fn handle(
                 requested,
                 changes,
             ));
-            subscriptions.0.insert(
+            subscriptions.chips.insert(
                 chip,
                 Subscription {
                     task,
@@ -400,6 +410,36 @@ async fn open_bridge(run: &ChipRun) -> Result<Bridge, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn subscription(index: u16) -> Subscription {
+        Subscription {
+            task: tokio::spawn(std::future::pending()),
+            index,
+            settings: watch::channel((1.0, 1.0)).0,
+            requested: (1.0, 1.0),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_new_chip_does_not_take_the_index_of_an_unsubscribed_one() {
+        let mut subscriptions = Subscriptions::default();
+        let first = subscriptions.take_index();
+        subscriptions
+            .chips
+            .insert("adxl345".to_owned(), subscription(first));
+        subscriptions.chips.remove("adxl345");
+        let second = subscriptions.take_index();
+        assert_ne!(first, second);
+    }
+
+    #[tokio::test]
+    async fn indices_skip_those_still_in_use_after_wrapping() {
+        let mut subscriptions = Subscriptions::default();
+        subscriptions.next_index = u16::MAX;
+        subscriptions.chips.insert("a".to_owned(), subscription(0));
+        assert_eq!(subscriptions.take_index(), u16::MAX);
+        assert_eq!(subscriptions.take_index(), 1);
+    }
 
     #[test]
     fn health_carries_the_frames_the_queue_dropped() {
