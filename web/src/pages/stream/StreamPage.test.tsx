@@ -148,9 +148,20 @@ describe("the stream page", () => {
     open(5);
     await connect();
     for (const n of names.slice(0, 4)) pick(n);
-    expect(screen.getByRole("checkbox", { name: "Stream a5" }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Stream a5" }).getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByText("at most 4 chips at once")).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Stream a1" }).getAttribute("aria-disabled")).not.toBe("true");
+    expect(screen.getByRole("switch", { name: "Stream a1" }).getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("lists each chip in a table with its rate and the highest frequency it can show", async () => {
+    open();
+    await connect();
+    for (const name of ["Chip", "Type", "Rate", "Max Frequency", "Axes", "Status"]) {
+      expect(screen.getByRole("columnheader", { name })).toBeTruthy();
+    }
+    expect(screen.getAllByText("3200 Hz").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1600 Hz").length).toBeGreaterThan(0);
+    expect(screen.queryByText("unchecked")).toBeNull();
   });
 
   it("unsubscribes when a chip is cleared", async () => {

@@ -1,10 +1,8 @@
 import type { ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { Availability } from "@/lib/generated/Availability";
 import type { Chip } from "@/lib/generated/Chip";
 
 import type { Axis3 } from "./axes";
@@ -26,70 +24,79 @@ interface Props {
   badge: (section: string) => ReactNode;
 }
 
-function check(availability: Availability): string {
-  switch (availability.state) {
-    case "unchecked":
-      return "unchecked";
-    case "available":
-      return `available · ${Math.round(availability.observed_rate_hz)} Hz`;
-    case "unavailable":
-      return `unavailable: ${availability.reason}`;
-  }
+/** The highest frequency a chip can show, which is half its sample rate. */
+function maxFrequency(chip: Chip): string {
+  return chip.nominal_rate_hz === null ? "unknown" : `${Math.floor(chip.nominal_rate_hz / 2)} Hz`;
 }
 
 /** The chips to stream, at most `maxChips` at once, each with its own axis toggles. */
 export function ChipPicker({ chips, selected, maxChips, axes, onToggle, onAxes, badge }: Props) {
   const full = selected.length >= maxChips;
   return (
-    <ul className="space-y-3">
-      {chips.map((chip) => {
-        const on = selected.includes(chip.section);
-        const blocked = !on && full;
-        const chosen = axes[chip.section] ?? ["sum"];
-        return (
-          <li key={chip.section} className="space-y-2 rounded-md border p-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id={`stream-${chip.section}`}
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-14">Show</TableHead>
+          <TableHead>Chip</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Rate</TableHead>
+          <TableHead>Max Frequency</TableHead>
+          <TableHead>Axes</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {chips.map((chip) => {
+          const on = selected.includes(chip.section);
+          const blocked = !on && full;
+          const chosen = axes[chip.section] ?? ["sum"];
+          return (
+            <TableRow key={chip.section}>
+              <TableCell>
+                <Switch
                   aria-label={`Stream ${chip.section}`}
                   checked={on}
                   disabled={blocked}
                   onCheckedChange={() => onToggle(chip.section)}
                 />
-                <Label htmlFor={`stream-${chip.section}`}>{chip.section}</Label>
-              </div>
-              <Badge variant="outline">{chip.chip_type}</Badge>
-              <span className="text-sm text-muted-foreground">
-                {chip.nominal_rate_hz === null ? "rate unknown" : `${chip.nominal_rate_hz} Hz`}
-              </span>
-              <span className="text-sm text-muted-foreground">{check(chip.availability)}</span>
-              {blocked && <span className="text-sm text-amber-400">at most {maxChips} chips at once</span>}
-            </div>
-            {on && (
-              <div className="space-y-2">
-                <ToggleGroup
-                  multiple
-                  variant="outline"
-                  size="sm"
-                  aria-label={`Axes of ${chip.section}`}
-                  value={chosen}
-                  onValueChange={(next) => {
-                    if (next.length > 0) onAxes(chip.section, next as Axis3[]);
-                  }}
-                >
-                  {AXIS_CHOICES.map(({ axis, label }) => (
-                    <ToggleGroupItem key={axis} value={axis} aria-label={`${label} of ${chip.section}`}>
-                      {label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-                {badge(chip.section)}
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+              </TableCell>
+              <TableCell className="font-mono">{chip.section}</TableCell>
+              <TableCell>{chip.chip_type}</TableCell>
+              <TableCell className="font-mono">
+                {chip.nominal_rate_hz === null ? "unknown" : `${chip.nominal_rate_hz} Hz`}
+              </TableCell>
+              <TableCell className="font-mono">{maxFrequency(chip)}</TableCell>
+              <TableCell>
+                {on && (
+                  <ToggleGroup
+                    multiple
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Axes of ${chip.section}`}
+                    value={chosen}
+                    onValueChange={(next) => {
+                      if (next.length > 0) onAxes(chip.section, next as Axis3[]);
+                    }}
+                  >
+                    {AXIS_CHOICES.map(({ axis, label }) => (
+                      <ToggleGroupItem key={axis} value={axis} aria-label={`${label} of ${chip.section}`}>
+                        {label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                )}
+              </TableCell>
+              <TableCell>
+                {on && badge(chip.section)}
+                {!on && chip.availability.state === "unavailable" && (
+                  <span className="text-sm text-destructive">unavailable: {chip.availability.reason}</span>
+                )}
+                {blocked && <span className="text-sm text-amber-400">at most {maxChips} chips at once</span>}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
