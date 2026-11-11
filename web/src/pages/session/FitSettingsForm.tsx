@@ -1,4 +1,4 @@
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Panel } from "@/components/Panel";
@@ -120,7 +120,35 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
         if ("params" in result) onApply(result.params);
       }}
     >
-      <Panel title="Fit settings">
+      <Panel
+        title="Fit settings"
+        action={
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Reset"
+                  onClick={() => {
+                    setDraft(draftFrom(baseline.params));
+                    if (onReset) onReset();
+                    else onApply(baseline.params);
+                  }}
+                />
+              }
+            >
+              <RotateCcwIcon />
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {baseline.recorded.scv || baseline.recorded.damping
+                ? "Back to the values the printer recorded"
+                : "Back to Klipper's defaults"}
+            </TooltipContent>
+          </Tooltip>
+        }
+      >
         <div className="grid gap-4 sm:grid-cols-4">
           {field("scv")}
           {field("damping_ratio")}
@@ -131,17 +159,6 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
         <div className="flex gap-2">
           <Button type="submit" disabled={invalid !== null}>
             Apply
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setDraft(draftFrom(baseline.params));
-              if (onReset) onReset();
-              else onApply(baseline.params);
-            }}
-          >
-            Reset
           </Button>
         </div>
       </Panel>
