@@ -44,6 +44,25 @@ describe('useSignalBuffers', () => {
     expect(result.current.a.version).toBe(2)
   })
 
+  it('forgets a chip that leaves the stream', () => {
+    const chipState = { index: 0, rateHz: 800, inputRateHz: 3200, configuredRateHz: 3200, factor: 4, maxHz: 200, health: null, closed: null, refused: null }
+    const withChips = (chips: Record<string, typeof chipState>): StreamApi => ({
+      ...stream,
+      state: { ...stream.state, chips },
+    })
+    const { result, rerender } = renderHook(({ s }) => useSignalBuffers(s), {
+      initialProps: { s: withChips({ a: chipState, b: chipState }) },
+    })
+    act(() => {
+      send('a', [1, 2, 3])
+      send('b', [4, 5, 6])
+      frames.forEach((cb) => cb(0))
+    })
+    expect(Object.keys(result.current).sort()).toEqual(['a', 'b'])
+    rerender({ s: withChips({ a: chipState }) })
+    expect(Object.keys(result.current)).toEqual(['a'])
+  })
+
   it('keeps one trail buffer per frame, the last trailBuffers of them', () => {
     const { result } = renderHook(() => useSignalBuffers(stream, { trailBuffers: 2 }))
     act(() => {

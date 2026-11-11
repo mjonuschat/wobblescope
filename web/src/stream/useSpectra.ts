@@ -110,6 +110,20 @@ export function useSpectra(
     }
   }, [onFrame, createWorker])
 
+  // A chip that left the stream is dropped from the worker and from the state.
+  useEffect(() => {
+    const worker = workerRef.current
+    if (!worker) return
+    const gone = [...configured.current.keys()].filter((chip) => !(chip in chips))
+    if (gone.length === 0) return
+    for (const chip of gone) {
+      configured.current.delete(chip)
+      holds.current.delete(chip)
+      worker.postMessage({ type: 'drop', chip })
+    }
+    setSpectra((previous) => Object.fromEntries(Object.entries(previous).filter(([chip]) => !gone.includes(chip))))
+  }, [chips])
+
   useEffect(() => {
     const worker = workerRef.current
     if (!worker) return

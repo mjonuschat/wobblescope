@@ -43,6 +43,17 @@ export function useSignalBuffers(
   const data = useRef<SignalBuffers>({})
   const [snapshot, setSnapshot] = useState<SignalBuffers>({})
   const { onFrame } = stream
+  const { chips } = stream.state
+  const seen = useRef(new Set<string>())
+
+  // Forget a chip that was in the stream and has left it.
+  useEffect(() => {
+    const gone = [...seen.current].filter((chip) => !(chip in chips))
+    seen.current = new Set(Object.keys(chips))
+    if (gone.length === 0) return
+    for (const chip of gone) delete data.current[chip]
+    setSnapshot({ ...data.current })
+  }, [chips])
 
   useEffect(() => {
     let pending: number | null = null

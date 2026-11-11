@@ -185,6 +185,10 @@ export function useStream(): StreamApi {
     (chip: string) => {
       subscriptions.current.delete(chip)
       send({ type: 'unsubscribe', chip })
+      setState((old) => {
+        const { [chip]: _gone, ...chips } = old.chips
+        return { ...old, chips }
+      })
     },
     [send],
   )

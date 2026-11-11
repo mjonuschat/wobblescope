@@ -82,6 +82,16 @@ describe('useStream', () => {
     expect(result.current.state.chips.adxl345).toMatchObject({ index: 2, factor: 4, rateHz: 800 })
   })
 
+  it('forgets a chip when it is unsubscribed', () => {
+    const { result } = renderHook(() => useStream())
+    const socket = FakeSocket.latest
+    act(() => socket.open())
+    act(() => socket.send(stream))
+    expect(result.current.state.chips.adxl345).toBeDefined()
+    act(() => result.current.unsubscribe('adxl345'))
+    expect(result.current.state.chips.adxl345).toBeUndefined()
+  })
+
   it('subscribes again after a reconnect', () => {
     const { result } = renderHook(() => useStream())
     const first = FakeSocket.latest

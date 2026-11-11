@@ -75,6 +75,19 @@ describe('useSpectra', () => {
     expect(requests[1]).toEqual({ type: 'frame', chip: 'a', t0: 5, xyz })
   })
 
+  it('drops a chip from the worker and the state when it leaves the stream', () => {
+    const { requests, reply, hook, api } = setup()
+    const { result, rerender } = hook({ a: chipState(), b: chipState() })
+    reply('a', spectrumOf([1, 1, 1]))
+    reply('b', spectrumOf([2, 2, 2]))
+    rerender({ s: api({ a: chipState() }), w: 2, u: 10 })
+    expect(requests.filter((r) => r.type === 'drop')).toEqual([{ type: 'drop', chip: 'b' }])
+    expect(result.current.spectra.b).toBeUndefined()
+    expect(result.current.spectra.a).toBeDefined()
+    rerender({ s: api({ a: chipState(), b: chipState() }), w: 2, u: 10 })
+    expect(requests.filter((r) => r.type === 'configure' && r.chip === 'b')).toHaveLength(2)
+  })
+
   it('does not post frames or take replies while paused, and does again after', () => {
     const { requests, reply, hook, api, handlers } = setup()
     const chips = { a: chipState() }
