@@ -70,12 +70,6 @@ describe("the run screen", () => {
     expect(mode()).toContain("Pulse");
   });
 
-  it("shows the emergency stop consequence before a test starts", async () => {
-    await open();
-    expect(screen.getByText(/Emergency stop puts Klipper into shutdown/)).toBeTruthy();
-    expect(screen.getByText(/FIRMWARE_RESTART/)).toBeTruthy();
-  });
-
   it("marks an unreadable freq_end as required and keeps Start disabled until it has a value", async () => {
     await open({
       settings: printerSettings({ freq_end: { value: null, overridable: true, needed: true } }),
@@ -86,16 +80,6 @@ describe("the run screen", () => {
     expect((startButton() as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "100" } });
     expect((startButton() as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it("shows two points and two axes as 4 segments and changes the time when hz_per_sec is overridden", async () => {
-    await open();
-    fireEvent.click(screen.getByRole("button", { name: "Add a point after point 1" }));
-    // 130 s of sweep plus 15 s of overhead per segment.
-    expect(screen.getByText(/4 segments · about 9 min 40 s/)).toBeTruthy();
-    fireEvent.change(field(/Hz per second/), { target: { value: "2" } });
-    // 65 s plus 15 s per segment.
-    expect(screen.getByText(/4 segments · about 5 min 20 s/)).toBeTruthy();
   });
 
   it("posts only the overridden fields with the chosen chips and points", async () => {

@@ -1,6 +1,5 @@
 import type { AxisLimits } from "@/lib/generated/AxisLimits";
 import type { Overrides } from "@/lib/generated/Overrides";
-import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 
 /** The seven settings a test may override, in the order the form shows them. */
 export const OVERRIDE_FIELDS = [
@@ -14,27 +13,6 @@ export const OVERRIDE_FIELDS = [
 ] as const satisfies readonly { key: keyof Overrides; label: string; unit: string }[];
 
 export type OverrideKey = (typeof OVERRIDE_FIELDS)[number]["key"];
-
-/** The value a test runs with: the override, else the printer's value. */
-export function effective(
-  settings: PrinterSettings,
-  overrides: Partial<Record<OverrideKey, number>>,
-  key: OverrideKey,
-): number | null {
-  return overrides[key] ?? settings.settings[key].value;
-}
-
-/** Expected seconds of one segment, or `null` when a value it needs is not known. */
-export function segmentSeconds(
-  settings: PrinterSettings,
-  overrides: Partial<Record<OverrideKey, number>>,
-): number | null {
-  const start = effective(settings, overrides, "freq_start");
-  const end = effective(settings, overrides, "freq_end");
-  const rate = effective(settings, overrides, "hz_per_sec");
-  if (start === null || end === null || rate === null || rate <= 0) return null;
-  return (end - start) / rate + settings.segment_overhead_seconds;
-}
 
 /** A duration as minutes and seconds, such as `7 min` or `45 s`. */
 export function formatDuration(seconds: number): string {

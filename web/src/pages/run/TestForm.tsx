@@ -23,19 +23,7 @@ import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { parseNumber } from "@/lib/parse";
 
-import {
-  OVERRIDE_FIELDS,
-  type OverrideKey,
-  POINT_PATTERNS,
-  type PointPattern,
-  formatDuration,
-  patternPoints,
-  segmentSeconds,
-} from "./planning";
-
-/** The consequence of the emergency stop, shown before a test starts. */
-export const STOP_CONSEQUENCE =
-  "Emergency stop puts Klipper into shutdown. You will need a FIRMWARE_RESTART afterwards.";
+import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 
 /** The settings only one mode uses; they sit beside the mode choice. */
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
@@ -142,9 +130,6 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   const missing = OVERRIDE_FIELDS.filter(
     ({ key }) => settings.settings[key].needed && settings.settings[key].value === null && overrides[key] === undefined,
   );
-
-  const seconds = segmentSeconds(settings, overrides);
-  const segmentCount = points.length * axes.length;
 
   let problem = blocked;
   if (!problem && chips.length === 0) problem = "Choose at least one chip.";
@@ -412,11 +397,6 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
       </FormCard>
 
       <div className="space-y-2">
-        <p className="text-sm">
-          {segmentCount} {segmentCount === 1 ? "segment" : "segments"}
-          {seconds !== null && segmentCount > 0 ? ` · about ${formatDuration(seconds * segmentCount)}` : ""}
-        </p>
-        <p className="text-sm text-muted-foreground">{STOP_CONSEQUENCE}</p>
         {general && (
           <p role="alert" className="text-sm text-destructive">
             {general}
