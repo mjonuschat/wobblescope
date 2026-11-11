@@ -9,7 +9,12 @@ const spectrum: Spectrum = { freq_bins: [0, 1], psd_x: [1, 1], psd_y: [1, 1], ps
 function setup() {
   const created: {
     args: number[];
-    handle: LiveSpectrumHandle & { pushes: [number, Float32Array][]; freed: boolean };
+    handle: LiveSpectrumHandle & {
+      pushes: [number, Float32Array][];
+      freed: boolean;
+      found: { freq: number; level: number }[];
+      peakArgs: number[];
+    };
   }[] = [];
   class Fake {
     pushes: [number, Float32Array][] = [];
@@ -23,8 +28,11 @@ function setup() {
     spectrum() {
       return spectrum;
     }
-    peaks() {
-      return [{ freq: 1, level: 3 }];
+    found = [{ freq: 1, level: 3 }];
+    peakArgs: number[] = [];
+    peaks(...args: number[]) {
+      this.peakArgs = args;
+      return this.found;
     }
     free() {
       this.freed = true;
@@ -53,6 +61,24 @@ describe("createSpectrumHandler", () => {
     ]);
     expect(created[0].handle.pushes).toHaveLength(0);
     expect(created[1].handle.pushes).toHaveLength(1);
+  });
+
+  it("asks for 3 peaks at least 10 Hz apart and drops those under a tenth of the strongest", async () => {
+    const { created, configure, frame } = setup();
+    await configure("a");
+    created[0].handle.found = [
+      { freq: 100, level: 1000 },
+      { freq: 70, level: 100 },
+      { freq: 120, level: 99 },
+    ];
+    const answer = await frame("a");
+    expect(created[0].handle.peakArgs).toEqual([3, 10]);
+    expect(answer).toMatchObject({
+      peaks: [
+        { freq: 100, level: 1000 },
+        { freq: 70, level: 100 },
+      ],
+    });
   });
 
   it("answers at most one spectrum per interval", async () => {

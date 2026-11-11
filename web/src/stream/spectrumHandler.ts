@@ -23,9 +23,13 @@ export interface SpectrumModule {
   WasmLiveSpectrum: new (rateHz: number, windowSeconds: number, maxHz: number) => LiveSpectrumHandle;
 }
 
-/** How many peaks are reported, and the least distance between two of them. */
-export const PEAK_COUNT = 5;
-export const PEAK_SEPARATION_HZ = 5;
+/**
+ * How many peaks are reported per chip, the least distance between two of them, and how high a
+ * peak must reach, as a share of the strongest one, to be reported at all.
+ */
+export const PEAK_COUNT = 3;
+export const PEAK_SEPARATION_HZ = 10;
+export const PEAK_MIN_RATIO = 0.1;
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -76,11 +80,13 @@ export function createSpectrumHandler(loadModule: () => Promise<SpectrumModule>,
           const spectrum = entry.handle.spectrum();
           if (!spectrum) return null;
           entry.lastSentAt = at;
+          const found = entry.handle.peaks(PEAK_COUNT, PEAK_SEPARATION_HZ);
+          const floor = (found[0]?.level ?? 0) * PEAK_MIN_RATIO;
           return {
             type: "spectrum",
             chip: request.chip,
             spectrum,
-            peaks: entry.handle.peaks(PEAK_COUNT, PEAK_SEPARATION_HZ),
+            peaks: found.filter((peak) => peak.level >= floor),
           };
         }
       }
