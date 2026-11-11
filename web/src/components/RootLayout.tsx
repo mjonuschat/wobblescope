@@ -41,7 +41,7 @@ export function RootLayout() {
           </main>
         </div>
       </div>
-      <Toaster position="bottom-left" />
+      <Toaster position="bottom-right" offset={{ bottom: 88, right: 24 }} />
     </SidebarProvider>
   );
 }
