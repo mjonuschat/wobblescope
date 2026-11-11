@@ -17,7 +17,16 @@ import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { parseNumber } from "@/lib/parse";
 
-import { OVERRIDE_FIELDS, type OverrideKey, formatDuration, segmentSeconds } from "./planning";
+import {
+  OVERRIDE_FIELDS,
+  type OverrideKey,
+  POINT_MARGIN_MM,
+  POINT_PATTERNS,
+  type PointPattern,
+  formatDuration,
+  patternPoints,
+  segmentSeconds,
+} from "./planning";
 
 /** The consequence of the emergency stop, shown before a test starts. */
 export const STOP_CONSEQUENCE =
@@ -34,6 +43,11 @@ const FREQ_MAX = 300;
 const FIELD_STEPS: Partial<Record<OverrideKey, number>> = { hz_per_sec: 0.1, sweeping_period: 0.1 };
 
 const FREQ_KEYS = ["freq_start", "freq_end"] as const;
+
+const PATTERN_CHOICES: { value: PointPattern | "custom"; label: string }[] = [
+  ...POINT_PATTERNS,
+  { value: "custom", label: "Custom" },
+];
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
 
@@ -103,6 +117,20 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
   const [texts, setTexts] = useState<Partial<Record<OverrideKey, string>>>({});
   const [points, setPoints] = useState<PointRow[]>(() => [rowFrom(settings.default_point)]);
+  // The pattern the rows still match; any edit to a row makes them custom.
+  const [pattern, setPattern] = useState<PointPattern | "custom">(settings.axis_limits ? "center" : "custom");
+  const editPoints = (change: (old: PointRow[]) => PointRow[]) => {
+    setPoints(change);
+    setPattern("custom");
+  };
+  const limits = settings.axis_limits;
+  const patternZ = settings.default_point?.[2] ?? (limits ? Math.min(Math.max(20, limits.z.min), limits.z.max) : 20);
+  function choosePattern(next: PointPattern | "custom") {
+    setPattern(next);
+    if (next !== "custom" && limits) {
+      setPoints(patternPoints(next, limits, patternZ).map((point) => rowFrom(point)));
+    }
+  }
   const mode = chosenMode ?? settings.default_mode;
 
   const overrides: Partial<Record<OverrideKey, number>> = {};
@@ -318,6 +346,30 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
 
       <FormCard title="Points">
         <div className="space-y-2">
+          {limits && (
+            <div className="mb-4 space-y-2">
+              <Label htmlFor="pattern">Pattern</Label>
+              <Select
+                items={PATTERN_CHOICES}
+                value={pattern}
+                onValueChange={(value) => choosePattern(value as PointPattern | "custom")}
+              >
+                <SelectTrigger id="pattern" className="w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PATTERN_CHOICES.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Patterns keep {POINT_MARGIN_MM} mm from the travel limits and stay at Z {patternZ}.
+              </p>
+            </div>
+          )}
           {points.map((row, i) => {
             return (
               // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
@@ -335,7 +387,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                       className="w-32"
                       value={row[axis]}
                       onChange={(e) =>
-                        setPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
+                        editPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
                       }
                     />
                   </div>
@@ -347,7 +399,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                     size="icon"
                     aria-label={`Remove point ${i + 1}`}
                     className={points.length === 1 ? "invisible" : undefined}
-                    onClick={() => setPoints((old) => old.filter((_, j) => j !== i))}
+                    onClick={() => editPoints((old) => old.filter((_, j) => j !== i))}
                   >
                     <MinusIcon />
                   </Button>
@@ -357,7 +409,11 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                     size="icon"
                     aria-label={`Add a point after point ${i + 1}`}
                     onClick={() =>
-                      setPoints((old) => [...old.slice(0, i + 1), rowFrom(settings.default_point), ...old.slice(i + 1)])
+                      editPoints((old) => [
+                        ...old.slice(0, i + 1),
+                        rowFrom(settings.default_point),
+                        ...old.slice(i + 1),
+                      ])
                     }
                   >
                     <PlusIcon />

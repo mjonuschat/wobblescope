@@ -235,6 +235,23 @@ describe("the run screen", () => {
     expect(xs()).toEqual(["150.5", "200"]);
   });
 
+  it("fills the points from a pattern and goes back to custom when a point is edited", async () => {
+    await open();
+    const xs = () =>
+      [...document.querySelectorAll<HTMLInputElement>('input[id^="point-"][id$="-x"]')].map((i) => i.value);
+    const pattern = () => screen.getByRole("combobox", { name: "Pattern" });
+    expect(pattern().textContent).toContain("Center");
+    fireEvent.click(pattern());
+    const option = await screen.findByRole("option", { name: /9 points/ });
+    fireEvent.pointerDown(option);
+    fireEvent.pointerUp(option);
+    fireEvent.click(option);
+    await waitFor(() => expect(xs()).toHaveLength(9));
+    expect(xs().slice(0, 3)).toEqual(["20", "150.5", "281"]);
+    fireEvent.change(document.getElementById("point-0-x") as HTMLInputElement, { target: { value: "30" } });
+    await waitFor(() => expect(pattern().textContent).toContain("Custom"));
+  });
+
   it("hides the sweeping fields in pulse mode", async () => {
     await open();
     expect(screen.queryByLabelText(/Sweeping period/)).toBeTruthy();

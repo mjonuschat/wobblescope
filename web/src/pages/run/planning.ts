@@ -1,3 +1,4 @@
+import type { AxisLimits } from "@/lib/generated/AxisLimits";
 import type { Overrides } from "@/lib/generated/Overrides";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 
@@ -47,4 +48,51 @@ export function formatDuration(seconds: number): string {
 /** A point as `x, y, z`. */
 export function formatPoint(point: readonly number[]): string {
   return point.map((v) => String(Math.round(v * 1000) / 1000)).join(", ");
+}
+
+/** A set of test points spread over the bed. */
+export type PointPattern = "center" | "five" | "nine";
+
+export const POINT_PATTERNS: { value: PointPattern; label: string }[] = [
+  { value: "center", label: "Center" },
+  { value: "five", label: "5 points: center and corners" },
+  { value: "nine", label: "9 points: 3 × 3 grid" },
+];
+
+/** How far a pattern's outer points stay from the travel limits, in mm. */
+export const POINT_MARGIN_MM = 20;
+
+const tenth = (value: number) => Math.round(value * 10) / 10;
+
+/**
+ * The points of `pattern` over the toolhead's travel at height `z`. The outer points keep
+ * [`POINT_MARGIN_MM`] from the limits, less on a bed too small for that. The order keeps the
+ * moves between points short.
+ */
+export function patternPoints(pattern: PointPattern, limits: AxisLimits, z: number): [number, number, number][] {
+  const spread = ({ min, max }: { min: number; max: number }): [number, number, number] => {
+    const margin = Math.min(POINT_MARGIN_MM, (max - min) / 4);
+    return [tenth(min + margin), tenth((min + max) / 2), tenth(max - margin)];
+  };
+  const [x0, x1, x2] = spread(limits.x);
+  const [y0, y1, y2] = spread(limits.y);
+  const at = (x: number, y: number): [number, number, number] => [x, y, z];
+  switch (pattern) {
+    case "center":
+      return [at(x1, y1)];
+    case "five":
+      return [at(x1, y1), at(x0, y0), at(x2, y0), at(x2, y2), at(x0, y2)];
+    case "nine":
+      return [
+        at(x0, y0),
+        at(x1, y0),
+        at(x2, y0),
+        at(x2, y1),
+        at(x1, y1),
+        at(x0, y1),
+        at(x0, y2),
+        at(x1, y2),
+        at(x2, y2),
+      ];
+  }
 }
