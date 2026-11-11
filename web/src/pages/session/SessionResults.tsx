@@ -67,9 +67,9 @@ export function SessionResults({ id }: { id: string }) {
       ) : (
         <>
           <Tabs value={axis} onValueChange={(value) => setSelected(value as Axis)}>
-            <TabsList>
+            <TabsList variant="line">
               {axes.map((a) => (
-                <TabsTrigger key={a} value={a}>
+                <TabsTrigger key={a} value={a} className="after:bg-primary">
                   Axis {a}
                 </TabsTrigger>
               ))}
