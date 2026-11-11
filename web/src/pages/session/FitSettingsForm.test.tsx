@@ -62,30 +62,4 @@ describe("FitSettingsForm", () => {
     expect(onReset).toHaveBeenCalledOnce();
     expect(onApply).not.toHaveBeenCalled();
   });
-
-  describe("the advanced limits", () => {
-    const limit = () => screen.getByLabelText(/Maximum Corner Rounding/);
-    const folded = () => limit().closest("[hidden]") !== null;
-
-    it("start folded away and open with the Advanced button", () => {
-      render(<FitSettingsForm onApply={vi.fn()} />);
-      expect(folded()).toBe(true);
-      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-      expect(folded()).toBe(false);
-    });
-
-    it("start open when a limit is in use", () => {
-      const applied = { ...defaultFitParams, max_smoothing: 0.1 };
-      render(<FitSettingsForm applied={applied} onApply={vi.fn()} />);
-      expect(folded()).toBe(false);
-    });
-
-    it("still apply when folded away", () => {
-      const onApply = vi.fn();
-      render(<FitSettingsForm onApply={onApply} />);
-      fireEvent.change(limit(), { target: { value: "0.2" } });
-      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-      expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ max_smoothing: 0.2 }));
-    });
-  });
 });

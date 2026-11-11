@@ -1,10 +1,9 @@
-import { ChevronDownIcon, InfoIcon } from "lucide-react";
+import { InfoIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Panel } from "@/components/Panel";
 import { UnitInput } from "@/components/UnitInput";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FitParams } from "@/lib/generated/FitParams";
 
@@ -53,14 +52,14 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   const { label, unit, step } = FIELDS[name];
   const id = `fit-${name}`;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <Tooltip>
         <TooltipTrigger
           render={
             <button
               type="button"
               aria-label={`About ${label.toLowerCase()}`}
-              className="-m-1 flex cursor-help items-center gap-1 rounded p-1 text-sm leading-none font-medium"
+              className="-mx-1 flex cursor-help items-center gap-1 rounded px-1 py-0.5 text-sm leading-none font-medium"
             />
           }
         >
@@ -103,8 +102,6 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
   const [draft, setDraft] = useState<FitDraft>(() => draftFrom(applied ?? baseline.params));
   const result = draftToParams(draft);
   const invalid = "invalid" in result ? result.invalid : null;
-  // The two limits start folded away, unless one is in use.
-  const [advancedOpen] = useState(() => draft.max_smoothing !== "" || draft.max_vibrations !== "");
   const field = (name: keyof FitDraft) => (
     <FitField
       name={name}
@@ -123,24 +120,12 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
       }}
     >
       <Panel title="Fit settings">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-4">
           {field("scv")}
           {field("damping_ratio")}
+          {field("max_smoothing")}
+          {field("max_vibrations")}
         </div>
-        <Collapsible defaultOpen={advancedOpen} className="space-y-4">
-          <CollapsibleTrigger
-            render={
-              <Button type="button" variant="ghost" size="sm" className="-ml-2 group/advanced text-muted-foreground" />
-            }
-          >
-            Advanced
-            <ChevronDownIcon className="transition-transform group-data-panel-open/advanced:rotate-180" />
-          </CollapsibleTrigger>
-          <CollapsibleContent keepMounted className="grid gap-4 sm:grid-cols-2">
-            {field("max_smoothing")}
-            {field("max_vibrations")}
-          </CollapsibleContent>
-        </Collapsible>
         {invalid && <p className="text-sm text-destructive">Enter a number, or leave the field empty.</p>}
         <div className="flex gap-2">
           <Button type="submit" disabled={invalid !== null}>
