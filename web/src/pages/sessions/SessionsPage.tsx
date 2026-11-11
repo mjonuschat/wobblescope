@@ -87,7 +87,7 @@ export function SessionsPage() {
                     </div>
                   )}
                 </TableCell>
-                <TableCell>{s.source === "CsvImport" ? "CSV import" : "Capture"}</TableCell>
+                <TableCell>{s.source === "CsvImport" ? "CSV" : "Wobblescope"}</TableCell>
                 <TableCell>{s.mode ?? "–"}</TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>
                 <TableCell>{s.outcome}</TableCell>

@@ -42,7 +42,7 @@ describe("the sessions page", () => {
     expect(text[1]).toContain("older");
     expect(text[1]).toContain("3 MiB");
     expect(text[1]).not.toContain("Pinned");
-    expect(text[2]).toContain("CSV import");
+    expect(text[2]).toContain("CSV");
   });
 
   it('requests only pinned sessions when "pinned only" is chosen', async () => {

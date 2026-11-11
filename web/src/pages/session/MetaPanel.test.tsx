@@ -43,6 +43,29 @@ describe("the session details", () => {
     expect(screen.queryByText("Damping ratio Y")).toBeNull();
   });
 
+  it("names a test's source Wobblescope and shows no file name", () => {
+    render(<MetaPanel meta={twoAxisMeta()} />);
+    expect(screen.getByText("Wobblescope")).toBeTruthy();
+    expect(screen.queryByText("File Name")).toBeNull();
+  });
+
+  it("names an import's source CSV and shows the file it came from", () => {
+    const meta = twoAxisMeta();
+    meta.source = { CsvImport: { original_file_name: "ws_x_adxl345.csv" } };
+    render(<MetaPanel meta={meta} />);
+    expect(screen.getByText("CSV")).toBeTruthy();
+    expect(screen.getByText("File Name")).toBeTruthy();
+    expect(screen.getByText("ws_x_adxl345.csv")).toBeTruthy();
+  });
+
+  it("shows no file name for an import that has none", () => {
+    const meta = twoAxisMeta();
+    meta.source = { CsvImport: { original_file_name: null } };
+    render(<MetaPanel meta={meta} />);
+    expect(screen.getByText("CSV")).toBeTruthy();
+    expect(screen.queryByText("File Name")).toBeNull();
+  });
+
   it("shows no firmware row when none was recorded", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
     expect(screen.queryByText("MCU firmware")).toBeNull();

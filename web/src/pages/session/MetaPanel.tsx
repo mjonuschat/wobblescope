@@ -15,10 +15,14 @@ function outcomeText(outcome: Outcome): string {
   return `Failed: ${outcome.Failed.reason}`;
 }
 
+/** Where the session came from: this app's own test, or a CSV file. */
 function sourceText(meta: SessionMeta): string {
-  if (meta.source === "Capture") return "Capture";
-  const name = meta.source.CsvImport.original_file_name;
-  return name ? `CSV import of ${name}` : "CSV import";
+  return meta.source === "Capture" ? "Wobblescope" : "CSV";
+}
+
+/** The name of the file an import came from, when it has one. A test has no file. */
+function fileName(meta: SessionMeta): string | null {
+  return meta.source === "Capture" ? null : meta.source.CsvImport.original_file_name;
 }
 
 const row = (label: string, value: React.ReactNode) => (
@@ -49,6 +53,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
     <Panel title="Session" label="Session details">
       <Fields>
         {row("Source", sourceText(meta))}
+        {fileName(meta) !== null && row("File Name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
         {row("Mode", meta.mode ?? "Not recorded")}
         {row("Outcome", outcomeText(meta.outcome))}
