@@ -20,8 +20,8 @@ import { SessionFilters } from "./SessionFilters";
 import { StorageUsage } from "./StorageUsage";
 
 const PIN_HINTS = {
-  pin: "Keep this session. The oldest sessions are deleted to make room for new ones, but a pinned session never is, and you cannot delete it until you unpin it.",
-  unpin: "Allow this session to be deleted again, by you or automatically when space is needed.",
+  pin: "Never delete this session to make room for new ones.",
+  unpin: "Allow this session to be deleted again.",
 };
 
 const OUTCOME_CLASS: Record<OutcomeKind, string> = {

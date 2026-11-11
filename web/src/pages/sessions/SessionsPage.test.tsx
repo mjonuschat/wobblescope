@@ -228,6 +228,6 @@ describe("the sessions page", () => {
     api([summary("s1")]);
     renderRoute("/sessions");
     fireEvent.focus(await screen.findByRole("button", { name: "Pin" }));
-    expect(await screen.findByText(/a pinned session never is/)).toBeTruthy();
+    expect(await screen.findByText(/Never delete this session/)).toBeTruthy();
   });
 });
