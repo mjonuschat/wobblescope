@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-/** The range choice. It is a fixed top frequency or the most the chips allow. */
-export type Range = number | "full";
+/** The range choice. It is a fixed top frequency, or the most each chip can show. */
+export type Range = number | "max";
 
 const WINDOW_SECONDS = [0.5, 1, 2, 4];
-const RANGES_HZ = [100, 200, 400];
+const RANGES_HZ = [100, 200, 400, 800];
 const RATES = [1, 2, 5, 10, 20];
 
 /** The update rates up to the daemon's limit, which is the top choice. */
@@ -28,8 +28,6 @@ interface Props {
   range: Range;
   /** The fixed range the daemon starts with. */
   defaultMaxHz: number;
-  /** What "full" means now, in Hz. */
-  fullHz: number;
   onRange: (value: Range) => void;
   windowSeconds: number;
   onWindowSeconds: (value: number) => void;
@@ -68,7 +66,7 @@ function Choice({
 /** The display choices: refresh rate, range, spectrum window, pause and peak-hold reset. */
 export function DisplaySettings(props: Props) {
   const rateText = (r: number) => `${r} Hz`;
-  const rangeText = (range: Range) => (range === "full" ? `Full (${props.fullHz} Hz)` : `${range} Hz`);
+  const rangeText = (range: Range) => (range === "max" ? "Max" : `${range} Hz`);
   return (
     <div className="flex flex-wrap items-end gap-4">
       <Choice
@@ -87,14 +85,14 @@ export function DisplaySettings(props: Props) {
         label="Frequency range"
         value={String(props.range)}
         text={rangeText(props.range)}
-        onChange={(value) => props.onRange(value === "full" ? "full" : Number(value))}
+        onChange={(value) => props.onRange(value === "max" ? "max" : Number(value))}
       >
         {rangeOptions(props.defaultMaxHz).map((hz) => (
           <SelectItem key={hz} value={String(hz)}>
             {rangeText(hz)}
           </SelectItem>
         ))}
-        <SelectItem value="full">{rangeText("full")}</SelectItem>
+        <SelectItem value="max">{rangeText("max")}</SelectItem>
       </Choice>
       <Choice
         label="Spectrum window"

@@ -51,16 +51,12 @@ export function StreamPage({ createWorker }: Props) {
     setFrozen(value ? { spectra, signals } : null);
   }
 
-  // "Full" is the daemon's limit or half the slowest active chip's sample rate, whichever is less.
-  const limit = hello?.limits.max_hz ?? 0;
-  const rates = selected.flatMap((section) => {
-    const rate = streams[section]?.inputRateHz || chipList?.chips.find((c) => c.section === section)?.nominal_rate_hz;
-    return rate ? [rate] : [];
-  });
-  const fullHz = rates.length > 0 ? Math.min(limit, Math.floor(Math.min(...rates) / 2)) : limit;
+  // The daemon clamps each chip's request to what that chip can show, so "Max" sends its own limit.
   const defaultMaxHz = hello?.defaults.max_hz ?? 0;
   const effectiveRange = range ?? defaultMaxHz;
-  const maxHz = effectiveRange === "full" ? fullHz : effectiveRange;
+  const maxHz = effectiveRange === "max" ? (hello?.limits.max_hz ?? 0) : effectiveRange;
+  const announcedHz = Math.max(0, ...selected.map((section) => streams[section]?.maxHz ?? 0));
+  const axisHz = announcedHz || maxHz;
 
   // Changing a setting sends Subscribe again for the active chips.
   const previous = useRef<string | null>(null);
@@ -111,7 +107,6 @@ export function StreamPage({ createWorker }: Props) {
             onUpdatesPerSecond={setUpdates}
             range={effectiveRange}
             defaultMaxHz={defaultMaxHz}
-            fullHz={fullHz}
             onRange={setRange}
             windowSeconds={windowSeconds}
             onWindowSeconds={setWindowSeconds}
@@ -152,7 +147,7 @@ export function StreamPage({ createWorker }: Props) {
       {shown.length > 0 && (
         <Panel title="Live spectrum">
           <SpectrumChart
-            maxHz={maxHz}
+            maxHz={axisHz}
             onResetPeakHold={() => resetPeakHold()}
             chips={shown.map(({ chip, index, entry, spectrum }) => ({
               chip,

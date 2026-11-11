@@ -191,12 +191,11 @@ describe("the stream page", () => {
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 5 });
   });
 
-  it("makes full the smaller of the daemon limit and half the slowest chip rate", async () => {
+  it("sends the daemon's limit for Max and leaves each chip to clamp it", async () => {
     open();
     await connect();
     pick("a1");
-    server(streamHeader("a1", 0));
-    await choose("Frequency range", /^Full/);
+    await choose("Frequency range", "Max");
     expect(sent().at(-1).max_hz).toBe(800);
   });
 
@@ -273,24 +272,23 @@ describe("the stream page", () => {
     expect(chartProps().chips[0]).toMatchObject({ chip: "a2", colorIndex: 1 });
   });
 
-  it("makes full half of the chip input rate when that is below the limit", async () => {
-    open();
-    await connect();
-    pick("a1");
-    server({ ...streamHeader("a1", 0), input_rate_hz: 400 });
-    await choose("Frequency range", /^Full/);
-    expect(sent().at(-1).max_hz).toBe(200);
-  });
-
-  it("makes full follow the slowest of several chips", async () => {
+  it("draws the spectrum to the highest range the chips announce", async () => {
     open();
     await connect();
     pick("a1");
     pick("a2");
-    server({ ...streamHeader("a1", 0), input_rate_hz: 1000 });
-    server({ ...streamHeader("a2", 1), input_rate_hz: 600 });
-    await choose("Frequency range", /^Full/);
-    expect(sent().at(-1).max_hz).toBe(300);
+    server({ ...streamHeader("a1", 0), max_hz: 1592 });
+    server({ ...streamHeader("a2", 1), max_hz: 804 });
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    expect(chartProps().maxHz).toBe(1592);
+  });
+
+  it("offers 100, 200, 400, 800 and Max", async () => {
+    open();
+    await connect();
+    fireEvent.click(screen.getByRole("combobox", { name: "Frequency range" }));
+    const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(names).toEqual(expect.arrayContaining(["100 Hz", "200 Hz", "400 Hz", "800 Hz", "Max"]));
   });
 
   it("says a print is running only while one is", async () => {
