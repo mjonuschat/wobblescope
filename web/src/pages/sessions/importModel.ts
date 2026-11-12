@@ -86,7 +86,9 @@ export function addFiles(
       continue;
     }
     const { entry, stamp } = makeEntry(file, context);
-    const target = entry.stampToken ? next.find((g) => g.entries[0].stampToken === entry.stampToken) : undefined;
+    const target = entry.stampToken
+      ? next.find((g) => g.entries.some((e) => e.stampToken === entry.stampToken))
+      : undefined;
     if (target) {
       next = next.map((g) => (g.id === target.id ? { ...g, entries: [...g.entries, entry], confirmed: false } : g));
     } else {

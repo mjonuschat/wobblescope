@@ -174,4 +174,19 @@ describe("moving", () => {
     const confirmed = confirmGroup(state, gid, true);
     expect(removeEntry(confirmed, confirmed[0].entries[0].id)[0].confirmed).toBe(false);
   });
+
+  it("a_new_file_joins_the_group_that_holds_a_member_with_its_stamp", () => {
+    const s = add([csv("one.csv"), csv(A)]);
+    let state = moveEntry(s, s[1].entries[0].id, s[0].id);
+    const gid = state[0].id;
+    expect(state[0].entries[0].stampToken).toBeNull();
+    state = confirmGroup(state, gid, true);
+    expect(state[0].confirmed).toBe(true);
+
+    const added = addFiles(state, [csv(B)], context).state;
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe(gid);
+    expect(added[0].entries).toHaveLength(3);
+    expect(added[0].confirmed).toBe(false);
+  });
 });
