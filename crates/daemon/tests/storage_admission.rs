@@ -279,6 +279,7 @@ fn imports_and_failed_captures_are_evicted_before_a_newer_completed_one() {
     let mut imported = Spec::new("s1", "2026-10-01T10:00:00Z");
     imported.source = Source::CsvImport {
         original_file_name: None,
+        original_file_names: Vec::new(),
     };
     let mut failed = Spec::new("s2", "2026-10-02T10:00:00Z");
     failed.outcome = Outcome::Failed {

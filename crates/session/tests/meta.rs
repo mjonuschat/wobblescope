@@ -301,3 +301,14 @@ fn per_segment_health_round_trips_and_older_metadata_without_it_still_loads() {
     assert_eq!(old.segments[0].files[0].health, None);
     assert!(old.segments[0].files[0].health_notes.is_empty());
 }
+
+parity_test! {
+    fn an_old_csv_import_without_file_names_still_parses() {
+        let source: Source = serde_json::from_str(r#"{"CsvImport": {"original_file_name": "a.csv"}}"#).unwrap();
+        let Source::CsvImport { original_file_name, original_file_names } = source else {
+            panic!("expected CsvImport");
+        };
+        assert_eq!(original_file_name.as_deref(), Some("a.csv"));
+        assert!(original_file_names.is_empty());
+    }
+}

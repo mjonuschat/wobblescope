@@ -23,6 +23,10 @@ pub enum Source {
         /// Name of the file that was imported, when known.
         #[serde(default)]
         original_file_name: Option<String>,
+        /// Names of every file that was imported, in import order. Sessions written before
+        /// multi-file import have none.
+        #[serde(default)]
+        original_file_names: Vec<String>,
     },
 }
 

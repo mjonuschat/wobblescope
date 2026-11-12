@@ -50,11 +50,8 @@ pub struct Imported {
 /// [`SessionError::CsvRow`] naming the line of a bad row, [`SessionError::CsvTooShort`],
 /// [`SessionError::TooManySamples`], or a metadata error such as an invalid id.
 pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Imported, SessionError> {
-    let samples = parse_rows(text)?;
+    let samples = parse_klipper_csv(text)?;
     let n = samples.len();
-    if n < 2 {
-        return Err(SessionError::CsvTooShort { found: n });
-    }
     let mut notes = Vec::new();
     if request.point.is_none() {
         notes.push("The probe point is unknown: Klipper's raw CSV does not record it.".to_owned());
@@ -65,6 +62,7 @@ pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Importe
         created_at: request.created_at.clone(),
         source: Source::CsvImport {
             original_file_name: request.original_file_name.clone(),
+            original_file_names: request.original_file_name.iter().cloned().collect(),
         },
         time_domain: TimeDomain::KlipperPrintTime,
         mode: None,
@@ -110,9 +108,29 @@ fn row_error(line: usize, reason: impl Into<String>) -> SessionError {
     }
 }
 
-fn parse_rows(text: &str) -> Result<RawSamples, SessionError> {
+/// Parses a Klipper raw CSV into samples, with each vector sized to the number of data lines.
+///
+/// Accepts the same text as [`import_klipper_csv`]: a leading BOM, `\r\n` endings, `#` lines and
+/// blank lines, and four finite numbers per row with timestamps strictly increasing.
+///
+/// # Errors
+/// [`SessionError::CsvRow`] naming the line of a bad row, [`SessionError::CsvTooShort`] for
+/// fewer than two samples, or [`SessionError::TooManySamples`].
+pub fn parse_klipper_csv(text: &str) -> Result<RawSamples, SessionError> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let mut s = RawSamples::default();
+    let count = text
+        .lines()
+        .filter(|l| {
+            let l = l.trim();
+            !l.is_empty() && !l.starts_with('#')
+        })
+        .count();
+    let mut s = RawSamples {
+        t: Vec::with_capacity(count),
+        x: Vec::with_capacity(count),
+        y: Vec::with_capacity(count),
+        z: Vec::with_capacity(count),
+    };
     for (i, raw) in text.lines().enumerate() {
         let line = i + 1;
         let row = raw.trim();
@@ -155,6 +173,9 @@ fn parse_rows(text: &str) -> Result<RawSamples, SessionError> {
         s.x.push(v[1]);
         s.y.push(v[2]);
         s.z.push(v[3]);
+    }
+    if s.len() < 2 {
+        return Err(SessionError::CsvTooShort { found: s.len() });
     }
     Ok(s)
 }

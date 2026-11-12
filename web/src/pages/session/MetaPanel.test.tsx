@@ -50,7 +50,7 @@ describe("the session details", () => {
 
   it("names an import's source CSV and shows the file it came from", () => {
     const meta = twoAxisMeta();
-    meta.source = { CsvImport: { original_file_name: "ws_x_adxl345.csv" } };
+    meta.source = { CsvImport: { original_file_name: "ws_x_adxl345.csv", original_file_names: ["ws_x_adxl345.csv"] } };
     render(<MetaPanel meta={meta} />);
     expect(screen.getByText("CSV")).toBeTruthy();
     expect(screen.getByText("File Name")).toBeTruthy();
@@ -59,7 +59,7 @@ describe("the session details", () => {
 
   it("shows no file name for an import that has none", () => {
     const meta = twoAxisMeta();
-    meta.source = { CsvImport: { original_file_name: null } };
+    meta.source = { CsvImport: { original_file_name: null, original_file_names: [] } };
     render(<MetaPanel meta={meta} />);
     expect(screen.getByText("CSV")).toBeTruthy();
     expect(screen.queryByText("File Name")).toBeNull();

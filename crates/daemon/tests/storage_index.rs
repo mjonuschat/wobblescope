@@ -142,6 +142,7 @@ fn a_failed_import_summarizes_its_source_outcome_and_size() {
     let mut spec = Spec::new("imp", "2026-10-01T10:00:00Z");
     spec.source = Source::CsvImport {
         original_file_name: Some("raw_data_x.csv".to_owned()),
+        original_file_names: vec!["raw_data_x.csv".to_owned()],
     };
     spec.outcome = Outcome::Failed {
         reason: "disk".to_owned(),

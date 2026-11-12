@@ -7,4 +7,9 @@ export type Source = "Capture" | { "CsvImport": {
 /**
  * Name of the file that was imported, when known.
  */
-original_file_name: string | null, } };
+original_file_name: string | null, 
+/**
+ * Names of every file that was imported, in import order. Sessions written before
+ * multi-file import have none.
+ */
+original_file_names: Array<string>, } };

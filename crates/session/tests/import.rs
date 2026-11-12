@@ -10,7 +10,7 @@ use wobblescope_session::SessionError;
 use wobblescope_session::bridge::dataset_inputs;
 use wobblescope_session::codec::{decode_samples, encode_samples};
 use wobblescope_session::import::{
-    ImportRequest, import_klipper_csv, suggest_hints_from_file_name,
+    ImportRequest, import_klipper_csv, parse_klipper_csv, suggest_hints_from_file_name,
 };
 use wobblescope_session::meta::{Outcome, Source};
 
@@ -120,7 +120,10 @@ parity_test! {
         assert_eq!(m.segments[0].files[0].sample_count, 3);
         assert_eq!(
             m.source,
-            Source::CsvImport { original_file_name: Some("raw_data_x_ws.csv".to_owned()) }
+            Source::CsvImport {
+                original_file_name: Some("raw_data_x_ws.csv".to_owned()),
+                original_file_names: vec!["raw_data_x_ws.csv".to_owned()],
+            }
         );
         assert!(m.notes.iter().any(|n| n.contains("probe point is unknown")));
         assert_eq!(m.probe_points[0].position, None);
@@ -260,4 +263,47 @@ fn an_imported_session_survives_a_directory_round_trip() {
         analyze(&inputs, &params).unwrap(),
         analyze(&direct, &params).unwrap()
     );
+}
+
+parity_test! {
+    fn a_single_import_records_its_name_in_both_fields() {
+        let imp = import_klipper_csv(&text_with(true, "\n", true), &request("c")).unwrap();
+        let Source::CsvImport { original_file_name, original_file_names } = imp.meta.source else {
+            panic!("expected CsvImport");
+        };
+        assert_eq!(original_file_name.as_deref(), Some("raw_data_x_ws.csv"));
+        assert_eq!(original_file_names, ["raw_data_x_ws.csv"]);
+    }
+}
+
+parity_test! {
+    fn parse_klipper_csv_sizes_its_vectors_exactly() {
+        let s = parse_klipper_csv(&text_with(true, "\n\n", true)).unwrap();
+        for v in [&s.t, &s.x, &s.y, &s.z] {
+            assert_eq!((v.len(), v.capacity()), (3, 3));
+        }
+    }
+}
+
+parity_test! {
+    fn parse_klipper_csv_refuses_an_empty_and_a_one_row_text() {
+        assert!(matches!(parse_klipper_csv(""), Err(SessionError::CsvTooShort { found: 0 })));
+        let one = format!("{HEADER}\n{}\n", ROWS[0]);
+        assert!(matches!(parse_klipper_csv(&one), Err(SessionError::CsvTooShort { found: 1 })));
+    }
+}
+
+parity_test! {
+    fn parse_klipper_csv_accepts_bom_crlf_and_comments() {
+        let base = parse_klipper_csv(&text_with(true, "\n", true)).unwrap();
+        assert_eq!(base.len(), 3);
+        let variants = [
+            format!("\u{feff}{}", text_with(true, "\n", true)),
+            text_with(true, "\r\n", true),
+            format!("# a comment\n{}", text_with(true, "\n", true)),
+        ];
+        for (i, v) in variants.iter().enumerate() {
+            assert_eq!(parse_klipper_csv(v).unwrap(), base, "variant {i}");
+        }
+    }
 }
