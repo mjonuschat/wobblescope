@@ -45,7 +45,7 @@ const cards = () => inDialog().queryAllByRole("region", { name: /^Group \d+$/ })
 const rows = () => [...document.querySelectorAll<HTMLElement>("[data-slot=attachment]")];
 const rowOf = (name: string) => rows().find((r) => r.textContent?.includes(name)) as HTMLElement;
 const importButton = () => screen.getByRole("button", { name: "Import" }) as HTMLButtonElement;
-const posts = (calls: { method: string }[]) => calls.filter((c) => c.method === "POST");
+const posts = <T extends { method: string }>(calls: T[]) => calls.filter((c) => c.method === "POST");
 
 async function sessionPart(call: { body: unknown }) {
   const form = call.body as FormData;
