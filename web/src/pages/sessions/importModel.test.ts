@@ -11,6 +11,7 @@ import {
   needsConfirmation,
   problems,
   removeEntry,
+  setCreatedAt,
 } from "./importModel";
 
 const NOW = new Date(2026, 10, 12, 9, 0, 0);
@@ -112,6 +113,17 @@ describe("problems", () => {
     let state = add(Array.from({ length: 17 }, (_, i) => csv(`f${i}.csv`)));
     for (const g of state.slice(1)) state = moveEntry(state, g.entries[0].id, state[0].id);
     expect(problems(state[0]).some((p) => p.entryId === null)).toBe(true);
+  });
+});
+
+describe("an invalid group date", () => {
+  it("problems_reports_an_invalid_created_at_and_canImport_is_false", () => {
+    const state = add([csv(A)]);
+    const invalid = setCreatedAt(state, state[0].id, new Date(Number.NaN))[0];
+    const group = state[0];
+    expect(problems(invalid)).toContainEqual({ entryId: null, text: "Pick a valid date and time." });
+    expect(canImport(invalid)).toBe(false);
+    expect(problems(group)).not.toContainEqual({ entryId: null, text: "Pick a valid date and time." });
   });
 });
 

@@ -183,6 +183,9 @@ export function problems(group: ImportGroupState): ImportProblem[] {
       seen.add(key);
     }
   }
+  if (Number.isNaN(group.createdAt.getTime())) {
+    found.push({ entryId: null, text: "Pick a valid date and time." });
+  }
   if (group.entries.length > MAX_IMPORT_FILES) {
     found.push({
       entryId: null,

@@ -23,10 +23,12 @@ interface Props {
   known: string[];
   /** What the daemon said about this group, and which file it named. */
   failure: { text: string; entryId: string | null } | null;
+  /** True while groups are being sent. */
+  disabled: boolean;
   update: (change: (state: ImportState) => ImportState) => void;
 }
 
-export function ImportGroupCard({ group, number, labels, known, failure, update }: Props) {
+export function ImportGroupCard({ group, number, labels, known, failure, disabled, update }: Props) {
   const found = problems(group);
   const groupWide = found.filter((p) => p.entryId === null);
   const targets = labels.filter((l) => l.id !== group.id);
@@ -38,7 +40,11 @@ export function ImportGroupCard({ group, number, labels, known, failure, update 
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Group {number}</h3>
-        <GroupDatePicker value={group.createdAt} onChange={(date) => update((s) => setCreatedAt(s, group.id, date))} />
+        <GroupDatePicker
+          disabled={disabled}
+          value={group.createdAt}
+          onChange={(date) => update((s) => setCreatedAt(s, group.id, date))}
+        />
       </div>
       {needsConfirmation(group) && (
         <div className="space-y-1 rounded-lg bg-muted/50 p-2 text-sm">
@@ -47,6 +53,7 @@ export function ImportGroupCard({ group, number, labels, known, failure, update 
             <Checkbox
               id={`confirm-${group.id}`}
               checked={group.confirmed}
+              disabled={disabled}
               onCheckedChange={(checked) => update((s) => confirmGroup(s, group.id, checked === true))}
             />
             <Label htmlFor={`confirm-${group.id}`}>I recorded these together</Label>
@@ -69,6 +76,7 @@ export function ImportGroupCard({ group, number, labels, known, failure, update 
               ...found.filter((p) => p.entryId === entry.id).map((p) => p.text),
               ...(failure?.entryId === entry.id ? [failure.text] : []),
             ]}
+            disabled={disabled}
             onEdit={(patch) => update((s) => editEntry(s, entry.id, patch))}
             onMove={(target) => update((s) => moveEntry(s, entry.id, target))}
             onRemove={() => update((s) => removeEntry(s, entry.id))}

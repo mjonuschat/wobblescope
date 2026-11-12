@@ -3,10 +3,11 @@ import { useState } from "react";
 
 interface Props {
   onFiles: (files: File[]) => void;
+  disabled: boolean;
 }
 
 /** Takes files dropped on it or chosen through the browse input. Folders are not read. */
-export function ImportDropzone({ onFiles }: Props) {
+export function ImportDropzone({ onFiles, disabled }: Props) {
   const [over, setOver] = useState(false);
   return (
     // biome-ignore lint/a11y/useSemanticElements: a drop target that wraps the file input, not a fieldset
@@ -24,15 +25,16 @@ export function ImportDropzone({ onFiles }: Props) {
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        onFiles(Array.from(e.dataTransfer.files));
+        if (!disabled) onFiles(Array.from(e.dataTransfer.files));
       }}
     >
-      <label className="flex cursor-pointer flex-col items-center gap-1">
+      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-md focus-within:ring-2 focus-within:ring-ring">
         <UploadIcon className="size-5" />
         <span>Drop CSV files here or click to browse</span>
         <input
           type="file"
           multiple
+          disabled={disabled}
           accept=".csv,text/csv"
           aria-label="CSV files"
           className="sr-only"

@@ -25,9 +25,11 @@ interface Props {
   onEdit: (patch: Partial<Pick<ImportEntry, "chip" | "axis" | "point">>) => void;
   onMove: (target: string) => void;
   onRemove: () => void;
+  /** True while groups are being sent. */
+  disabled: boolean;
 }
 
-export function ImportFileRow({ entry, known, targets, reasons, onEdit, onMove, onRemove }: Props) {
+export function ImportFileRow({ entry, known, targets, reasons, onEdit, onMove, onRemove, disabled }: Props) {
   const name = entry.file.name;
   return (
     <Attachment state={reasons.length > 0 ? "error" : "done"} className="w-full">
@@ -49,7 +51,7 @@ export function ImportFileRow({ entry, known, targets, reasons, onEdit, onMove, 
       </AttachmentContent>
       <AttachmentActions>
         <Popover>
-          <PopoverTrigger render={<AttachmentAction aria-label={`Edit ${name}`} />}>
+          <PopoverTrigger render={<AttachmentAction aria-label={`Edit ${name}`} disabled={disabled} />}>
             <PencilIcon />
           </PopoverTrigger>
           <PopoverContent className="w-auto">
@@ -60,6 +62,7 @@ export function ImportFileRow({ entry, known, targets, reasons, onEdit, onMove, 
           aria-label={`Move ${name}`}
           className="h-6 rounded-md border border-input bg-transparent px-1 text-xs"
           value=""
+          disabled={disabled}
           onChange={(e) => e.target.value && onMove(e.target.value)}
         >
           <option value="">Move</option>
@@ -70,7 +73,7 @@ export function ImportFileRow({ entry, known, targets, reasons, onEdit, onMove, 
           ))}
           <option value="new">New group</option>
         </select>
-        <AttachmentAction aria-label={`Remove ${name}`} onClick={onRemove}>
+        <AttachmentAction aria-label={`Remove ${name}`} disabled={disabled} onClick={onRemove}>
           <XIcon />
         </AttachmentAction>
       </AttachmentActions>

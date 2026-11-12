@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { chipsSnapshot } from "@/test/capture";
 import type { Reply } from "@/test/http";
@@ -197,6 +197,44 @@ describe("importing", () => {
     fireEvent.click(importButton());
     await waitFor(() => expect(posts(calls)).toHaveLength(1));
     expect((await sessionPart(posts(calls)[0])).created_at).toBe(new Date(2026, 10, 11, 6, 7, 8).toISOString());
+  });
+
+  it("clearing the time field keeps the earlier created_at", async () => {
+    const calls = api();
+    await openDialog();
+    addFiles(X1);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(inDialog().getByRole("button", { name: "Date and time" }));
+    const time = await screen.findByLabelText("Time");
+    fireEvent.change(time, { target: { value: "06:07:08" } });
+    fireEvent.change(time, { target: { value: "" } });
+    fireEvent.click(importButton());
+    await waitFor(() => expect(posts(calls)).toHaveLength(1));
+    expect((await sessionPart(posts(calls)[0])).created_at).toBe(new Date(2026, 10, 11, 6, 7, 8).toISOString());
+  });
+
+  it("while a group is being sent the dropzone and Cancel are disabled and Escape does not close the dialog", async () => {
+    api();
+    const stubbed = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") await gate;
+      return stubbed(input, init);
+    });
+    await openDialog();
+    addFiles(X1);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(importButton());
+    await waitFor(() => expect((inDialog().getByLabelText("CSV files") as HTMLInputElement).disabled).toBe(true));
+    expect((inDialog().getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(rowOf(X1)).getByRole("button", { name: `Remove ${X1}` }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    release();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("a single file imports through the same dialog", async () => {

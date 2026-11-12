@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 interface Props {
   value: Date;
   onChange: (date: Date) => void;
+  disabled: boolean;
 }
 
 const two = (n: number) => String(n).padStart(2, "0");
@@ -17,7 +18,7 @@ function timeText(date: Date): string {
 }
 
 /** The session's local date and time: a calendar and a time field with seconds. */
-export function GroupDatePicker({ value, onChange }: Props) {
+export function GroupDatePicker({ value, onChange, disabled }: Props) {
   const chooseDay = (day: Date | undefined) => {
     if (!day) return;
     onChange(
@@ -32,13 +33,17 @@ export function GroupDatePicker({ value, onChange }: Props) {
     );
   };
   const chooseTime = (text: string) => {
+    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(text)) return;
     const [hours, minutes, seconds] = text.split(":").map(Number);
-    if (Number.isNaN(hours) || Number.isNaN(minutes)) return;
-    onChange(new Date(value.getFullYear(), value.getMonth(), value.getDate(), hours, minutes, seconds || 0));
+    const date = new Date(value.getFullYear(), value.getMonth(), value.getDate(), hours, minutes, seconds || 0);
+    if (Number.isNaN(date.getTime())) return;
+    onChange(date);
   };
   return (
     <Popover>
-      <PopoverTrigger render={<Button type="button" variant="outline" size="sm" aria-label="Date and time" />}>
+      <PopoverTrigger
+        render={<Button type="button" variant="outline" size="sm" aria-label="Date and time" disabled={disabled} />}
+      >
         <CalendarIcon />
         {value.toLocaleString()}
       </PopoverTrigger>

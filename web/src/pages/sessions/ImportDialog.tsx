@@ -57,19 +57,20 @@ interface Props {
 
 /** The dialog's content is only mounted while it is open, so closing it clears the files. */
 export function ImportDialog({ open, onOpenChange }: Props) {
+  const sending = useImportGroups();
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !(sending.isRunning && !next) && onOpenChange(next)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <ImportForm onDone={() => onOpenChange(false)} />
+        <ImportForm sending={sending} onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function ImportForm({ onDone }: { onDone: () => void }) {
+function ImportForm({ sending, onDone }: { sending: ReturnType<typeof useImportGroups>; onDone: () => void }) {
   const navigate = useNavigate();
   const chips = useChips();
-  const { run, isRunning } = useImportGroups();
+  const { run, isRunning } = sending;
   const [groups, setGroups] = useState<ImportState>([]);
   const [refused, setRefused] = useState<{ name: string; reason: string }[]>([]);
   const [failures, setFailures] = useState<Record<string, Failure>>({});
@@ -125,28 +126,31 @@ function ImportForm({ onDone }: { onDone: () => void }) {
           Raw accelerometer files from <code>TEST_RESONANCES OUTPUT=raw_data</code>. Each group becomes one session.
         </DialogDescription>
       </DialogHeader>
-      <ImportDropzone onFiles={add} />
+      <ImportDropzone onFiles={add} disabled={isRunning} />
       {refused.map((r) => (
         <p key={r.name} role="alert" className="text-sm text-destructive">
           {r.name}: {r.reason}
         </p>
       ))}
-      {groups.map((group, i) => {
-        const failure = failures[group.id];
-        return (
-          <ImportGroupCard
-            key={group.id}
-            group={group}
-            number={i + 1}
-            labels={labels}
-            known={known}
-            failure={failure && failure.signature === signature(group) ? failure : null}
-            update={(change) => setGroups(change)}
-          />
-        );
-      })}
+      <fieldset disabled={isRunning} className="min-w-0 space-y-4">
+        {groups.map((group, i) => {
+          const failure = failures[group.id];
+          return (
+            <ImportGroupCard
+              key={group.id}
+              group={group}
+              number={i + 1}
+              labels={labels}
+              known={known}
+              failure={failure && failure.signature === signature(group) ? failure : null}
+              disabled={isRunning}
+              update={(change) => setGroups(change)}
+            />
+          );
+        })}
+      </fieldset>
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onDone}>
+        <Button type="button" variant="outline" disabled={isRunning} onClick={onDone}>
           Cancel
         </Button>
         <Button
