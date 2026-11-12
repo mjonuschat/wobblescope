@@ -12,11 +12,7 @@ scv: number,
 /**
  * Damping ratio the shapers were built with.
  */
-damping_ratio: number, 
-/**
- * Whether it was fixed, estimated or fell back to 0.1.
- */
-damping_source: DampingSource, 
+damping_ratio: number, damping_source: DampingSource, 
 /**
  * Frequency of the strongest resonance the estimate looked at, in Hz. `None` when the ratio
  * was fixed.

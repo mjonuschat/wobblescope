@@ -12,7 +12,6 @@ pub const HALF_POWER_LEVEL: f64 = std::f64::consts::FRAC_1_SQRT_2;
 /// The damping ratio used when the data gives no estimate.
 pub const FALLBACK_DAMPING: f64 = DEFAULT_DAMPING_RATIO;
 
-/// The strongest resonance of a spectrum.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DampingEstimate {
     /// Frequency of the strongest bin in Hz.

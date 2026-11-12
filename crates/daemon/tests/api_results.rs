@@ -341,7 +341,7 @@ fn install_legacy(dir: &std::path::Path, label: &str) -> String {
     id
 }
 
-/// The keys this change added to an `Analysis`, which a result saved before it lacks.
+/// Keys of `Analysis` that results saved by older versions do not have.
 const ADDED: [&str; 4] = [
     "damping_source",
     "resonance_freq",
@@ -399,7 +399,7 @@ async fn open_legacy(label: &str) {
     let (status, detail) = json(&app, "GET", &format!("/api/results/{id}")).await;
     assert_eq!(status, StatusCode::OK, "{detail}");
     assert_eq!(detail["record"]["version"], 1);
-    // A missing or zero damping ratio meant 0.1 when this was saved; it must not become "estimate".
+    // A missing or zero damping ratio meant 0.1 when this was saved. It must not become "estimate".
     assert_eq!(
         detail["record"]["fit_params"]["damping_ratio"], 0.1,
         "{label}"

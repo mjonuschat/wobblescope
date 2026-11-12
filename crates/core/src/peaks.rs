@@ -1,7 +1,7 @@
 //! Peaks of a PSD, found the way Shake&Tune finds them (`detect_peaks` and the thresholds of its
 //! shaper graph, at the commit pinned in `docs/specs/shaketune-deviations.md`).
 //!
-//! The detector is kept exactly as Shake&Tune writes it, including its quirks: peaks closer
+//! The detector is kept exactly as Shake&Tune writes it, including its quirks. Peaks closer
 //! than the smoothing window merge, the last two bins are never examined, two peaks can be
 //! refined to the same bin, and a peak refined to a negative index wraps to the end of the
 //! array, as Python indexes. Each deliberate difference is a row in the deviations file.
@@ -19,27 +19,23 @@ const WINDOW: usize = 5;
 /// A peak is moved to the largest raw value within this many bins.
 const VICINITY: usize = 3;
 
-/// One peak of a PSD.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PsdPeak {
     /// Frequency in Hz.
     pub freq: f64,
-    /// PSD value at the peak.
     pub level: f64,
-    /// Whether the value is above the effect threshold.
     pub above_effect: bool,
 }
 
-/// The peaks of one dataset and the thresholds they were judged against.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PsdPeaks {
     /// The peaks, in the order found (by frequency).
     pub peaks: Vec<PsdPeak>,
-    /// `PEAK_DETECTION` times the strongest value: the lower threshold line.
+    /// The lower threshold line, `PEAK_DETECTION` times the strongest value.
     pub detect_threshold: f64,
-    /// `PEAK_EFFECT` times the strongest value: the upper threshold line.
+    /// The upper threshold line, `PEAK_EFFECT` times the strongest value.
     pub effect_threshold: f64,
 }
 

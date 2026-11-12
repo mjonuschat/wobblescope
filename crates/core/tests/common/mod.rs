@@ -467,7 +467,7 @@ pub struct OracleEdge {
     pub effect_threshold: f64,
 }
 
-/// Shake&Tune's own results for the golden inputs; see `golden/shaketune.py`.
+/// Shake&Tune's own results for the golden inputs, written by `golden/shaketune.py`.
 #[derive(Deserialize)]
 pub struct Oracle {
     pub pin: String,
@@ -479,7 +479,7 @@ pub fn shaketune() -> Oracle {
     serde_json::from_str(include_str!("../golden/shaketune.json")).unwrap()
 }
 
-/// Klipper's default fit: the damping ratio fixed at 0.1.
+/// Klipper's default fit, which fixes the damping ratio at 0.1.
 pub fn klipper_params() -> wobblescope_core::fit::FitParams {
     wobblescope_core::fit::FitParams {
         damping_ratio: Some(0.1),

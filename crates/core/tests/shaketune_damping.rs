@@ -42,7 +42,7 @@ fn a_flat_psd_has_no_zeta() {
 #[test]
 fn a_peak_with_no_half_power_point_on_one_side_has_no_zeta() {
     let freqs: Vec<f64> = (0..50).map(f64::from).collect();
-    // Rises to its maximum in the last bin: nothing falls to half power after it.
+    // Rises to its maximum in the last bin, so nothing falls to half power after it.
     let psd: Vec<f64> = (0..50).map(f64::from).collect();
     let got = estimate_damping(&freqs, &psd).unwrap();
     assert_eq!(got.fr, 49.0);

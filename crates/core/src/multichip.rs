@@ -62,9 +62,8 @@ pub fn summed_psd(data: &[CalibrationData], max_freq: f64) -> Option<SummedPsd> 
     })
 }
 
-/// The spectrum a damping ratio is estimated from: the dataset's own PSD for one dataset, else the
-/// sum of all of them (see [`summed_psd`]) up to the highest bin any of them has. `None` for no
-/// data.
+/// The spectrum a damping ratio is estimated from. One dataset gives its own PSD, several give
+/// their sum (see [`summed_psd`]) up to the highest bin any of them has. `None` for no data.
 pub(crate) fn estimation_psd(data: &[CalibrationData]) -> Option<(Vec<f64>, Vec<f64>)> {
     match data {
         [] => None,

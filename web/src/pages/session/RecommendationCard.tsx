@@ -30,7 +30,7 @@ interface Props {
 interface ShaperProps {
   result: CalibrationResult;
   snippet: string | null;
-  /** Names the block when there are two; the copy button then sits beside it. */
+  /** Names the block when there are two. The copy button then sits beside it. */
   heading?: string;
   children?: ReactNode;
 }

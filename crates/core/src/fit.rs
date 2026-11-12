@@ -1,6 +1,6 @@
 //! Shaper fitting and recommendation, ported from Klipper's `fit_shaper` and
-//! `find_best_shaper` (frequency searched in 0.2 Hz steps). The damping ratio is fixed by the
-//! caller, or estimated from the data as Shake&Tune does (see [`crate::resonance`]).
+//! `find_best_shaper` (frequency searched in 0.2 Hz steps). The caller fixes the damping ratio or
+//! leaves it to the data, which gives an estimate as Shake&Tune does (see [`crate::resonance`]).
 
 use std::borrow::Cow;
 
@@ -23,7 +23,7 @@ pub const MAX_SHAPER_FREQ: f64 = 150.0;
 pub const FREQ_STEP: f64 = 0.2;
 const SMOOTHING_ACCEL: f64 = 5000.0;
 
-/// Caller-supplied fitting parameters. `None` selects the default; for `damping_ratio` that is
+/// Caller-supplied fitting parameters. `None` selects the default. For `damping_ratio` that is
 /// the estimate from the data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -60,14 +60,12 @@ impl Default for FitParams {
     }
 }
 
-/// Where the damping ratio of a fit came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum DampingSource {
     /// Set by the caller. A result saved before the estimate existed reads as this.
     #[default]
     Fixed,
-    /// Estimated from the data.
     Estimated,
     /// There was no usable estimate, so the default 0.1 was used.
     Fallback,
@@ -75,7 +73,7 @@ pub enum DampingSource {
 
 impl FitParams {
     /// These parameters as a result saved before the damping ratio could be estimated meant
-    /// them: no ratio, and a ratio of 0, both meant 0.1.
+    /// them. Then a missing ratio and a ratio of 0 both meant 0.1.
     #[must_use]
     pub fn from_legacy(mut self) -> Self {
         if self.damping_ratio.is_none_or(|d| d == 0.0) {
@@ -93,7 +91,6 @@ pub struct FitSettings {
     pub scv: f64,
     /// Damping ratio the shapers were built with.
     pub damping_ratio: f64,
-    /// Whether it was fixed, estimated or fell back to 0.1.
     #[serde(default)]
     pub damping_source: DampingSource,
     /// Frequency of the strongest resonance the estimate looked at, in Hz. `None` when the ratio
@@ -294,8 +291,8 @@ struct Damping {
     resonance_freq: Option<f64>,
 }
 
-/// The damping ratio a fit over `data` uses: the caller's, else the estimate from the datasets'
-/// summed PSD, else 0.1. `data` must be normalised and well formed.
+/// The damping ratio a fit over `data` uses. That is the caller's, else the estimate from the
+/// datasets' summed PSD, else 0.1. `data` must be normalised and well formed.
 fn resolve_damping(data: &[CalibrationData], params: &FitParams) -> Damping {
     if let Some(ratio) = params.damping_ratio {
         return Damping {

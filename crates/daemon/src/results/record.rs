@@ -9,7 +9,7 @@ use wobblescope_session::meta::SessionMeta;
 ///
 /// Version 2 results come from a core that can estimate the damping ratio, so their
 /// `fit_params.damping_ratio` of `None` means "estimate". In a version 1 record a missing or zero
-/// ratio meant 0.1; see [`FIRST_ESTIMATING_VERSION`].
+/// ratio meant 0.1. See [`FIRST_ESTIMATING_VERSION`].
 pub const RESULT_VERSION: u32 = 2;
 
 /// The first [`ResultRecord`] version whose `fit_params` can ask for an estimated damping ratio.
