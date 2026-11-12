@@ -107,7 +107,7 @@ fn names(text: Option<&str>) -> Vec<&str> {
     .unwrap_or_default()
 }
 
-/// The default chips, by Kalico's `accel_chips`, then `accel_chip_x` and `accel_chip_y`, then
+/// The default chips, by Kalico's `accel_chips`, then `accel_chip_x` with `accel_chip_y`, then
 /// `accel_chip`. Names that are not listed chips are left out.
 fn defaults(tester: &Map<String, Value>, chips: &[Chip]) -> Defaults {
     let option = |key: &str| tester.get(key).and_then(Value::as_str);
@@ -125,11 +125,12 @@ fn defaults(tester: &Map<String, Value>, chips: &[Chip]) -> Defaults {
             y: both,
         };
     }
-    let (x, y) = (option("accel_chip_x"), option("accel_chip_y"));
-    if x.is_some() || y.is_some() {
+    // Klipper and Kalico take the per-axis form only when `accel_chip_x` is set. An
+    // `accel_chip_y` alone does nothing: `accel_chip` covers both axes.
+    if let Some(x) = option("accel_chip_x") {
         return Defaults {
-            x: keep(names(x)),
-            y: keep(names(y)),
+            x: keep(names(Some(x))),
+            y: keep(names(option("accel_chip_y"))),
         };
     }
     let both = keep(names(option("accel_chip")));

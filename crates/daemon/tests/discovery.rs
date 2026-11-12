@@ -177,6 +177,17 @@ fn an_x_default_without_a_y_default_gives_x_only() {
 }
 
 #[test]
+fn accel_chip_y_without_accel_chip_x_is_ignored() {
+    let list = parse(json!({
+        "adxl345": {},
+        "lis2dw ebb36": {},
+        "resonance_tester": {"accel_chip": "adxl345", "accel_chip_y": "lis2dw ebb36"},
+    }));
+    assert_eq!(list.defaults.x, ["adxl345"]);
+    assert_eq!(list.defaults.y, ["adxl345"]);
+}
+
+#[test]
 fn accel_chip_alone_covers_both_axes_and_no_resonance_tester_gives_none() {
     let list = parse(json!({
         "adxl345": {},
