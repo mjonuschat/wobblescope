@@ -163,7 +163,7 @@ async fn identify_names_the_client_and_carries_the_key_only_when_one_is_set() {
     assert_eq!(params["client_name"], "wobblescope");
     assert_eq!(params["version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(params["type"], "other");
-    assert_eq!(params["url"], "https://wobblescope.invalid/");
+    assert_eq!(params["url"], "https://github.com/mjonuschat/wobblescope");
     assert!(params.get("api_key").is_none());
 
     let keyed = FakeMoonraker::start().await;

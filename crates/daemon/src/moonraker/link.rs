@@ -13,9 +13,8 @@ use super::rpc::{Notification, Rpc, RpcError};
 use super::status::{KlippyState, MoonrakerState, state_line};
 use super::{Publisher, Timings};
 
-/// What the daemon tells Moonraker about itself. Moonraker requires a project URL, and none
-/// exists yet; `.invalid` is reserved for names that never resolve.
-const PROJECT_URL: &str = "https://wobblescope.invalid/";
+/// The project URL Moonraker requires in `server.connection.identify`.
+const PROJECT_URL: &str = "https://github.com/mjonuschat/wobblescope";
 
 const UNAUTHORIZED_MESSAGE: &str = "Moonraker refused the daemon. Add the daemon's address to \
     trusted_clients in moonraker.conf, or set moonraker_api_key in the daemon's config.";
