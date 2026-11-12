@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import {
   AlertDialog,
@@ -57,7 +57,7 @@ export function ResultsPage() {
   const list = useResults();
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  let body;
+  let body: ReactNode;
   if (list.isPending) {
     body = <p className="text-sm text-muted-foreground">Loading results…</p>;
   } else if (list.isError) {

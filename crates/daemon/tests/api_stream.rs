@@ -303,7 +303,11 @@ async fn push_in_real_time(rig: &Rig, sensors: &[&str], t0: f64, seconds: f64) {
 #[tokio::test]
 async fn a_slow_reader_gets_dropped_frames_not_a_growing_queue() {
     let rig = rig_with_extra_chips(&["adxl345 b", "adxl345 c", "adxl345 d"]).await;
-    let mut socket = connect_with_small_buffers(&rig).await;
+    // The write timeout is longer than the 10 s push. On Linux the small buffers fill at once, so
+    // with the default 10 s timeout the server could close the connection before the push ends.
+    let mut socket =
+        connect_with_small_buffers_to(rig.app_with_stream_write_timeout(Duration::from_secs(60)))
+            .await;
     text_of(&mut socket, "hello").await;
     for chip in ["adxl345", "adxl345 b", "adxl345 c", "adxl345 d"] {
         subscribe(&mut socket, chip, 1600.0, 20.0).await;

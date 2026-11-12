@@ -59,6 +59,7 @@ function IconAction({
             className={highlighted ? "border-primary dark:border-primary" : undefined}
             disabled={disabled}
             onClick={onClick}
+            // biome-ignore lint/a11y/useAnchorContent: the Button puts its children inside this anchor
             {...(href ? { render: <a href={href} download />, nativeButton: false } : {})}
           />
         }

@@ -114,8 +114,7 @@ jobs:
       - run: pnpm --dir web lint:check
       - run: pnpm --dir web test
 
-  # The built app, which the daemon embeds. The binaries wait only for this job, not for the
-  # web checks, which run beside them.
+  # The built app, which the daemon embeds.
   web-build:
     name: Web build
     needs: [changes]
@@ -133,7 +132,9 @@ jobs:
 
   dist:
     name: Dist (${{ matrix.build }})
-    needs: [web-build]
+    # Nothing consumes the binaries of a failed run, so they wait for every check. A skipped
+    # need (the release commit on main) skips this job too.
+    needs: [lints, test, deny, web-check, web-build]
     if: ${{ inputs.dist || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     strategy:

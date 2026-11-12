@@ -59,6 +59,7 @@ export function useLive(): LiveState & { retry: () => void } {
   // Raised by `retry` to open a new socket at once instead of waiting out the reconnect delay.
   const [attempt, setAttempt] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new attempt is the trigger to open a new socket
   useEffect(() => {
     let closed = false;
     let socket: WebSocket | null = null;
