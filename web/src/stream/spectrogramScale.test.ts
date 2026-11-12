@@ -34,6 +34,16 @@ describe("SharedAutoScale", () => {
   });
 });
 
+describe("SharedAutoScale with a chip that stopped", () => {
+  it("forgets a chip that has not reported for a minute", () => {
+    const scale = new SharedAutoScale();
+    for (let i = 0; i < 12; i++) scale.columnScale("loud", i * 100, flat(5));
+    for (let i = 0; i < 12; i++) scale.columnScale("quiet", 120_000 + i * 100, flat(1));
+    const { low, range } = scale.current();
+    expect(low + range).toBeLessThan(2);
+  });
+});
+
 describe("fixedScale", () => {
   it("is the same for every chip and moment, and takes powers, not logarithms", () => {
     const scale = fixedScale(100, 100_000);

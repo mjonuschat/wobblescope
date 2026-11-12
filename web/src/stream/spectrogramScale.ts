@@ -31,9 +31,14 @@ export class SharedAutoScale implements ScaleSource {
 
   columnScale(chip: string, at: number, logPsd: number[]): ColourScale {
     const stride = Math.max(1, Math.ceil(logPsd.length / SAMPLES_PER_SPECTRUM));
-    const kept = (this.samples.get(chip) ?? []).filter((sample) => at - sample.at <= SPAN_MS);
+    const kept = this.samples.get(chip) ?? [];
     kept.push({ at, values: logPsd.filter((_, bin) => bin % stride === 0) });
     this.samples.set(chip, kept);
+    for (const [name, list] of this.samples) {
+      const recent = list.filter((sample) => at - sample.at <= SPAN_MS);
+      if (recent.length === 0) this.samples.delete(name);
+      else this.samples.set(name, recent);
+    }
     if (!this.computed || ++this.since >= SCALE_EVERY * this.samples.size) this.recompute();
     return this.scale;
   }
