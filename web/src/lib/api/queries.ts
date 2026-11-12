@@ -1,4 +1,11 @@
-import { type Query, QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  type Query,
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import type { Axis } from "@/lib/generated/Axis";
@@ -66,6 +73,8 @@ export function useSessions(filters: SessionFilters = {}) {
   return useQuery({
     queryKey: queryKeys.sessionList(filters),
     queryFn: ({ signal }) => listSessions(filters, signal),
+    // Keeps the table, and the filter popover in its header, mounted while a new filter loads.
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -26,6 +26,20 @@ describe("endpoints", () => {
     expect(http.url()).toBe("http://printer.local/wobblescope/api/sessions?chip=adxl345+nh36&pinned=true");
   });
 
+  it("sends a date range as the start of the first day and the start of the day after the last", async () => {
+    const http = stubFetch({ body: { sessions: [] } });
+    await listSessions({ createdFrom: "2026-11-01", createdTo: "2026-11-30" });
+    const url = new URL(http.url());
+    expect(url.searchParams.get("created_from")).toBe(new Date(2026, 10, 1).toISOString());
+    expect(url.searchParams.get("created_to")).toBe(new Date(2026, 11, 1).toISOString());
+  });
+
+  it("leaves out a date that is empty or not a day", async () => {
+    const http = stubFetch({ body: { sessions: [] } });
+    await listSessions({ createdFrom: "", createdTo: "soon" });
+    expect(new URL(http.url()).search).toBe("");
+  });
+
   it("pins with a JSON body", async () => {
     const http = stubFetch({ body: { id: "s1", pinned: true } });
     await pinSession("s1", true);

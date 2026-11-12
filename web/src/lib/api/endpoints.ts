@@ -24,6 +24,17 @@ export interface SessionFilters {
   chip?: string;
   printer?: string;
   pinned?: boolean;
+  /** The first day to include, as a local `YYYY-MM-DD`. */
+  createdFrom?: string;
+  /** The last day to include, as a local `YYYY-MM-DD`. */
+  createdTo?: string;
+}
+
+/** The instant a local calendar day starts, `offsetDays` later, as an RFC 3339 time. */
+function dayStart(day: string, offsetDays = 0): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date + offsetDays).toISOString();
 }
 
 export function listSessions(filters: SessionFilters = {}, signal?: AbortSignal) {
@@ -31,6 +42,11 @@ export function listSessions(filters: SessionFilters = {}, signal?: AbortSignal)
   if (filters.chip) url.searchParams.set("chip", filters.chip);
   if (filters.printer) url.searchParams.set("printer", filters.printer);
   if (filters.pinned !== undefined) url.searchParams.set("pinned", String(filters.pinned));
+  const from = filters.createdFrom ? dayStart(filters.createdFrom) : null;
+  // The daemon's `created_to` is exclusive, so the last day included ends where the next starts.
+  const to = filters.createdTo ? dayStart(filters.createdTo, 1) : null;
+  if (from) url.searchParams.set("created_from", from);
+  if (to) url.searchParams.set("created_to", to);
   return apiJson<SessionList>(url, { signal });
 }
 

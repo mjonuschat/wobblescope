@@ -17,7 +17,7 @@ import type { OutcomeKind } from "@/lib/generated/OutcomeKind";
 
 import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { ImportDialog } from "./ImportDialog";
-import { ColumnFilter, type FilterColumn } from "./SessionFilters";
+import { ColumnFilter, DateFilter, type FilterColumn } from "./SessionFilters";
 
 const PIN_HINTS = {
   pin: "Never delete this session to make room for new ones.",
@@ -121,7 +121,11 @@ export function SessionsPage() {
       <Table>
         <TableHeader className="bg-muted/40">
           <TableRow className="hover:bg-transparent">
-            <TableHead className={head}>Session</TableHead>
+            <TableHead className={head}>
+              <span className="inline-flex items-center gap-1">
+                Session <DateFilter filters={filters} onChange={setFilters} />
+              </span>
+            </TableHead>
             <TableHead className={head}>Source</TableHead>
             <TableHead className={head}>Mode</TableHead>
             <TableHead className={head}>

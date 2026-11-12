@@ -1,6 +1,8 @@
 import { ListFilterIcon } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SessionFilters as Filters } from "@/lib/api/endpoints";
@@ -78,24 +80,68 @@ export function ColumnFilter({ column, filters, onChange, all }: Props & { colum
     ];
     change = (next) => onChange({ ...filters, pinned: next === ALL ? undefined : next === "true" });
   }
-  const active = value !== ALL;
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Filter ${label}`}
-            className={active ? "bg-primary/15 text-primary hover:bg-primary/25" : "text-muted-foreground"}
-          />
-        }
-      >
-        <ListFilterIcon />
-      </PopoverTrigger>
+      <FilterTrigger label={label} active={value !== ALL} />
       <PopoverContent>
         <Choice label={label} everything={everything} value={value} options={options} onChange={change} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function FilterTrigger({ label, active }: { label: string; active: boolean }) {
+  return (
+    <PopoverTrigger
+      render={
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Filter ${label}`}
+          className={active ? "bg-primary/15 text-primary hover:bg-primary/25" : "text-muted-foreground"}
+        />
+      }
+    >
+      <ListFilterIcon />
+    </PopoverTrigger>
+  );
+}
+
+/** A local `YYYY-MM-DD` as a date at local midnight. */
+function parseDay(day: string | undefined): Date | undefined {
+  const match = day ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(day) : null;
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : undefined;
+}
+
+function formatDay(date: Date | undefined): string | undefined {
+  if (!date) return undefined;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+}
+
+/** Limits the list to sessions created between two days, both included. */
+export function DateFilter({ filters, onChange }: Pick<Props, "filters" | "onChange">) {
+  const from = parseDay(filters.createdFrom);
+  const to = parseDay(filters.createdTo);
+  const active = Boolean(from || to);
+  const choose = (range: DateRange | undefined) =>
+    onChange({ ...filters, createdFrom: formatDay(range?.from), createdTo: formatDay(range?.to) });
+  return (
+    <Popover>
+      <FilterTrigger label="Created" active={active} />
+      <PopoverContent className="w-auto space-y-2 p-0">
+        <Calendar mode="range" selected={from ? { from, to } : undefined} onSelect={choose} defaultMonth={from} />
+        {active && (
+          <div className="flex items-center justify-between gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
+            <span>
+              {filters.createdFrom ?? "…"} to {filters.createdTo ?? filters.createdFrom ?? "…"}
+            </span>
+            <Button type="button" variant="outline" size="xs" onClick={() => choose(undefined)}>
+              Clear dates
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

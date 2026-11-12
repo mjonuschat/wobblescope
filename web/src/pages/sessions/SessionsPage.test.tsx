@@ -71,6 +71,33 @@ describe("the sessions page", () => {
     );
   });
 
+  it("requests a date range picked on the calendar and clears it", async () => {
+    const calls = api();
+    renderRoute("/sessions");
+    await screen.findAllByRole("row");
+    fireEvent.click(screen.getByRole("button", { name: "Filter Created" }));
+    const now = new Date();
+    const day = (date: number) =>
+      document.querySelector<HTMLElement>(
+        `[data-day="${new Date(now.getFullYear(), now.getMonth(), date).toLocaleDateString()}"]`,
+      );
+    await waitFor(() => expect(day(3)).not.toBeNull());
+    fireEvent.click(day(3) as HTMLElement);
+    fireEvent.click(day(5) as HTMLElement);
+    const ranged = () =>
+      calls.some(
+        (c) =>
+          c.url.pathname.endsWith("/sessions") &&
+          c.url.searchParams.get("created_from") === new Date(now.getFullYear(), now.getMonth(), 3).toISOString() &&
+          c.url.searchParams.get("created_to") === new Date(now.getFullYear(), now.getMonth(), 6).toISOString(),
+      );
+    await waitFor(() => expect(ranged()).toBe(true));
+    expect(screen.getByRole("button", { name: "Filter Created" }).className).toContain("text-primary");
+    fireEvent.click(screen.getByRole("button", { name: "Clear dates" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Clear dates" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Filter Created" }).className).not.toContain("text-primary");
+  });
+
   it("keeps the column filters when a filter matches nothing, and marks the active one", async () => {
     stubApi(({ url }) => {
       const path = url.pathname.replace(/^.*\/api\//, "");
