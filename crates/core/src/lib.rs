@@ -7,6 +7,7 @@ pub mod fit;
 pub mod multichip;
 pub mod numeric;
 pub mod psd;
+pub mod resonance;
 pub mod samples;
 pub mod score;
 pub mod shaper;

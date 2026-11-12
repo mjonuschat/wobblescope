@@ -425,3 +425,54 @@ pub fn energy_between(s: &RawSamples, range: std::ops::Range<f64>) -> f64 {
     };
     var(&s.x) + var(&s.y) + var(&s.z)
 }
+
+#[derive(Deserialize)]
+pub struct OraclePeak {
+    pub freq: f64,
+    pub level: f64,
+    pub above_effect: bool,
+}
+
+#[derive(Deserialize)]
+pub struct OracleDataset {
+    pub name: String,
+    pub fr: f64,
+    pub zeta: Option<f64>,
+    pub peaks: Vec<OraclePeak>,
+    pub detect_threshold: f64,
+    pub effect_threshold: f64,
+}
+
+#[derive(Deserialize)]
+pub struct OraclePerformance {
+    pub name: Option<String>,
+    pub shown: bool,
+}
+
+#[derive(Deserialize)]
+pub struct OracleCase {
+    pub datasets: Vec<OracleDataset>,
+    pub performance: OraclePerformance,
+}
+
+#[derive(Deserialize)]
+pub struct OracleEdge {
+    pub name: String,
+    pub freq_bins: Vec<f64>,
+    pub psd: Vec<f64>,
+    pub peaks: Vec<OraclePeak>,
+    pub detect_threshold: f64,
+    pub effect_threshold: f64,
+}
+
+/// Shake&Tune's own results for the golden inputs; see `golden/shaketune.py`.
+#[derive(Deserialize)]
+pub struct Oracle {
+    pub pin: String,
+    pub cases: BTreeMap<String, OracleCase>,
+    pub edge_cases: Vec<OracleEdge>,
+}
+
+pub fn shaketune() -> Oracle {
+    serde_json::from_str(include_str!("../golden/shaketune.json")).unwrap()
+}
