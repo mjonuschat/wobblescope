@@ -155,7 +155,8 @@ pub struct Settings {
     pub stream_max_hz: f64,
     /// The address the daemon listens on.
     pub listen: SocketAddr,
-    /// The addresses and networks whose `X-Forwarded-For` the daemon believes.
+    /// The addresses and networks whose `Forwarded`, `X-Forwarded-For` and `X-Real-IP` headers
+    /// the daemon believes.
     pub trusted_proxies: Vec<Net>,
     /// The host names, lowercase, that the `Host` check admits besides the ones Moonraker's
     /// lists imply.

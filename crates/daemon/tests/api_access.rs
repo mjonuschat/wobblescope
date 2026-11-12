@@ -422,6 +422,70 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
 }
 
 #[tokio::test]
+async fn forwarded_and_x_real_ip_name_the_client_behind_a_proxy() {
+    let rig = rig(&["127.0.0.1"], &[]);
+    rig.publish(real_policy());
+    let ask = |header: &'static str, value: &'static str| {
+        let rig = &rig;
+        async move {
+            let (status, body) = rig
+                .ask(
+                    "127.0.0.1",
+                    "GET",
+                    "/api/status",
+                    &[("host", HOST), (header, value)],
+                )
+                .await;
+            (status, code(&body).to_owned())
+        }
+    };
+    assert_eq!(ask("forwarded", "for=192.168.1.20").await.0, StatusCode::OK);
+    assert_eq!(
+        ask(
+            "forwarded",
+            "for=\"[::ffff:192.168.1.20]:4711\";proto=https"
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        ask("forwarded", "for=203.0.113.9").await,
+        (StatusCode::FORBIDDEN, "untrusted_client".to_owned())
+    );
+    assert_eq!(
+        ask("forwarded", "for=_hidden").await,
+        (StatusCode::FORBIDDEN, "untrusted_client".to_owned())
+    );
+    assert_eq!(ask("x-real-ip", "192.168.1.20").await.0, StatusCode::OK);
+    assert_eq!(
+        ask("x-real-ip", "203.0.113.9").await,
+        (StatusCode::FORBIDDEN, "untrusted_client".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn forwarding_headers_that_disagree_are_refused_even_when_one_names_a_trusted_client() {
+    let rig = rig(&["127.0.0.1"], &[]);
+    rig.publish(real_policy());
+    let (status, body) = rig
+        .ask(
+            "127.0.0.1",
+            "GET",
+            "/api/status",
+            &[
+                ("host", HOST),
+                ("x-forwarded-for", "192.168.1.20"),
+                ("x-real-ip", "203.0.113.9"),
+            ],
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code(&body), "untrusted_client");
+    assert!(body.to_string().contains("different clients"), "{body}");
+}
+
+#[tokio::test]
 async fn without_proxies_the_forwarded_header_is_ignored_and_warned_about_once() {
     let rig = rig(&[], &[]);
     rig.publish(real_policy());

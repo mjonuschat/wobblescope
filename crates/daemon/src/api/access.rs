@@ -11,13 +11,11 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use super::error::ApiError;
-use crate::access::client::{host_allowed, resolve_client, same_origin};
+use crate::access::client::{ForwardingHeaders, host_allowed, resolve_client, same_origin};
 use crate::access::names::Names;
 use crate::access::policy::Net;
 use crate::access::{AccessState, Policy};
 use crate::moonraker::Moonraker;
-
-const FORWARDED_FOR: &str = "x-forwarded-for";
 
 /// What the guard needs: Moonraker's published lists and the daemon's own settings. Clones
 /// share the once-only warning.
@@ -31,7 +29,7 @@ pub struct AccessGuard {
 }
 
 impl AccessGuard {
-    /// A guard that reads the access state from `moonraker`, trusts `X-Forwarded-For` only from
+    /// A guard that reads the access state from `moonraker`, trusts the forwarding headers only from
     /// `proxies`, and admits the host names `allowed_hosts` (lowercase).
     #[must_use]
     pub fn new(moonraker: Moonraker, proxies: Vec<Net>, allowed_hosts: Vec<String>) -> Self {
@@ -183,22 +181,32 @@ impl AccessGuard {
         }
     }
 
-    /// The client's address: the peer, or the forwarded address when the peer is a proxy.
     fn client(&self, peer: IpAddr, headers: &HeaderMap) -> Result<IpAddr, ApiError> {
-        let forwarded: Vec<&str> = headers
-            .get_all(FORWARDED_FOR)
-            .iter()
-            .map(|v| v.to_str().unwrap_or_default())
-            .collect();
-        let refusal = || ApiError::UntrustedClient {
-            message: "X-Forwarded-For holds something that is not an IP address".to_owned(),
+        let values = |name: &str| -> Vec<&str> {
+            headers
+                .get_all(name)
+                .iter()
+                .map(|v| v.to_str().unwrap_or_default())
+                .collect()
         };
-        let client = resolve_client(peer, &forwarded, &self.proxies).map_err(|_| refusal())?;
+        let forwarded = values("forwarded");
+        let x_forwarded_for = values("x-forwarded-for");
+        let x_real_ip = values("x-real-ip");
+        let forwarding = ForwardingHeaders {
+            forwarded: &forwarded,
+            x_forwarded_for: &x_forwarded_for,
+            x_real_ip: &x_real_ip,
+        };
+        let client = resolve_client(peer, &forwarding, &self.proxies).map_err(|error| {
+            ApiError::UntrustedClient {
+                message: error.to_string(),
+            }
+        })?;
         if client.ignored_forwarded && !self.warned_forwarded.swap(true, Ordering::Relaxed) {
             tracing::warn!(
-                "a request from {peer} carries X-Forwarded-For, which is ignored because {peer} \
-                 is not in trusted_proxies; if a reverse proxy runs there, list it in \
-                 trusted_proxies"
+                "a request from {peer} carries Forwarded, X-Forwarded-For or X-Real-IP, which \
+                 is ignored because {peer} is not in trusted_proxies; if a reverse proxy runs \
+                 there, list it in trusted_proxies"
             );
         }
         Ok(client.ip)
