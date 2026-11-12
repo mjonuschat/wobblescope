@@ -29,6 +29,16 @@ describe("readFileName", () => {
     expect(r.stamp).toBeUndefined();
     expect(r.stampToken).toBeUndefined();
   });
+  it("a_timestamp_in_a_name_without_the_klipper_prefix_is_read", () => {
+    const r = readFileName("chip-a_20261111_045236.csv");
+    expect(r.stampToken).toBe("20261111_045236");
+    expect(r.stamp).toEqual(new Date(2026, 10, 11, 4, 52, 36));
+    expect(r.axis).toBeUndefined();
+    expect(r.point).toBeUndefined();
+  });
+  it("an_impossible_timestamp_in_an_unprefixed_name_gives_no_stamp", () => {
+    expect(readFileName("run_20261345_999999.csv")).toEqual({});
+  });
 });
 
 describe("guessChip", () => {

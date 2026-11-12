@@ -41,6 +41,14 @@ describe("addFiles", () => {
     expect(state.map((g) => g.entries.length)).toEqual([2, 1, 1]);
   });
 
+  it("unprefixed_files_with_the_same_stamp_share_a_group", () => {
+    const state = add([csv("chip-a_20261111_045236.csv"), csv("chip-b_20261111_045236.csv")]);
+    expect(state).toHaveLength(1);
+    expect(state[0].createdAt).toEqual(new Date(2026, 10, 11, 4, 52, 36));
+    expect(state[0].entries.map((e) => e.axis)).toEqual(["", ""]);
+    expect(problems(state[0]).filter((p) => p.text === "Choose an axis.")).toHaveLength(2);
+  });
+
   it("the_group_date_is_the_stamp_else_now", () => {
     const state = add([csv(A), csv("one.csv")]);
     expect(state[0].createdAt).toEqual(new Date(2026, 10, 11, 4, 52, 36));

@@ -42,17 +42,19 @@ function readStamp(text: string): { stamp: Date; stampToken: string } | undefine
   return valid ? { stamp, stampToken: token } : undefined;
 }
 
-/** Reads the axis, probe point and time from a Klipper raw file name, by its base name. */
+/** Reads the axis and probe point from a Klipper raw file name, and the time from any name, by its base name. */
 export function readFileName(name: string): FileNameReading {
+  const reading: FileNameReading = {};
   const parts = afterAxis(name);
-  if (!parts) return {};
-  const reading: FileNameReading = { axis: parts.axis };
-  const tokens = parts.rest.split("_");
-  for (let i = 0; i + 3 <= tokens.length; i++) {
-    const w = tokens.slice(i, i + 3);
-    if (w.every((t) => THREE_DECIMALS.test(t))) {
-      reading.point = [Number(w[0]), Number(w[1]), Number(w[2])];
-      break;
+  if (parts) {
+    reading.axis = parts.axis;
+    const tokens = parts.rest.split("_");
+    for (let i = 0; i + 3 <= tokens.length; i++) {
+      const w = tokens.slice(i, i + 3);
+      if (w.every((t) => THREE_DECIMALS.test(t))) {
+        reading.point = [Number(w[0]), Number(w[1]), Number(w[2])];
+        break;
+      }
     }
   }
   const stamp = readStamp(stem(name));
