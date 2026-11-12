@@ -1,0 +1,196 @@
+name: CI
+# One definition of every check and of the three static builds. Pull requests run the checks.
+# A push to main also builds the binaries. release.yml calls this workflow with `dist: true`,
+# so a tag runs the same checks and builds as main before anything is drafted.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_call:
+    inputs:
+      dist:
+        description: Build the release binaries
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# A new push to a pull request replaces its running checks; main and tag runs always finish.
+# The group name differs from release.yml's so a called run is never cancelled by its caller.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The release commit that `cargo release` pushes is built again by the tag run it creates
+  # together with it, so main's own run of that commit is skipped.
+  changes:
+    name: Changed files
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(release):') && github.ref_type == 'branch') }}
+    outputs:
+      dependencies: ${{ steps.filter.outputs.dependencies }}
+    steps:
+      # Only pull requests are filtered. Pushes, tags and the weekly run always check the
+      # dependencies, which is how a new advisory is found.
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "dependencies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files" --jq '.[].filename')
+          if printf '%s\n' "$files" | grep -Eq '(^|/)Cargo\.toml$|^Cargo\.lock$|^deny\.toml$'; then
+            echo "dependencies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dependencies=false" >> "$GITHUB_OUTPUT"
+          fi
+    permissions:
+      contents: read
+      pull-requests: read
+
+  lints:
+    name: Lints
+    needs: [changes]
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all -- --check
+      # Also type-checks every target, so a separate `cargo check` would add nothing.
+      - run: cargo clippy --all-targets --locked -- -D warnings
+
+  test:
+    name: Test suite
+    needs: [changes]
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked
+
+  # cargo-deny covers the RustSec advisories, so cargo-audit would repeat it.
+  deny:
+    name: Dependency check
+    needs: [changes]
+    if: ${{ needs.changes.outputs.dependencies == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  web-check:
+    name: Web checks
+    needs: [changes]
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+      - run: pnpm --dir web build:wasm
+      - run: pnpm --dir web format:check
+      - run: pnpm --dir web lint:check
+      - run: pnpm --dir web test
+
+  # The built app, which the daemon embeds. The binaries wait only for this job, not for the
+  # web checks, which run beside them.
+  web-build:
+    name: Web build
+    needs: [changes]
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+      - run: pnpm --dir web build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 14
+
+  dist:
+    name: Dist (${{ matrix.build }})
+    needs: [web-build]
+    if: ${{ inputs.dist || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [x86_64-linux, aarch64-linux, armv7l-linux]
+        include:
+          # `asset` is the exact name Moonraker's release_info.json asks for. `wobblescope setup`
+          # derives it from the binary's own architecture, so these three names must not change.
+          - build: x86_64-linux
+            target: x86_64-unknown-linux-musl
+            asset: wobblescope-x86_64
+            strip: strip
+          - build: aarch64-linux
+            target: aarch64-unknown-linux-musl
+            asset: wobblescope-aarch64
+            strip: aarch64-linux-gnu-strip
+          - build: armv7l-linux
+            target: armv7-unknown-linux-musleabihf
+            asset: wobblescope-armv7
+            strip: arm-linux-gnueabihf-strip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - name: Install ARM binary tools
+        if: matrix.build != 'x86_64-linux'
+        run: sudo apt-get update && sudo apt-get install -y binutils-aarch64-linux-gnu binutils-arm-linux-gnueabihf
+      - name: Build binary
+        run: cross build --target ${{ matrix.target }} --release --locked -p wobblescope
+      - name: Verify static binary
+        run: |
+          BINARY="target/${{ matrix.target }}/release/wobblescope"
+          if readelf --dynamic "$BINARY" | grep --quiet '(NEEDED)'; then
+            echo "$BINARY has dynamic library dependencies."
+            exit 1
+          fi
+      - name: Strip and name the binary as its release asset
+        run: |
+          mkdir dist
+          cp "target/${{ matrix.target }}/release/wobblescope" "dist/${{ matrix.asset }}"
+          ${{ matrix.strip }} --strip-unneeded "dist/${{ matrix.asset }}"
+          chmod +x "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: asset-${{ matrix.build }}
+          path: dist/${{ matrix.asset }}
+          retention-days: 14

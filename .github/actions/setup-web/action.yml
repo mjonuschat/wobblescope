@@ -1,0 +1,29 @@
+name: Set up the web app
+description: Rust with the wasm target, wasm-bindgen at the locked version, Node, pnpm and the web dependencies.
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: web
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+    - name: Read the locked wasm-bindgen version
+      id: wasm-bindgen
+      shell: bash
+      run: echo "version=$(awk '/^name = "wasm-bindgen"$/ {getline; gsub(/[^0-9.]/, "", $3); print $3; exit}' Cargo.lock)" >> "$GITHUB_OUTPUT"
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-bindgen@${{ steps.wasm-bindgen.outputs.version }}
+    - uses: pnpm/action-setup@v6
+      with:
+        version: 10
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: web/pnpm-lock.yaml
+    - run: pnpm --dir web install --frozen-lockfile
+      shell: bash
