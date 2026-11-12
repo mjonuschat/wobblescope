@@ -195,7 +195,7 @@ export function problems(group: ImportGroupState): ImportProblem[] {
       found.push({ entryId: e.id, text: "The point must be three numbers: x, y, z." });
     }
     if (e.chip.trim() !== "" && e.axis !== "" && point !== "invalid") {
-      const key = JSON.stringify([e.chip, e.axis, point]);
+      const key = JSON.stringify([e.chip.trim(), e.axis, point]);
       if (seen.has(key)) {
         found.push({ entryId: e.id, text: "Another file has the same chip, axis and point." });
       }

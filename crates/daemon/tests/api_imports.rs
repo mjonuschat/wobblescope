@@ -206,7 +206,7 @@ async fn a_missing_chip_or_axis_is_refused_naming_the_file() {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let message = body_json(&body)["message"].as_str().unwrap().to_owned();
         assert!(message.contains(word), "{message}");
-        assert!(message.contains("file 2"), "{message}");
+        assert!(message.contains("b.csv"), "{message}");
     }
 }
 
@@ -413,4 +413,44 @@ async fn a_request_without_the_ui_header_is_refused_as_cross_origin_like_other_w
     let (status, _, body) = send(&app, request_with(body, false)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body_json(&body)["error"], "cross_origin");
+}
+
+#[tokio::test]
+async fn a_wrong_content_type_is_refused_with_the_json_error_shape() {
+    let dir = TempDir::new().unwrap();
+    let (s, _) = open(dir.path(), BIG);
+    let app = app(Some(s));
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/imports")
+        .header("content-type", "text/plain")
+        .header("x-wobblescope-client", "1")
+        .body(Body::from("nope"))
+        .unwrap();
+    let (status, _, body) = send(&app, request).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body_json(&body)["error"], "invalid_request");
+}
+
+#[tokio::test]
+async fn a_file_part_without_a_filename_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (s, _) = open(dir.path(), BIG);
+    let app = app(Some(s));
+    let mut body = multipart_body(&session(&[csv("a", "X")]), &[]);
+    body.truncate(body.len() - format!("--{BOUNDARY}--\r\n").len());
+    body.extend_from_slice(
+        format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\n{CSV}\r\n--{BOUNDARY}--\r\n"
+        )
+        .as_bytes(),
+    );
+    let (status, _, body) = send(&app, request_with(body, true)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(&body)["message"]
+            .as_str()
+            .unwrap()
+            .contains("no file name")
+    );
 }

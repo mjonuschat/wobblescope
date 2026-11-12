@@ -1,6 +1,6 @@
 use axum::Json;
-use axum::extract::Multipart;
 use axum::extract::multipart::{Field, MultipartError};
+use axum::extract::{FromRequest, Multipart, Request};
 use axum::http::StatusCode;
 use serde::Deserialize;
 use time::OffsetDateTime;
@@ -27,11 +27,7 @@ struct FileSpec {
 }
 
 fn multipart_error(e: &MultipartError) -> ApiError {
-    if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
-        too_large()
-    } else {
-        ApiError::invalid(e.body_text())
-    }
+    multipart_error_text(e.status(), e.body_text())
 }
 
 /// The most bytes the `session` part may hold; 16 entries need far less.
@@ -68,10 +64,32 @@ async fn read_file(field: &mut Field<'_>, total: &mut usize) -> Result<Vec<u8>, 
     Ok(bytes)
 }
 
+/// `axum::extract::Multipart` that rejects with the JSON error body.
+pub(super) struct ApiMultipart(Multipart);
+
+impl<S: Send + Sync> FromRequest<S> for ApiMultipart {
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, ApiError> {
+        Multipart::from_request(req, state)
+            .await
+            .map(Self)
+            .map_err(|r| multipart_error_text(r.status(), r.body_text()))
+    }
+}
+
+fn multipart_error_text(status: StatusCode, text: String) -> ApiError {
+    if status == StatusCode::PAYLOAD_TOO_LARGE {
+        too_large()
+    } else {
+        ApiError::invalid(text)
+    }
+}
+
 pub(super) async fn import(
     Store(storage): Store,
     permit: ImportPermit,
-    mut multipart: Multipart,
+    ApiMultipart(mut multipart): ApiMultipart,
 ) -> Result<(StatusCode, Json<Summary>), ApiError> {
     let mut first = multipart
         .next_field()
@@ -116,19 +134,21 @@ pub(super) async fn import(
         }
         let name = field
             .file_name()
-            .map_or_else(|| format!("file {n}"), str::to_owned);
+            .filter(|f| !f.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| ApiError::invalid(format!("file {n}: the part has no file name")))?;
         let chip = spec
             .chip
             .filter(|c| !c.is_empty())
-            .ok_or_else(|| ApiError::invalid(format!("file {n}: chip is required")))?;
+            .ok_or_else(|| ApiError::invalid(format!("{name}: chip is required")))?;
         let axis = spec
             .axis
-            .ok_or_else(|| ApiError::invalid(format!("file {n}: axis is required")))?;
+            .ok_or_else(|| ApiError::invalid(format!("{name}: axis is required")))?;
         let axis = parse_axis(&axis)
-            .map_err(|_| ApiError::invalid(format!("file {n}: axis must be x or y")))?;
+            .map_err(|_| ApiError::invalid(format!("{name}: axis must be x or y")))?;
         if spec.point.is_some_and(|p| p.iter().any(|v| !v.is_finite())) {
             return Err(ApiError::invalid(format!(
-                "file {n}: point must be three finite numbers"
+                "{name}: point must be three finite numbers"
             )));
         }
         let bytes = read_file(&mut field, &mut total).await?;

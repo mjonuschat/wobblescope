@@ -264,6 +264,51 @@ describe("importing", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("shows the busy and cap_exceeded wording from the daemon", async () => {
+    api(() => ({ status: 409, body: { error: "busy", message: "Slot taken." } }));
+    await openDialog();
+    addFiles(X1);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(importButton());
+    expect(
+      (await inDialog().findAllByText(/Another import is running\. Try again in a moment\. Slot taken\./)).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows the sizes when the storage cap is exceeded", async () => {
+    api(() => ({
+      status: 507,
+      body: {
+        error: "cap_exceeded",
+        message: "No room.",
+        need: 2 * 1024 * 1024,
+        cap: 1024 * 1024,
+        pinned_bytes: 0,
+        evictable_bytes: 0,
+      },
+    }));
+    await openDialog();
+    addFiles(X1);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(importButton());
+    expect(
+      (await inDialog().findAllByText(/No room\. The import needs 2 MiB and the cap is 1 MiB\./)).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("reopening the dialog starts with no files", async () => {
+    api();
+    await openDialog();
+    addFiles(X1);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(inDialog().getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(await screen.findByRole("button", { name: "Import CSV" }));
+    await screen.findByRole("dialog");
+    expect(cards()).toHaveLength(0);
+    expect(rows()).toHaveLength(0);
+  });
+
   it("a single file imports through the same dialog", async () => {
     const calls = api();
     await openDialog();

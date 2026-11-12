@@ -131,4 +131,42 @@ describe("query hooks", () => {
     expect(client.getQueryState(queryKeys.storage)?.isInvalidated).toBe(true);
     expect(result.current.isRunning).toBe(false);
   });
+
+  it("useImportGroups starts a group only after the one before it has answered", async () => {
+    const { wrapper } = setup();
+    let inFlight = 0;
+    let overlapped = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        inFlight += 1;
+        if (inFlight > 1) overlapped = true;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return new Response(JSON.stringify({ id: "s" }), { status: 201 });
+      }),
+    );
+    const group = (id: string): ImportGroupState => ({
+      id,
+      createdAt: new Date("2026-11-12T10:00:00Z"),
+      confirmed: true,
+      entries: [
+        {
+          id: `${id}-0`,
+          file: new File(["x"], `${id}.csv`),
+          chip: "adxl345",
+          chipGuessed: false,
+          axis: "X" as const,
+          point: "",
+          stampToken: null,
+        },
+      ],
+    });
+    const { result } = renderHook(() => useImportGroups(), { wrapper });
+    await act(async () => {
+      await result.current.run([group("a"), group("b"), group("c")], () => {});
+    });
+    expect(overlapped).toBe(false);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+  });
 });

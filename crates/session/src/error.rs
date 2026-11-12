@@ -107,17 +107,25 @@ pub enum SessionError {
     #[error("no files to import")]
     ImportNoFiles,
     #[error(
-        "chip {chip} appears twice for axis {axis:?} at {point:?}; give the files different points"
+        "chip {chip} appears twice for axis {axis:?} at {}; give the files different points",
+        point_text(point)
     )]
     ImportDuplicate {
         chip: String,
         axis: wobblescope_core::fit::Axis,
         point: Option<[f64; 3]>,
     },
-    #[error("these files were not recorded in the same run")]
+    #[error("chips {chip_a} and {chip_b} on axis {axis:?} were not recorded in the same run")]
     ImportNotSameRun {
         chip_a: String,
         chip_b: String,
         axis: wobblescope_core::fit::Axis,
     },
+}
+
+fn point_text(point: &Option<[f64; 3]>) -> String {
+    point.map_or_else(
+        || "no point".to_owned(),
+        |p| format!("point {}, {}, {}", p[0], p[1], p[2]),
+    )
 }

@@ -130,7 +130,7 @@ fn chips_with_non_overlapping_time_ranges_in_one_segment_are_refused() {
     assert!(matches!(err, SessionError::ImportNotSameRun { .. }));
     assert_eq!(
         err.to_string(),
-        "these files were not recorded in the same run"
+        "chips a and b on axis X were not recorded in the same run"
     );
     assert!(build_klipper_group(&request(), apart(0.0, 0.5)).is_ok());
 

@@ -102,7 +102,7 @@ export function importGroup(group: ImportGroupState, signal?: AbortSignal) {
     if (point === "invalid") {
       throw new Error(`The point of ${entry.file.name} is not three numbers`);
     }
-    return { chip: entry.chip, axis: entry.axis ? entry.axis.toLowerCase() : null, point };
+    return { chip: entry.chip.trim(), axis: entry.axis ? entry.axis.toLowerCase() : null, point };
   });
   const form = new FormData();
   const spec = { created_at: group.createdAt.toISOString(), files };
