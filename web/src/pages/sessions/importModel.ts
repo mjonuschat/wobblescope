@@ -1,5 +1,6 @@
 import type { Axis } from "@/lib/generated/Axis";
 import { guessChip, isCsv, parsePointText, readFileName } from "@/lib/importFiles";
+import { formatBytes } from "@/lib/format";
 
 export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
 /** The daemon refuses a request with more files than this. */
@@ -160,10 +161,6 @@ export function groupBytes(group: ImportGroupState): number {
   return group.entries.reduce((sum, e) => sum + e.file.size, 0);
 }
 
-function megabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-}
-
 export function problems(group: ImportGroupState): ImportProblem[] {
   const found: ImportProblem[] = [];
   const seen = new Set<string>();
@@ -195,7 +192,7 @@ export function problems(group: ImportGroupState): ImportProblem[] {
   if (bytes > MAX_IMPORT_BYTES) {
     found.push({
       entryId: null,
-      text: `The files total ${megabytes(bytes)}. The limit is ${megabytes(MAX_IMPORT_BYTES)}.`,
+      text: `The files total ${formatBytes(bytes)}. The limit is ${formatBytes(MAX_IMPORT_BYTES)}.`,
     });
   }
   return found;
