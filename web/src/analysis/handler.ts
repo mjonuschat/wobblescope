@@ -60,6 +60,9 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
       analysis,
       snippets: {
         worstCase: snippet(analysis.worst_case),
+        worstCasePerformance: analysis.worst_case?.for_performance
+          ? module.config_snippet({ ...analysis.worst_case, best: analysis.worst_case.for_performance }, request.axis)
+          : null,
         perChip: analysis.per_chip.map((chip) => candidates(chip.recommendation)),
       },
     };

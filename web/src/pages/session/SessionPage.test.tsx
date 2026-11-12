@@ -27,6 +27,7 @@ function result(a: Analysis, perChip: (string | null)[]): AnalysisResult {
     analysis: a,
     snippets: {
       worstCase: a.worst_case ? SNIPPET : null,
+      worstCasePerformance: null,
       perChip: perChip.map((snippet, i) =>
         snippet === null ? null : (a.per_chip[i]?.recommendation?.all.map(() => snippet) ?? [snippet]),
       ),
@@ -418,6 +419,7 @@ describe("the session view", () => {
           snippets: {
             worst_case: result(a, [SNIPPET, null]).snippets.worstCase,
             per_chip: result(a, [SNIPPET, null]).snippets.perChip,
+            worst_case_performance: result(a, [SNIPPET, null]).snippets.worstCasePerformance,
           },
         },
       ],

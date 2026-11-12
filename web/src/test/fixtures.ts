@@ -60,6 +60,8 @@ export function twoAxisMeta(id = "s1"): SessionMeta {
 export const settings: FitSettings = {
   scv: 5,
   damping_ratio: 0.1,
+  damping_source: "Fixed",
+  resonance_freq: null,
   test_damping_ratios: [0.075, 0.1, 0.15],
   max_smoothing: null,
   max_vibrations: null,
@@ -86,6 +88,7 @@ export function recommendation(best = candidate("mzv", 48.2)): Recommendation {
   return {
     freq_bins: [5, 5.2, 5.4],
     best,
+    for_performance: null,
     all: [candidate("zv", 55), best],
     settings,
     core_version: "0.1.0",
@@ -116,8 +119,8 @@ export function analysis(): Analysis {
   };
   return {
     per_chip: [
-      { chip: "a", health: "Ok", datasets: [[0, data]], windows: [], recommendation: rec },
-      { chip: "b", health: "Degraded", datasets: [[0, data]], windows: [], recommendation: null },
+      { chip: "a", health: "Ok", datasets: [[0, data]], windows: [], peaks: [], recommendation: rec },
+      { chip: "b", health: "Degraded", datasets: [[0, data]], windows: [], peaks: [], recommendation: null },
     ],
     worst_case: rec,
     worst_case_vibrations: [{ chip: "a", point: 0, vibrs: 0.032 }],

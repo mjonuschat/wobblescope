@@ -24,7 +24,7 @@ function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string
       }`;
     case "damping_ratio":
       return `How quickly the printer's resonance dies out; lower rings longer. ${
-        recorded.damping ? "From the printer's input shaper settings." : "Empty uses 0.1."
+        recorded.damping ? "From the printer's input shaper settings." : "Empty estimates it from the data."
       }`;
     case "max_smoothing":
       return "Skip shapers that round corners more than this. Empty means no limit.";

@@ -6,7 +6,7 @@ import { parseNumber } from "@/lib/parse";
 
 export const defaultFitParams: FitParams = {
   scv: 5,
-  damping_ratio: 0.1,
+  damping_ratio: null,
   max_smoothing: null,
   max_vibrations: null,
   test_damping_ratios: null,

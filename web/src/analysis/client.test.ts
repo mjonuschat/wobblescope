@@ -24,7 +24,10 @@ class FakeWorker implements WorkerLike {
     const response: WorkerResponse = {
       type: "result",
       id,
-      result: { analysis: analysis(), snippets: { worstCase: "s", perChip: [["s"], null] } },
+      result: {
+        analysis: analysis(),
+        snippets: { worstCase: "s", worstCasePerformance: null, perChip: [["s"], null] },
+      },
     };
     this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>);
   }

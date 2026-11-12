@@ -75,7 +75,11 @@ function AxisView({ rid, detail, axis }: { rid: string; detail: ResultDetail; ax
   const { record, meta } = detail;
   const result: AnalysisResult = {
     analysis: axis.analysis,
-    snippets: { worstCase: axis.snippets.worst_case, perChip: axis.snippets.per_chip },
+    snippets: {
+      worstCase: axis.snippets.worst_case,
+      worstCasePerformance: axis.snippets.worst_case_performance,
+      perChip: axis.snippets.per_chip,
+    },
   };
   return (
     <div className="space-y-4">

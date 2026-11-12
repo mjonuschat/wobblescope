@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { analysis, defaultParams, twoAxisMeta } from "@/test/fixtures";
+import { analysis, candidate, defaultParams, twoAxisMeta } from "@/test/fixtures";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
@@ -89,8 +89,22 @@ describe("the worker handler", () => {
     const result = (response as { result: { snippets: unknown } }).result;
     expect(result.snippets).toEqual({
       worstCase: "snippet mzv X",
+      worstCasePerformance: null,
       perChip: [["snippet zv X", "snippet mzv X"], null],
     });
+  });
+
+  it("returns a config snippet for the performance recommendation when there is one", async () => {
+    const withPerformance = () => {
+      const a = analysis();
+      a.worst_case = a.worst_case && { ...a.worst_case, for_performance: candidate("zv", 55) };
+      return a;
+    };
+    const { module } = fakeModule(withPerformance);
+    const handle = createHandler(async () => module);
+    const response = await handle(request({ files: { "c0-s0.zst": bytes(1) } }));
+    const result = (response as { result: { snippets: { worstCasePerformance: string | null } } }).result;
+    expect(result.snippets.worstCasePerformance).toBe("snippet zv X");
   });
 
   it("reuses the handle for a second request on the same session", async () => {

@@ -29,6 +29,8 @@ export interface AnalysisResult {
   analysis: Analysis;
   snippets: {
     worstCase: string | null;
+    /** The snippet of the worst-case recommendation's "for performance" shaper, when it has one. */
+    worstCasePerformance: string | null;
     /**
      * One entry per `analysis.per_chip` entry: null for a chip without a recommendation, else the
      * snippet of each shaper in that recommendation's `all`, in the same order.

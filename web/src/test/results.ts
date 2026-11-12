@@ -35,7 +35,7 @@ export function resultDetail(over: { coreVersion?: string } = {}): ResultDetail 
         {
           axis: "X",
           analysis: saved,
-          snippets: { worst_case: SAVED_SNIPPET, per_chip: [[SAVED_SNIPPET], null] },
+          snippets: { worst_case: SAVED_SNIPPET, per_chip: [[SAVED_SNIPPET], null], worst_case_performance: null },
         },
       ],
       manifest: {},

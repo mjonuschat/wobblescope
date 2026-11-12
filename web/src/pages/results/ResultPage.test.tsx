@@ -19,7 +19,10 @@ vi.mock("@/components/charts/EChart", () => ({
 }));
 
 function fresh(a: Analysis): AnalysisResult {
-  return { analysis: a, snippets: { worstCase: "fresh snippet", perChip: [["fresh snippet"], null] } };
+  return {
+    analysis: a,
+    snippets: { worstCase: "fresh snippet", worstCasePerformance: null, perChip: [["fresh snippet"], null] },
+  };
 }
 
 function serve(detail = resultDetail()) {
@@ -129,7 +132,7 @@ describe("the result page", () => {
     detail.record.axes.push({
       ...detail.record.axes[0],
       axis: "Y",
-      snippets: { worst_case: "y snippet", per_chip: [["y snippet"], null] },
+      snippets: { worst_case: "y snippet", per_chip: [["y snippet"], null], worst_case_performance: null },
     });
     fake.analyze.mockImplementation(pending);
     serve(detail);

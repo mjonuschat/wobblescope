@@ -58,6 +58,7 @@ export function SaveResultButton({ sessionId, meta, axis, params, overrides, res
             analysis: result.analysis,
             snippets: {
               worst_case: result.snippets.worstCase,
+              worst_case_performance: result.snippets.worstCasePerformance,
               per_chip: result.snippets.perChip,
             },
           },
