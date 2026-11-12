@@ -1,5 +1,7 @@
 //! Converting a Klipper raw CSV (`OUTPUT=raw_data`) into a session.
 
+use std::collections::HashMap;
+
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
@@ -51,18 +53,209 @@ pub struct Imported {
 /// [`SessionError::TooManySamples`], or a metadata error such as an invalid id.
 pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Imported, SessionError> {
     let samples = parse_klipper_csv(text)?;
-    let n = samples.len();
+    let mut group = build_klipper_group(
+        &GroupRequest {
+            id: request.id.clone(),
+            created_at: request.created_at.clone(),
+        },
+        vec![ImportFile {
+            chip_name: request.chip_name.clone(),
+            axis: request.axis,
+            point: request.point,
+            file_name: request.original_file_name.clone(),
+            samples,
+        }],
+    )?;
+    let file = group.meta.segments[0].files[0].clone();
+    let samples = group.take(&file)?;
+    Ok(Imported {
+        meta: group.meta,
+        samples,
+    })
+}
+
+/// One parsed file of a group, with what the caller knows about its recording.
+#[derive(Debug, Clone)]
+pub struct ImportFile {
+    /// Klipper config section name of the chip that recorded the file.
+    pub chip_name: String,
+    /// Test axis the file was recorded for.
+    pub axis: Axis,
+    /// Probe point in machine coordinates, when known.
+    pub point: Option<[f64; 3]>,
+    /// Name of the imported file, kept in the metadata.
+    pub file_name: Option<String>,
+    /// The parsed samples.
+    pub samples: RawSamples,
+}
+
+/// What a group of files shares: the new session's id and creation time.
+#[derive(Debug, Clone)]
+pub struct GroupRequest {
+    /// Id for the new session; see [`crate::meta::validate_session_id`].
+    pub id: String,
+    /// Creation time as an RFC 3339 UTC string.
+    pub created_at: String,
+}
+
+/// A session built from several files: its metadata and the samples of every file, which
+/// [`ImportedGroup::take`] hands out one file at a time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportedGroup {
+    /// Validated metadata.
+    pub meta: SessionMeta,
+    samples: HashMap<String, RawSamples>,
+    sample_count: u64,
+}
+
+impl ImportedGroup {
+    /// Moves out the samples stored for `file.sample_file`.
+    ///
+    /// # Errors
+    /// [`SessionError::Invalid`] when the group holds no samples under that name, which includes
+    /// a file already taken.
+    pub fn take(&mut self, file: &SegmentFile) -> Result<RawSamples, SessionError> {
+        self.samples
+            .remove(&file.sample_file)
+            .ok_or_else(|| SessionError::Invalid {
+                field: "sample_file".to_owned(),
+                reason: format!("no samples held for {}", file.sample_file),
+            })
+    }
+
+    /// Total number of samples over all files of the group, whether taken or not.
+    pub fn sample_count(&self) -> u64 {
+        self.sample_count
+    }
+}
+
+/// Builds one session from parsed files.
+///
+/// Chips, probe points and segments are listed in order of first appearance. A segment is one
+/// (axis, point) pair, and an unknown point equals only another unknown point. Each file keeps
+/// the single-file importer's rules: health `Unknown`, coverage `Complete`, no window. A chip's
+/// `observed_rate_hz` is the median rate of its first file.
+///
+/// # Errors
+/// [`SessionError::ImportNoFiles`] for an empty list, [`SessionError::ImportDuplicate`] when a
+/// chip appears twice in one segment, [`SessionError::ImportNotSameRun`] when two chips in a
+/// segment have time ranges that do not overlap, or a metadata error such as an invalid id.
+pub fn build_klipper_group(
+    request: &GroupRequest,
+    files: Vec<ImportFile>,
+) -> Result<ImportedGroup, SessionError> {
+    if files.is_empty() {
+        return Err(SessionError::ImportNoFiles);
+    }
+    let names: Vec<String> = files.iter().filter_map(|f| f.file_name.clone()).collect();
+    let single_name = if files.len() == 1 {
+        names.first().cloned()
+    } else {
+        None
+    };
     let mut notes = Vec::new();
-    if request.point.is_none() {
+    if files.iter().any(|f| f.point.is_none()) {
         notes.push("The probe point is unknown: Klipper's raw CSV does not record it.".to_owned());
     }
+
+    let mut chips: Vec<ChipMeta> = Vec::new();
+    let mut points: Vec<ProbePoint> = Vec::new();
+    let mut segments: Vec<SegmentMeta> = Vec::new();
+    // Time range of each file per segment, parallel to `segments[..].files`.
+    let mut ranges: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut stored = HashMap::new();
+    let mut sample_count = 0u64;
+
+    for file in files {
+        let chip = match chips.iter().position(|c| c.name == file.chip_name) {
+            Some(i) => i,
+            None => {
+                chips.push(ChipMeta {
+                    name: file.chip_name.clone(),
+                    chip_type: None,
+                    nominal_rate_hz: None,
+                    observed_rate_hz: median_rate(&file.samples.t),
+                    axes_map: None,
+                    mounting: None,
+                    health: Health::Unknown,
+                    health_notes: vec![
+                        "Imported from a CSV: capture health is unknown.".to_owned(),
+                    ],
+                });
+                chips.len() - 1
+            }
+        };
+        let point = match points.iter().position(|p| p.position == file.point) {
+            Some(i) => i,
+            None => {
+                points.push(ProbePoint {
+                    position: file.point,
+                });
+                points.len() - 1
+            }
+        };
+        let segment = match segments
+            .iter()
+            .position(|s| s.axis == file.axis && s.point == point as u32)
+        {
+            Some(i) => i,
+            None => {
+                segments.push(SegmentMeta {
+                    axis: file.axis,
+                    point: point as u32,
+                    window: None,
+                    files: Vec::new(),
+                });
+                ranges.push(Vec::new());
+                segments.len() - 1
+            }
+        };
+        if segments[segment]
+            .files
+            .iter()
+            .any(|f| f.chip as usize == chip)
+        {
+            return Err(SessionError::ImportDuplicate {
+                chip: file.chip_name,
+                axis: file.axis,
+                point: file.point,
+            });
+        }
+        let n = file.samples.len();
+        let (Some(&first), Some(&last)) = (file.samples.t.first(), file.samples.t.last()) else {
+            return Err(SessionError::CsvTooShort { found: 0 });
+        };
+        let range = (first, last);
+        for (other, other_range) in segments[segment].files.iter().zip(&ranges[segment]) {
+            if range.0 > other_range.1 || other_range.0 > range.1 {
+                return Err(SessionError::ImportNotSameRun {
+                    chip_a: chips[other.chip as usize].name.clone(),
+                    chip_b: file.chip_name,
+                    axis: file.axis,
+                });
+            }
+        }
+        let sample_file = sample_file_name(chip, segment);
+        segments[segment].files.push(SegmentFile {
+            chip: chip as u32,
+            sample_file: sample_file.clone(),
+            sample_count: n as u32,
+            coverage: Coverage::Complete,
+            health: None,
+            health_notes: Vec::new(),
+        });
+        ranges[segment].push(range);
+        sample_count += n as u64;
+        stored.insert(sample_file, file.samples);
+    }
+
     let meta = SessionMeta {
         format_version: FORMAT_VERSION,
         id: request.id.clone(),
         created_at: request.created_at.clone(),
         source: Source::CsvImport {
-            original_file_name: request.original_file_name.clone(),
-            original_file_names: request.original_file_name.iter().cloned().collect(),
+            original_file_name: single_name,
+            original_file_names: names,
         },
         time_domain: TimeDomain::KlipperPrintTime,
         mode: None,
@@ -70,35 +263,16 @@ pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Importe
         printer: None,
         outcome: Outcome::Complete,
         notes,
-        probe_points: vec![ProbePoint {
-            position: request.point,
-        }],
-        chips: vec![ChipMeta {
-            name: request.chip_name.clone(),
-            chip_type: None,
-            nominal_rate_hz: None,
-            observed_rate_hz: median_rate(&samples.t),
-            axes_map: None,
-            mounting: None,
-            health: Health::Unknown,
-            health_notes: vec!["Imported from a CSV: capture health is unknown.".to_owned()],
-        }],
-        segments: vec![SegmentMeta {
-            axis: request.axis,
-            point: 0,
-            window: None,
-            files: vec![SegmentFile {
-                chip: 0,
-                sample_file: sample_file_name(0, 0),
-                sample_count: n as u32,
-                coverage: Coverage::Complete,
-                health: None,
-                health_notes: Vec::new(),
-            }],
-        }],
+        probe_points: points,
+        chips,
+        segments,
     };
     meta.validate()?;
-    Ok(Imported { meta, samples })
+    Ok(ImportedGroup {
+        meta,
+        samples: stored,
+        sample_count,
+    })
 }
 
 fn row_error(line: usize, reason: impl Into<String>) -> SessionError {
