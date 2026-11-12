@@ -20,6 +20,7 @@ pub const ABS_PEAK_TOL: f64 = 1e-12;
 pub const NEAR_TIE_MARGIN: f64 = 0.01;
 
 /// Runs the wrapped test on both native and wasm32.
+#[allow(unused_macros)]
 macro_rules! parity_test {
     ($(#[$m:meta])* fn $name:ident() $body:block) => {
         $(#[$m])*
@@ -226,7 +227,8 @@ pub fn normalized(name: &str) -> wobblescope_core::CalibrationData {
 pub fn fit_params(p: &Params) -> wobblescope_core::fit::FitParams {
     wobblescope_core::fit::FitParams {
         scv: p.scv,
-        damping_ratio: p.damping_ratio,
+        // Klipper's goldens fix the ratio; `None` there is its default 0.1, not an estimate.
+        damping_ratio: p.damping_ratio.or(Some(0.1)),
         max_smoothing: p.max_smoothing,
         max_vibrations: p.max_vibrations,
         test_damping_ratios: p.test_damping_ratios.clone(),
@@ -475,4 +477,12 @@ pub struct Oracle {
 
 pub fn shaketune() -> Oracle {
     serde_json::from_str(include_str!("../golden/shaketune.json")).unwrap()
+}
+
+/// Klipper's default fit: the damping ratio fixed at 0.1.
+pub fn klipper_params() -> wobblescope_core::fit::FitParams {
+    wobblescope_core::fit::FitParams {
+        damping_ratio: Some(0.1),
+        ..Default::default()
+    }
 }

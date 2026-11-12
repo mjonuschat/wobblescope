@@ -1,5 +1,6 @@
 //! Shaper fitting and recommendation, ported from Klipper's `fit_shaper` and
-//! `find_best_shaper` (parity mode: damping fixed, frequency searched in 0.2 Hz steps).
+//! `find_best_shaper` (frequency searched in 0.2 Hz steps). The damping ratio is fixed by the
+//! caller, or estimated from the data as Shake&Tune does (see [`crate::resonance`]).
 
 use std::borrow::Cow;
 
@@ -7,10 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
 use crate::error::CoreError;
+use crate::multichip::estimation_psd;
 use crate::numeric::{InterpPlan, arange};
 use crate::psd::{CalibrationData, MAX_FREQ};
+use crate::resonance::{DampingEstimate, FALLBACK_DAMPING, estimate_damping};
 use crate::score::{find_max_accel, remaining_vibrations, shaper_smoothing};
-use crate::shaper::{AUTOTUNE_SHAPERS, DEFAULT_DAMPING_RATIO, Shaper, builtin};
+use crate::shaper::{AUTOTUNE_SHAPERS, Shaper, builtin};
 
 /// Damping ratios the robustness check is evaluated across.
 pub const TEST_DAMPING_RATIOS: [f64; 3] = [0.075, 0.1, 0.15];
@@ -20,14 +23,16 @@ pub const MAX_SHAPER_FREQ: f64 = 150.0;
 pub const FREQ_STEP: f64 = 0.2;
 const SMOOTHING_ACCEL: f64 = 5000.0;
 
-/// Caller-supplied fitting parameters. `None` selects Klipper's default.
+/// Caller-supplied fitting parameters. `None` selects the default; for `damping_ratio` that is
+/// the estimate from the data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct FitParams {
     /// Square corner velocity in mm/s used for smoothing.
     pub scv: f64,
-    /// Damping ratio the shaper is built with (default 0.1).
+    /// Damping ratio the shaper is built with. `None` estimates it from the data (Shake&Tune's
+    /// method, 0.1 when there is no estimate). `Some` fixes it and must be above 0 and below 1.
     pub damping_ratio: Option<f64>,
     /// Stop searching higher frequencies once smoothing exceeds this (mm).
     pub max_smoothing: Option<f64>,
@@ -55,6 +60,31 @@ impl Default for FitParams {
     }
 }
 
+/// Where the damping ratio of a fit came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum DampingSource {
+    /// Set by the caller. A result saved before the estimate existed reads as this.
+    #[default]
+    Fixed,
+    /// Estimated from the data.
+    Estimated,
+    /// There was no usable estimate, so the default 0.1 was used.
+    Fallback,
+}
+
+impl FitParams {
+    /// These parameters as a result saved before the damping ratio could be estimated meant
+    /// them: no ratio, and a ratio of 0, both meant 0.1.
+    #[must_use]
+    pub fn from_legacy(mut self) -> Self {
+        if self.damping_ratio.is_none_or(|d| d == 0.0) {
+            self.damping_ratio = Some(FALLBACK_DAMPING);
+        }
+        self
+    }
+}
+
 /// The effective values a fit used, saved with every result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -63,6 +93,13 @@ pub struct FitSettings {
     pub scv: f64,
     /// Damping ratio the shapers were built with.
     pub damping_ratio: f64,
+    /// Whether it was fixed, estimated or fell back to 0.1.
+    #[serde(default)]
+    pub damping_source: DampingSource,
+    /// Frequency of the strongest resonance the estimate looked at, in Hz. `None` when the ratio
+    /// was fixed.
+    #[serde(default)]
+    pub resonance_freq: Option<f64>,
     /// Damping ratios of the robustness check.
     pub test_damping_ratios: Vec<f64>,
     /// Smoothing limit, if any.
@@ -172,7 +209,7 @@ pub(crate) fn validate_params(p: &FitParams) -> Result<(), CoreError> {
     if !non_negative(p.scv) {
         return Err(invalid("scv", p.scv));
     }
-    if let Some(d) = p.damping_ratio.filter(|d| !ratio(*d)) {
+    if let Some(d) = p.damping_ratio.filter(|d| !(ratio(*d) && *d > 0.0)) {
         return Err(invalid("damping_ratio", d));
     }
     if let Some(bad) = p.test_damping_ratios.iter().flatten().find(|d| !ratio(**d)) {
@@ -219,8 +256,40 @@ fn or_default<T>(v: Option<T>, is_unset: impl Fn(&T) -> bool, default: T) -> T {
     }
 }
 
+/// The ratio shapers are checked with before the data is looked at.
 fn damping_of(params: &FitParams) -> f64 {
-    or_default(params.damping_ratio, |d| *d == 0.0, DEFAULT_DAMPING_RATIO)
+    params.damping_ratio.unwrap_or(FALLBACK_DAMPING)
+}
+
+struct Damping {
+    ratio: f64,
+    source: DampingSource,
+    resonance_freq: Option<f64>,
+}
+
+/// The damping ratio a fit over `data` uses: the caller's, else the estimate from the datasets'
+/// summed PSD, else 0.1. `data` must be normalised and well formed.
+fn resolve_damping(data: &[CalibrationData], params: &FitParams) -> Damping {
+    if let Some(ratio) = params.damping_ratio {
+        return Damping {
+            ratio,
+            source: DampingSource::Fixed,
+            resonance_freq: None,
+        };
+    }
+    let estimate = estimation_psd(data).and_then(|(bins, psd)| estimate_damping(&bins, &psd));
+    match estimate {
+        Some(DampingEstimate { fr, zeta: Some(z) }) if z > 0.0 && z < 1.0 => Damping {
+            ratio: z,
+            source: DampingSource::Estimated,
+            resonance_freq: Some(fr),
+        },
+        other => Damping {
+            ratio: FALLBACK_DAMPING,
+            source: DampingSource::Fallback,
+            resonance_freq: other.map(|e| e.fr),
+        },
+    }
 }
 
 fn test_ratios_of(params: &FitParams) -> Vec<f64> {
@@ -337,7 +406,20 @@ pub fn fit_shaper(
         return Err(CoreError::TooFewSamples { have: 0, need: 1 });
     }
     let data = &*normalised(data);
-    let damping_ratio = damping_of(params);
+    for d in data {
+        validate_dataset(d)?;
+    }
+    let damping = resolve_damping(data, params);
+    fit_with_damping(shaper, data, params, damping.ratio)
+}
+
+/// [`fit_shaper`] for normalised, well formed `data` and a resolved damping ratio.
+fn fit_with_damping(
+    shaper: &dyn Shaper,
+    data: &[CalibrationData],
+    params: &FitParams,
+    damping_ratio: f64,
+) -> Result<ShaperFit, CoreError> {
     let test_ratios = test_ratios_of(params);
     let test_freqs = test_freqs_of(shaper);
     let max_freq = effective_max_freq(params, &test_freqs);
@@ -474,7 +556,14 @@ pub fn find_best_shaper(
 ) -> Result<Recommendation, CoreError> {
     validate_params(params)?;
     validate_shapers(params)?;
+    if data.is_empty() {
+        return Err(CoreError::TooFewSamples { have: 0, need: 1 });
+    }
     let data = &*normalised(data);
+    for d in data {
+        validate_dataset(d)?;
+    }
+    let damping = resolve_damping(data, params);
     let names = shaper_names(params);
     let mut best: Option<CalibrationResult> = None;
     let mut all: Vec<CalibrationResult> = Vec::new();
@@ -488,7 +577,7 @@ pub fn find_best_shaper(
         let ShaperFit {
             freq_bins: grid,
             results: mut fit,
-        } = fit_shaper(shaper, data, params)?;
+        } = fit_with_damping(shaper, data, params, damping.ratio)?;
         // Every shaper's grid starts at the same bin, so the longest holds the others.
         if grid.len() > freq_bins.len() {
             freq_bins = grid;
@@ -535,7 +624,9 @@ pub fn find_best_shaper(
         all,
         settings: FitSettings {
             scv: params.scv,
-            damping_ratio: damping_of(params),
+            damping_ratio: damping.ratio,
+            damping_source: damping.source,
+            resonance_freq: damping.resonance_freq,
             test_damping_ratios: test_ratios_of(params),
             max_smoothing: params.max_smoothing,
             max_vibrations: params.max_vibrations,
@@ -567,6 +658,29 @@ mod tests {
             freq_bins,
             normalized: true,
         }
+    }
+
+    /// A PSD whose strongest bin is the first, so no half-power point lies before it.
+    fn strongest_at_the_start() -> CalibrationData {
+        let freq_bins: Vec<f64> = (0..=400).map(f64::from).collect();
+        let psd_sum: Vec<f64> = freq_bins.iter().map(|f| 1.0 / (1.0 + f)).collect();
+        CalibrationData {
+            name: "falling".to_owned(),
+            psd_x: psd_sum.clone(),
+            psd_y: vec![0.0; freq_bins.len()],
+            psd_z: vec![0.0; freq_bins.len()],
+            psd_sum,
+            freq_bins,
+            normalized: true,
+        }
+    }
+
+    #[test]
+    fn no_half_power_point_falls_back_to_a_tenth() {
+        let rec = find_best_shaper(&[strongest_at_the_start()], &FitParams::default()).unwrap();
+        assert_eq!(rec.settings.damping_source, DampingSource::Fallback);
+        assert_eq!(rec.settings.damping_ratio, 0.1);
+        assert_eq!(rec.settings.resonance_freq, Some(0.0));
     }
 
     #[test]

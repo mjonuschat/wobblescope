@@ -1,9 +1,8 @@
 #[macro_use]
 mod common;
 
-use common::{assert_close, case, check_recommendation, load_csv, normalized};
+use common::{assert_close, case, check_recommendation, klipper_params, load_csv, normalized};
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
-use wobblescope_core::fit::FitParams;
 use wobblescope_core::multichip::{analyze, summed_psd};
 
 fn input(chip: &str, health: Health) -> DatasetInput {
@@ -22,7 +21,7 @@ fn input(chip: &str, health: Health) -> DatasetInput {
 
 parity_test! {
     fn worst_case_of_chip_a_and_chip_b_matches_klipper_multi_file_run() {
-        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &FitParams::default())
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &klipper_params())
             .unwrap();
         check_recommendation("worst case", a.worst_case.as_ref().unwrap(), &case("chip_a+chip_b"));
     }
@@ -30,7 +29,7 @@ parity_test! {
 
 parity_test! {
     fn worst_case_vibrations_name_the_dataset_that_sets_the_answer() {
-        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &FitParams::default())
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &klipper_params())
             .unwrap();
         let vibrations = &a.worst_case_vibrations;
         let names: Vec<_> = vibrations.iter().map(|v| (v.chip.as_str(), v.point)).collect();
@@ -38,7 +37,7 @@ parity_test! {
         let largest = vibrations.iter().map(|v| v.vibrs).fold(0.0, f64::max);
         assert_eq!(largest, a.worst_case.as_ref().unwrap().best.vibrs);
 
-        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Degraded)], &FitParams::default())
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Degraded)], &klipper_params())
             .unwrap();
         assert_eq!(a.worst_case_vibrations.len(), 1);
         assert_eq!(a.worst_case_vibrations[0].chip, "chip_a");
@@ -47,7 +46,7 @@ parity_test! {
 
 parity_test! {
     fn per_chip_recommendations_match_single_file_runs() {
-        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &FitParams::default())
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Ok)], &klipper_params())
             .unwrap();
         for (chip, analysis) in ["chip_a", "chip_b"].iter().zip(&a.per_chip) {
             assert_eq!(&analysis.chip, chip);
@@ -78,7 +77,7 @@ parity_test! {
 
 parity_test! {
     fn degraded_chip_is_absent_from_worst_case_but_its_psd_is_still_returned() {
-        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Degraded)], &FitParams::default())
+        let a = analyze(&[input("chip_a", Health::Ok), input("chip_b", Health::Degraded)], &klipper_params())
             .unwrap();
         check_recommendation("worst case", a.worst_case.as_ref().unwrap(), &case("chip_a"));
         assert!(a.per_chip[1].recommendation.is_none());
@@ -106,7 +105,7 @@ parity_test! {
         for axis in ["x", "y"] {
             let a = analyze(
                 &[real_input("adxl345", axis), real_input("ebb36", axis)],
-                &FitParams::default(),
+                &klipper_params(),
             )
             .unwrap();
             check_recommendation(
