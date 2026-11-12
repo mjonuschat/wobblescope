@@ -11,7 +11,7 @@ ts = ["dep:ts-rs", "wobblescope-session/ts"]
 
 [dependencies]
 clap = { version = "4.5.58", default-features = false, features = ["derive", "std", "help", "usage", "error-context", "suggestions"] }
-axum = { version = "0.8.9", features = ["ws"] }
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 mime_guess = "2.0.5"
 regex = "1.13.1"

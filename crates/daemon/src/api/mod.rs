@@ -4,6 +4,7 @@
 mod access;
 mod error;
 mod hold;
+mod imports;
 mod live;
 mod origin;
 mod printer;
@@ -45,6 +46,9 @@ use crate::storage::Storage;
 /// The largest CSV an import accepts. A Klipper raw row is about 49 bytes, so this holds about
 /// 430 seconds at 3.2 kHz.
 const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
+
+/// The most files one `POST /api/imports` request may carry.
+const MAX_GROUP_FILES: usize = 16;
 
 const RESULT_LIMIT: usize = 16 * 1024 * 1024;
 
@@ -237,6 +241,10 @@ pub fn mount_configured(
             post(sessions::import)
                 .layer(DefaultBodyLimit::max(IMPORT_LIMIT))
                 .get(sessions::list),
+        )
+        .route(
+            "/imports",
+            post(imports::import).layer(DefaultBodyLimit::max(IMPORT_LIMIT + 1024 * 1024)),
         )
         .route(
             "/sessions/{id}",

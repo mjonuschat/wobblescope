@@ -151,7 +151,7 @@ pub struct ImportQuery {
     pub file_name: Option<String>,
 }
 
-fn parse_axis(text: &str) -> Result<Axis, ApiError> {
+pub(super) fn parse_axis(text: &str) -> Result<Axis, ApiError> {
     match text.to_ascii_lowercase().as_str() {
         "x" => Ok(Axis::X),
         "y" => Ok(Axis::Y),

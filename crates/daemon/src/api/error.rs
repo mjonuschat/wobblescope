@@ -34,6 +34,10 @@ pub enum ApiError {
     /// The uploaded file is not a valid Klipper raw CSV.
     InvalidCsv {
         message: String,
+        /// Position of the failing file in a multi-file import, from 1.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        file: Option<usize>,
     },
     /// The upload is over the size limit.
     TooLarge {
@@ -264,7 +268,14 @@ impl From<ImportError> for ApiError {
             | ImportError::NoFiles
             | ImportError::BadCreatedAt(_)
             | ImportError::Group(_) => Self::InvalidRequest { message },
-            ImportError::InvalidCsv(_) | ImportError::File { .. } => Self::InvalidCsv { message },
+            ImportError::InvalidCsv(_) => Self::InvalidCsv {
+                message,
+                file: None,
+            },
+            ImportError::File { index, .. } => Self::InvalidCsv {
+                message,
+                file: Some(index),
+            },
             ImportError::NoFreeId => Self::Internal { message },
             ImportError::Storage(e) => e.into(),
         }
