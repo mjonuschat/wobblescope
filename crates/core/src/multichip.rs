@@ -92,7 +92,7 @@ pub struct DatasetVibration {
 pub struct ChipAnalysis {
     /// Chip name.
     pub chip: String,
-    /// Worst health among the chip's inputs (`Degraded` > `Unknown` > `Ok`).
+    /// Worst health among the chip's inputs (`Degraded` > `Ok`).
     pub health: Health,
     /// Normalised PSD of every input, keyed by probe point, eligible or not.
     pub datasets: Vec<(usize, CalibrationData)>,

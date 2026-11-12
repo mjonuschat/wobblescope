@@ -12,7 +12,7 @@ export type ChipAnalysis = {
  */
 chip: string, 
 /**
- * Worst health among the chip's inputs (`Degraded` > `Unknown` > `Ok`).
+ * Worst health among the chip's inputs (`Degraded` > `Ok`).
  */
 health: Health, 
 /**

@@ -8,41 +8,24 @@ use crate::samples::RawSamples;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Health {
-    /// No problems detected.
+    /// No problems detected. Sessions stored before `Unknown` was removed read back as `Ok`.
+    #[serde(alias = "Unknown")]
     Ok,
     /// Problems detected; the data is not trusted.
     Degraded,
-    /// The chip type cannot report health; analysed with a warning.
-    Unknown,
 }
 
 impl Health {
-    /// The health a capture earns: `Degraded` when a problem was seen, else `Ok` when the chip
-    /// reports counters that could have shown one, else `Unknown`.
+    /// The health a capture earns: `Degraded` when a problem was seen, else `Ok`.
     #[must_use]
-    pub fn judged(degraded: bool, counters_seen: bool) -> Self {
-        if degraded {
-            Self::Degraded
-        } else if counters_seen {
-            Self::Ok
-        } else {
-            Self::Unknown
-        }
+    pub fn judged(degraded: bool) -> Self {
+        if degraded { Self::Degraded } else { Self::Ok }
     }
 
-    /// The lower of two healths: `Degraded` beats `Unknown`, which beats `Ok`.
+    /// The lower of two healths: `Degraded` beats `Ok`.
     #[must_use]
     pub fn worse(self, other: Self) -> Self {
-        let rank = |h| match h {
-            Self::Ok => 0,
-            Self::Unknown => 1,
-            Self::Degraded => 2,
-        };
-        if rank(other) > rank(self) {
-            other
-        } else {
-            self
-        }
+        if other == Self::Degraded { other } else { self }
     }
 }
 
@@ -138,10 +121,7 @@ pub fn select_eligible(inputs: &[DatasetInput]) -> (Vec<usize>, Eligibility) {
             blockers.push(format!("incomplete coverage: {missing}"));
         }
         blockers.extend(input.exclusions.iter().cloned());
-        let mut reasons = blockers.clone();
-        if input.health == Health::Unknown {
-            reasons.push("unknown capture health".to_owned());
-        }
+        let reasons = blockers.clone();
         let decision = match (blockers.is_empty(), input.include_override) {
             (true, _) => Decision::Included,
             (false, true) => Decision::Overridden,

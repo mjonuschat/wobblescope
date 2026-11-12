@@ -12,16 +12,14 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
-use wobblescope_core::numeric::median_rate;
+use wobblescope_core::numeric::{long_gaps, median_rate};
+use wobblescope_core::signal::value_problems;
 use wobblescope_session::codec::MAX_SAMPLES;
 
 use super::availability::OpenChip;
 use crate::lock::lock;
 use crate::moonraker::bridge::{Batch, Bridge, Event};
 use crate::moonraker::chips::ChipType;
-
-/// A gap longer than this many median sample intervals inside a window degrades a chip.
-const GAP_FACTOR: f64 = 3.0;
 
 /// The most often a chip's signal level is sent, as sample time between events, in seconds.
 const LEVEL_PERIOD: f64 = 0.25;
@@ -52,8 +50,7 @@ pub struct ChipSegmentReport {
     pub coverage: Coverage,
     /// Whether this segment shows a problem: counters rose, or a gap sits inside the window.
     pub degraded: bool,
-    /// The segment's health on its own: `Degraded` as above, `Ok` for a chip that reports
-    /// counters, `Unknown` for one that does not.
+    /// The segment's health on its own: `Degraded` as above, else `Ok`.
     pub health: Health,
     /// What was seen, one line each.
     pub notes: Vec<String>,
@@ -74,8 +71,8 @@ pub struct Taken {
 /// A chip's health over the whole test.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChipSummary {
-    /// `Ok` and `Degraded` as the counters and gaps show; `Unknown` for a chip type without
-    /// counters whose timestamps were clean.
+    /// `Degraded` when a counter rose or the timestamps, gaps or sample cap showed a problem in
+    /// any segment, else `Ok`. A chip without counters is judged on the rest.
     pub health: Health,
     /// The notes of every segment that showed a problem.
     pub notes: Vec<String>,
@@ -92,7 +89,6 @@ struct Inner {
     overflows: Option<u64>,
     base_errors: Option<u64>,
     base_overflows: Option<u64>,
-    counters_seen: bool,
     // Aggregates across taken segments.
     degraded: bool,
     notes: Vec<String>,
@@ -263,7 +259,7 @@ impl Recorder {
     #[must_use]
     pub fn summary(&self) -> ChipSummary {
         let i = lock(&self.shared.inner);
-        let health = Health::judged(i.degraded, i.counters_seen);
+        let health = Health::judged(i.degraded);
         let mut rates = i.rates.clone();
         rates.sort_by(f64::total_cmp);
         ChipSummary {
@@ -279,7 +275,6 @@ impl Shared {
     fn apply(&self, batch: &Batch) {
         let mut i = lock(&self.inner);
         if batch.errors.is_some() || batch.overflows.is_some() {
-            i.counters_seen = true;
             i.errors = batch.errors.or(i.errors);
             i.overflows = batch.overflows.or(i.overflows);
             // The first batch of the connection sets the baseline for the first segment.
@@ -371,19 +366,16 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
     }
 
     let rate = median_rate(&samples.t);
-    if let Some(interval) = rate.map(|r| 1.0 / r) {
-        let limit = interval * GAP_FACTOR;
-        for pair in samples.t.windows(2) {
-            let (a, b) = (pair[0], pair[1]);
-            if b > start && a < end && b - a > limit {
-                degraded = true;
-                notes.push(format!(
-                    "a gap of {:.1} ms at t={a:.3} s, {:.1} times the sample interval",
-                    (b - a) * 1000.0,
-                    (b - a) / interval
-                ));
-            }
-        }
+    let gaps = long_gaps(&samples.t, Some((start, end)));
+    degraded |= !gaps.is_empty();
+    notes.extend(gaps);
+
+    // Only the window is analysed, so only its samples are judged. When the timestamps do not
+    // allow a window, they are already reported above.
+    if let Ok(range) = samples.window(start..end) {
+        let problems = value_problems(&samples.slice(range));
+        degraded |= !problems.is_empty();
+        notes.extend(problems);
     }
 
     let coverage = match (samples.t.first(), samples.t.last()) {
@@ -415,9 +407,10 @@ fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentRe
         },
     };
     if i.capped {
+        degraded = true;
         notes.push("the segment hit the sample limit and the rest was dropped".to_owned());
     }
-    let health = Health::judged(degraded, i.counters_seen);
+    let health = Health::judged(degraded);
     ChipSegmentReport {
         coverage,
         degraded,

@@ -75,8 +75,8 @@ async fn push(
                 [
                     from + (n + k) as f64 * step,
                     1.0 + (k % 7) as f64,
-                    0.5,
-                    9800.0,
+                    0.5 + (k % 5) as f64,
+                    9800.0 + (k % 3) as f64,
                 ]
             })
             .collect();
@@ -111,7 +111,7 @@ async fn five_seconds_around_a_window_are_complete_ok_and_at_the_right_rate() {
 }
 
 #[tokio::test]
-async fn clean_timestamps_without_counters_give_unknown_health() {
+async fn clean_timestamps_without_counters_give_ok_health() {
     let fake = FakeMoonraker::start().await;
     let rec = recorder(&fake).await;
     rec.begin_segment();
@@ -119,7 +119,7 @@ async fn clean_timestamps_without_counters_give_unknown_health() {
     let taken = rec.take(20.5, 22.5);
     assert_eq!(taken.report.coverage, Coverage::Complete);
     assert!(!taken.report.degraded);
-    assert_eq!(rec.summary().health, Health::Unknown);
+    assert_eq!(rec.summary().health, Health::Ok);
 }
 
 #[tokio::test]
@@ -246,7 +246,14 @@ async fn push_edited(
 ) {
     let step = 1.0 / RATE;
     let mut rows: Vec<[f64; 4]> = (0..3200)
-        .map(|k| [from + k as f64 * step, 0.0, 0.0, 9800.0])
+        .map(|k| {
+            [
+                from + k as f64 * step,
+                (k % 7) as f64,
+                (k % 5) as f64,
+                9800.0 + (k % 3) as f64,
+            ]
+        })
         .collect();
     edit(&mut rows);
     fake.bridge().push("adxl345", &rows, Some((0, 0)));
@@ -330,7 +337,7 @@ async fn levels_arrive_at_most_four_times_a_second() {
     let mut n = 0;
     while let Ok(level) = rx.try_recv() {
         assert_eq!(level.chip, "adxl345");
-        assert!(level.rms[0] > 0.0 && level.rms[2] < 1e-6);
+        assert!(level.rms[0] > 0.0 && level.rms[2] < 1.0);
         n += 1;
     }
     // Five seconds of sample time: four a second, and the first batch opens the count.
@@ -348,4 +355,40 @@ async fn a_closed_connection_is_reported_and_wakes_a_waiter() {
         rec.wait_past(1e9, Duration::from_secs(1)).await,
         Err(Missing::Closed(_))
     ));
+}
+
+#[tokio::test]
+async fn bad_values_outside_the_window_do_not_degrade_the_segment() {
+    let fake = FakeMoonraker::start().await;
+    let rec = recorder(&fake).await;
+    rec.begin_segment();
+    push_edited(&fake, &rec, 20.0, |rows| {
+        for row in rows.iter_mut().take(300) {
+            row[3] = 100_000.0;
+        }
+    })
+    .await;
+    let taken = rec.take(20.2, 20.9);
+    assert!(!taken.report.degraded, "{:?}", taken.report.notes);
+    assert_eq!(taken.report.health, Health::Ok);
+}
+
+#[tokio::test]
+async fn bad_values_inside_the_window_degrade_the_segment() {
+    let fake = FakeMoonraker::start().await;
+    let rec = recorder(&fake).await;
+    rec.begin_segment();
+    push_edited(&fake, &rec, 20.0, |rows| {
+        for row in rows.iter_mut().skip(1000) {
+            row[3] = 100_000.0;
+        }
+    })
+    .await;
+    let taken = rec.take(20.2, 20.9);
+    assert_eq!(taken.report.health, Health::Degraded);
+    assert!(
+        taken.report.notes.iter().any(|n| n.contains("gravity")),
+        "{:?}",
+        taken.report.notes
+    );
 }

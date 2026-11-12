@@ -92,7 +92,7 @@ fn real_input(chip: &str, axis: &str) -> DatasetInput {
         chip: chip.to_owned(),
         point: 0,
         samples: load_csv(&format!("ws_{axis}_{chip}")),
-        health: Health::Unknown,
+        health: Health::Ok,
         coverage: Coverage::Complete,
         include_override: false,
         window: None,

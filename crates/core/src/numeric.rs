@@ -43,6 +43,32 @@ pub fn median_rate(t: &[f64]) -> Option<f64> {
     rate.is_finite().then_some(rate)
 }
 
+/// A gap longer than this many median sample intervals degrades a recording.
+pub const GAP_FACTOR: f64 = 3.0;
+
+/// One note per gap in `t` longer than [`GAP_FACTOR`] median sample intervals. Only gaps overlapping `window` (start, end) count; `None` checks the
+/// whole recording. Empty when no sample rate can be derived.
+pub fn long_gaps(t: &[f64], window: Option<(f64, f64)>) -> Vec<String> {
+    let Some(interval) = median_rate(t).map(|r| 1.0 / r) else {
+        return Vec::new();
+    };
+    let limit = interval * GAP_FACTOR;
+    t.windows(2)
+        .filter(|w| {
+            let in_window = window.is_none_or(|(start, end)| w[1] > start && w[0] < end);
+            in_window && w[1] - w[0] > limit
+        })
+        .map(|w| {
+            format!(
+                "a gap of {:.1} ms at t={:.3} s, {:.1} times the sample interval",
+                (w[1] - w[0]) * 1000.0,
+                w[0],
+                (w[1] - w[0]) / interval
+            )
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Place {
     /// The query is NaN, so the result is too.

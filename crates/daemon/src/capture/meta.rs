@@ -85,7 +85,7 @@ pub fn initial(
                 observed_rate_hz: Some(c.observed_rate_hz),
                 axes_map: c.axes_map.clone(),
                 mounting: None,
-                health: Health::Unknown,
+                health: Health::Ok,
                 health_notes: Vec::new(),
             })
             .collect(),

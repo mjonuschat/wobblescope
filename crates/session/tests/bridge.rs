@@ -329,9 +329,9 @@ parity_test! {
 parity_test! {
     fn a_recording_without_stored_health_takes_its_chips() {
         let w = win();
-        let m = two_axis_meta(&w, Health::Unknown, None, None);
+        let m = two_axis_meta(&w, Health::Ok, None, None);
         let inputs = dataset_inputs(&m, Axis::X, loader(vec![("c0-s0.zst", &w.adxl)])).unwrap();
-        assert_eq!(inputs[0].health, Health::Unknown);
+        assert_eq!(inputs[0].health, Health::Ok);
     }
 }
 

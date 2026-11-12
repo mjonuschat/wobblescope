@@ -10,6 +10,7 @@ pub mod psd;
 pub mod samples;
 pub mod score;
 pub mod shaper;
+pub mod signal;
 pub mod spectrum;
 
 pub use error::CoreError;

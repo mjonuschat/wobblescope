@@ -3,4 +3,4 @@
 /**
  * Capture health of a chip for a test.
  */
-export type Health = "Ok" | "Degraded" | "Unknown";
+export type Health = "Ok" | "Degraded";

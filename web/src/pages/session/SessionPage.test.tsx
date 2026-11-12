@@ -63,17 +63,16 @@ async function openSaveDialog() {
 }
 
 describe("the session view", () => {
-  it("covers AE3: an imported session shows the unknown-health warning and a copyable snippet", async () => {
+  it("covers AE3: an imported session shows a copyable snippet", async () => {
     const a = analysis();
     a.per_chip = [{ ...a.per_chip[0], chip: "adxl345" }];
-    a.eligibility.decisions = [decision("adxl345", "Included", ["unknown capture health"])];
+    a.eligibility.decisions = [decision("adxl345", "Included", [])];
     fake.analyze.mockResolvedValue(result(a, [SNIPPET]));
     const writeText = vi.fn().mockResolvedValue(undefined);
     clipboard({ writeText });
     serve();
     renderRoute("/sessions/s1");
-    expect(await screen.findByText(/no record of whether samples were dropped/)).toBeTruthy();
-    expect(screen.getAllByText(/shaper_type_x: mzv/).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/shaper_type_x: mzv/)).length).toBeGreaterThan(0);
     const worst = screen.getByRole("region", { name: "Recommended Input Shaper" });
     fireEvent.click(worst.querySelector("button")!);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SNIPPET));

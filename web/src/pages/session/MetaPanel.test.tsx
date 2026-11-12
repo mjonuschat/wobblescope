@@ -79,7 +79,7 @@ describe("the session details", () => {
     expect(screen.getByText(/Segment 2 \(Y, .*\): adxl345, the chip's errors counter rose by 3/)).toBeTruthy();
   });
 
-  it("lists no degraded segment when every recording was fine or unjudged", () => {
+  it("lists no degraded segment when every recording was fine", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
     expect(screen.queryByText("Degraded segments")).toBeNull();
   });

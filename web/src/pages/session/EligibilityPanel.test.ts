@@ -6,8 +6,9 @@ import { explainReason, verdict } from "./EligibilityPanel";
 
 describe("explainReason", () => {
   it("puts the analysis's health reasons in plain words", () => {
-    expect(explainReason("degraded capture health")).toBe("The chip dropped or garbled samples during the capture.");
-    expect(explainReason("unknown capture health")).toContain("no record of whether samples were dropped");
+    expect(explainReason("degraded capture health")).toBe(
+      "The capture looks unreliable: dropped samples, timing gaps or suspect values. The session's health notes say which.",
+    );
   });
 
   it("explains an incomplete capture with what is missing", () => {
@@ -36,17 +37,12 @@ describe("verdict", () => {
     expect(verdict(decision({}))).toEqual({ tone: "good", headline: "Good data", detail: "" });
   });
 
-  it("says an included recording with unknown health cannot be checked", () => {
-    const v = verdict(decision({ reasons: ["unknown capture health"] }));
-    expect(v.tone).toBe("warn");
-    expect(v.headline).toBe("Cannot be checked");
-  });
-
   it("says why a recording was left out, and when it was included by the user", () => {
     expect(verdict(decision({ decision: "Excluded", reasons: ["degraded capture health"] }))).toEqual({
       tone: "bad",
       headline: "Left out",
-      detail: "The chip dropped or garbled samples during the capture.",
+      detail:
+        "The capture looks unreliable: dropped samples, timing gaps or suspect values. The session's health notes say which.",
     });
     expect(verdict(decision({ decision: "Overridden", reasons: ["degraded capture health"] })).headline).toBe(
       "Included at your request",

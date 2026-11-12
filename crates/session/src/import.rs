@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
-use wobblescope_core::numeric::{median_rate, strictly_increasing};
+use wobblescope_core::numeric::{long_gaps, median_rate, strictly_increasing};
+use wobblescope_core::signal::value_problems;
 
 use crate::SessionError;
 use crate::codec::MAX_SAMPLES;
@@ -43,8 +44,11 @@ pub struct Imported {
 
 /// Parses a Klipper raw CSV and builds a session around it.
 ///
-/// The chip's health is `Unknown`, the segment covers the whole file with no window (Klipper
-/// already cut it), and a note says the probe point is unknown unless `request.point` gives it.
+/// An import has no live stream, so it is judged on its own timestamps and values: the chip is
+/// `Degraded` when the file has a gap longer than three median sample intervals or a
+/// sample-value problem (see [`value_problems`]), else `Ok`, and a note names each problem. The
+/// parser already refuses repeated or backward timestamps and files over the sample cap. The
+/// segment covers the whole file with no window (Klipper already cut it), and a note says the probe point is unknown unless `request.point` gives it.
 /// A leading BOM, `\r\n` endings, `#` lines and blank lines are accepted; every other line must
 /// hold four finite numbers, with timestamps strictly increasing.
 ///
@@ -124,7 +128,8 @@ impl ImportedGroup {
 ///
 /// Chips, probe points and segments are listed in order of first appearance. A segment is one
 /// (axis, point) pair, and an unknown point equals only another unknown point. Each file keeps
-/// the single-file importer's rules: health `Unknown`, coverage `Complete`, no window. A chip's
+/// the single-file importer's rules: health judged on the file alone, coverage `Complete`, no
+/// window. A chip's
 /// `observed_rate_hz` is the median rate of its first file.
 ///
 /// # Errors
@@ -168,10 +173,8 @@ pub fn build_klipper_group(
                     observed_rate_hz: median_rate(&file.samples.t),
                     axes_map: None,
                     mounting: None,
-                    health: Health::Unknown,
-                    health_notes: vec![
-                        "Imported from a CSV: capture health is unknown.".to_owned(),
-                    ],
+                    health: Health::Ok,
+                    health_notes: Vec::new(),
                 });
                 chips.len() - 1
             }
@@ -227,13 +230,22 @@ pub fn build_klipper_group(
             }
         }
         let sample_file = sample_file_name(chip, segment);
+        let mut health_notes = long_gaps(&file.samples.t, None);
+        health_notes.extend(value_problems(&file.samples));
+        let health = Health::judged(!health_notes.is_empty());
+        chips[chip].health = chips[chip].health.worse(health);
+        chips[chip].health_notes.extend(
+            health_notes
+                .iter()
+                .map(|n| format!("segment {}: {n}", segment + 1)),
+        );
         segments[segment].files.push(SegmentFile {
             chip: chip as u32,
             sample_file: sample_file.clone(),
             sample_count: n as u32,
             coverage: Coverage::Complete,
-            health: None,
-            health_notes: Vec::new(),
+            health: Some(health),
+            health_notes,
         });
         ranges[segment].push(range);
         sample_count += n as u64;

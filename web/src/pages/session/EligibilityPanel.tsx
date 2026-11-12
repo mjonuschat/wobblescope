@@ -21,10 +21,8 @@ function overridable(analysis: Analysis) {
 }
 
 export function explainReason(reason: string): string {
-  if (reason === "degraded capture health") return "The chip dropped or garbled samples during the capture.";
-  if (reason === "unknown capture health") {
-    return "An imported file has no record of whether samples were dropped.";
-  }
+  if (reason === "degraded capture health")
+    return "The capture looks unreliable: dropped samples, timing gaps or suspect values. The session's health notes say which.";
   const missing = /^incomplete coverage: (.*)$/.exec(reason)?.[1];
   if (missing) return `The capture is incomplete: ${missing}`;
   return reason;
@@ -36,7 +34,6 @@ export function verdict(d: DatasetDecision): { tone: Tone; headline: string; det
   const detail = d.reasons.map(explainReason).join(" ");
   if (d.decision === "Excluded") return { tone: "bad", headline: "Left out", detail };
   if (d.decision === "Overridden") return { tone: "warn", headline: "Included at your request", detail };
-  if (d.reasons.length > 0) return { tone: "warn", headline: "Cannot be checked", detail };
   return { tone: "good", headline: "Good data", detail: "" };
 }
 

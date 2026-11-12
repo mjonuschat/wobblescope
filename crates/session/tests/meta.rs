@@ -138,7 +138,7 @@ parity_test! {
         let meta = SessionMeta::from_json(json).unwrap();
         assert!(meta.mode.is_none() && meta.settings.is_none() && meta.printer.is_none());
         assert!(meta.chips[0].chip_type.is_none());
-        assert_eq!(meta.chips[0].health, Health::Unknown);
+        assert_eq!(meta.chips[0].health, Health::Ok);
     }
 }
 

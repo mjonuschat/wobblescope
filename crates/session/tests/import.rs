@@ -71,7 +71,7 @@ parity_test! {
             chip: "adxl345".to_owned(),
             point: 0,
             samples: real("ws_x_adxl345"),
-            health: Health::Unknown,
+            health: Health::Ok,
             coverage: Coverage::Complete,
             include_override: false,
             window: None,
@@ -107,7 +107,7 @@ parity_test! {
         let m = &imp.meta;
         assert_eq!(m.chips.len(), 1);
         assert_eq!(m.chips[0].name, "lis2dw ebb36");
-        assert_eq!(m.chips[0].health, Health::Unknown);
+        assert_eq!(m.chips[0].health, Health::Ok);
         assert!(m.chips[0].chip_type.is_none() && m.chips[0].nominal_rate_hz.is_none());
         let step = imp.samples.t[1] - imp.samples.t[0];
         let rate = m.chips[0].observed_rate_hz.unwrap();
@@ -305,5 +305,56 @@ parity_test! {
         for (i, v) in variants.iter().enumerate() {
             assert_eq!(parse_klipper_csv(v).unwrap(), base, "variant {i}");
         }
+    }
+}
+
+parity_test! {
+    fn an_import_is_ok_when_clean_and_degraded_with_a_note_for_a_long_gap() {
+        let clean = import_klipper_csv(&text_with(true, "\n", true), &request("c")).unwrap();
+        assert_eq!(clean.meta.chips[0].health, Health::Ok);
+        assert!(clean.meta.chips[0].health_notes.is_empty());
+
+        let mut rows: Vec<String> = (0..20)
+            .map(|i| format!("{:.6},1.0,2.0,3.0", 10.0 + f64::from(i) * 0.001))
+            .collect();
+        rows.extend((20..40).map(|i| format!("{:.6},1.0,2.0,3.0", 10.1 + f64::from(i) * 0.001)));
+        let gappy = import_klipper_csv(&rows.join("\n"), &request("c")).unwrap();
+        assert_eq!(gappy.meta.chips[0].health, Health::Degraded);
+        assert_eq!(gappy.meta.chips[0].health_notes.len(), 1);
+        assert!(gappy.meta.chips[0].health_notes[0].contains("a gap of"));
+    }
+}
+
+parity_test! {
+    fn a_group_judges_each_file_and_degrades_only_the_chip_with_the_problem() {
+        use wobblescope_session::import::{GroupRequest, ImportFile, build_klipper_group};
+        let wave = |gap: bool| {
+            let mut s = RawSamples::default();
+            for i in 0..200 {
+                let t = 10.0 + f64::from(i) * 0.001 + if gap && i >= 100 { 0.1 } else { 0.0 };
+                s.t.push(t);
+                s.x.push((f64::from(i) * 0.37).sin() * 300.0);
+                s.y.push((f64::from(i) * 0.53).cos() * 200.0);
+                s.z.push(9800.0 + (f64::from(i) * 0.11).sin() * 100.0);
+            }
+            s
+        };
+        let file = |chip: &str, gap: bool| ImportFile {
+            chip_name: chip.to_owned(),
+            axis: Axis::X,
+            point: None,
+            file_name: None,
+            samples: wave(gap),
+        };
+        let group = build_klipper_group(
+            &GroupRequest { id: "g1".to_owned(), created_at: "2026-10-31T19:00:00Z".to_owned() },
+            vec![file("a", false), file("b", true)],
+        )
+        .unwrap();
+        let chips = &group.meta.chips;
+        assert_eq!((chips[0].health, chips[1].health), (Health::Ok, Health::Degraded));
+        let files = &group.meta.segments[0].files;
+        assert_eq!(files[0].health, Some(Health::Ok));
+        assert_eq!(files[1].health, Some(Health::Degraded));
     }
 }
