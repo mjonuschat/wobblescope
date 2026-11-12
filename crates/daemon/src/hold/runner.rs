@@ -253,11 +253,10 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
     if let Some(left) = quarantine {
         failures.push(quarantine_failure(left));
     }
-    if !failures.is_empty() {
-        return Err(Refusal::Checks(failures));
-    }
-    let permit =
-        permit.ok_or_else(|| failure("no_test_running", "another test is already running"))?;
+    let permit = match permit {
+        Some(permit) if failures.is_empty() => permit,
+        _ => return Err(Refusal::Checks(failures)),
+    };
     let control = deps.moonraker.control().ok_or_else(|| {
         failure(
             "moonraker_connected",

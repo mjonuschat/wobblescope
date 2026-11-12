@@ -16,7 +16,6 @@ interface Props {
 
 /** How much time the canvas shows, in milliseconds. */
 export const SPAN_MS = 60_000;
-/** The distance between ticks on the time axis, in seconds. */
 const TIME_TICK_SECONDS = 5;
 const WIDTH = 640;
 const HEIGHT = 160;
@@ -30,7 +29,6 @@ export function frequencyTicks(maxHz: number): number[] {
   return ticks;
 }
 
-/** The times to label, in seconds before now, from the oldest to 0. */
 export function timeTicks(): number[] {
   const count = SPAN_MS / 1000 / TIME_TICK_SECONDS;
   return Array.from({ length: count + 1 }, (_, i) => (count - i) * TIME_TICK_SECONDS);

@@ -52,7 +52,6 @@ interface Props {
   streaming: boolean;
 }
 
-/** Starts, changes and stops a held excitation. */
 export function HoldPanel({ hold, frequencyOfInterest, streaming }: Props) {
   const settings = useSettings();
   const [axis, setAxis] = useState<HoldAxis>("X");

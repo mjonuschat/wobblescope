@@ -1,4 +1,3 @@
-/** How near a labelled peak a click has to be to pick that peak, in Hz. */
 const SNAP_HZ = 3;
 
 /**

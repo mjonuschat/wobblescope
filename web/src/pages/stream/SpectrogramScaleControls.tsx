@@ -11,7 +11,6 @@ interface Props {
   max: string;
   onMin: (text: string) => void;
   onMax: (text: string) => void;
-  /** The scale in use, which the colour bar shows. */
   scale: ColourScale;
 }
 
@@ -19,7 +18,6 @@ const level = (logPower: number) => (10 ** logPower).toExponential(1);
 
 const GRADIENT = `linear-gradient(to right, ${RAMP.map(([r, g, b]) => `rgb(${r} ${g} ${b})`).join(", ")})`;
 
-/** Auto or fixed colour limits for the spectrograms, and a bar showing the range in use. */
 export function SpectrogramScaleControls({ auto, onAuto, min, max, onMin, onMax, scale }: Props) {
   const shown = (typed: string, logPower: number) => (auto ? String(Number((10 ** logPower).toPrecision(2))) : typed);
   return (

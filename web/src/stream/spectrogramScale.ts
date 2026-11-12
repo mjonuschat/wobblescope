@@ -1,8 +1,6 @@
-/** How much history the auto scale looks at, in milliseconds. */
 const SPAN_MS = 60_000;
 /** Bins kept per spectrum for the percentiles. That is enough for them and cheap to sort. */
 const SAMPLES_PER_SPECTRUM = 32;
-/** The auto scale is recomputed once per this many spectra from each chip. */
 const SCALE_EVERY = 10;
 
 /** The colour scale in log10 power: `low` is the dark end and `low + range` the pale end. */
@@ -11,15 +9,12 @@ export interface ColourScale {
   range: number;
 }
 
-/** Where the spectrograms get their colour scale from. One source serves every chip shown. */
 export interface ScaleSource {
   /** Takes a chip's new spectrum, as log10 power, and returns the scale to draw its column with. */
   columnScale(chip: string, at: number, logPsd: number[]): ColourScale;
-  /** The scale in use now, for the colour bar. */
   current(): ColourScale;
 }
 
-/** The value below which `fraction` of the sorted values lie. */
 function percentile(sorted: number[], fraction: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(fraction * sorted.length))];
 }
@@ -67,7 +62,6 @@ export function fixedScale(lowPsd: number, highPsd: number): ScaleSource {
   return { columnScale: () => scale, current: () => scale };
 }
 
-/** Dark blue, through purple and orange, to pale yellow. */
 export const RAMP: [number, number, number][] = [
   [10, 10, 60],
   [90, 20, 120],
