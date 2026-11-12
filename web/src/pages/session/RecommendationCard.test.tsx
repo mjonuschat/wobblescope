@@ -99,11 +99,20 @@ describe("RecommendationCard", () => {
     expect(shown({ damping_ratio: 0.08, damping_source: "Fixed", resonance_freq: null })).toBe("0.080 (Set)");
   });
 
-  it("shows the resonance frequency only when one was estimated", () => {
+  it("shows the resonance frequency whenever one is known, estimated or not", () => {
     const { rerender } = render(
       <RecommendationCard
         title="t"
         recommendation={withDamping({ damping_source: "Estimated", resonance_freq: 48.4 })}
+        snippet={null}
+      />,
+    );
+    expect(screen.getByText("Resonance")).toBeTruthy();
+    expect(screen.getByText("48.4 Hz")).toBeTruthy();
+    rerender(
+      <RecommendationCard
+        title="t"
+        recommendation={withDamping({ damping_source: "Fallback", resonance_freq: 48.4 })}
         snippet={null}
       />,
     );

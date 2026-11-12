@@ -101,9 +101,7 @@ export function RecommendationCard({
         <Field label="Damping ratio">
           {settings.damping_ratio.toFixed(3)} ({SOURCE_TEXT[settings.damping_source]})
         </Field>
-        {settings.damping_source === "Estimated" && settings.resonance_freq !== null && (
-          <Field label="Resonance">{formatHz(settings.resonance_freq)} Hz</Field>
-        )}
+        {settings.resonance_freq !== null && <Field label="Resonance">{formatHz(settings.resonance_freq)} Hz</Field>}
       </Fields>
     </>
   );
