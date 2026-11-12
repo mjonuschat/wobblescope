@@ -44,6 +44,7 @@ fn request(session_created_at: &str, core_version: &str) -> SaveRequest {
             snippets: Snippets {
                 worst_case: None,
                 per_chip: vec![],
+                worst_case_performance: None,
             },
         }],
     }

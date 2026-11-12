@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use wobblescope::results::container::{ResultError, ResultFile, write_result};
 use wobblescope::results::record::{AxisSnapshot, RESULT_VERSION, ResultRecord, Snippets};
 use wobblescope_core::eligibility::Eligibility;
-use wobblescope_core::fit::{Axis, FitParams};
+use wobblescope_core::fit::{Axis, DampingSource, FitParams};
 use wobblescope_core::multichip::Analysis;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::SessionMeta;
@@ -39,6 +39,7 @@ fn record(manifest: BTreeMap<String, String>) -> ResultRecord {
         snippets: Snippets {
             worst_case: Some("[input_shaper]".to_owned()),
             per_chip: vec![None, Some(vec!["[input_shaper]".to_owned()])],
+            worst_case_performance: None,
         },
     };
     ResultRecord {
@@ -239,7 +240,7 @@ fn refuses_a_newer_version() {
     let path = hostile_with_record(dir.path(), &entries, serde_json::to_vec(&value).unwrap());
     assert!(matches!(
         ResultFile::open(&path),
-        Err(ResultError::TooNew(2))
+        Err(ResultError::TooNew(v)) if v == RESULT_VERSION + 1
     ));
 }
 
@@ -357,4 +358,44 @@ fn refuses_a_name_outside_the_allowlist() {
     entries.push(("notes.txt", vec![1]));
     let path = hostile(dir.path(), &entries);
     assert!(is_format(ResultFile::open(&path)));
+}
+
+fn open_with(version: u32, damping_ratio: Option<f64>) -> ResultRecord {
+    let dir = TempDir::new().unwrap();
+    let entries = good_entries();
+    let mut record = record(manifest_of(&entries));
+    record.fit_params.damping_ratio = damping_ratio;
+    let mut value = serde_json::to_value(record).unwrap();
+    value["version"] = version.into();
+    let path = hostile_with_record(dir.path(), &entries, serde_json::to_vec(&value).unwrap());
+    ResultFile::open(&path).unwrap().record().clone()
+}
+
+#[test]
+fn a_v2_record_with_no_damping_ratio_keeps_it_unset() {
+    assert_eq!(open_with(2, None).fit_params.damping_ratio, None);
+}
+
+#[test]
+fn a_v1_record_reads_a_missing_or_zero_damping_ratio_as_a_tenth() {
+    assert_eq!(open_with(1, None).fit_params.damping_ratio, Some(0.1));
+    assert_eq!(open_with(1, Some(0.0)).fit_params.damping_ratio, Some(0.1));
+    assert_eq!(
+        open_with(1, Some(0.05)).fit_params.damping_ratio,
+        Some(0.05)
+    );
+}
+
+#[test]
+fn a_v1_result_gets_the_defaults_for_the_fields_added_since() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/results/legacy_null.zip");
+    let record = ResultFile::open(&path).unwrap().record().clone();
+    assert_eq!(record.version, 1);
+    let axis = &record.axes[0];
+    let rec = axis.analysis.per_chip[0].recommendation.as_ref().unwrap();
+    assert_eq!(rec.settings.damping_source, DampingSource::Fixed);
+    assert_eq!(rec.settings.resonance_freq, None);
+    assert_eq!(rec.for_performance, None);
+    assert!(axis.analysis.per_chip[0].peaks.is_empty());
+    assert_eq!(axis.snippets.worst_case_performance, None);
 }

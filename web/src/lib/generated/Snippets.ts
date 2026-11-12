@@ -5,4 +5,8 @@ export type Snippets = { worst_case: string | null,
  * For each chip in the order of `Analysis::per_chip`: none without a recommendation, else the
  * snippet of each shaper in that recommendation's `all`, in the same order.
  */
-per_chip: Array<Array<string> | null>, };
+per_chip: Array<Array<string> | null>, 
+/**
+ * The snippet of the worst-case recommendation's "for performance" shaper, when it has one.
+ */
+worst_case_performance: string | null, };

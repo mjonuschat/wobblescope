@@ -6,7 +6,15 @@ use wobblescope_core::multichip::Analysis;
 use wobblescope_session::meta::SessionMeta;
 
 /// Version of [`ResultRecord`]. A reader refuses a newer one.
-pub const RESULT_VERSION: u32 = 1;
+///
+/// Version 2 results come from a core that can estimate the damping ratio, so their
+/// `fit_params.damping_ratio` of `None` means "estimate". In a version 1 record a missing or zero
+/// ratio meant 0.1; see [`FIRST_ESTIMATING_VERSION`].
+pub const RESULT_VERSION: u32 = 2;
+
+/// The first [`ResultRecord`] version whose `fit_params` can ask for an estimated damping ratio.
+/// An older record's `fit_params` is read with `FitParams::from_legacy` when it is opened.
+pub const FIRST_ESTIMATING_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -15,6 +23,9 @@ pub struct Snippets {
     /// For each chip in the order of `Analysis::per_chip`: none without a recommendation, else the
     /// snippet of each shaper in that recommendation's `all`, in the same order.
     pub per_chip: Vec<Option<Vec<String>>>,
+    /// The snippet of the worst-case recommendation's "for performance" shaper, when it has one.
+    #[serde(default)]
+    pub worst_case_performance: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

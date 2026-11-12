@@ -12,9 +12,14 @@ export type Recommendation = {
  */
 freq_bins: Array<number>, 
 /**
- * The recommended shaper.
+ * The recommended shaper (Shake&Tune's "for low vibrations").
  */
 best: CalibrationResult, 
+/**
+ * A shaper that allows a higher acceleration while staying under 5% remaining vibrations,
+ * when there is one (see [`performance_pick`]). One of `all`.
+ */
+for_performance: CalibrationResult | null, 
 /**
  * The fitted result of every evaluated shaper, in evaluation order.
  */

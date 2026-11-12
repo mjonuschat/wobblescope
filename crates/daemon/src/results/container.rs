@@ -18,7 +18,7 @@ use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
-use super::record::{RESULT_VERSION, ResultRecord};
+use super::record::{FIRST_ESTIMATING_VERSION, RESULT_VERSION, ResultRecord};
 
 pub const MAX_ENTRIES: usize = 1024;
 pub const MAX_RECORD_BYTES: u64 = 16 << 20;
@@ -298,7 +298,10 @@ impl ResultFile {
                 u32::try_from(version).unwrap_or(u32::MAX),
             ));
         }
-        let record: ResultRecord = serde_json::from_value(value)?;
+        let mut record: ResultRecord = serde_json::from_value(value)?;
+        if record.version < FIRST_ESTIMATING_VERSION {
+            record.fit_params = record.fit_params.from_legacy();
+        }
         Ok(Self {
             path: path.to_owned(),
             record,
