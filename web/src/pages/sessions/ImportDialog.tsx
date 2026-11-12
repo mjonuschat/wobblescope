@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,12 @@ import {
 import { ApiClientError } from "@/lib/api/client";
 import { useChips, useImportGroups } from "@/lib/api/queries";
 import { formatBytes } from "@/lib/format";
+import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Summary } from "@/lib/generated/Summary";
 
 import { ImportDropzone } from "./ImportDropzone";
 import { ImportGroupCard } from "./ImportGroupCard";
-import { addFiles, canImport, type ImportGroupState, type ImportState } from "./importModel";
+import { addFiles, canImport, type ImportGroupState, type ImportState, reguessChips } from "./importModel";
 
 function describe(error: Error): string {
   if (!(error instanceof ApiClientError) || !error.body) return error.message;
@@ -33,6 +34,13 @@ function describe(error: Error): string {
     default:
       return body.message;
   }
+}
+
+function chipChoices(data: ChipsSnapshot | undefined) {
+  return {
+    known: data?.known ? data.chips.map((c) => c.section) : [],
+    defaults: data?.defaults ?? { x: [], y: [] },
+  };
 }
 
 /** Identifies a group's content, so an error from the daemon is dropped once the group changes. */
@@ -74,11 +82,14 @@ function ImportForm({ sending, onDone }: { sending: ReturnType<typeof useImportG
   const [groups, setGroups] = useState<ImportState>([]);
   const [refused, setRefused] = useState<{ name: string; reason: string }[]>([]);
   const [failures, setFailures] = useState<Record<string, Failure>>({});
-  const known = chips.data?.known ? chips.data.chips.map((c) => c.section) : [];
-  const defaults = chips.data?.defaults ?? { x: [], y: [] };
+  const choices = chipChoices(chips.data);
+
+  useEffect(() => {
+    setGroups((current) => reguessChips(current, { ...chipChoices(chips.data), now: new Date() }));
+  }, [chips.data]);
 
   function add(files: File[]) {
-    const added = addFiles(groups, files, { known, defaults, now: new Date() });
+    const added = addFiles(groups, files, { ...choices, now: new Date() });
     setGroups(added.state);
     setRefused(added.refused);
   }
@@ -141,7 +152,7 @@ function ImportForm({ sending, onDone }: { sending: ReturnType<typeof useImportG
               group={group}
               number={i + 1}
               labels={labels}
-              known={known}
+              known={choices.known}
               failure={failure && failure.signature === signature(group) ? failure : null}
               disabled={isRunning}
               update={(change) => setGroups(change)}

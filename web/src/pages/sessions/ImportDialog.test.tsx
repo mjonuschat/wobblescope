@@ -53,6 +53,33 @@ async function sessionPart(call: { body: unknown }) {
 }
 
 describe("the import dialog", () => {
+  it("gives files dropped before the chip list arrived a chip once it does", async () => {
+    let ready = false;
+    stubApi(({ url }) => {
+      if (url.pathname.endsWith("/chips")) {
+        return {
+          body: ready
+            ? chipsSnapshot()
+            : chipsSnapshot({ known: false, current: false, chips: [], defaults: { x: [], y: [] } }),
+        };
+      }
+      if (url.pathname.endsWith("/storage"))
+        return { status: 503, body: { error: "storage_unavailable", message: "x" } };
+      if (url.pathname.endsWith("/sessions")) return { body: { sessions: [summary("s1")] } };
+      return { status: 404, body: { error: "not_found", message: "no" } };
+    });
+    const { client } = renderRoute("/sessions");
+    fireEvent.click(await screen.findByRole("button", { name: "Import CSV" }));
+    await screen.findByRole("dialog");
+    addFiles("raw_data_x_ebb36_20261112_071845.csv");
+    await waitFor(() => expect(rowOf("ebb36").textContent).toContain("no chip"));
+    expect(importButton().disabled).toBe(true);
+    ready = true;
+    await client.invalidateQueries({ queryKey: ["chips"] });
+    await waitFor(() => expect(rowOf("ebb36").textContent).toContain("lis2dw ebb36"));
+    expect(importButton().disabled).toBe(false);
+  });
+
   it("shows a dropzone and no groups at first", async () => {
     api();
     await openDialog();

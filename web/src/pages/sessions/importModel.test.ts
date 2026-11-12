@@ -11,6 +11,7 @@ import {
   needsConfirmation,
   problems,
   removeEntry,
+  reguessChips,
   setCreatedAt,
 } from "./importModel";
 
@@ -208,5 +209,33 @@ describe("moving", () => {
     expect(added[0].id).toBe(gid);
     expect(added[0].entries).toHaveLength(3);
     expect(added[0].confirmed).toBe(false);
+  });
+});
+
+describe("reguessChips", () => {
+  const none: AddContext = { known: [], defaults: { x: [], y: [] }, now: NOW };
+  const late: AddContext = {
+    known: ["adxl345", "lis2dw ebb36"],
+    defaults: { x: ["lis2dw ebb36"], y: ["lis2dw ebb36"] },
+    now: NOW,
+  };
+
+  it("fills_the_chip_of_a_file_added_before_the_chips_were_known", () => {
+    const before = addFiles([], [csv("raw_data_x_ebb36_20261112_071845.csv")], none).state;
+    expect(before[0].entries[0].chip).toBe("");
+    const after = reguessChips(before, late);
+    expect(after[0].entries[0].chip).toBe("lis2dw ebb36");
+    expect(after[0].entries[0].chipGuessed).toBe(true);
+  });
+
+  it("leaves_a_chip_the_user_chose_alone", () => {
+    const before = addFiles([], [csv("raw_data_x_adxl345_20261112_071845.csv")], none).state;
+    const edited = editEntry(before, before[0].entries[0].id, { chip: "my chip" });
+    expect(reguessChips(edited, late)).toBe(edited);
+  });
+
+  it("returns_the_same_state_when_no_guess_changes", () => {
+    const state = addFiles([], [csv("raw_data_x_adxl345_20261112_071845.csv")], late).state;
+    expect(reguessChips(state, late)).toBe(state);
   });
 });

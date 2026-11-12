@@ -50,17 +50,21 @@ function sameFile(a: File, b: File): boolean {
   return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
 }
 
+/** The chip named in the file name, else the printer's default for the axis, else the first known chip. */
+function guessedChip(fileName: string, axis: Axis | "", context: AddContext): string {
+  const named = guessChip(fileName, context.known);
+  const byAxis = axis === "X" ? context.defaults.x[0] : axis === "Y" ? context.defaults.y[0] : undefined;
+  return named ?? byAxis ?? context.known[0] ?? "";
+}
+
 function makeEntry(file: File, context: AddContext): { entry: ImportEntry; stamp: Date | undefined } {
   const reading = readFileName(file.name);
-  const named = guessChip(file.name, context.known);
-  const byAxis =
-    reading.axis === "X" ? context.defaults.x[0] : reading.axis === "Y" ? context.defaults.y[0] : undefined;
   return {
     stamp: reading.stamp,
     entry: {
       id: nextId("entry"),
       file,
-      chip: named ?? byAxis ?? context.known[0] ?? "",
+      chip: guessedChip(file.name, reading.axis ?? "", context),
       chipGuessed: true,
       axis: reading.axis ?? "",
       point: reading.point ? formatPoint(reading.point) : "",
@@ -96,6 +100,25 @@ export function addFiles(
     }
   }
   return { state: next, refused };
+}
+
+/** Guesses again the chip of every file whose chip the user has not set, for when the chip list arrives late. */
+export function reguessChips(state: ImportState, context: AddContext): ImportState {
+  let changed = false;
+  const next = state.map((group) => {
+    let groupChanged = false;
+    const entries = group.entries.map((entry) => {
+      if (!entry.chipGuessed) return entry;
+      const chip = guessedChip(entry.file.name, entry.axis, context);
+      if (chip === entry.chip) return entry;
+      groupChanged = true;
+      return { ...entry, chip };
+    });
+    if (!groupChanged) return group;
+    changed = true;
+    return { ...group, entries };
+  });
+  return changed ? next : state;
 }
 
 export function moveEntry(state: ImportState, entryId: string, groupId: string | "new"): ImportState {
