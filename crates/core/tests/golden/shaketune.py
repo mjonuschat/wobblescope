@@ -76,6 +76,51 @@ def performance_of(golden: dict) -> dict:
     return {"name": pick, "shown": shown}
 
 
+def edge_case(common, name, psd) -> dict:
+    freq_bins = [i * 1.5625 for i in range(len(psd))]
+    return {"name": name, "freq_bins": freq_bins, "psd": [float(v) for v in psd], **peaks_of(common, freq_bins, psd)}
+
+
+def rounding_noise_cases(common) -> dict:
+    """Spectra where the padded mean and the convolution of the first five bins differ by one ulp.
+
+    That makes a "peak" at smoothed index 1 or 2 possible, which Shake&Tune then refines to a
+    negative index that Python wraps to the end of the array. Found by a seeded search so the
+    inputs are reproducible.
+    """
+    import random
+
+    rng = random.Random(1)
+    found = {}
+    kernel = np.ones(5) / 5
+    while len(found) < 2:
+        d = np.array([rng.uniform(0.5, 1.5) for _ in range(5)] + [rng.uniform(0.0, 0.2) for _ in range(58)] + [2.0])
+        s = np.concatenate(([np.mean(d[:5])] * 2, np.convolve(d, kernel, mode="valid")))
+        if not (s[1] < s[2] > s[3]):
+            continue
+        _, peaks, _ = common.detect_peaks(d, np.arange(len(d)) * 1.0, PEAKS_DETECTION_THRESHOLD * d.max())
+        if min(peaks) < 0 and "ulp_noise_wraps_to_the_end" not in found:
+            found["ulp_noise_wraps_to_the_end"] = d
+        elif len(set(peaks.tolist())) < len(peaks) and "ulp_noise_and_duplicate_peaks" not in found:
+            found["ulp_noise_and_duplicate_peaks"] = d
+    return found
+
+
+def edge_psds(common) -> dict:
+    spike_in_bin_1 = [0.1 + 0.01 * (i % 3) for i in range(64)]
+    spike_in_bin_1[1] = 10.0
+    close = [0.0] * 64
+    close[20], close[24] = 1.0, 0.9
+    at_the_end = [0.0] * 64
+    at_the_end[62], at_the_end[63] = 1.0, 1.0
+    return {
+        "peak_in_bin_1": spike_in_bin_1,
+        "two_peaks_four_bins_apart_merge": close,
+        "a_spike_in_the_last_two_bins": at_the_end,
+        **rounding_noise_cases(common),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shaketune", required=True, type=Path)
@@ -97,13 +142,11 @@ def main() -> None:
             "performance": performance_of(golden),
         }
 
-    freq_bins = [i * 1.5625 for i in range(64)]
-    psd = [0.1 + 0.01 * (i % 3) for i in range(64)]
-    psd[1] = 10.0
-    edge = {"name": "peak_in_bin_1", "freq_bins": freq_bins, "psd": psd}
-    edge.update(peaks_of(common, freq_bins, psd))
+    edge_cases = [
+        edge_case(common, name, psd) for name, psd in edge_psds(common).items()
+    ]
 
-    out = {"pin": PIN, "cases": cases, "edge_cases": [edge]}
+    out = {"pin": PIN, "cases": cases, "edge_cases": edge_cases}
     (HERE / "shaketune.json").write_text(json.dumps(out, indent=1) + "\n")
 
 

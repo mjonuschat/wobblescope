@@ -10,6 +10,7 @@ use crate::fit::{
     validate_params, validate_shapers,
 };
 use crate::numeric::{arange, interp};
+use crate::peaks::{PsdPeaks, psd_peaks};
 use crate::psd::{CalibrationData, MAX_FREQ};
 
 /// Display-only sum of several datasets' PSDs on a shared grid: the total and each of the
@@ -117,6 +118,10 @@ pub struct ChipAnalysis {
     /// For inputs analysed with a time `window`, the sample index range kept, keyed by probe
     /// point.
     pub windows: Vec<(usize, std::ops::Range<usize>)>,
+    /// The peaks of every input's PSD and the thresholds they were judged against, keyed by probe
+    /// point like `datasets`. An input whose PSD has no power has none.
+    #[serde(default)]
+    pub peaks: Vec<(usize, PsdPeaks)>,
     /// Recommendation from the chip's eligible datasets that could be analysed; `None` when it
     /// has none.
     pub recommendation: Option<Recommendation>,
@@ -216,6 +221,7 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
             chips.push(&input.chip);
         }
     }
+    let peaks_max_freq = params.max_freq.filter(|f| *f != 0.0).unwrap_or(MAX_FREQ);
     let mut per_chip = Vec::new();
     for chip in chips {
         let idx: Vec<usize> = (0..inputs.len())
@@ -244,6 +250,13 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
             datasets: idx
                 .iter()
                 .filter_map(|&i| psds[i].clone().map(|p| (inputs[i].point, p)))
+                .collect(),
+            peaks: idx
+                .iter()
+                .filter_map(|&i| {
+                    let peaks = psd_peaks(psds[i].as_ref()?, peaks_max_freq)?;
+                    Some((inputs[i].point, peaks))
+                })
                 .collect(),
             recommendation,
         });

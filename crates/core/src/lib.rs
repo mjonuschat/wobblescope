@@ -6,6 +6,7 @@ pub mod error;
 pub mod fit;
 pub mod multichip;
 pub mod numeric;
+pub mod peaks;
 pub mod psd;
 pub mod resonance;
 pub mod samples;
