@@ -168,11 +168,6 @@ export function startTest(request: StartTestRequest) {
   });
 }
 
-/** The emergency stop of one running test or hold, by its id. */
-export function stopTest(id: string) {
-  return apiJson<StopDispatched>(`tests/${encodeURIComponent(id)}/emergency-stop`, { method: "POST" });
-}
-
 export function getPrinter(signal?: AbortSignal) {
   return apiJson<PrinterState>("printer", { signal });
 }

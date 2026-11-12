@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Spectrum } from "@/lib/generated/Spectrum";
 
 import { chipColor } from "./colors";
-import { Spectrogram } from "./Spectrogram";
+import { Spectrogram, frequencyTicks, timeTicks } from "./Spectrogram";
 import { SignalStrips } from "./SignalStrips";
 import type { ChipSignal } from "./useSignalBuffers";
 
@@ -231,5 +231,22 @@ describe("Spectrogram", () => {
     act(() => rerender(props(now, spectrum())));
     expect(columns()).toBe(1);
     expect(calls.filter(([n]) => n === "drawImage")).toEqual([]);
+  });
+});
+
+describe("Spectrogram axes", () => {
+  it("labels frequencies in round steps, at most six", () => {
+    expect(frequencyTicks(200)).toEqual([0, 50, 100, 150, 200]);
+    expect(frequencyTicks(800)).toEqual([0, 200, 400, 600, 800]);
+    expect(frequencyTicks(199.8)).toEqual([0, 50, 100, 150, 200]);
+    expect(frequencyTicks(1600).length).toBeLessThanOrEqual(7);
+  });
+
+  it("labels the last minute every 5 seconds, oldest first", () => {
+    const ticks = timeTicks();
+    expect(ticks[0]).toBe(60);
+    expect(ticks.at(-1)).toBe(0);
+    expect(ticks).toHaveLength(13);
+    expect(ticks.every((t, i) => i === 0 || ticks[i - 1] - t === 5)).toBe(true);
   });
 });

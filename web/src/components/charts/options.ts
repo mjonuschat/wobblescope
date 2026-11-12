@@ -186,14 +186,15 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
       if (n === 0) {
         line.markPoint = {
           silent: true,
-          symbol: "pin",
-          symbolSize: 36,
+          symbol: "circle",
+          symbolSize: 6,
           itemStyle: { color },
           data: peaks.map((peak) => ({
             coord: [peak.freq, peak.level],
             value: peak.level,
             label: {
               formatter: `${formatHz(peak.freq)} Hz\n${peak.level.toExponential(1)}`,
+              position: "top",
               color: text,
               fontSize: 10,
             },
@@ -221,42 +222,11 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
     });
   });
   return {
+    animation: false,
     ...base(null, maxHz),
     grid: { top: 64, left: 64, right: 24, bottom: 40 },
     legend: { type: "scroll", top: 0, left: 56, textStyle: { color: text } },
     yAxis: { type: "value", name: "PSD", splitLine },
     series,
-  };
-}
-
-interface BandEnergyInput {
-  /** Each chip's energy readings, with `t` in seconds on one clock. */
-  chips: { chip: string; color: string; points: { t: number; v: number }[] }[];
-  centre: number;
-  halfWidth: number;
-}
-
-/** The energy in a band around one frequency over the last minute, one line per chip. */
-export function bandEnergyOption({ chips, centre, halfWidth }: BandEnergyInput): EChartsCoreOption {
-  const latest = Math.max(0, ...chips.flatMap((c) => c.points.map((p) => p.t)));
-  return {
-    backgroundColor: "transparent",
-    textStyle: { color: text },
-    tooltip: { trigger: "axis" },
-    grid: { top: 24, left: 64, right: 24, bottom: 40 },
-    xAxis: { type: "value", name: "s", min: -60, max: 0, splitLine },
-    yAxis: {
-      type: "value",
-      name: `Energy ${formatHz(centre - halfWidth)} to ${formatHz(centre + halfWidth)} Hz`,
-      splitLine,
-    },
-    series: chips.map(({ chip, color, points }) => ({
-      name: chip,
-      type: "line",
-      showSymbol: false,
-      color,
-      lineStyle: { color, width: 1.5 },
-      data: points.map((p) => [p.t - latest, p.v]),
-    })),
   };
 }

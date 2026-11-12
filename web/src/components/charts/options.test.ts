@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { chipColor } from "@/pages/stream/colors";
 import { analysis, candidate, recommendation } from "@/test/fixtures";
 
-import { bandEnergyOption, liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
+import { liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
 
 type Series = { name: string; yAxisIndex?: number; markLine?: { data: { xAxis: number }[] } };
 
@@ -168,6 +168,10 @@ describe("liveSpectrumOption", () => {
   const live = (option as { series: Live[] }).series;
   const byName = (name: string) => live.find((s) => s.name === name)!;
 
+  it("does not animate, since it is rebuilt several times a second", () => {
+    expect((option as { animation?: boolean }).animation).toBe(false);
+  });
+
   it("draws a line per chip and axis plus a peak-hold line per chip", () => {
     expect(live.map((s) => s.name)).toEqual(["a X", "a Total", "a Peak Hold", "b Z", "b Peak Hold"]);
   });
@@ -228,40 +232,5 @@ describe("the frequency of interest on the live spectrum", () => {
   it("has no marker without one", () => {
     const first = series(liveSpectrumOption({ chips, maxHz: 200 }))[0] as unknown as { markLine?: unknown };
     expect(first.markLine).toBeUndefined();
-  });
-});
-
-describe("bandEnergyOption", () => {
-  const chips = [
-    {
-      chip: "a",
-      color: "#fff",
-      points: [
-        { t: 10, v: 1 },
-        { t: 40, v: 2 },
-      ],
-    },
-    { chip: "b", color: "#000", points: [] },
-  ];
-
-  it("draws one line per chip against seconds ago over the last minute", () => {
-    const option = bandEnergyOption({ chips, centre: 52, halfWidth: 2 }) as unknown as {
-      xAxis: { min: number; max: number };
-      series: { name: string; data: number[][] }[];
-    };
-    expect(option.series.map((s) => s.name)).toEqual(["a", "b"]);
-    expect(option.series[0].data).toEqual([
-      [-30, 1],
-      [0, 2],
-    ]);
-    expect(option.xAxis.min).toBe(-60);
-    expect(option.xAxis.max).toBe(0);
-  });
-
-  it("says which band it shows", () => {
-    const option = bandEnergyOption({ chips, centre: 52, halfWidth: 2 }) as unknown as {
-      yAxis: { name: string };
-    };
-    expect(option.yAxis.name).toBe("Energy 50.0 to 54.0 Hz");
   });
 });

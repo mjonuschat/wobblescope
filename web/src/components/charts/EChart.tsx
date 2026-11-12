@@ -38,13 +38,25 @@ interface Props {
 export function EChart({ option, label, height = 340, onClickX }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
+  const pointer = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const instance = echarts.init(element.current);
     chart.current = instance;
+    const zr = instance.getZr();
+    const move = (event: { offsetX: number; offsetY: number }) => {
+      pointer.current = { x: event.offsetX, y: event.offsetY };
+    };
+    const leave = () => {
+      pointer.current = null;
+    };
+    zr.on("mousemove", move);
+    zr.on("globalout", leave);
     const observer = new ResizeObserver(() => instance.resize());
     observer.observe(element.current!);
     return () => {
+      zr.off("mousemove", move);
+      zr.off("globalout", leave);
       observer.disconnect();
       instance.dispose();
       chart.current = null;
@@ -52,7 +64,13 @@ export function EChart({ option, label, height = 340, onClickX }: Props) {
   }, []);
 
   useEffect(() => {
-    chart.current?.setOption(option, true);
+    const instance = chart.current;
+    if (!instance) return;
+    instance.setOption(option, true);
+    // A full replace closes the tooltip, which on a chart that updates 10 times a second makes
+    // it flicker under a resting pointer. Opening it again here happens before the next paint.
+    const at = pointer.current;
+    if (at) instance.dispatchAction({ type: "showTip", x: at.x, y: at.y });
   }, [option]);
 
   const clickRef = useRef(onClickX);

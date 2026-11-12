@@ -35,14 +35,14 @@ const RUNNING = {
   accel_limit: 3600,
 };
 
-function renderPanel(api: HoldApi, frequencyOfInterest: number | null = null) {
+function renderPanel(api: HoldApi, frequencyOfInterest: number | null = null, streaming = true) {
   const calls = stubApiWithStatus((call) =>
     apiPath(call) === "settings" ? { body: printerSettings() } : { body: { dispatched: true } },
   );
   render(
     <QueryClientProvider client={createQueryClient()}>
       <TooltipProvider>
-        <HoldPanel hold={api} frequencyOfInterest={frequencyOfInterest} />
+        <HoldPanel hold={api} frequencyOfInterest={frequencyOfInterest} streaming={streaming} />
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -53,15 +53,16 @@ describe("HoldPanel", () => {
   it("defaults to 25 Hz and the printer's acceleration per Hz", async () => {
     renderPanel(hold());
     expect(await screen.findByDisplayValue("60")).toBeTruthy();
-    expect((screen.getByLabelText("Frequency (Hz)") as HTMLInputElement).value).toBe("25");
-    expect(screen.getByText("30 s")).toBeTruthy();
-    expect(screen.getByText("Test point")).toBeTruthy();
+    expect((screen.getByLabelText("Frequency") as HTMLInputElement).value).toBe("25");
+    expect(screen.getByText("Hz")).toBeTruthy();
+    expect(screen.getByText("mm/s² per Hz")).toBeTruthy();
+    expect(screen.getByText("Default")).toBeTruthy();
   });
 
   it("defaults the frequency to the frequency of interest", async () => {
     renderPanel(hold(), 52);
     await screen.findByDisplayValue("60");
-    expect((screen.getByLabelText("Frequency (Hz)") as HTMLInputElement).value).toBe("52");
+    expect((screen.getByLabelText("Frequency") as HTMLInputElement).value).toBe("52");
   });
 
   it("starts with what the form holds", async () => {
@@ -73,16 +74,24 @@ describe("HoldPanel", () => {
       axis: "X",
       frequency: 52,
       accel_per_hz: 60,
-      duration_seconds: 30,
+      duration_seconds: null,
       start_point: null,
     });
+  });
+
+  it("will not start while no chip is streaming", async () => {
+    const api = hold();
+    renderPanel(api, null, false);
+    await screen.findByDisplayValue("60");
+    const start = screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
   });
 
   it("will not start on nonsense", async () => {
     renderPanel(hold());
     await screen.findByDisplayValue("60");
     const start = screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
-    const frequency = screen.getByLabelText("Frequency (Hz)");
+    const frequency = screen.getByLabelText("Frequency");
     for (const bad of ["4", "201", ""]) {
       fireEvent.change(frequency, { target: { value: bad } });
       expect(start.disabled, `frequency ${bad}`).toBe(true);
@@ -93,20 +102,37 @@ describe("HoldPanel", () => {
     expect(start.disabled).toBe(true);
   });
 
-  it("shows the numbers and the limit while it runs", async () => {
-    renderPanel(hold({ status: "running", id: "hold-1", state: RUNNING }));
-    expect(await screen.findByText(/12\.4 s/)).toBeTruthy();
-    expect(screen.getByText(/3600 mm\/s²/)).toBeTruthy();
-    expect(screen.getByText(/limit/i)).toBeTruthy();
+  it("says what the toolhead is doing only while it travels or stops", async () => {
+    const { rerender } = render(
+      <QueryClientProvider client={createQueryClient()}>
+        <TooltipProvider>
+          <HoldPanel
+            hold={hold({ status: "running", state: { ...RUNNING, phase: "travelling" } })}
+            frequencyOfInterest={null}
+            streaming
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(/moving to the start point/i)).toBeTruthy();
+    rerender(
+      <QueryClientProvider client={createQueryClient()}>
+        <TooltipProvider>
+          <HoldPanel hold={hold({ status: "running", state: RUNNING })} frequencyOfInterest={null} streaming />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText(/moving to the start point/i)).toBeNull();
+    expect(screen.queryByText(/elapsed/i)).toBeNull();
   });
 
   it("sends set when the frequency changes during a hold", async () => {
     const api = hold({ status: "running", id: "hold-1", state: RUNNING });
     renderPanel(api);
     await screen.findByDisplayValue("60");
-    fireEvent.change(screen.getByLabelText("Frequency (Hz)"), { target: { value: "70" } });
+    fireEvent.change(screen.getByLabelText("Frequency"), { target: { value: "70" } });
     expect(api.set).toHaveBeenCalledWith({ frequency: 70 });
-    fireEvent.change(screen.getByLabelText("Frequency (Hz)"), { target: { value: "300" } });
+    fireEvent.change(screen.getByLabelText("Frequency"), { target: { value: "300" } });
     expect(api.set).toHaveBeenCalledTimes(1);
   });
 
@@ -115,25 +141,6 @@ describe("HoldPanel", () => {
     renderPanel(api);
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
     expect(api.stop).toHaveBeenCalled();
-  });
-
-  it("posts an emergency stop to the hold's id after two clicks", async () => {
-    const api = hold({ status: "running", id: "hold-2026-11-11T10:00:00Z", state: RUNNING });
-    const calls = renderPanel(api);
-    const button = await screen.findByRole("button", { name: /emergency stop/i });
-    fireEvent.click(button);
-    expect(calls.find((c) => apiPath(c).includes("emergency-stop"))).toBeUndefined();
-    fireEvent.click(screen.getByRole("button", { name: /press again/i }));
-    await vi.waitFor(() => {
-      const call = calls.find((c) => apiPath(c).includes("emergency-stop"));
-      expect(call && apiPath(call)).toBe("tests/hold-2026-11-11T10%3A00%3A00Z/emergency-stop");
-    });
-  });
-
-  it("disables the emergency stop until the id has arrived", async () => {
-    renderPanel(hold({ status: "starting" }));
-    const button = (await screen.findByRole("button", { name: /emergency stop/i })) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
   });
 
   it("lists every failure and points at the Home button", async () => {
@@ -150,19 +157,25 @@ describe("HoldPanel", () => {
     expect(homed.textContent).toMatch(/Home button in the page header/);
   });
 
-  it("says in words why a hold ended", async () => {
-    const cases: [HoldApi["ended"], RegExp][] = [
-      [{ reason: "time_limit", restore: "done" }, /time limit was reached/i],
-      [{ reason: "stopped", restore: "done" }, /stopped/i],
-      [{ reason: "connection_lost", restore: "done" }, /connection to this page was lost/i],
-      [{ reason: { failed: { message: "Move out of range" } }, restore: "done" }, /Move out of range/],
-    ];
-    for (const [ended, text] of cases) {
-      const { unmount } = (() => {
-        renderPanel(hold({ status: "ended", ended }));
-        return { unmount: () => document.body.replaceChildren() };
-      })();
-      expect(await screen.findByText(text)).toBeTruthy();
+  it("says why a hold failed and nothing about one that ended normally", async () => {
+    renderPanel(
+      hold({ status: "ended", ended: { reason: { failed: { message: "Move out of range" } }, restore: "done" } }),
+    );
+    expect(await screen.findByText(/Move out of range/)).toBeTruthy();
+    document.body.replaceChildren();
+    for (const reason of ["stopped", "time_limit", "connection_lost", "emergency_stop"] as const) {
+      const { unmount } = render(
+        <QueryClientProvider client={createQueryClient()}>
+          <TooltipProvider>
+            <HoldPanel
+              hold={hold({ status: "ended", ended: { reason, restore: "done" } })}
+              frequencyOfInterest={null}
+              streaming
+            />
+          </TooltipProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByText(/stopped|time limit|connection|emergency/i), reason).toBeNull();
       unmount();
     }
   });

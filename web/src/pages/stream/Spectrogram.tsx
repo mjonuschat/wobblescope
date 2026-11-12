@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { Spectrum } from "@/lib/generated/Spectrum";
+import { type ColourScale, RAMP, type ScaleSource, SharedAutoScale } from "@/stream/spectrogramScale";
 
 interface Props {
   chip: string;
@@ -9,21 +10,30 @@ interface Props {
   spectrum: Spectrum | null;
   /** The clock in milliseconds. Tests pass their own. */
   now?: () => number;
+  /** The colour scale, shared with the other chips. Without one the chip scales itself. */
+  scale?: ScaleSource;
 }
 
 /** How much time the canvas shows, in milliseconds. */
 export const SPAN_MS = 60_000;
+/** The distance between ticks on the time axis, in seconds. */
+const TIME_TICK_SECONDS = 5;
 const WIDTH = 640;
 const HEIGHT = 160;
 
-/** Bins kept per spectrum for the colour scale. That is enough for percentiles and cheap to sort. */
-const SAMPLES_PER_SPECTRUM = 32;
-/** The colour scale is recomputed once per this many spectra. */
-const SCALE_EVERY = 10;
+/** The frequencies to label: a round step that gives at most six ticks from 0 up to `maxHz`, rounded, since the top bin sits just under a round figure. */
+export function frequencyTicks(maxHz: number): number[] {
+  const top = Math.round(maxHz);
+  const step = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((s) => top / s <= 6) ?? 1000;
+  const ticks: number[] = [];
+  for (let f = 0; f <= top; f += step) ticks.push(f);
+  return ticks;
+}
 
-interface Sample {
-  at: number;
-  values: number[];
+/** The times to label, in seconds before now, from the oldest to 0. */
+export function timeTicks(): number[] {
+  const count = SPAN_MS / 1000 / TIME_TICK_SECONDS;
+  return Array.from({ length: count + 1 }, (_, i) => (count - i) * TIME_TICK_SECONDS);
 }
 
 interface Drawn {
@@ -31,20 +41,7 @@ interface Drawn {
   lastAt: number | null;
   /** Times of the columns still inside the span. */
   times: number[];
-  samples: Sample[];
-  sinceScale: number;
-  low: number;
-  range: number;
 }
-
-/** Dark blue, through purple and orange, to pale yellow. */
-const RAMP: [number, number, number][] = [
-  [10, 10, 60],
-  [90, 20, 120],
-  [200, 60, 60],
-  [250, 170, 40],
-  [255, 250, 200],
-];
 
 function ramp(t: number): [number, number, number] {
   const position = Math.min(Math.max(t, 0), 1) * (RAMP.length - 1);
@@ -54,24 +51,12 @@ function ramp(t: number): [number, number, number] {
   return [r, g, b];
 }
 
-/** The value below which `fraction` of the sorted values lie. */
-function percentile(sorted: number[], fraction: number): number {
-  return sorted[Math.min(sorted.length - 1, Math.floor(fraction * sorted.length))];
-}
-
-function updateScale(drawn: Drawn) {
-  const all = drawn.samples.flatMap((sample) => sample.values).sort((a, b) => a - b);
-  drawn.low = percentile(all, 0.05);
-  drawn.range = Math.max(percentile(all, 0.99) - drawn.low, 1e-9);
-  drawn.sinceScale = 0;
-}
-
 /**
  * Scrolls the canvas left by the time since the last column and draws only the new column.
  * Columns keep the colour scale they were drawn with, so the scale drifting does not repaint
  * history. A full redraw is only needed when the canvas is new, which starts as empty.
  */
-function addColumn(canvas: HTMLCanvasElement, drawn: Drawn, at: number, logPsd: number[]) {
+function addColumn(canvas: HTMLCanvasElement, drawn: Drawn, at: number, logPsd: number[], scale: ColourScale) {
   const context = canvas.getContext("2d");
   if (!context) return;
   const pixel = (time: number) => Math.round((time / SPAN_MS) * WIDTH);
@@ -79,24 +64,18 @@ function addColumn(canvas: HTMLCanvasElement, drawn: Drawn, at: number, logPsd: 
   if (shift >= WIDTH || shift < 0) {
     context.clearRect(0, 0, WIDTH, HEIGHT);
     drawn.times = [];
-    drawn.samples = [];
   } else if (shift > 0) {
     context.drawImage(canvas, -shift, 0);
     context.clearRect(WIDTH - shift, 0, shift, HEIGHT);
   }
   drawn.lastAt = at;
   drawn.times = [...drawn.times.filter((time) => at - time <= SPAN_MS), at];
-  drawn.samples = drawn.samples.filter((sample) => at - sample.at <= SPAN_MS);
-  const stride = Math.ceil(logPsd.length / SAMPLES_PER_SPECTRUM);
-  drawn.samples.push({ at, values: logPsd.filter((_, bin) => bin % stride === 0) });
-  if (drawn.times.length === 1 || ++drawn.sinceScale >= SCALE_EVERY) updateScale(drawn);
-
   // As wide as the scroll, so each spectrum keeps its own columns instead of overwriting the last.
   const columnPx = shift >= WIDTH ? 1 : Math.max(shift, 1);
   const image = context.createImageData(columnPx, HEIGHT);
   for (let y = 0; y < HEIGHT; y++) {
     const bin = Math.floor(((HEIGHT - 1 - y) / HEIGHT) * logPsd.length);
-    const [r, g, b] = ramp((logPsd[bin] - drawn.low) / drawn.range);
+    const [r, g, b] = ramp((logPsd[bin] - scale.low) / scale.range);
     for (let x = 0; x < columnPx; x++) image.data.set([r, g, b, 255], (y * columnPx + x) * 4);
   }
   context.putImageData(image, WIDTH - columnPx, 0);
@@ -104,19 +83,27 @@ function addColumn(canvas: HTMLCanvasElement, drawn: Drawn, at: number, logPsd: 
 }
 
 /** One chip's summed spectrum over the last minute, newest on the right, low frequencies at the bottom. */
-export function Spectrogram({ chip, color, spectrum, now = () => performance.now() }: Props) {
+export function Spectrogram({ chip, color, spectrum, now = () => performance.now(), scale }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const clock = useRef(now);
   useEffect(() => {
     clock.current = now;
   }, [now]);
-  const drawn = useRef<Drawn>({ lastAt: null, times: [], samples: [], sinceScale: 0, low: 0, range: 1 });
+  const drawn = useRef<Drawn>({ lastAt: null, times: [] });
+  const own = useRef<ScaleSource>(new SharedAutoScale());
+  const source = scale ?? own.current;
 
   useEffect(() => {
     if (!spectrum || !canvas.current) return;
     const logPsd = spectrum.psd_sum.map((v) => Math.log10(Math.max(v, 1e-12)));
-    if (logPsd.length > 0) addColumn(canvas.current, drawn.current, clock.current(), logPsd);
-  }, [spectrum]);
+    if (logPsd.length === 0) return;
+    const at = clock.current();
+    addColumn(canvas.current, drawn.current, at, logPsd, source.columnScale(chip, at, logPsd));
+  }, [spectrum, chip, source]);
+
+  const maxHz = spectrum?.freq_bins.at(-1) ?? 0;
+  const frequencies = useMemo(() => (maxHz > 0 ? frequencyTicks(maxHz) : []), [maxHz]);
+  const times = useMemo(timeTicks, []);
 
   return (
     <figure className="space-y-1">
@@ -124,14 +111,41 @@ export function Spectrogram({ chip, color, spectrum, now = () => performance.now
         <span className="inline-block size-3 rounded-sm" style={{ background: color }} />
         {chip}
       </figcaption>
-      <canvas
-        ref={canvas}
-        width={WIDTH}
-        height={HEIGHT}
-        role="img"
-        aria-label={`${chip} spectrogram`}
-        className="w-full rounded-md border bg-background"
-      />
+      <div className="grid grid-cols-[3.5rem_1fr] gap-x-1 pr-4 text-xs text-muted-foreground">
+        <div className="relative" aria-hidden>
+          {frequencies.map((f) => (
+            <span
+              key={f}
+              className="absolute right-0 flex translate-y-1/2 items-center gap-1 tabular-nums"
+              style={{ bottom: `${Math.min(f / maxHz, 1) * 100}%` }}
+            >
+              {f} Hz
+              <span className="h-px w-1 bg-border" />
+            </span>
+          ))}
+        </div>
+        <canvas
+          ref={canvas}
+          width={WIDTH}
+          height={HEIGHT}
+          role="img"
+          aria-label={`${chip} spectrogram`}
+          className="block w-full rounded-md border bg-background"
+        />
+        <div />
+        <div className="relative h-8" aria-hidden>
+          {times.map((t) => (
+            <span
+              key={t}
+              className="absolute top-0 flex -translate-x-1/2 flex-col items-center whitespace-nowrap tabular-nums"
+              style={{ left: `${(1 - (t * 1000) / SPAN_MS) * 100}%` }}
+            >
+              <span className="h-1 w-px bg-border" />
+              {t === 0 ? "0" : `-${t}`} s
+            </span>
+          ))}
+        </div>
+      </div>
     </figure>
   );
 }

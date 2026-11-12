@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 
 import { EChart } from "@/components/charts/EChart";
 import { liveSpectrumOption } from "@/components/charts/options";
-import { pickFrequency } from "@/stream/bandEnergy";
+import { pickFrequency } from "@/stream/pickFrequency";
 
 type Chips = Parameters<typeof liveSpectrumOption>[0]["chips"];
 
