@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 
+import { formatHz } from "@/lib/format";
 import { chipColor } from "@/pages/stream/colors";
 import { analysis, candidate, recommendation } from "@/test/fixtures";
 
 import { liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
 
-type Series = { name: string; yAxisIndex?: number; markLine?: { data: { xAxis: number }[] } };
+type Series = {
+  name: string;
+  yAxisIndex?: number;
+  markLine?: { data: { xAxis?: number; yAxis?: number }[] };
+  markArea?: { data: { yAxis: number }[][] };
+  markPoint?: { data: { label: { formatter: string; color: string; fontWeight: string } }[] };
+};
 
 const series = (o: unknown) => (o as { series: Series[] }).series;
 
@@ -49,6 +56,7 @@ describe("psdOption", () => {
     expect(series(option).filter((s) => s.yAxisIndex === 1)).toHaveLength(rec.all.length);
     const marked = series(option).flatMap((s) => s.markLine?.data ?? []);
     expect(marked.map((m) => m.xAxis)).toEqual([48.2]);
+    expect(marked.some((m) => m.yAxis !== undefined)).toBe(false);
   });
 
   it("ends the frequency axis at the fit settings\u2019 maximum", () => {
@@ -232,5 +240,79 @@ describe("the frequency of interest on the live spectrum", () => {
   it("has no marker without one", () => {
     const first = series(liveSpectrumOption({ chips, maxHz: 200 }))[0] as unknown as { markLine?: unknown };
     expect(first.markLine).toBeUndefined();
+  });
+});
+
+describe("psdOption peaks, thresholds and scale", () => {
+  const one = analysis().per_chip[0];
+  const found = {
+    peaks: [
+      { freq: 5.2, level: 4, above_effect: false },
+      { freq: 5.4, level: 5, above_effect: true },
+    ],
+    detect_threshold: 1,
+    effect_threshold: 3,
+  };
+  const withPeaks = { ...one, peaks: [[0, found]] as typeof one.peaks };
+  const totals = (o: unknown) => series(o).filter((s) => s.name.endsWith("Total"));
+
+  it("marks each peak on its dataset's total series with its number and its frequency", () => {
+    const [total] = totals(psdOption({ chip: withPeaks, recommendation: null, maxFreq: 200 }));
+    expect(total.markPoint?.data.map((d) => d.label.formatter)).toEqual([
+      `1 ${formatHz(5.2)} Hz`,
+      `2 ${formatHz(5.4)} Hz`,
+    ]);
+  });
+
+  it("draws a peak above the effect threshold in bold and in a colour of its own", () => {
+    const [total] = totals(psdOption({ chip: withPeaks, recommendation: null, maxFreq: 200 }));
+    const [below, above] = total.markPoint?.data.map((d) => d.label) ?? [];
+    expect(above.fontWeight).toBe("bold");
+    expect(below.fontWeight).toBe("normal");
+    expect(above.color).not.toBe(below.color);
+  });
+
+  it("draws both threshold lines and the relax and warning bands on the first dataset only", () => {
+    const second = [1, one.datasets[0][1]] as (typeof one.datasets)[number];
+    const chip = {
+      ...one,
+      datasets: [one.datasets[0], second],
+      peaks: [
+        [0, found],
+        [1, found],
+      ] as typeof one.peaks,
+    };
+    const [first, other] = totals(psdOption({ chip, recommendation: null, maxFreq: 200 }));
+    expect(first.markLine?.data.map((m) => m.yAxis)).toEqual([1, 3]);
+    expect(first.markArea?.data.map(([from, to]) => [from.yAxis, to.yAxis])).toEqual([
+      [0, 1],
+      [1, 3],
+    ]);
+    expect(other.markLine).toBeUndefined();
+    expect(other.markArea).toBeUndefined();
+    expect(other.markPoint?.data).toHaveLength(2);
+  });
+
+  it("keeps the recommended frequency line next to the threshold lines", () => {
+    const o = psdOption({ chip: withPeaks, recommendation: recommendation(candidate("mzv", 48.2)), maxFreq: 200 });
+    const lines = totals(o)[0].markLine?.data ?? [];
+    expect(lines.map((m) => m.yAxis ?? m.xAxis)).toEqual([1, 3, 48.2]);
+  });
+
+  const leftAxis = (o: unknown) => (o as { yAxis: { min: number; max: number }[] }).yAxis[0];
+
+  it("sets the left axis to 0 and the given maximum", () => {
+    const axis = leftAxis(psdOption({ chip: one, recommendation: null, maxFreq: 200, maxScale: 10 }));
+    expect([axis.min, axis.max]).toEqual([0, 10]);
+  });
+
+  it("without a maximum, ends the left axis at 1.05 times the largest total up to maxFreq", () => {
+    for (const maxScale of [undefined, null, 0]) {
+      const axis = leftAxis(psdOption({ chip: one, recommendation: null, maxFreq: 200, maxScale }));
+      expect(axis.min).toBe(0);
+      expect(axis.max).toBeCloseTo(5.25, 10);
+    }
+    const cut = leftAxis(psdOption({ chip: one, recommendation: null, maxFreq: 5.2 }));
+    expect(cut.max).toBeCloseTo(4.2, 10);
   });
 });

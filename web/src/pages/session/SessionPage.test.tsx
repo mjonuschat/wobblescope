@@ -16,7 +16,10 @@ vi.mock("@/analysis/client", async (importOriginal) => ({
   getAnalysisClient: () => fake,
 }));
 vi.mock("@/components/charts/EChart", () => ({
-  EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
+  EChart: ({ label, option }: { label: string; option: { yAxis?: { max?: number } | { max?: number }[] } }) => {
+    const left = Array.isArray(option.yAxis) ? option.yAxis[0] : option.yAxis;
+    return <div role="img" aria-label={label} data-ymax={left?.max} />;
+  },
 }));
 
 const SNIPPET = "[input_shaper]\nshaper_type_x: mzv\nshaper_freq_x: 48.2\ndamping_ratio_x: 0.1\n";
@@ -104,6 +107,20 @@ describe("the session view", () => {
     expect(degraded.textContent).toContain("No recommendation for this chip: degraded capture health");
     expect(degraded.querySelector('[role="img"]')).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recommended Input Shaper" }).textContent).toContain("mzv at 48.2 Hz");
+  });
+
+  it("typing a maximum above the chart rescales it and clearing it autoscales", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const card = await chipCard("a");
+    const chart = () => card.querySelector('[role="img"]') as HTMLElement;
+    const input = within(card).getByLabelText("Maximum");
+    expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
+    fireEvent.change(input, { target: { value: "10" } });
+    expect(chart().dataset.ymax).toBe("10");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
   });
 
   it("lets the user include an excluded chip, and analyses again with it named", async () => {

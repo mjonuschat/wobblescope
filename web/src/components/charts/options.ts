@@ -42,6 +42,23 @@ interface PsdInput {
   recommendation: Recommendation | null;
   /** The largest frequency the fit considered, in Hz. */
   maxFreq: number;
+  /** The left axis ends here. Empty or 0 ends it at 1.05 times the largest total. */
+  maxScale?: number | null;
+}
+
+const PEAK_ALERT = "#ff6b6b";
+const RELAX_BAND = "rgba(126, 224, 129, 0.12)";
+const WARNING_BAND = "rgba(255, 209, 102, 0.14)";
+
+/** 1.05 times the largest total PSD up to `maxFreq`, as Shake&Tune scales its graph. */
+function autoscale(chip: ChipAnalysis, maxFreq: number): number | undefined {
+  let largest = Number.NEGATIVE_INFINITY;
+  for (const [, data] of chip.datasets) {
+    data.freq_bins.forEach((f, i) => {
+      if (f <= maxFreq) largest = Math.max(largest, data.psd_sum[i]);
+    });
+  }
+  return largest > 0 ? largest * 1.05 : undefined;
 }
 
 /**
@@ -49,18 +66,57 @@ interface PsdInput {
  * legend) and every fitted shaper's response on the right axis, with the recommended
  * frequency marked. Every curve is `core`'s array as returned.
  */
-export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsCoreOption {
+export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = [];
   const selected: Record<string, boolean> = {};
   const many = chip.datasets.length > 1;
   const named = (point: number, what: string) => (many ? `Point ${point + 1} ${what}` : what);
-  for (const [point, data] of chip.datasets) {
-    series.push({
+  chip.datasets.forEach(([point, data], index) => {
+    const total: Record<string, unknown> = {
       name: named(point, "Total"),
       type: "line",
       showSymbol: false,
       data: zip(data.freq_bins, data.psd_sum),
-    });
+    };
+    const found = chip.peaks.find(([p]) => p === point)?.[1];
+    if (found) {
+      total.markPoint = {
+        silent: true,
+        symbol: "circle",
+        symbolSize: 6,
+        itemStyle: { color: text },
+        data: found.peaks.map((peak, n) => ({
+          coord: [peak.freq, peak.level],
+          label: {
+            formatter: `${n + 1} ${formatHz(peak.freq)} Hz`,
+            position: "top",
+            color: peak.above_effect ? PEAK_ALERT : text,
+            fontWeight: peak.above_effect ? "bold" : "normal",
+            fontSize: 11,
+          },
+        })),
+      };
+      if (index === 0) {
+        const line = (yAxis: number) => ({
+          yAxis,
+          lineStyle: { color: MUTED, type: "dashed", width: 1 },
+          label: { show: false },
+        });
+        total.markLine = {
+          silent: true,
+          symbol: "none",
+          data: [line(found.detect_threshold), line(found.effect_threshold)],
+        };
+        total.markArea = {
+          silent: true,
+          data: [
+            [{ yAxis: 0, itemStyle: { color: RELAX_BAND } }, { yAxis: found.detect_threshold }],
+            [{ yAxis: found.detect_threshold, itemStyle: { color: WARNING_BAND } }, { yAxis: found.effect_threshold }],
+          ],
+        };
+      }
+    }
+    series.push(total);
     for (const [axis, values] of [
       ["X", data.psd_x],
       ["Y", data.psd_y],
@@ -70,13 +126,17 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
       selected[name] = false;
       series.push({ name, type: "line", showSymbol: false, data: zip(data.freq_bins, values) });
     }
-  }
+  });
   if (recommendation && series.length > 0) {
     const { best } = recommendation;
+    const thresholds = (series[0].markLine as { data: unknown[] } | undefined)?.data ?? [];
     series[0].markLine = {
       silent: true,
       symbol: "none",
-      data: [{ xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: text } }],
+      data: [
+        ...thresholds,
+        { xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: text } },
+      ],
     };
   }
   const grid = recommendation?.freq_bins ?? [];
@@ -107,7 +167,13 @@ export function psdOption({ chip, recommendation, maxFreq }: PsdInput): EChartsC
     ],
     graphic: [rowLabel("Axes", 0), ...(shapers.length > 0 ? [rowLabel("Shapers", 28)] : [])],
     yAxis: [
-      { type: "value", name: "Vibration Strength", splitLine },
+      {
+        type: "value",
+        name: "Vibration Strength",
+        splitLine,
+        min: 0,
+        max: maxScale && maxScale > 0 ? maxScale : autoscale(chip, maxFreq),
+      },
       {
         type: "value",
         name: "Remaining Vibration",
