@@ -1,6 +1,7 @@
-import { InfoIcon, RotateCcwIcon } from "lucide-react";
+import { RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
+import { HintLabel } from "@/components/HintLabel";
 import { Panel } from "@/components/Panel";
 import { UnitInput } from "@/components/UnitInput";
 import { Button } from "@/components/ui/button";
@@ -51,23 +52,7 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   const id = `fit-${name}`;
   return (
     <div className="flex flex-col gap-2.5">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={`About ${label.toLowerCase()}`}
-              className="-mx-1 flex cursor-help items-center gap-1 rounded px-1 py-0.5 text-sm leading-none font-medium"
-            />
-          }
-        >
-          {label}
-          <InfoIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-64">
-          {hint}
-        </TooltipContent>
-      </Tooltip>
+      <HintLabel label={label} hint={hint} />
       <UnitInput
         id={id}
         unit={unit}

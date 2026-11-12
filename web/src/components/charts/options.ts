@@ -50,6 +50,26 @@ const PEAK_ALERT = "#ff6b6b";
 const RELAX_BAND = "rgba(126, 224, 129, 0.12)";
 const WARNING_BAND = "rgba(255, 209, 102, 0.14)";
 
+/** How far apart, as a fraction of the frequency axis, two peak labels must be to sit on one level. */
+const LABEL_GAP = 0.09;
+/** How far each level lifts a peak label, in pixels. */
+const LABEL_LIFT = 16;
+
+/**
+ * The level of each peak label, lowest first. A peak whose label would touch an earlier one (within
+ * `gap` Hz) takes the lowest level those neighbours leave free, so labels in a crowd alternate.
+ */
+function labelLevels(freqs: number[], gap: number): number[] {
+  const levels: number[] = [];
+  for (const freq of freqs) {
+    const taken = new Set(levels.filter((_, j) => freq - freqs[j] < gap));
+    let level = 0;
+    while (taken.has(level)) level += 1;
+    levels.push(level);
+  }
+  return levels;
+}
+
 /** 1.05 times the largest total PSD up to `maxFreq`, as Shake&Tune scales its graph. */
 function autoscale(chip: ChipAnalysis, maxFreq: number): number | undefined {
   let largest = Number.NEGATIVE_INFINITY;
@@ -80,6 +100,10 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
     };
     const found = chip.peaks.find(([p]) => p === point)?.[1];
     if (found) {
+      const levels = labelLevels(
+        found.peaks.map((p) => p.freq),
+        maxFreq * LABEL_GAP,
+      );
       total.markPoint = {
         silent: true,
         symbol: "circle",
@@ -88,11 +112,26 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
         data: found.peaks.map((peak, n) => ({
           coord: [peak.freq, peak.level],
           label: {
-            formatter: `${n + 1} ${formatHz(peak.freq)} Hz`,
+            formatter: `{index|${n + 1}} {value|${formatHz(peak.freq)} Hz}`,
             position: "top",
+            offset: [0, levels[n] === 0 ? 0 : -LABEL_LIFT * levels[n]],
             color: peak.above_effect ? PEAK_ALERT : text,
             fontWeight: peak.above_effect ? "bold" : "normal",
-            fontSize: 11,
+            fontSize: 13,
+            // The number is a small badge, so it reads apart from the frequency beside it.
+            rich: {
+              index: {
+                backgroundColor: peak.above_effect ? PEAK_ALERT : MUTED,
+                color: "#171717",
+                fontWeight: "bold",
+                padding: [1, 5],
+                borderRadius: 3,
+              },
+              value: {
+                color: peak.above_effect ? PEAK_ALERT : text,
+                fontWeight: peak.above_effect ? "bold" : "normal",
+              },
+            },
           },
         })),
       };
@@ -173,6 +212,10 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
         splitLine,
         min: 0,
         max: maxScale && maxScale > 0 ? maxScale : autoscale(chip, maxFreq),
+        axisLabel: {
+          formatter: (value: number) =>
+            Number(value.toPrecision(3)).toLocaleString("en-US", { maximumFractionDigits: 20 }),
+        },
       },
       {
         type: "value",

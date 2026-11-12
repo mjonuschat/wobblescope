@@ -61,12 +61,17 @@ export function EligibilityPanel({
   const manyPoints = new Set(decisions.map((d) => d.point)).size > 1;
   return (
     <Panel title="Data Quality">
-      <ul className="space-y-3">
-        {decisions.map((d) => {
+      <ul className="flex flex-wrap items-start gap-x-3 gap-y-3">
+        {decisions.map((d, index) => {
           const { tone, headline, detail } = verdict(d);
           const { Icon, className } = TONES[tone];
           return (
             <li key={`${d.chip}-${d.point}`} className="flex items-start gap-3">
+              {index > 0 && (
+                <span aria-hidden="true" className="text-muted-foreground">
+                  ·
+                </span>
+              )}
               <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
               <div className="space-y-0.5">
                 <p>

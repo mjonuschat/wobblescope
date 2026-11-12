@@ -11,7 +11,18 @@ type Series = {
   yAxisIndex?: number;
   markLine?: { data: { xAxis?: number; yAxis?: number }[] };
   markArea?: { data: { yAxis: number }[][] };
-  markPoint?: { data: { label: { formatter: string; color: string; fontWeight: string } }[] };
+  markPoint?: {
+    data: {
+      label: {
+        formatter: string;
+        color: string;
+        fontWeight: string;
+        fontSize: number;
+        offset: [number, number];
+        rich: Record<string, { backgroundColor?: string; color: string }>;
+      };
+    }[];
+  };
 };
 
 const series = (o: unknown) => (o as { series: Series[] }).series;
@@ -259,9 +270,40 @@ describe("psdOption peaks, thresholds and scale", () => {
   it("marks each peak on its dataset's total series with its number and its frequency", () => {
     const [total] = totals(psdOption({ chip: withPeaks, recommendation: null, maxFreq: 200 }));
     expect(total.markPoint?.data.map((d) => d.label.formatter)).toEqual([
-      `1 ${formatHz(5.2)} Hz`,
-      `2 ${formatHz(5.4)} Hz`,
+      `{index|1} {value|${formatHz(5.2)} Hz}`,
+      `{index|2} {value|${formatHz(5.4)} Hz}`,
     ]);
+  });
+
+  it("lifts the label of a peak that sits close to an earlier one, so labels do not overlap", () => {
+    const [total] = totals(psdOption({ chip: withPeaks, recommendation: null, maxFreq: 200 }));
+    expect(total.markPoint?.data.map((d) => d.label.offset)).toEqual([
+      [0, 0],
+      [0, -16],
+    ]);
+  });
+
+  it("alternates the tiers along a run of close peaks and leaves distant peaks level", () => {
+    const peak = (freq: number) => ({ freq, level: 4, above_effect: false });
+    const run = { ...found, peaks: [20, 30, 40, 150].map(peak) };
+    const chip = { ...one, peaks: [[0, run]] as typeof one.peaks };
+    const [total] = totals(psdOption({ chip, recommendation: null, maxFreq: 200 }));
+    expect(total.markPoint?.data.map((d) => d.label.offset[1])).toEqual([0, -16, 0, 0]);
+  });
+
+  it("draws the peak labels at 13 px", () => {
+    const [total] = totals(psdOption({ chip: withPeaks, recommendation: null, maxFreq: 200 }));
+    expect(total.markPoint?.data.map((d) => d.label.fontSize)).toEqual([13, 13]);
+  });
+
+  it("sets the number apart from the frequency as a badge", () => {
+    const [total] = totals(psdOption({ chip: withPeaks, recommendation: null, maxFreq: 200 }));
+    const [below, above] = total.markPoint?.data.map((d) => d.label) ?? [];
+    for (const label of [below, above]) {
+      expect(label.rich.index.backgroundColor).toBeTruthy();
+      expect(label.rich.value.backgroundColor).toBeUndefined();
+    }
+    expect(above.rich.index.backgroundColor).not.toBe(below.rich.index.backgroundColor);
   });
 
   it("draws a peak above the effect threshold in bold and in a colour of its own", () => {
@@ -299,7 +341,16 @@ describe("psdOption peaks, thresholds and scale", () => {
     expect(lines.map((m) => m.yAxis ?? m.xAxis)).toEqual([1, 3, 48.2]);
   });
 
-  const leftAxis = (o: unknown) => (o as { yAxis: { min: number; max: number }[] }).yAxis[0];
+  const leftAxis = (o: unknown) =>
+    (o as { yAxis: { min: number; max: number; axisLabel: { formatter: (v: number) => string } }[] }).yAxis[0];
+
+  it("writes the left axis labels to three significant digits", () => {
+    const { formatter } = leftAxis(psdOption({ chip: one, recommendation: null, maxFreq: 200 })).axisLabel;
+    expect(formatter(1341.6751077824945)).toBe("1,340");
+    expect(formatter(300)).toBe("300");
+    expect(formatter(0.0123456)).toBe("0.0123");
+    expect(formatter(0)).toBe("0");
+  });
 
   it("sets the left axis to 0 and the given maximum", () => {
     const axis = leftAxis(psdOption({ chip: one, recommendation: null, maxFreq: 200, maxScale: 10 }));

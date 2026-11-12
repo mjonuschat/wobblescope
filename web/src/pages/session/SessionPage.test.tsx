@@ -78,7 +78,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     expect((await screen.findAllByText(/shaper_type_x: mzv/)).length).toBeGreaterThan(0);
     const worst = screen.getByRole("region", { name: "Recommended Input Shaper" });
-    fireEvent.click(worst.querySelector("button")!);
+    fireEvent.click(within(worst).getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SNIPPET));
     expect(await screen.findByText("Copied")).toBeTruthy();
   });
@@ -92,7 +92,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const worst = await screen.findByRole("region", { name: "Recommended Input Shaper" });
-    fireEvent.click(worst.querySelector("button")!);
+    fireEvent.click(within(worst).getByRole("button", { name: "Copy" }));
     expect(await screen.findByText(/Copy failed/)).toBeTruthy();
     expect(worst.textContent).toContain("shaper_type_x: mzv");
   });
@@ -109,18 +109,69 @@ describe("the session view", () => {
     expect(screen.getByRole("region", { name: "Recommended Input Shaper" }).textContent).toContain("mzv at 48.2 Hz");
   });
 
-  it("typing a maximum above the chart rescales it and clearing it autoscales", async () => {
+  it("lists the chips of the data quality panel on one line, separated by a mid dot", async () => {
+    const a = analysis();
+    a.eligibility.decisions = [decision("a", "Included"), decision("b", "Included")];
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const panel = await screen.findByRole("region", { name: "Data Quality" });
+    const list = panel.querySelector("ul") as HTMLElement;
+    expect(list.className).toContain("flex-wrap");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(list.textContent?.match(/·/g)).toHaveLength(1);
+  });
+
+  it("sets the chart scale in a dialog next to the expand button and restores auto from it", async () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
     const card = await chipCard("a");
     const chart = () => card.querySelector('[role="img"]') as HTMLElement;
-    const input = within(card).getByLabelText("Maximum");
     expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
+    const scale = within(card).getByRole("button", { name: "Set the chart scale" });
+    const expand = within(card).getByRole("button", { name: "Expand the chart and table" });
+    expect(scale.compareDocumentPosition(expand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(scale);
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByLabelText("Maximum") as HTMLInputElement;
+    expect(input.type).toBe("number");
+    fireEvent.change(input, { target: { value: "-5" } });
+    expect((within(dialog).getByRole("button", { name: "Apply" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).getByText(/positive number/)).toBeTruthy();
     fireEvent.change(input, { target: { value: "10" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(chart().dataset.ymax).toBe("10");
-    fireEvent.change(input, { target: { value: "" } });
+
+    fireEvent.click(scale);
+    const again = await screen.findByRole("dialog");
+    expect((within(again).getByLabelText("Maximum") as HTMLInputElement).value).toBe("10");
+    fireEvent.click(within(again).getByRole("button", { name: "Restore Auto" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
+  });
+
+  it("explains the scale and expand buttons in a tooltip", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const card = await chipCard("a");
+    fireEvent.focus(within(card).getByRole("button", { name: "Set the chart scale" }));
+    expect(await screen.findByText(/Set where the vibration axis ends/)).toBeTruthy();
+    fireEvent.blur(within(card).getByRole("button", { name: "Set the chart scale" }));
+    fireEvent.focus(within(card).getByRole("button", { name: "Expand the chart and table" }));
+    expect(await screen.findByText(/Open the chart and table in a larger view/)).toBeTruthy();
+  });
+
+  it("offers the chart scale for a chip that has no recommendation to expand", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const degraded = await chipCard("b");
+    expect(within(degraded).getByRole("button", { name: "Set the chart scale" })).toBeTruthy();
+    expect(within(degraded).queryByRole("button", { name: "Expand the chart and table" })).toBeNull();
   });
 
   it("lets the user include an excluded chip, and analyses again with it named", async () => {
