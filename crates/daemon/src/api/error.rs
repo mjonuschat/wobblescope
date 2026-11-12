@@ -259,8 +259,12 @@ impl From<ImportError> for ApiError {
     fn from(e: ImportError) -> Self {
         let message = e.to_string();
         match e {
-            ImportError::MissingChip | ImportError::MissingAxis => Self::InvalidRequest { message },
-            ImportError::InvalidCsv(_) => Self::InvalidCsv { message },
+            ImportError::MissingChip
+            | ImportError::MissingAxis
+            | ImportError::NoFiles
+            | ImportError::BadCreatedAt(_)
+            | ImportError::Group(_) => Self::InvalidRequest { message },
+            ImportError::InvalidCsv(_) | ImportError::File { .. } => Self::InvalidCsv { message },
             ImportError::NoFreeId => Self::Internal { message },
             ImportError::Storage(e) => e.into(),
         }

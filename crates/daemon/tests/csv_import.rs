@@ -5,7 +5,7 @@ use std::path::Path;
 use common::{Spec, probe, seal_in, sessions_dir, settings};
 use tempfile::TempDir;
 use time::OffsetDateTime;
-use wobblescope::csv_import::{ImportError, ImportOptions, import_csv};
+use wobblescope::csv_import::{GroupFile, ImportError, ImportOptions, import_csv, import_group};
 use wobblescope::storage::index::{ListFilter, SourceKind};
 use wobblescope::storage::{Storage, StorageError};
 use wobblescope_core::fit::Axis;
@@ -217,4 +217,115 @@ fn a_real_capture_imports_and_loads_back_with_its_sample_count() {
     file.read_to_end(&mut stored).unwrap();
     let decoded = wobblescope_session::codec::decode_samples(&stored).unwrap();
     assert_eq!(decoded.len(), rows);
+}
+
+fn gfile(name: &str, chip: &str, bytes: &[u8]) -> GroupFile {
+    GroupFile {
+        name: name.to_owned(),
+        chip: chip.to_owned(),
+        axis: Axis::X,
+        point: None,
+        bytes: bytes.to_vec(),
+    }
+}
+
+fn two_chips() -> Vec<GroupFile> {
+    vec![
+        gfile("a.csv", "adxl345 a", CSV.as_bytes()),
+        gfile("b.csv", "adxl345 b", CSV.as_bytes()),
+    ]
+}
+
+#[test]
+fn a_group_of_two_chips_is_one_stored_session() {
+    let dir = TempDir::new().unwrap();
+    let s = open(dir.path(), BIG);
+    let summary = import_group(&s, two_chips(), None, at(NOON)).unwrap();
+    assert_eq!(summary.source, SourceKind::CsvImport);
+    assert_eq!(summary.chips, ["adxl345 a", "adxl345 b"]);
+    assert_eq!(ids(&s), std::slice::from_ref(&summary.id));
+    let (_, meta) = s.session(&summary.id).unwrap();
+    assert_eq!(meta.chips.len(), 2);
+    assert_eq!(meta.segments.len(), 1);
+}
+
+#[test]
+fn created_at_with_an_offset_or_a_fraction_is_stored_as_whole_second_utc() {
+    let dir = TempDir::new().unwrap();
+    let s = open(dir.path(), BIG);
+    let summary = import_group(
+        &s,
+        two_chips(),
+        Some("2026-11-11T06:52:36.789+02:00"),
+        at(NOON),
+    )
+    .unwrap();
+    assert_eq!(summary.created_at, "2026-11-11T04:52:36Z");
+    assert_eq!(summary.id, "csv-20261111T045236Z");
+    assert!(matches!(
+        import_group(&s, two_chips(), Some("nope"), at(NOON)),
+        Err(ImportError::BadCreatedAt(_))
+    ));
+}
+
+#[test]
+fn a_bad_file_names_its_position_and_name_and_stores_nothing() {
+    let dir = TempDir::new().unwrap();
+    let s = open(dir.path(), BIG);
+    let bad: [(&str, &[u8]); 4] = [
+        (
+            "back.csv",
+            b"#time,accel_x,accel_y,accel_z\n2.0,1,2,3\n1.0,1,2,3\n",
+        ),
+        ("empty.csv", b""),
+        ("one.csv", b"#time,accel_x,accel_y,accel_z\n1.0,1,2,3\n"),
+        ("utf.csv", &[0xff, 0xfe, 0x00]),
+    ];
+    for (name, bytes) in bad {
+        let files = vec![
+            gfile("a.csv", "adxl345 a", CSV.as_bytes()),
+            gfile(name, "adxl345 b", bytes),
+        ];
+        match import_group(&s, files, None, at(NOON)) {
+            Err(ImportError::File { index, name: n, .. }) => {
+                assert_eq!(index, 2);
+                assert_eq!(n, name);
+            }
+            other => panic!("{name}: {other:?}"),
+        }
+        assert!(ids(&s).is_empty());
+    }
+}
+
+#[test]
+fn an_id_taken_gets_a_suffix() {
+    let dir = TempDir::new().unwrap();
+    let s = open(dir.path(), BIG);
+    let first = import_group(&s, two_chips(), None, at(NOON)).unwrap();
+    let second = import_group(&s, two_chips(), None, at(NOON)).unwrap();
+    assert_eq!(first.id, "csv-20261031T120000Z");
+    assert_eq!(second.id, "csv-20261031T120000Z-2");
+}
+
+#[test]
+fn admission_uses_the_summed_estimate() {
+    let dir = TempDir::new().unwrap();
+    // Two files of three samples: 6 * 32 * 1.5 = 288 bytes.
+    let refused = open(dir.path(), 287);
+    assert!(matches!(
+        import_group(&refused, two_chips(), None, at(NOON)),
+        Err(ImportError::Storage(StorageError::CapExceeded { .. }))
+    ));
+    let admitted = open(dir.path(), 289);
+    import_group(&admitted, two_chips(), None, at(NOON)).unwrap();
+}
+
+#[test]
+fn no_files_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let s = open(dir.path(), BIG);
+    assert!(matches!(
+        import_group(&s, Vec::new(), None, at(NOON)),
+        Err(ImportError::NoFiles)
+    ));
 }

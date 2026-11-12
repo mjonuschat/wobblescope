@@ -2,9 +2,11 @@
 //! store. Nothing is admitted, and so nothing evicted, until the file has parsed.
 
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 use wobblescope_core::fit::Axis;
 use wobblescope_session::import::{
-    ImportRequest, import_klipper_csv, suggest_hints_from_file_name,
+    GroupRequest, ImportFile, ImportRequest, build_klipper_group, import_klipper_csv,
+    parse_klipper_csv, suggest_hints_from_file_name,
 };
 
 use crate::capture::iso_utc;
@@ -42,6 +44,25 @@ pub enum ImportError {
     /// Every id from `csv-<time>` to its `-99` suffix is taken.
     #[error("no free session id for this second")]
     NoFreeId,
+    /// A group import was given no files.
+    #[error("no files to import")]
+    NoFiles,
+    /// A file of a group did not parse. `index` counts from 1.
+    #[error("file {index} ({name}): {reason}")]
+    File {
+        /// Position of the file in the request, from 1.
+        index: usize,
+        /// The file's name as uploaded.
+        name: String,
+        /// Why it was refused.
+        reason: String,
+    },
+    /// The files parsed but do not make one session.
+    #[error("{0}")]
+    Group(String),
+    /// `created_at` is not an RFC 3339 timestamp.
+    #[error("created_at is not an RFC 3339 timestamp: {0}")]
+    BadCreatedAt(String),
     /// Admission refused the import, or storing it failed.
     #[error(transparent)]
     Storage(#[from] StorageError),
@@ -104,4 +125,100 @@ pub fn import_csv<B: AsRef<[u8]>>(
     };
     meta.id = id;
     Ok(storage.store(reservation, &meta, |_| Ok(std::mem::take(&mut samples)))?)
+}
+
+/// One file of a group import, as uploaded.
+#[derive(Debug, Clone)]
+pub struct GroupFile {
+    /// The uploaded file's name, kept in the metadata.
+    pub name: String,
+    /// Klipper config section name of the chip that recorded the file.
+    pub chip: String,
+    /// Test axis the file was recorded for.
+    pub axis: Axis,
+    /// Probe point in machine coordinates, when known.
+    pub point: Option<[f64; 3]>,
+    /// The file's content.
+    pub bytes: Vec<u8>,
+}
+
+/// Parses an RFC 3339 timestamp and returns it as UTC to whole seconds.
+///
+/// # Errors
+/// [`ImportError::BadCreatedAt`] when `text` is not RFC 3339.
+pub fn normalize_created_at(text: &str) -> Result<String, ImportError> {
+    OffsetDateTime::parse(text, &Rfc3339)
+        .map(iso_utc)
+        .map_err(|e| ImportError::BadCreatedAt(format!("{text:?}: {e}")))
+}
+
+/// Imports `files` as one new session. `created_at` defaults to `now`; the id is
+/// `csv-<created_at>` with the same suffixes as [`import_csv`].
+///
+/// Files are parsed one at a time and each file's bytes are freed right after its parse, so
+/// peak memory stays near that of a single-file import. Nothing is admitted until every file
+/// has parsed and the group has been built, so a bad group never causes an eviction. Admission
+/// uses the estimate for the samples of all files together.
+///
+/// # Errors
+/// [`ImportError`].
+pub fn import_group(
+    storage: &Storage,
+    files: Vec<GroupFile>,
+    created_at: Option<&str>,
+    now: OffsetDateTime,
+) -> Result<Summary, ImportError> {
+    if files.is_empty() {
+        return Err(ImportError::NoFiles);
+    }
+    let created_at = match created_at {
+        Some(text) => normalize_created_at(text)?,
+        None => iso_utc(now),
+    };
+    let base = base_id("csv", &created_at);
+
+    let mut parsed = Vec::with_capacity(files.len());
+    for (i, file) in files.into_iter().enumerate() {
+        let GroupFile {
+            name,
+            chip,
+            axis,
+            point,
+            bytes,
+        } = file;
+        let file_error = |reason: String| ImportError::File {
+            index: i + 1,
+            name: name.clone(),
+            reason,
+        };
+        let text = std::str::from_utf8(&bytes)
+            .map_err(|e| file_error(format!("the file is not UTF-8: {e}")))?;
+        let samples = parse_klipper_csv(text).map_err(|e| file_error(e.to_string()))?;
+        drop(bytes);
+        parsed.push(ImportFile {
+            chip_name: chip,
+            axis,
+            point,
+            file_name: Some(name),
+            samples,
+        });
+    }
+
+    let mut group = build_klipper_group(
+        &GroupRequest {
+            id: base.clone(),
+            created_at,
+        },
+        parsed,
+    )
+    .map_err(|e| ImportError::Group(e.to_string()))?;
+
+    let estimate = estimate_from_samples(group.sample_count()).unwrap_or(u64::MAX);
+    let admitted = first_free_id(&base, |id| storage.admit(id, estimate))?;
+    let Some((id, reservation)) = admitted else {
+        return Err(ImportError::NoFreeId);
+    };
+    let mut meta = group.meta.clone();
+    meta.id = id;
+    Ok(storage.store(reservation, &meta, |file| group.take(file))?)
 }
