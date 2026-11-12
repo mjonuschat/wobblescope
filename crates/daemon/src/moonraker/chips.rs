@@ -12,7 +12,6 @@ pub enum ChipType {
     Adxl345,
     /// An LIS2DW, plain or named.
     Lis2dw,
-    /// The plain Beacon probe's accelerometer.
     Beacon,
 }
 
@@ -92,7 +91,6 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
     let Some(&kind) = words.first() else {
         return Section::Ignored;
     };
-    let named = words.len() > 1;
     let last = words.last().copied().unwrap_or(kind);
     let skip = |reason: &str| {
         Section::Skipped(SkippedSection {
@@ -124,23 +122,38 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
             axes_map: axes_map_of(options),
             availability: Availability::Unchecked,
         }),
-        "beacon" if !named => Section::Chip(Chip {
+        "beacon" => classify_beacon(name, &words[1..], options),
+        "lis3dh" => skip("lis3dh is not supported yet"),
+        "mpu9250" => skip("mpu9250 is not supported yet"),
+        "icm20948" => skip("icm20948 is not supported yet"),
+        _ => Section::Ignored,
+    }
+}
+
+/// A `[beacon]` or `[beacon sensor <name>]` section is a probe with an accelerometer. A `model`
+/// section, alone or after the sensor name, holds a calibration model and is not a device.
+/// `after` is the section name's words after `beacon`.
+fn classify_beacon(name: &str, after: &[&str], options: &Map<String, Value>) -> Section {
+    let (sensor, rest) = match after {
+        ["sensor", sensor, rest @ ..] => (Some(*sensor), rest),
+        rest => (None, rest),
+    };
+    match rest {
+        [] => Section::Chip(Chip {
             section: name.to_owned(),
             chip_type: ChipType::Beacon,
-            sensor: None,
+            sensor: sensor.map(str::to_owned),
             dump_endpoint: "beacon/dump_accel".to_owned(),
             nominal_rate_hz: None,
             mcu: None,
             axes_map: option_without_spaces(options, "accel_axes_map"),
             availability: Availability::Unchecked,
         }),
-        // `[beacon model <name>]` holds a calibration model, not a device.
-        "beacon" if words[1] == "model" => Section::Ignored,
-        "beacon" => skip("named Beacon devices are not supported yet"),
-        "lis3dh" => skip("lis3dh is not supported yet"),
-        "mpu9250" => skip("mpu9250 is not supported yet"),
-        "icm20948" => skip("icm20948 is not supported yet"),
-        _ => Section::Ignored,
+        ["model", ..] => Section::Ignored,
+        _ => Section::Skipped(SkippedSection {
+            section: name.to_owned(),
+            reason: "not a Beacon section the daemon knows".to_owned(),
+        }),
     }
 }
 
@@ -161,7 +174,6 @@ fn axes_map_of(options: &Map<String, Value>) -> Option<String> {
     option_without_spaces(options, "axes_map")
 }
 
-/// The option `key` with its spaces removed, when the config sets it.
 fn option_without_spaces(options: &Map<String, Value>, key: &str) -> Option<String> {
     let text = options.get(key)?.as_str()?;
     let map: String = text.chars().filter(|c| !c.is_whitespace()).collect();

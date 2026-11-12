@@ -65,9 +65,24 @@ fn a_plain_beacon_has_no_sensor_and_no_rate() {
 }
 
 #[test]
+fn a_named_beacon_is_a_chip_with_its_name_as_the_sensor() {
+    let chip = only_chip(json!({"beacon sensor left": {}}));
+    assert_eq!(chip.chip_type, ChipType::Beacon);
+    assert_eq!(chip.sensor.as_deref(), Some("left"));
+    assert_eq!(chip.dump_endpoint, "beacon/dump_accel");
+}
+
+#[test]
 fn a_beacon_reads_its_axes_from_accel_axes_map() {
     let chip = only_chip(json!({"beacon": {"accel_axes_map": "x, z, -y", "axes_map": "y,x,z"}}));
     assert_eq!(chip.axes_map.as_deref(), Some("x,z,-y"));
+}
+
+#[test]
+fn a_model_of_a_named_beacon_is_ignored() {
+    let list = parse(json!({"beacon sensor left model default": {}}));
+    assert!(list.chips.is_empty());
+    assert!(list.skipped.is_empty());
 }
 
 #[test]
@@ -87,7 +102,7 @@ fn a_beacon_model_is_neither_a_chip_nor_skipped() {
 #[test]
 fn sections_the_mvp_cannot_use_are_skipped_with_a_reason() {
     let list = parse(json!({
-        "beacon sensor left": {},
+        "beacon bogus": {},
         "lis3dh": {},
         "mpu9250 bed": {},
         "icm20948": {},
