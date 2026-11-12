@@ -137,3 +137,27 @@ async fn a_frame_that_is_not_a_batch_ends_the_stream_with_the_reason() {
     };
     assert!(reason.contains("not [t, x, y, z]"), "{reason}");
 }
+
+#[tokio::test]
+async fn recorded_beacon_frames_give_batches_without_counters() {
+    let path = format!(
+        "{}/tests/data/moonraker/real_beacon_frames.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let recorded: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let fake = FakeMoonraker::start().await;
+    let mut bridge = open(&fake, None).await.unwrap();
+    fake.bridge().push_frame("", &recorded["beacon_header"]);
+    for frame in recorded["beacon_batches"].as_array().unwrap() {
+        fake.bridge().push_frame("", frame);
+    }
+    for _ in 0..2 {
+        let Event::Batch(batch) = bridge.recv().await else {
+            panic!("expected a batch");
+        };
+        assert_eq!(batch.samples.len(), 160);
+        assert_eq!((batch.errors, batch.overflows), (None, None));
+        let rate_hz = 1.0 / (batch.samples.t[1] - batch.samples.t[0]);
+        assert!((rate_hz - 3300.0).abs() < 300.0, "{rate_hz}");
+    }
+}

@@ -198,9 +198,11 @@ fn parse_batch(frame: &Value) -> Result<Option<Batch>, BridgeError> {
         return Ok(None);
     };
     let protocol = |what: &str| BridgeError::Protocol(what.to_owned());
+    // Klipper's chips send `{"data": [...], "errors": n, "overflows": n}`. The probe's
+    // `beacon/dump_accel` sends the bare list of rows.
     let rows = params
-        .get("data")
-        .and_then(Value::as_array)
+        .as_array()
+        .or_else(|| params.get("data").and_then(Value::as_array))
         .ok_or_else(|| protocol("a batch without data"))?;
     let mut samples = RawSamples::default();
     for row in rows {
