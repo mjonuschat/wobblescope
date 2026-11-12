@@ -150,6 +150,18 @@ describe("the stream page", () => {
     expect(FakeSocket.instances).toHaveLength(1);
   });
 
+  it("keeps Start disabled until the daemon has started a chip's stream", async () => {
+    open();
+    await connect();
+    pick("a1");
+    fireEvent.change(screen.getByLabelText("Acceleration per Hz"), { target: { value: "60" } });
+    const start = screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
+    server(streamHeader("a1", 0));
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    expect(start.disabled).toBe(false);
+  });
+
   it("shares one colour scale between spectrograms, automatic until fixed limits are typed", async () => {
     open();
     await connect();

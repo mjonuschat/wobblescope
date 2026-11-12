@@ -188,7 +188,11 @@ export function StreamPage({ createWorker }: Props) {
           />
         </Panel>
       )}
-      <HoldPanel hold={hold} frequencyOfInterest={frequencyOfInterest} streaming={selected.length > 0} />
+      <HoldPanel
+        hold={hold}
+        frequencyOfInterest={frequencyOfInterest}
+        streaming={selected.some((section) => streams[section] !== undefined)}
+      />
       {chipList && !hello && <Waiting>Waiting for the daemon's defaults.</Waiting>}
       {hello && chipList && chipList.chips.length > 0 && selected.length === 0 && (
         <Card>
