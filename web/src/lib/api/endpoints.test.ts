@@ -1,6 +1,7 @@
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import { describe, expect, it } from "vitest";
 
+import type { ImportGroupState } from "@/pages/sessions/importModel";
 import { setBase, stubFetch } from "@/test/http";
 
 import { ApiClientError } from "./client";
@@ -12,6 +13,7 @@ import {
   getChips,
   getSettings,
   importCsv,
+  importGroup,
   listSessions,
   pinSession,
   saveResult,
@@ -158,5 +160,54 @@ describe("endpoints", () => {
     const got = await fetchResultSample("r1", 1, 2);
     expect(http.url()).toMatch(/\/api\/results\/r1\/samples\/1\/2$/);
     expect([...new Uint8Array(got)]).toEqual([7]);
+  });
+
+  const groupOf = (...entries: [string, string, "X" | "Y" | "", string][]): ImportGroupState => ({
+    id: "g1",
+    createdAt: new Date("2026-11-12T10:00:00Z"),
+    confirmed: true,
+    entries: entries.map(([name, chip, axis, point], i) => ({
+      id: `e${i}`,
+      file: new File([name], name),
+      chip,
+      chipGuessed: false,
+      axis,
+      point,
+      stampToken: null,
+    })),
+  });
+
+  it("importGroup posts multipart with the session part first and the files in order", async () => {
+    const http = stubFetch({ status: 201, body: { id: "csv-1" } });
+    await importGroup(groupOf(["a.csv", "adxl345", "X", "1, 2, 3"], ["b.csv", "adxl345 nh36", "Y", ""]));
+    expect(new URL(http.url()).pathname.endsWith("/api/imports")).toBe(true);
+    expect(http.init().method).toBe("POST");
+    expect(http.header(0, "X-Wobblescope-Client")).toBe("1");
+    expect(http.header(0, "Content-Type")).toBeNull();
+    const form = http.init().body as FormData;
+    expect([...form.keys()]).toEqual(["session", "file", "file"]);
+    const session = form.get("session") as Blob;
+    expect(session.type).toBe("application/json");
+    expect(JSON.parse(await session.text())).toEqual({
+      created_at: "2026-11-12T10:00:00.000Z",
+      files: [
+        { chip: "adxl345", axis: "x", point: [1, 2, 3] },
+        { chip: "adxl345 nh36", axis: "y", point: null },
+      ],
+    });
+    expect(form.getAll("file").map((f) => (f as File).name)).toEqual(["a.csv", "b.csv"]);
+  });
+
+  it("importGroup sends a null point for an empty point text", async () => {
+    const http = stubFetch({ status: 201, body: { id: "csv-1" } });
+    await importGroup(groupOf(["a.csv", "adxl345", "X", "  "]));
+    const session = (http.init().body as FormData).get("session") as Blob;
+    expect(JSON.parse(await session.text()).files[0].point).toBeNull();
+  });
+
+  it("importGroup refuses an invalid point text without sending", async () => {
+    const http = stubFetch({ status: 201, body: {} });
+    expect(() => importGroup(groupOf(["a.csv", "adxl345", "X", "1,2"]))).toThrow("a.csv");
+    expect(http.fn).not.toHaveBeenCalled();
   });
 });

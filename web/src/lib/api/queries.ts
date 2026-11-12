@@ -6,12 +6,14 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
+import type { Summary } from "@/lib/generated/Summary";
+import type { ImportGroupState } from "@/pages/sessions/importModel";
 
 import { getAnalysisClient } from "@/analysis/client";
 
@@ -30,6 +32,7 @@ import {
   getStatus,
   getStorage,
   importCsv,
+  importGroup,
   listResults,
   listSessions,
   getPrinter,
@@ -203,6 +206,51 @@ export function useImportCsv() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
     },
   });
+}
+
+export interface ImportGroupFailure {
+  groupId: string;
+  error: Error;
+  /** The 0-based position in the group of the file the daemon named, or null. */
+  entryIndex: number | null;
+}
+
+/** Sends groups one after another and keeps going after a failure; `run` never throws. */
+export function useImportGroups() {
+  const queryClient = useQueryClient();
+  const [isRunning, setIsRunning] = useState(false);
+  const run = useCallback(
+    async (groups: ImportGroupState[], onStored: (groupId: string, summary: Summary) => void) => {
+      setIsRunning(true);
+      const failed: ImportGroupFailure[] = [];
+      try {
+        for (const group of groups) {
+          try {
+            onStored(group.id, await importGroup(group));
+          } catch (caught) {
+            const error = caught instanceof Error ? caught : new Error(String(caught));
+            let entryIndex: number | null = null;
+            if (error instanceof ApiClientError && error.body?.error === "invalid_csv") {
+              const position = (error.body as { file?: number | null }).file;
+              if (typeof position === "number" && position >= 1 && position <= group.entries.length) {
+                entryIndex = position - 1;
+              }
+            }
+            failed.push({ groupId: group.id, error, entryIndex });
+          }
+        }
+      } finally {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.storage }),
+        ]);
+        setIsRunning(false);
+      }
+      return { failed };
+    },
+    [queryClient],
+  );
+  return { run, isRunning };
 }
 
 /** The printer's settings, read when the run screen opens. */

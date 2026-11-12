@@ -17,6 +17,9 @@ import type { StopDispatched } from "@/lib/generated/StopDispatched";
 import type { Summary } from "@/lib/generated/Summary";
 import type { Usage } from "@/lib/generated/Usage";
 
+import { parsePointText } from "@/lib/importFiles";
+import type { ImportGroupState } from "@/pages/sessions/importModel";
+
 import { ApiClientError, apiFetch, apiJson, apiUrl } from "./client";
 
 /** The list filters the app offers. */
@@ -109,6 +112,22 @@ export function importCsv({ file, chip, axis, point }: ImportRequest) {
   if (point) url.searchParams.set("point", point);
   url.searchParams.set("file_name", file.name);
   return apiJson<Summary>(url, { method: "POST", body: file });
+}
+
+/** Posts one group of CSV files as a multipart request that stores one session. */
+export function importGroup(group: ImportGroupState, signal?: AbortSignal) {
+  const files = group.entries.map((entry) => {
+    const point = parsePointText(entry.point);
+    if (point === "invalid") {
+      throw new Error(`The point of ${entry.file.name} is not three numbers`);
+    }
+    return { chip: entry.chip, axis: entry.axis ? entry.axis.toLowerCase() : null, point };
+  });
+  const form = new FormData();
+  const spec = { created_at: group.createdAt.toISOString(), files };
+  form.append("session", new Blob([JSON.stringify(spec)], { type: "application/json" }), "session.json");
+  for (const entry of group.entries) form.append("file", entry.file, entry.file.name);
+  return apiJson<Summary>("imports", { method: "POST", body: form, signal });
 }
 
 /** The stored, compressed sample file of one recording, exactly as the daemon holds it. */
