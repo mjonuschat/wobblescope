@@ -149,6 +149,29 @@ pub struct ShaperFit {
     pub results: Vec<CalibrationResult>,
 }
 
+/// Remaining vibrations (as a fraction) below which a shaper can be the one recommended for
+/// performance. Shake&Tune's `MAX_VIBRATIONS`, 5%.
+pub const PERFORMANCE_MAX_VIBRATIONS: f64 = 0.05;
+
+/// The shaper Shake&Tune recommends "for performance": the one with the highest `max_accel`
+/// among those whose remaining vibrations are below 5% (the first wins a tie). It is returned
+/// only when it is not `best` and its `max_accel` is at least `best`'s.
+pub fn performance_pick(
+    best: &CalibrationResult,
+    all: &[CalibrationResult],
+) -> Option<CalibrationResult> {
+    let mut pick: Option<&CalibrationResult> = None;
+    let mut pick_accel = 0.0;
+    for r in all {
+        if pick_accel < r.max_accel && r.vibrs * 100.0 < PERFORMANCE_MAX_VIBRATIONS * 100.0 {
+            pick = Some(r);
+            pick_accel = r.max_accel;
+        }
+    }
+    pick.filter(|p| p.name != best.name && p.max_accel >= best.max_accel)
+        .cloned()
+}
+
 /// The outcome of a shaper search.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -156,8 +179,12 @@ pub struct Recommendation {
     /// Frequency grid of every result's `vals`. A shaper whose search range ends lower has fewer
     /// values. Its grid is the first `vals.len()` bins.
     pub freq_bins: Vec<f64>,
-    /// The recommended shaper.
+    /// The recommended shaper (Shake&Tune's "for low vibrations").
     pub best: CalibrationResult,
+    /// A shaper that allows a higher acceleration while staying under 5% remaining vibrations,
+    /// when there is one (see [`performance_pick`]). One of `all`.
+    #[serde(default)]
+    pub for_performance: Option<CalibrationResult>,
     /// The fitted result of every evaluated shaper, in evaluation order.
     pub all: Vec<CalibrationResult>,
     /// The settings used.
@@ -620,6 +647,7 @@ pub fn find_best_shaper(
 
     Ok(Recommendation {
         freq_bins,
+        for_performance: performance_pick(&best, &all),
         best,
         all,
         settings: FitSettings {
