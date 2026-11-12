@@ -12,7 +12,6 @@ import {
   fetchSample,
   getChips,
   getSettings,
-  importCsv,
   importGroup,
   listSessions,
   pinSession,
@@ -62,29 +61,6 @@ describe("endpoints", () => {
     const got = await fetchSample("s1", 1, 0);
     expect(http.url()).toMatch(/\/api\/sessions\/s1\/samples\/1\/0$/);
     expect([...new Uint8Array(got)]).toEqual([1, 2, 3, 250]);
-  });
-
-  it("imports the file itself with chip, axis, point and file name", async () => {
-    const http = stubFetch({ status: 201, body: { id: "csv-1" } });
-    const file = new File(["a,b"], "run.csv", { type: "text/csv" });
-    await importCsv({ file, chip: "adxl345", axis: "X", point: "1,2,3" });
-    const url = new URL(http.url());
-    expect(http.init().method).toBe("POST");
-    expect(http.init().body).toBe(file);
-    expect(Object.fromEntries(url.searchParams)).toEqual({
-      chip: "adxl345",
-      axis: "x",
-      point: "1,2,3",
-      file_name: "run.csv",
-    });
-  });
-
-  it("leaves an empty axis and point out of the query", async () => {
-    const http = stubFetch({ status: 201, body: { id: "csv-1" } });
-    await importCsv({ file: new File(["x"], "a.csv"), chip: "adxl345", axis: "", point: "" });
-    const url = new URL(http.url());
-    expect(url.searchParams.has("axis")).toBe(false);
-    expect(url.searchParams.has("point")).toBe(false);
   });
 
   it("reads settings and chips with GET and checks chips with POST", async () => {

@@ -97,23 +97,6 @@ export function deleteSession(id: string) {
   return apiJson<void>(`sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** What the import form collects. Empty `axis` and `point` are left to the daemon. */
-export interface ImportRequest {
-  file: File;
-  chip: string;
-  axis?: Axis | "";
-  point?: string;
-}
-
-export function importCsv({ file, chip, axis, point }: ImportRequest) {
-  const url = apiUrl("sessions");
-  url.searchParams.set("chip", chip);
-  if (axis) url.searchParams.set("axis", axis.toLowerCase());
-  if (point) url.searchParams.set("point", point);
-  url.searchParams.set("file_name", file.name);
-  return apiJson<Summary>(url, { method: "POST", body: file });
-}
-
 /** Posts one group of CSV files as a multipart request that stores one session. */
 export function importGroup(group: ImportGroupState, signal?: AbortSignal) {
   const files = group.entries.map((entry) => {

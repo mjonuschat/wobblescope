@@ -19,7 +19,6 @@ import { getAnalysisClient } from "@/analysis/client";
 
 import { ApiClientError } from "./client";
 import {
-  type ImportRequest,
   type SessionFilters,
   type StartTestRequest,
   checkChips,
@@ -31,7 +30,6 @@ import {
   getSettings,
   getStatus,
   getStorage,
-  importCsv,
   importGroup,
   listResults,
   listSessions,
@@ -191,17 +189,6 @@ export function useDeleteSession() {
       // The id can be written again with other data, so nothing of the old session may stay.
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(id) });
       getAnalysisClient().forget(id);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
-    },
-  });
-}
-
-export function useImportCsv() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (request: ImportRequest) => importCsv(request),
-    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
     },
