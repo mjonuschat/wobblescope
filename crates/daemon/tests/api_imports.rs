@@ -352,6 +352,24 @@ async fn seventeen_files_are_refused() {
 }
 
 #[tokio::test]
+async fn a_session_part_over_64_kib_is_refused_with_413() {
+    let dir = TempDir::new().unwrap();
+    let (s, _) = open(dir.path(), BIG);
+    let app = app(Some(s.clone()));
+    let entries = vec!["{}"; 20_000].join(",");
+    let json = format!("{{\"files\":[{entries}]}}");
+    let padded = format!(
+        "{json}{}",
+        " ".repeat(64 * 1024 + 1 - json.len().min(64 * 1024))
+    );
+    assert!(padded.len() > 64 * 1024);
+    let (status, _, body) = send(&app, multipart(&padded, &[])).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(body_json(&body)["error"], "too_large");
+    assert!(s.list(&Default::default()).is_empty());
+}
+
+#[tokio::test]
 async fn file_parts_over_64_mib_in_total_are_refused_with_413() {
     let dir = TempDir::new().unwrap();
     let (s, _) = open(dir.path(), BIG);

@@ -38,10 +38,27 @@ fn multipart_error(e: &MultipartError) -> ApiError {
     }
 }
 
+/// The most bytes the `session` part may hold; 16 entries need far less.
+const SESSION_PART_LIMIT: usize = 64 * 1024;
+
 fn too_large() -> ApiError {
     ApiError::TooLarge {
         message: "the files add up to more than 64 MiB".to_owned(),
     }
+}
+
+/// Reads the `session` part, refusing more than `SESSION_PART_LIMIT` bytes.
+async fn read_session_part(field: &mut Field<'_>) -> Result<Vec<u8>, ApiError> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field.chunk().await.map_err(|e| multipart_error(&e))? {
+        if bytes.len() + chunk.len() > SESSION_PART_LIMIT {
+            return Err(ApiError::TooLarge {
+                message: "the session part is larger than 64 KiB".to_owned(),
+            });
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
 }
 
 /// Reads one `file` part into memory, adding its size to `total`.
@@ -62,7 +79,7 @@ pub(super) async fn import(
     permit: ImportPermit,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<Summary>), ApiError> {
-    let first = multipart
+    let mut first = multipart
         .next_field()
         .await
         .map_err(|e| multipart_error(&e))?
@@ -72,7 +89,8 @@ pub(super) async fn import(
             "the first part must be named session and hold the JSON description",
         ));
     }
-    let text = first.bytes().await.map_err(|e| multipart_error(&e))?;
+    let text = read_session_part(&mut first).await?;
+    drop(first);
     let SessionPart { created_at, files } = serde_json::from_slice(&text)
         .map_err(|e| ApiError::invalid(format!("the session part is not valid: {e}")))?;
     if files.len() > MAX_GROUP_FILES {
