@@ -162,6 +162,22 @@ describe("the stream page", () => {
     expect(start.disabled).toBe(false);
   });
 
+  it("keeps Start disabled for a chip whose subscription was refused or whose stream closed", async () => {
+    open();
+    await connect();
+    pick("a1");
+    fireEvent.change(screen.getByLabelText("Acceleration per Hz"), { target: { value: "60" } });
+    const start = screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
+    server({ type: "refused", chip: "a1", reason: "no such chip" });
+    expect(start.disabled).toBe(true);
+    pick("a1");
+    pick("a2");
+    server(streamHeader("a2", 1));
+    expect(start.disabled).toBe(false);
+    server({ type: "closed", chip: "a2", reason: "the chip went away" });
+    expect(start.disabled).toBe(true);
+  });
+
   it("shares one colour scale between spectrograms, automatic until fixed limits are typed", async () => {
     open();
     await connect();
