@@ -131,7 +131,7 @@ pub fn classify(name: &str, options: &Map<String, Value>) -> Section {
             dump_endpoint: "beacon/dump_accel".to_owned(),
             nominal_rate_hz: None,
             mcu: None,
-            axes_map: axes_map_of(options),
+            axes_map: option_without_spaces(options, "accel_axes_map"),
             availability: Availability::Unchecked,
         }),
         // `[beacon model <name>]` holds a calibration model, not a device.
@@ -158,7 +158,12 @@ fn mcu_of(options: &Map<String, Value>) -> Option<String> {
 
 /// The `axes_map` option with its spaces removed, when the config sets one.
 fn axes_map_of(options: &Map<String, Value>) -> Option<String> {
-    let text = options.get("axes_map")?.as_str()?;
+    option_without_spaces(options, "axes_map")
+}
+
+/// The option `key` with its spaces removed, when the config sets it.
+fn option_without_spaces(options: &Map<String, Value>, key: &str) -> Option<String> {
+    let text = options.get(key)?.as_str()?;
     let map: String = text.chars().filter(|c| !c.is_whitespace()).collect();
     (!map.is_empty()).then_some(map)
 }

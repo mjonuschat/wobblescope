@@ -65,6 +65,12 @@ fn a_plain_beacon_has_no_sensor_and_no_rate() {
 }
 
 #[test]
+fn a_beacon_reads_its_axes_from_accel_axes_map() {
+    let chip = only_chip(json!({"beacon": {"accel_axes_map": "x, z, -y", "axes_map": "y,x,z"}}));
+    assert_eq!(chip.axes_map.as_deref(), Some("x,z,-y"));
+}
+
+#[test]
 fn a_section_name_with_several_words_is_kept_and_the_last_word_is_the_sensor() {
     let chip = only_chip(json!({"adxl345 tool head": {}}));
     assert_eq!(chip.section, "adxl345 tool head");
@@ -219,6 +225,20 @@ fn a_real_printers_config_gives_its_two_chips_and_the_accel_chip_default() {
     assert!(list.skipped.is_empty());
     assert_eq!(list.defaults.x, ["lis2dw ebb36"]);
     assert_eq!(list.defaults.y, ["lis2dw ebb36"]);
+}
+
+#[test]
+fn a_real_beacon_config_gives_one_chip_with_its_axis_map_and_the_default() {
+    // Recorded from a real Moonraker, trimmed to the `[beacon]` and `[resonance_tester]` sections.
+    let list = parse_configfile(&fixture("real_configfile_beacon.json")).unwrap();
+    assert_eq!(list.chips.len(), 1, "{list:?}");
+    let chip = &list.chips[0];
+    assert_eq!(chip.chip_type, ChipType::Beacon);
+    assert_eq!(chip.sensor, None);
+    assert_eq!(chip.axes_map.as_deref(), Some("x,z,-y"));
+    assert!(list.skipped.is_empty());
+    assert_eq!(list.defaults.x, ["beacon"]);
+    assert_eq!(list.defaults.y, ["beacon"]);
 }
 
 #[test]

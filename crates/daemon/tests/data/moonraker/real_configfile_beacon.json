@@ -1,0 +1,11 @@
+{
+  "eventtime": 1017.5,
+  "status": {
+    "configfile": {
+      "config": {
+        "beacon": {"home_z_hop": "5", "home_z_hop_speed": "30", "home_xy_move_speed": "350", "home_xy_position": "75,75", "home_method": "contact", "home_method_when_homed": "proximity", "home_autocalibrate": "unhomed", "home_gcode_pre_x": "_HOME_PRE_AXIS AXIS=X", "home_gcode_post_x": "_HOME_POST_AXIS AXIS=X", "home_gcode_pre_y": "_HOME_PRE_AXIS AXIS=Y", "home_gcode_post_y": "_HOME_POST_AXIS AXIS=Y", "home_gcode_pre_xy": "_HOME_XY STAGE=pre", "home_gcode_post_xy": "_HOME_XY STAGE=post", "contact_activate_gcode": "ACTIVATE_PROBE SOURCE=homing", "contact_deactivate_gcode": "DEACTIVATE_PROBE SOURCE=homing", "contact_max_hotend_temperature": "180", "serial": "/dev/serial/by-id/usb-Beacon_Beacon_RevH_F07FB5FE5154354D38202020FF0A0617-if00", "x_offset": "0", "y_offset": "24", "mesh_main_direction": "x", "mesh_runs": "2", "accel_axes_map": "x, z, -y"},
+        "resonance_tester": {"accel_chip": "beacon", "probe_points": "\n-1,-1,-1"}
+      }
+    }
+  }
+}
