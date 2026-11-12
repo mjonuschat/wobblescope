@@ -17,11 +17,13 @@ import { useChips, useImportCsv } from "@/lib/api/queries";
 import { formatBytes } from "@/lib/format";
 import type { Axis } from "@/lib/generated/Axis";
 
+import { MAX_IMPORT_BYTES } from "./importModel";
+
 /** The select entry that reveals the typed field. */
 const OTHER = "__other__";
 
 /** The daemon refuses a larger body, so the browser does not send one. */
-export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
+export { MAX_IMPORT_BYTES } from "./importModel";
 
 function describe(error: Error): string {
   if (!(error instanceof ApiClientError) || !error.body) return error.message;
