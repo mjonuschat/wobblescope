@@ -42,6 +42,17 @@ describe("readFileName", () => {
 });
 
 describe("guessChip", () => {
+  it("matches the last word of a section name, which is what Klipper writes in the file name", () => {
+    const known = ["adxl345", "lis2dw ebb36"];
+    expect(guessChip("raw_data_x_ebb36_20261112_071845.csv", known)).toBe("lis2dw ebb36");
+    expect(guessChip("raw_data_x_adxl345_20261112_071845.csv", known)).toBe("adxl345");
+    expect(guessChip("raw_data_x_bed_t.csv", ["adxl345", "adxl345 bed"])).toBe("adxl345 bed");
+  });
+
+  it("does not guess when two known chips end in the same word", () => {
+    expect(guessChip("raw_data_x_left_t.csv", ["adxl345 left", "lis2dw left"])).toBeUndefined();
+  });
+
   const known = ["adxl345", "adxl345 bed", "lis2dw ebb36"];
   it("takes the longest match", () => {
     expect(guessChip("raw_data_x_adxl345_bed_t.csv", known)).toBe("adxl345 bed");

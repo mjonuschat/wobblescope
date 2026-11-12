@@ -60,19 +60,32 @@ export function readFileName(name: string): FileNameReading {
   return reading;
 }
 
-/** The longest known chip name that starts the name after the axis and ends at `_`, `.` or the end of the stem. */
+/**
+ * The known chip whose name starts the text after the axis and ends at `_`, `.` or the end of the stem.
+ * Klipper writes the last word of a chip's section name there (`ebb36` for `lis2dw ebb36`). The whole
+ * name with each space written as `_` also counts. The longest match wins, and a tie between chips
+ * gives no guess.
+ */
 export function guessChip(name: string, known: string[]): string | undefined {
   const parts = afterAxis(name);
   if (!parts) return undefined;
-  let best: string | undefined;
+  let longest = 0;
+  let matches = new Set<string>();
   for (const chip of known) {
-    const key = chip.replaceAll(" ", "_");
-    if (!key || !parts.rest.startsWith(key)) continue;
-    const next = parts.rest.charAt(key.length);
-    if (next !== "" && next !== "_" && next !== ".") continue;
-    if (best === undefined || chip.length > best.length) best = chip;
+    const keys = new Set([chip.replaceAll(" ", "_"), chip.slice(chip.lastIndexOf(" ") + 1)]);
+    for (const key of keys) {
+      if (!key || !parts.rest.startsWith(key)) continue;
+      const next = parts.rest.charAt(key.length);
+      if (next !== "" && next !== "_" && next !== ".") continue;
+      if (key.length > longest) {
+        longest = key.length;
+        matches = new Set([chip]);
+      } else if (key.length === longest) {
+        matches.add(chip);
+      }
+    }
   }
-  return best;
+  return matches.size === 1 ? [...matches][0] : undefined;
 }
 
 /** Parses `x, y, z`. Empty text is no point; anything else that is not three finite numbers is invalid. */
