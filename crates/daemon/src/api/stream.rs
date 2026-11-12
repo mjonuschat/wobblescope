@@ -447,6 +447,7 @@ async fn open_bridge(run: &ChipRun) -> Result<Bridge, String> {
         &run.chip.dump_endpoint,
         run.chip.sensor.as_deref(),
         AVAILABILITY_TIMEOUT,
+        run.moonraker.tls(),
     )
     .await
     .map_err(|e| match e {

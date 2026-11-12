@@ -14,6 +14,8 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use wobblescope_core::RawSamples;
 
+use super::tls::Tls;
+
 /// The request id the one subscribe call carries.
 const SUBSCRIBE_ID: u64 = 1;
 
@@ -67,8 +69,8 @@ impl Drop for Bridge {
 }
 
 impl Bridge {
-    /// Connects to `url`, subscribes to `endpoint` (with `sensor` when the chip has one) and
-    /// waits up to `timeout` for Klipper's answer.
+    /// Connects to `url`, verifying a `wss` server as `tls` says, subscribes to `endpoint` (with
+    /// `sensor` when the chip has one) and waits up to `timeout` for Klipper's answer.
     ///
     /// # Errors
     /// A [`BridgeError`]: the socket would not open, Klipper refused the subscription, or
@@ -78,9 +80,10 @@ impl Bridge {
         endpoint: &str,
         sensor: Option<&str>,
         timeout: Duration,
+        tls: &Tls,
     ) -> Result<Self, BridgeError> {
         let deadline = tokio::time::Instant::now() + timeout;
-        let connect = tokio::time::timeout_at(deadline, tokio_tungstenite::connect_async(url));
+        let connect = tokio::time::timeout_at(deadline, super::tls::connect(url, tls));
         let mut socket = match connect.await {
             Err(_) => return Err(BridgeError::Timeout),
             Ok(Err(WsError::Http(response))) => {
@@ -90,7 +93,7 @@ impl Bridge {
                 )));
             }
             Ok(Err(e)) => return Err(BridgeError::Connect(e.to_string())),
-            Ok(Ok((socket, _))) => socket,
+            Ok(Ok(socket)) => socket,
         };
         let mut params = json!({"response_template": {}});
         if let Some(sensor) = sensor {

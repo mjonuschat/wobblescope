@@ -5,6 +5,7 @@ use clap::Parser;
 use wobblescope::api;
 use wobblescope::cli::{Cli, Command};
 use wobblescope::config;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{self, Timings};
 use wobblescope::setup;
 use wobblescope::startup;
@@ -80,10 +81,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         let storage = startup::open_storage(dir, &settings, default_probe(), Some(&capture.slot))?;
         let _ = cell.set(storage);
     }
+    let tls = Tls::new(&settings.moonraker_tls)?;
+    for warning in settings.moonraker_warnings() {
+        tracing::warn!("{warning}");
+    }
     let (moonraker, report) = moonraker::spawn(
         &settings,
         Timings::default(),
         settings.storage_dir.is_none(),
+        tls,
     );
 
     let app = api::mount_configured(

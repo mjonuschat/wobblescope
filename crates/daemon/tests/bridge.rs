@@ -6,6 +6,7 @@ use common::fake_bridge::Subscribe;
 use common::fake_moonraker::{FakeMoonraker, eventually};
 use serde_json::Value;
 use wobblescope::moonraker::bridge::{Bridge, BridgeError, Event};
+use wobblescope::moonraker::tls::Tls;
 
 const DEADLINE: Duration = Duration::from_secs(5);
 const OPEN: Duration = Duration::from_millis(500);
@@ -19,7 +20,14 @@ fn frames() -> Value {
 }
 
 async fn open(fake: &FakeMoonraker, sensor: Option<&str>) -> Result<Bridge, BridgeError> {
-    Bridge::open(&fake.bridge_url("T"), "adxl345/dump_adxl345", sensor, OPEN).await
+    Bridge::open(
+        &fake.bridge_url("T"),
+        "adxl345/dump_adxl345",
+        sensor,
+        OPEN,
+        &Tls::default(),
+    )
+    .await
 }
 
 #[tokio::test]

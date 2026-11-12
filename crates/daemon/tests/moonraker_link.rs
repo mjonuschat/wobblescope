@@ -7,6 +7,7 @@ use common::fake_moonraker::{FakeMoonraker, Script, eventually};
 use serde_json::{Value, json};
 use wobblescope::config::Settings;
 use wobblescope::moonraker::status::{KlippyState, MoonrakerState, state_line};
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -130,7 +131,7 @@ fn chip_sections(m: &Moonraker) -> Vec<String> {
 async fn a_ready_printer_gives_a_connected_status_and_current_chips() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("ready and current chips", || {
         m.status().klippy.state == KlippyState::Ready && m.chips().current
     })
@@ -152,7 +153,7 @@ async fn a_ready_printer_gives_a_connected_status_and_current_chips() {
 async fn identify_names_the_client_and_carries_the_key_only_when_one_is_set() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
-    let (_m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (_m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("identify", || {
         !fake.requests_for("server.connection.identify").is_empty()
     })
@@ -168,7 +169,12 @@ async fn identify_names_the_client_and_carries_the_key_only_when_one_is_set() {
 
     let keyed = FakeMoonraker::start().await;
     Printer::new(&keyed, "ready", one_chip());
-    let (_m, _) = spawn(&settings(&keyed, Some("s3cret-key")), fast(), false);
+    let (_m, _) = spawn(
+        &settings(&keyed, Some("s3cret-key")),
+        fast(),
+        false,
+        Tls::default(),
+    );
     until("identify with a key", || {
         !keyed.requests_for("server.connection.identify").is_empty()
     })
@@ -185,7 +191,7 @@ async fn a_klipper_restart_that_adds_a_chip_shows_in_the_chips_once_ready_again(
     let printer = Printer::new(&fake, "ready", one_chip());
     let mut timings = fast();
     timings.poll_ready = Duration::from_secs(10);
-    let (m, _) = spawn(&settings(&fake, None), timings, false);
+    let (m, _) = spawn(&settings(&fake, None), timings, false, Tls::default());
     until("current chips", || m.chips().current).await;
     assert_eq!(chip_sections(&m), ["adxl345"]);
 
@@ -220,7 +226,7 @@ async fn a_klipper_restart_that_adds_a_chip_shows_in_the_chips_once_ready_again(
 async fn a_repeated_ready_notification_sends_no_second_chip_query() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("current chips", || m.chips().current).await;
     fake.push("notify_klippy_ready", json!([]));
     tokio::time::sleep(ms(150)).await;
@@ -231,7 +237,7 @@ async fn a_repeated_ready_notification_sends_no_second_chip_query() {
 async fn a_poll_that_sees_startup_become_ready_rereads_the_chips() {
     let fake = FakeMoonraker::start().await;
     let printer = Printer::new(&fake, "startup", one_chip());
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("startup", || {
         m.status().klippy.state == KlippyState::Startup
     })
@@ -247,7 +253,7 @@ async fn a_shutdown_carries_klippers_own_message() {
     let fake = FakeMoonraker::start().await;
     let printer = Printer::new(&fake, "shutdown", one_chip());
     printer.set_message("MCU 'mcu' shutdown: Timer too close");
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("the shutdown message", || {
         m.status().klippy.message.as_deref() == Some("MCU 'mcu' shutdown: Timer too close")
     })
@@ -259,7 +265,7 @@ async fn a_shutdown_carries_klippers_own_message() {
 async fn a_klippy_state_the_daemon_does_not_know_is_unknown() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "bogus", one_chip());
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("connected", || {
         m.status().moonraker.state == MoonrakerState::Connected
     })
@@ -272,7 +278,7 @@ async fn a_klippy_state_the_daemon_does_not_know_is_unknown() {
 async fn losing_moonraker_shows_unreachable_and_its_return_makes_the_chips_current_again() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("current chips", || m.chips().current).await;
 
     fake.set_accepting(false);
@@ -300,7 +306,7 @@ async fn backoff_doubles_to_its_cap_and_resets_after_a_successful_bootstrap() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
     fake.set_accepting(false);
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("five attempts", || fake.attempts().len() >= 5).await;
     fake.set_accepting(true);
     until("connected", || {
@@ -336,7 +342,7 @@ async fn an_unauthorized_call_gives_unauthorized_naming_both_fixes_and_retries()
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
     fake.on("server.info", Script::error(-32602, "Unauthorized"));
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("unauthorized", || {
         m.status().moonraker.state == MoonrakerState::Unauthorized
     })
@@ -357,7 +363,12 @@ async fn a_wrong_key_is_unauthorized_and_the_key_appears_nowhere() {
         "server.connection.identify",
         Script::error(-32602, "Invalid API Key"),
     );
-    let (m, _) = spawn(&settings(&fake, Some("s3cret-key")), fast(), false);
+    let (m, _) = spawn(
+        &settings(&fake, Some("s3cret-key")),
+        fast(),
+        false,
+        Tls::default(),
+    );
     until("unauthorized", || {
         m.status().moonraker.state == MoonrakerState::Unauthorized
     })
@@ -389,7 +400,7 @@ async fn a_slow_chip_query_within_its_own_timeout_still_gives_current_chips() {
         "printer.objects.query",
         Script::after(ms(400), Script::Result(inner)),
     );
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("current chips", || m.chips().current).await;
     assert_eq!(m.status().moonraker.state, MoonrakerState::Connected);
     assert_eq!(chip_sections(&m), ["adxl345 nh36", "lis2dw ebb36"]);
@@ -407,7 +418,7 @@ async fn a_chip_query_past_its_timeout_keeps_the_link_and_is_tried_again_next_po
             Script::Result(good.clone())
         }
     });
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("a second query", || {
         fake.requests_for("printer.objects.query").len() >= 2
     })
@@ -425,7 +436,7 @@ async fn a_shutdown_during_a_slow_chip_read_shows_at_once() {
     let mut timings = fast();
     timings.configfile = Duration::from_secs(5);
     timings.poll_ready = Duration::from_secs(10);
-    let (m, _) = spawn(&settings(&fake, None), timings, false);
+    let (m, _) = spawn(&settings(&fake, None), timings, false, Tls::default());
     until("the chip query", || {
         !fake.requests_for("printer.objects.query").is_empty()
     })
@@ -459,7 +470,7 @@ async fn a_read_that_a_restart_overtakes_is_not_current_and_is_read_again() {
     });
     let mut timings = fast();
     timings.poll_ready = Duration::from_secs(10);
-    let (m, _) = spawn(&settings(&fake, None), timings, false);
+    let (m, _) = spawn(&settings(&fake, None), timings, false, Tls::default());
     until("the first chip query", || {
         !fake.requests_for("printer.objects.query").is_empty()
     })
@@ -486,7 +497,7 @@ async fn a_chip_query_that_errors_keeps_the_link_and_the_next_poll_recovers() {
             Script::Result(good.clone())
         }
     });
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("current chips", || m.chips().current).await;
     assert_eq!(m.status().moonraker.state, MoonrakerState::Connected);
     assert_eq!(fake.connections(), 1);
@@ -504,7 +515,7 @@ async fn a_poll_that_times_out_ends_the_connection() {
             Script::Silent
         }
     });
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("unreachable", || {
         m.status().moonraker.state == MoonrakerState::Unreachable
     })
@@ -517,7 +528,7 @@ async fn a_poll_that_times_out_ends_the_connection() {
 async fn the_config_root_is_reported_without_waiting_for_ready_and_asked_once() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "error", one_chip());
-    let (m, report) = spawn(&settings(&fake, None), fast(), true);
+    let (m, report) = spawn(&settings(&fake, None), fast(), true, Tls::default());
     let root = tokio::time::timeout(DEADLINE, report.unwrap())
         .await
         .unwrap()
@@ -548,7 +559,7 @@ async fn roots_without_a_config_entry_are_reported_as_an_error() {
         "server.files.roots",
         Script::Result(json!([{"name": "gcodes", "path": "/g", "permissions": "rw"}])),
     );
-    let (_m, report) = spawn(&settings(&fake, None), fast(), true);
+    let (_m, report) = spawn(&settings(&fake, None), fast(), true, Tls::default());
     let answer = tokio::time::timeout(DEADLINE, report.unwrap())
         .await
         .unwrap()
@@ -560,7 +571,7 @@ async fn roots_without_a_config_entry_are_reported_as_an_error() {
 async fn without_asking_for_the_root_the_fake_never_sees_the_roots_call() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
-    let (m, report) = spawn(&settings(&fake, None), fast(), false);
+    let (m, report) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     assert!(report.is_none());
     until("current chips", || m.chips().current).await;
     assert!(fake.requests_for("server.files.roots").is_empty());
@@ -589,7 +600,7 @@ async fn real_recorded_responses_bootstrap_the_supervisor() {
         "printer.objects.query",
         Script::Result(fixture("real_configfile.json")),
     );
-    let (m, report) = spawn(&settings(&fake, None), fast(), true);
+    let (m, report) = spawn(&settings(&fake, None), fast(), true, Tls::default());
     let root = tokio::time::timeout(DEADLINE, report.unwrap())
         .await
         .unwrap()
@@ -614,7 +625,7 @@ async fn the_control_handle_reaches_the_fake_and_goes_away_with_the_connection()
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
     fake.on("printer.gcode.script", Script::Result(json!("ok")));
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     assert!(m.control().is_none());
     until("a control handle", || m.control().is_some()).await;
 
@@ -643,7 +654,7 @@ async fn the_bridge_url_keeps_the_route_prefix_and_encodes_the_token() {
         s.moonraker_bridge_url("T"),
         format!("ws://{addr}/printer-a/klippysocket?token=T")
     );
-    let (m, _) = spawn(&s, fast(), false);
+    let (m, _) = spawn(&s, fast(), false, Tls::default());
     assert_eq!(
         m.bridge_url("a b"),
         format!("ws://{addr}/printer-a/klippysocket?token=a%20b")
@@ -654,7 +665,7 @@ async fn the_bridge_url_keeps_the_route_prefix_and_encodes_the_token() {
 async fn gcode_responses_reach_the_line_receiver_without_non_string_entries() {
     let fake = FakeMoonraker::start().await;
     Printer::new(&fake, "ready", one_chip());
-    let (m, _) = spawn(&settings(&fake, None), fast(), false);
+    let (m, _) = spawn(&settings(&fake, None), fast(), false, Tls::default());
     until("ready", || m.status().klippy.state == KlippyState::Ready).await;
     let mut lines = m.gcode_lines();
     fake.push("notify_gcode_response", json!(["// a", 7, "!! b"]));

@@ -13,6 +13,7 @@ use crate::access::policy::parse_login_required;
 use crate::config::{DEFAULT_MOONRAKER_URL, Settings, moonraker_url};
 use crate::moonraker::discovery::parse_config_root;
 use crate::moonraker::rpc::{Notification, Rpc, RpcError};
+use crate::moonraker::tls::Tls;
 
 use super::render::SERVICE;
 
@@ -310,6 +311,12 @@ impl Moonraker {
         let text = url.unwrap_or(DEFAULT_MOONRAKER_URL);
         let parsed = moonraker_url(text)
             .map_err(|reason| super::SetupError::new(format!("--moonraker {text:?} {reason}")))?;
+        if parsed.scheme_str() == Some("https") {
+            return Err(super::SetupError::new(format!(
+                "--moonraker {text:?} must be a plain http URL: setup edits Moonraker's files and \
+                 runs on its host"
+            )));
+        }
         let settings = Settings {
             moonraker_url: parsed,
             ..Settings::default()
@@ -339,7 +346,7 @@ impl Moonraker {
 
     /// Opens a connection and identifies, with the API key when there is one.
     async fn connect(&self) -> Result<(Rpc, UnboundedReceiver<Notification>), MoonrakerError> {
-        let (rpc, notes) = Rpc::connect(&self.ws_url, self.timings.connect)
+        let (rpc, notes) = Rpc::connect(&self.ws_url, self.timings.connect, &Tls::default())
             .await
             .map_err(|e| match &e {
                 RpcError::Connect(m) if m.contains("HTTP 401") || m.contains("HTTP 403") => {

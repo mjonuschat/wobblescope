@@ -13,6 +13,7 @@ use wobblescope::capture::preflight::{Deps, Refusal, Started, run};
 use wobblescope::capture::slot::TestSlot;
 use wobblescope::config::Settings;
 use wobblescope::moonraker::status::KlippyState;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 use wobblescope::startup::StorageCell;
 use wobblescope::storage::{Storage, StorageError};
@@ -55,7 +56,7 @@ async fn rig_with(cap: u64) -> Rig {
         backoff_start: ms(10),
         backoff_max: ms(40),
     };
-    let (moonraker, _) = spawn(&settings, timings, false);
+    let (moonraker, _) = spawn(&settings, timings, false, Tls::default());
     eventually("current chips", DEADLINE, || {
         moonraker.chips().current && moonraker.control().is_some()
     })

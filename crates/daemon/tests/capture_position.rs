@@ -10,6 +10,7 @@ use wobblescope::capture::position::{
     PositionError, SWEEP_LEAD_IN_SECONDS, Timeouts, move_to_point, window_end, window_start,
 };
 use wobblescope::moonraker::rpc::Rpc;
+use wobblescope::moonraker::tls::Tls;
 
 const POINT: [f64; 3] = [150.5, 154.0, 20.0];
 
@@ -31,7 +32,7 @@ struct Rig {
 async fn rig() -> Rig {
     let fake = FakeMoonraker::start().await;
     let printer = FakePrinter::new(&fake, "ready", json!({}));
-    let (rpc, notes) = Rpc::connect(&fake.ws_url(), Duration::from_secs(2))
+    let (rpc, notes) = Rpc::connect(&fake.ws_url(), Duration::from_secs(2), &Tls::default())
         .await
         .unwrap();
     Rig {

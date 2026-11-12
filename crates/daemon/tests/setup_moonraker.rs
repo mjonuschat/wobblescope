@@ -296,3 +296,11 @@ fn the_main_config_path_comes_from_the_first_file_and_refuses_odd_names() {
     assert!(main_config_path(root, Some("../x.conf")).is_err());
     assert!(main_config_path(root, Some("a\nb.conf")).is_err());
 }
+
+#[test]
+fn setup_refuses_an_https_moonraker_url() {
+    let Err(err) = Moonraker::new(Some("https://printer.local:7130"), None, fast()) else {
+        panic!("an https URL must be refused");
+    };
+    assert!(err.to_string().contains("plain http"), "{err}");
+}

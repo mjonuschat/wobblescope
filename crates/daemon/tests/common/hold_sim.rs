@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use wobblescope::capture::slot::TestSlot;
 use wobblescope::config::Settings;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, spawn};
 
 use super::fake_moonraker::{FakeMoonraker, Script, eventually};
@@ -126,7 +127,7 @@ impl HoldSim {
             moonraker_url: fake.http_url().parse().unwrap(),
             ..Settings::default()
         };
-        let (moonraker, _) = spawn(&settings, fast(), false);
+        let (moonraker, _) = spawn(&settings, fast(), false, Tls::default());
         eventually("a connection", DEADLINE, || {
             moonraker.chips().current && moonraker.control().is_some()
         })

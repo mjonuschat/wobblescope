@@ -9,6 +9,7 @@ use serde_json::json;
 use wobblescope::access::AccessState;
 use wobblescope::config::Settings;
 use wobblescope::moonraker::status::MoonrakerState;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -43,7 +44,7 @@ fn chips() -> serde_json::Value {
 async fn rig() -> (FakeMoonraker, FakePrinter, Moonraker) {
     let fake = FakeMoonraker::start().await;
     let printer = FakePrinter::new(&fake, "ready", chips());
-    let (m, _) = spawn(&settings(&fake), fast(), false);
+    let (m, _) = spawn(&settings(&fake), fast(), false, Tls::default());
     (fake, printer, m)
 }
 
@@ -88,7 +89,7 @@ async fn a_config_answer_without_the_lists_keeps_the_policy_unknown_until_it_has
     let printer = FakePrinter::new(&fake, "ready", chips());
     let good = fixture("real_server_config.json")["config"]["authorization"].clone();
     printer.set_authorization(None);
-    let (m, _) = spawn(&settings(&fake), fast(), false);
+    let (m, _) = spawn(&settings(&fake), fast(), false, Tls::default());
     until("a config read", || {
         fake.requests_for("server.config").len() >= 3
     })
@@ -115,7 +116,7 @@ async fn the_hostname_arrives_once_printer_info_answers() {
     let fake = FakeMoonraker::start().await;
     let printer = FakePrinter::new(&fake, "ready", chips());
     printer.set_printer_info_fails(true);
-    let (m, _) = spawn(&settings(&fake), fast(), false);
+    let (m, _) = spawn(&settings(&fake), fast(), false, Tls::default());
     until("a policy", || known(&m)).await;
     until("a few printer.info calls", || {
         fake.requests_for("printer.info").len() >= 3
@@ -166,7 +167,7 @@ async fn a_daemon_that_never_reached_moonraker_has_no_marker() {
     let fake = FakeMoonraker::start().await;
     FakePrinter::new(&fake, "ready", chips());
     fake.set_accepting(false);
-    let (m, _) = spawn(&settings(&fake), fast(), false);
+    let (m, _) = spawn(&settings(&fake), fast(), false, Tls::default());
     until("an attempt", || fake.attempts().len() >= 2).await;
     assert_eq!(m.access(), AccessState::default());
 }
@@ -176,7 +177,7 @@ async fn an_unauthorized_config_read_is_the_unauthorized_status_with_no_policy()
     let fake = FakeMoonraker::start().await;
     FakePrinter::new(&fake, "ready", chips());
     fake.on("server.config", Script::error(-32602, "Unauthorized"));
-    let (m, _) = spawn(&settings(&fake), fast(), false);
+    let (m, _) = spawn(&settings(&fake), fast(), false, Tls::default());
     until("unauthorized", || {
         m.status().moonraker.state == MoonrakerState::Unauthorized
     })
@@ -193,7 +194,7 @@ async fn a_slow_chip_read_does_not_delay_a_login_change() {
         "printer.objects.query",
         Script::after(ms(400), Script::Result(answer)),
     );
-    let (m, _) = spawn(&settings(&fake), fast(), false);
+    let (m, _) = spawn(&settings(&fake), fast(), false, Tls::default());
     until("a policy", || known(&m)).await;
     printer.set_login_required(true);
     // The access task polls on its own, so the 400 ms chip read does not hold the change back.
@@ -224,7 +225,7 @@ async fn the_policy_goes_unknown_at_once_when_the_link_drops_the_connection_duri
         request: ms(3000),
         ..fast()
     };
-    let (m, _) = spawn(&settings(&fake), timings, false);
+    let (m, _) = spawn(&settings(&fake), timings, false, Tls::default());
     until("a policy", || known(&m)).await;
     let before = fake.requests_for("access.info").len();
     fake.on(

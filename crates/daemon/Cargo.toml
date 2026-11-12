@@ -22,7 +22,9 @@ serde_json = "1.0.154"
 thiserror = "2.0.21"
 time = { version = "0.3.55", default-features = false, features = ["parsing", "std"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "io-util"] }
-tokio-tungstenite = "0.30.0"
+tokio-tungstenite = { version = "0.30.0", features = ["__rustls-tls"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std"] }
 toml = "1.1.8"
@@ -40,5 +42,7 @@ workspace = true
 http-body-util = "0.1.5"
 structured-zstd = { version = "0.2.6", default-features = false, features = ["std", "hash"] }
 tempfile = "3.27.0"
+rcgen = { version = "0.14.10", default-features = false, features = ["ring", "pem"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
 tokio = { version = "1.54.1", features = ["test-util"] }
 tower = { version = "0.5.3", features = ["util"] }

@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 
+use super::tls::Tls;
+
 /// JSON-RPC code Moonraker uses for invalid params and for failed authentication.
 const INVALID_PARAMS: i64 = -32602;
 
@@ -77,7 +79,7 @@ pub struct Rpc {
 }
 
 impl Rpc {
-    /// Opens the websocket at `url`.
+    /// Opens the websocket at `url`, verifying a `wss` server as `tls` says.
     ///
     /// Returns the client and the stream of notifications, which ends when the connection does.
     ///
@@ -87,19 +89,19 @@ impl Rpc {
     pub async fn connect(
         url: &str,
         timeout: Duration,
+        tls: &Tls,
     ) -> Result<(Self, mpsc::UnboundedReceiver<Notification>), RpcError> {
-        let socket =
-            match tokio::time::timeout(timeout, tokio_tungstenite::connect_async(url)).await {
-                Err(_) => return Err(RpcError::Timeout),
-                Ok(Err(WsError::Http(response))) => {
-                    return Err(RpcError::Connect(format!(
-                        "Moonraker refused the websocket with HTTP {}",
-                        response.status().as_u16()
-                    )));
-                }
-                Ok(Err(e)) => return Err(RpcError::Connect(e.to_string())),
-                Ok(Ok((socket, _))) => socket,
-            };
+        let socket = match tokio::time::timeout(timeout, super::tls::connect(url, tls)).await {
+            Err(_) => return Err(RpcError::Timeout),
+            Ok(Err(WsError::Http(response))) => {
+                return Err(RpcError::Connect(format!(
+                    "Moonraker refused the websocket with HTTP {}",
+                    response.status().as_u16()
+                )));
+            }
+            Ok(Err(e)) => return Err(RpcError::Connect(e.to_string())),
+            Ok(Ok(socket)) => socket,
+        };
         let (calls, call_rx) = mpsc::unbounded_channel();
         let (notes, note_rx) = mpsc::unbounded_channel();
         tokio::spawn(run(socket, call_rx, notes));

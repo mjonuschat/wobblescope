@@ -10,6 +10,7 @@ use wobblescope_core::numeric::{median_rate, strictly_increasing};
 use crate::moonraker::Moonraker;
 use crate::moonraker::bridge::{Batch, Bridge, BridgeError, Event};
 use crate::moonraker::chips::{Availability, Chip};
+use crate::moonraker::tls::Tls;
 
 /// How long one chip may take to prove itself.
 pub const AVAILABILITY_TIMEOUT: Duration = Duration::from_secs(3);
@@ -66,7 +67,7 @@ pub async fn open_chips(
                 let token = token
                     .as_str()
                     .ok_or_else(|| "Moonraker's bridge token is not a string".to_owned())?;
-                prove(moonraker.bridge_url(token), chip, timeout).await
+                prove(moonraker.bridge_url(token), moonraker.tls(), chip, timeout).await
             })
             .await;
             let outcome = proof.unwrap_or_else(|_| {
@@ -82,13 +83,19 @@ pub async fn open_chips(
 }
 
 /// Subscribes to `chip` and reads until its samples are valid and give a rate.
-async fn prove(url: String, chip: &Chip, timeout: Duration) -> ChipOutcome {
-    let mut bridge = Bridge::open(&url, &chip.dump_endpoint, chip.sensor.as_deref(), timeout)
-        .await
-        .map_err(|e| match e {
-            BridgeError::Subscribe(message) => message,
-            other => other.to_string(),
-        })?;
+async fn prove(url: String, tls: &Tls, chip: &Chip, timeout: Duration) -> ChipOutcome {
+    let mut bridge = Bridge::open(
+        &url,
+        &chip.dump_endpoint,
+        chip.sensor.as_deref(),
+        timeout,
+        tls,
+    )
+    .await
+    .map_err(|e| match e {
+        BridgeError::Subscribe(message) => message,
+        other => other.to_string(),
+    })?;
     let mut batches: Vec<Batch> = Vec::new();
     let mut times: Vec<f64> = Vec::new();
     loop {

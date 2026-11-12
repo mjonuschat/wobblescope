@@ -8,6 +8,7 @@ use wobblescope::capture::availability::OpenChip;
 use wobblescope::capture::recorder::{Level, Missing, Recorder};
 use wobblescope::moonraker::bridge::Bridge;
 use wobblescope::moonraker::chips::{Availability, Chip, ChipType};
+use wobblescope::moonraker::tls::Tls;
 use wobblescope_core::eligibility::{Coverage, Health};
 
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -36,6 +37,7 @@ async fn recorder_with(
         "adxl345/dump_adxl345",
         Some("adxl345"),
         Duration::from_secs(2),
+        &Tls::default(),
     )
     .await
     .unwrap();

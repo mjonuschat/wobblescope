@@ -9,6 +9,7 @@ use common::{cell, json, open, probe, settings};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use wobblescope::config::Settings;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Timings, spawn};
 use wobblescope::startup::{StartupError, new_cell, resolve_storage};
 
@@ -47,7 +48,7 @@ fn start(
     tokio::task::JoinHandle<Result<(), StartupError>>,
 ) {
     let settings = settings_for(fake);
-    let (moonraker, report) = spawn(&settings, fast(), true);
+    let (moonraker, report) = spawn(&settings, fast(), true, Tls::default());
     let task = tokio::spawn(resolve_storage(
         report.unwrap(),
         settings,
@@ -156,7 +157,12 @@ async fn with_storage_dir_set_sessions_answer_at_once_and_roots_are_never_asked(
     };
     let (storage, _) = open(tmp.path(), u64::MAX / 4);
     let app = wobblescope::api::mount(cell(Some(storage)), common::idle_moonraker());
-    let (_moonraker, report) = spawn(&settings, fast(), settings.storage_dir.is_none());
+    let (_moonraker, report) = spawn(
+        &settings,
+        fast(),
+        settings.storage_dir.is_none(),
+        Tls::default(),
+    );
     assert!(report.is_none());
     let (status, _) = json(&app, "GET", "/api/sessions").await;
     assert_eq!(status, StatusCode::OK);

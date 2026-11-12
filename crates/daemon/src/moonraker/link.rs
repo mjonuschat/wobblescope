@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use super::discovery::{RootsError, parse_config_root, parse_configfile};
 use super::rpc::{Notification, Rpc, RpcError};
 use super::status::{KlippyState, MoonrakerState, state_line};
+use super::tls::Tls;
 use super::{Publisher, Timings};
 
 /// The project URL Moonraker requires in `server.connection.identify`.
@@ -36,6 +37,7 @@ pub(super) struct Link {
     pub(super) ws_url: String,
     pub(super) base_url: String,
     pub(super) api_key: Option<String>,
+    pub(super) tls: Tls,
     pub(super) timings: Timings,
     pub(super) publisher: Publisher,
     pub(super) root_report: Option<RootReport>,
@@ -84,12 +86,14 @@ impl Link {
 
     async fn serve(&mut self, backoff: &mut Duration) -> Result<std::convert::Infallible, Failure> {
         let t = self.timings;
-        let (rpc, mut notes) = Rpc::connect(&self.ws_url, t.connect).await.map_err(|e| {
-            Failure::Unreachable(format!(
-                "cannot connect to Moonraker at {}: {e}",
-                self.base_url
-            ))
-        })?;
+        let (rpc, mut notes) = Rpc::connect(&self.ws_url, t.connect, &self.tls)
+            .await
+            .map_err(|e| {
+                Failure::Unreachable(format!(
+                    "cannot connect to Moonraker at {}: {e}",
+                    self.base_url
+                ))
+            })?;
 
         let mut identify = json!({
             "client_name": "wobblescope",

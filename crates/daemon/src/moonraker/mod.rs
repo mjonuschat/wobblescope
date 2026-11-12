@@ -9,6 +9,7 @@ use crate::access;
 use crate::access::AccessState;
 use crate::config::Settings;
 use rpc::Rpc;
+use tls::Tls;
 
 pub mod bridge;
 pub mod chips;
@@ -17,6 +18,7 @@ mod link;
 pub mod rpc;
 pub mod settings;
 pub mod status;
+pub mod tls;
 
 use chips::Availability;
 use discovery::{ChipList, RootsError};
@@ -79,6 +81,7 @@ pub struct Moonraker {
     access: watch::Receiver<AccessState>,
     gcode: broadcast::Sender<String>,
     bridge_base: std::sync::Arc<str>,
+    tls: Tls,
 }
 
 impl ChipsSnapshot {
@@ -164,6 +167,11 @@ impl Moonraker {
     #[must_use]
     pub fn watch_control(&self) -> watch::Receiver<Option<Rpc>> {
         self.control.clone()
+    }
+
+    #[must_use]
+    pub fn tls(&self) -> &Tls {
+        &self.tls
     }
 
     /// The websocket URL of Moonraker's bridge to Klipper's own socket, with the one-shot
@@ -297,6 +305,7 @@ pub fn channel() -> (Publisher, Moonraker) {
             access,
             gcode: gcode_tx,
             bridge_base: Settings::default().moonraker_bridge_base().into(),
+            tls: Tls::default(),
         },
     )
 }
@@ -316,8 +325,10 @@ pub fn spawn(
     settings: &Settings,
     timings: Timings,
     want_config_root: bool,
+    tls: Tls,
 ) -> (Moonraker, Option<ConfigRootReport>) {
     let (publisher, mut handle) = channel();
+    handle.tls = tls.clone();
     let access_sender = publisher.access.clone();
     let (refused_tx, refused) = mpsc::unbounded_channel();
     handle.bridge_base = settings.moonraker_bridge_base().into();
@@ -335,6 +346,7 @@ pub fn spawn(
             .trim_end_matches('/')
             .to_owned(),
         api_key: settings.moonraker_api_key.clone(),
+        tls,
         timings,
         publisher,
         root_report: report,

@@ -6,6 +6,7 @@ use common::fake_moonraker::{FakeMoonraker, Script, eventually};
 use serde_json::json;
 use tokio::net::TcpListener;
 use wobblescope::moonraker::rpc::{Rpc, RpcError};
+use wobblescope::moonraker::tls::Tls;
 
 const SLOW: Duration = Duration::from_secs(5);
 const FAST: Duration = Duration::from_millis(50);
@@ -16,7 +17,9 @@ async fn connect(
     Rpc,
     tokio::sync::mpsc::UnboundedReceiver<wobblescope::moonraker::rpc::Notification>,
 ) {
-    Rpc::connect(&fake.ws_url(), SLOW).await.unwrap()
+    Rpc::connect(&fake.ws_url(), SLOW, &Tls::default())
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -123,7 +126,10 @@ async fn a_socket_closed_during_a_call_fails_the_call_and_ends_the_stream() {
 async fn an_upgrade_answered_with_http_502_is_a_connect_error_naming_502() {
     let fake = FakeMoonraker::start().await;
     fake.refuse_upgrade_with(Some(502));
-    let err = Rpc::connect(&fake.ws_url(), SLOW).await.err().unwrap();
+    let err = Rpc::connect(&fake.ws_url(), SLOW, &Tls::default())
+        .await
+        .err()
+        .unwrap();
     assert!(
         matches!(&err, RpcError::Connect(m) if m.contains("502")),
         "{err:?}"
@@ -136,10 +142,14 @@ async fn nothing_listening_is_a_connect_error() {
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
         l.local_addr().unwrap().port()
     };
-    let err = Rpc::connect(&format!("ws://127.0.0.1:{port}/websocket"), SLOW)
-        .await
-        .err()
-        .unwrap();
+    let err = Rpc::connect(
+        &format!("ws://127.0.0.1:{port}/websocket"),
+        SLOW,
+        &Tls::default(),
+    )
+    .await
+    .err()
+    .unwrap();
     assert!(matches!(err, RpcError::Connect(_)), "{err:?}");
 }
 
@@ -154,7 +164,7 @@ async fn a_listener_that_never_answers_the_upgrade_times_out() {
         }
     });
     let started = std::time::Instant::now();
-    let err = Rpc::connect(&format!("ws://{addr}/websocket"), FAST)
+    let err = Rpc::connect(&format!("ws://{addr}/websocket"), FAST, &Tls::default())
         .await
         .err()
         .unwrap();

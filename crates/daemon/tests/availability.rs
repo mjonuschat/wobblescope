@@ -13,6 +13,7 @@ use wobblescope::capture::availability::{open_chips, rate_from_times};
 use wobblescope::config::Settings;
 use wobblescope::moonraker::chips::Availability;
 use wobblescope::moonraker::status::KlippyState;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -51,7 +52,7 @@ async fn rig() -> Rig {
         moonraker_url: fake.http_url().parse().unwrap(),
         ..Settings::default()
     };
-    let (moonraker, _) = spawn(&settings, fast(), false);
+    let (moonraker, _) = spawn(&settings, fast(), false, Tls::default());
     eventually("current chips", DEADLINE, || {
         moonraker.chips().current && moonraker.control().is_some()
     })

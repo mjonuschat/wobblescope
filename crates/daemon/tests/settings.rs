@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use wobblescope::api::mount;
 use wobblescope::config::Settings;
 use wobblescope::moonraker::settings::{Variant, parse_settings};
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 use wobblescope_session::meta::Mode;
 
@@ -117,7 +118,7 @@ async fn rig() -> (FakeMoonraker, FakePrinter, Moonraker) {
         backoff_start: ms(10),
         backoff_max: ms(40),
     };
-    let (moonraker, _) = spawn(&settings, timings, false);
+    let (moonraker, _) = spawn(&settings, timings, false, Tls::default());
     eventually("a control handle", Duration::from_secs(10), || {
         moonraker.control().is_some()
     })

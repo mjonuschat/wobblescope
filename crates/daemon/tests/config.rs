@@ -115,16 +115,97 @@ fn a_url_without_a_port_or_with_an_ipv6_host_derives_its_websocket_url() {
 }
 
 #[test]
-fn an_https_url_is_refused_as_not_supported() {
-    let err = load_text("moonraker_url = \"https://printer.local:7130\"\n").unwrap_err();
-    assert!(err.contains("moonraker_url"), "{err}");
-    assert!(err.contains("https is not supported"), "{err}");
+fn an_https_url_derives_a_wss_websocket_url() {
+    let s = load_text("moonraker_url = \"https://printer.local:7130/moonraker\"\n").unwrap();
+    assert!(s.moonraker_is_https());
+    assert_eq!(
+        s.moonraker_ws_url(),
+        "wss://printer.local:7130/moonraker/websocket"
+    );
+    assert_eq!(
+        s.moonraker_bridge_url("T"),
+        "wss://printer.local:7130/moonraker/klippysocket?token=T"
+    );
+}
+
+#[test]
+fn the_trust_settings_are_read_for_an_https_url() {
+    let s = load_text(
+        "moonraker_url = \"https://printer.local\"\nmoonraker_ca_file = \"/etc/ws/ca.pem\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        s.moonraker_tls.ca_file,
+        Some(PathBuf::from("/etc/ws/ca.pem"))
+    );
+    assert!(!s.moonraker_tls.insecure_skip_verify);
+    let s = load_text(
+        "moonraker_url = \"https://printer.local\"\nmoonraker_insecure_skip_verify = true\n",
+    )
+    .unwrap();
+    assert!(s.moonraker_tls.insecure_skip_verify);
+    assert_eq!(s.moonraker_tls.ca_file, None);
+}
+
+#[test]
+fn trust_settings_that_conflict_or_do_not_apply_are_refused_by_name() {
+    refused_naming(
+        "moonraker_url = \"https://printer.local\"\nmoonraker_ca_file = \"/ca.pem\"\n\
+         moonraker_insecure_skip_verify = true\n",
+        "moonraker_ca_file",
+    );
+    refused_naming("moonraker_ca_file = \"/ca.pem\"\n", "moonraker_ca_file");
+    refused_naming(
+        "moonraker_insecure_skip_verify = true\n",
+        "moonraker_insecure_skip_verify",
+    );
+}
+
+#[test]
+fn a_local_http_moonraker_gets_no_startup_warning() {
+    for url in [
+        "http://127.0.0.1:7125",
+        "http://localhost:7125",
+        "http://[::1]:7125",
+    ] {
+        let s = load_text(&format!("moonraker_url = \"{url}\"\n")).unwrap();
+        assert!(s.moonraker_warnings().is_empty(), "{url}");
+    }
+}
+
+#[test]
+fn a_remote_moonraker_is_warned_about_and_plain_http_adds_the_cleartext_warning() {
+    let s = load_text("moonraker_url = \"http://printer.local:7125\"\n").unwrap();
+    let warnings = s.moonraker_warnings();
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+    assert!(warnings[0].contains("not on this host"), "{warnings:?}");
+    assert!(warnings[1].contains("cleartext"), "{warnings:?}");
+
+    let s = load_text("moonraker_url = \"https://printer.local\"\n").unwrap();
+    let warnings = s.moonraker_warnings();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("not on this host"), "{warnings:?}");
+}
+
+#[test]
+fn skipping_verification_is_always_warned_about() {
+    let s = load_text(
+        "moonraker_url = \"https://127.0.0.1:7130\"\nmoonraker_insecure_skip_verify = true\n",
+    )
+    .unwrap();
+    let warnings = s.moonraker_warnings();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("moonraker_insecure_skip_verify"),
+        "{warnings:?}"
+    );
 }
 
 #[test]
 fn urls_that_cannot_work_are_refused_by_name() {
     for url in [
         "ws://printer.local",
+        "wss://printer.local",
         "printer.local:7125",
         "http://pi:secret@printer.local",
         "http://printer.local/?a=1",

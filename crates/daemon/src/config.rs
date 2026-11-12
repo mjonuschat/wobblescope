@@ -8,6 +8,7 @@ use axum::http::Uri;
 use serde::Deserialize;
 
 use crate::access::policy::{Net, NetError};
+use crate::moonraker::tls::TlsOptions;
 
 const MIB: u64 = 1024 * 1024;
 const DEFAULT_CAP_MIB: u64 = 2048;
@@ -112,6 +113,8 @@ struct RawConfig {
     free_space_headroom_mib: Option<u64>,
     moonraker_url: Option<String>,
     moonraker_api_key: Option<String>,
+    moonraker_ca_file: Option<PathBuf>,
+    moonraker_insecure_skip_verify: Option<bool>,
     max_segment_seconds: Option<u32>,
     stream_idle_updates_per_second: Option<f64>,
     stream_printing_updates_per_second: Option<f64>,
@@ -132,8 +135,10 @@ pub struct Settings {
     pub retention_cap_bytes: u64,
     /// Free space that must remain on the sessions filesystem after a test's estimate.
     pub free_space_headroom_bytes: u64,
-    /// The base URL of Moonraker: plain `http`, a host, and a path that is its route prefix.
+    /// The base URL of Moonraker: `http` or `https`, a host, and a path that is its route prefix.
     pub moonraker_url: Uri,
+    /// What to trust when `moonraker_url` is `https`.
+    pub moonraker_tls: TlsOptions,
     /// The API key sent when identifying to Moonraker, when the config sets one.
     pub moonraker_api_key: Option<String>,
     /// The longest one `TEST_RESONANCES` command may be expected to run, in seconds.
@@ -177,13 +182,62 @@ impl Settings {
         format!("{}?token={token}", self.moonraker_bridge_base())
     }
 
+    #[must_use]
+    pub fn moonraker_is_https(&self) -> bool {
+        self.moonraker_url.scheme_str() == Some("https")
+    }
+
+    /// Whether Moonraker is on this host, by its URL: `localhost` or a loopback address.
+    #[must_use]
+    pub fn moonraker_is_loopback(&self) -> bool {
+        let host = self.moonraker_url.host().unwrap_or_default();
+        let host = host.trim_start_matches('[').trim_end_matches(']');
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    }
+
+    #[must_use]
+    pub fn moonraker_warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if !self.moonraker_is_loopback() {
+            warnings.push(format!(
+                "moonraker_url {} is not on this host. The daemon assumes it runs beside \
+                 Moonraker: the default data directory comes from Moonraker's config root, a \
+                 path on Moonraker's host.",
+                self.moonraker_url
+            ));
+            if !self.moonraker_is_https() {
+                warnings.push(
+                    "moonraker_url uses plain http to a remote host, so Moonraker's traffic and \
+                     the API key cross the network in cleartext. Use an https URL."
+                        .to_owned(),
+                );
+            }
+        }
+        if self.moonraker_tls.insecure_skip_verify {
+            warnings.push(
+                "moonraker_insecure_skip_verify is set: Moonraker's certificate is not checked, \
+                 so the connection is encrypted but the server is not authenticated."
+                    .to_owned(),
+            );
+        }
+        warnings
+    }
+
     fn moonraker_ws_base(&self) -> String {
         let authority = self
             .moonraker_url
             .authority()
             .map_or("", axum::http::uri::Authority::as_str);
         let prefix = self.moonraker_url.path().trim_end_matches('/');
-        format!("ws://{authority}{prefix}")
+        let scheme = if self.moonraker_is_https() {
+            "wss"
+        } else {
+            "ws"
+        };
+        format!("{scheme}://{authority}{prefix}")
     }
 }
 
@@ -194,6 +248,7 @@ impl fmt::Debug for Settings {
             .field("retention_cap_bytes", &self.retention_cap_bytes)
             .field("free_space_headroom_bytes", &self.free_space_headroom_bytes)
             .field("moonraker_url", &self.moonraker_url)
+            .field("moonraker_tls", &self.moonraker_tls)
             .field("max_segment_seconds", &self.max_segment_seconds)
             .field(
                 "stream_idle_updates_per_second",
@@ -227,6 +282,7 @@ impl Default for Settings {
             retention_cap_bytes: DEFAULT_CAP_MIB * MIB,
             free_space_headroom_bytes: DEFAULT_HEADROOM_MIB * MIB,
             moonraker_url: Uri::from_static(DEFAULT_MOONRAKER_URL),
+            moonraker_tls: TlsOptions::default(),
             moonraker_api_key: None,
             max_segment_seconds: DEFAULT_MAX_SEGMENT_SECONDS,
             stream_idle_updates_per_second: 10.0,
@@ -250,9 +306,8 @@ pub fn moonraker_url(text: &str) -> Result<Uri, &'static str> {
         .parse()
         .map_err(|_| "must be a URL like http://127.0.0.1:7125")?;
     match uri.scheme_str() {
-        Some("http") => {}
-        Some("https") => return Err("https is not supported yet; use a plain http URL"),
-        _ => return Err("must start with http://"),
+        Some("http" | "https") => {}
+        _ => return Err("must start with http:// or https://"),
     }
     let Some(authority) = uri.authority() else {
         return Err("must name a host");
@@ -423,11 +478,30 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         Some(text) => moonraker_url(&text).map_err(|reason| invalid("moonraker_url", reason))?,
         None => defaults.moonraker_url,
     };
+    let moonraker_tls = TlsOptions {
+        ca_file: raw.moonraker_ca_file,
+        insecure_skip_verify: raw.moonraker_insecure_skip_verify.unwrap_or(false),
+    };
+    if moonraker_tls.ca_file.is_some() && moonraker_tls.insecure_skip_verify {
+        return Err(invalid(
+            "moonraker_ca_file",
+            "cannot be combined with moonraker_insecure_skip_verify",
+        ));
+    }
+    if moonraker_tls.is_set() && moonraker_url.scheme_str() != Some("https") {
+        let key = if moonraker_tls.ca_file.is_some() {
+            "moonraker_ca_file"
+        } else {
+            "moonraker_insecure_skip_verify"
+        };
+        return Err(invalid(key, "only applies when moonraker_url is https"));
+    }
     Ok(Settings {
         listen,
         trusted_proxies,
         allowed_hosts,
         moonraker_url,
+        moonraker_tls,
         moonraker_api_key: raw.moonraker_api_key,
         max_segment_seconds: raw
             .max_segment_seconds

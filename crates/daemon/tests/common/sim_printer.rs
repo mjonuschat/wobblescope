@@ -16,6 +16,7 @@ use wobblescope::capture::request::TestPlan;
 use wobblescope::capture::runner::{Job, Runner, RunnerTimings};
 use wobblescope::capture::slot::TestSlot;
 use wobblescope::config::Settings;
+use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 use wobblescope::startup::StorageCell;
 use wobblescope::storage::Storage;
@@ -492,7 +493,7 @@ async fn rig_on(sim: Sim, timings: RunnerTimings, cap: u64) -> Rig {
         moonraker_url: sim.fake.http_url().parse().unwrap(),
         ..Settings::default()
     };
-    let (moonraker, _) = spawn(&settings, fast(), false);
+    let (moonraker, _) = spawn(&settings, fast(), false, Tls::default());
     eventually("current chips", DEADLINE, || {
         moonraker.chips().current && moonraker.control().is_some()
     })
