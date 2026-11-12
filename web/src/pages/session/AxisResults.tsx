@@ -61,6 +61,7 @@ export function AxisResults({ result, meta, overrides, onOverridesChange, readOn
           title="Recommended Input Shaper"
           recommendation={analysis.worst_case}
           snippet={snippets.worstCase}
+          performanceSnippet={snippets.worstCasePerformance}
           datasetVibrations={analysis.worst_case_vibrations}
           probePoints={meta.probe_points}
         />

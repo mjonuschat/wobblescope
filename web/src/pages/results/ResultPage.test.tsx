@@ -127,6 +127,22 @@ describe("the result page", () => {
     expect(fake.analyze).not.toHaveBeenCalled();
   });
 
+  it("reopening a saved result with both recommendations shows both snippets", async () => {
+    const detail = resultDetail();
+    const axis = detail.record.axes[0];
+    axis.analysis.worst_case = {
+      ...recommendation(),
+      for_performance: candidate("zv", 55, { max_accel: 6000, vibrs: 0.04 }),
+    };
+    axis.snippets.worst_case_performance = "PERFORMANCE SNIPPET";
+    fake.analyze.mockImplementation(pending);
+    serve(detail);
+    renderRoute("/results/r1");
+    expect((await screen.findAllByText("PERFORMANCE SNIPPET")).length).toBeGreaterThan(0);
+    expect(screen.getByText("For low vibrations")).toBeTruthy();
+    expect(screen.getByText("For performance")).toBeTruthy();
+  });
+
   it("switches between the axes of a result", async () => {
     const detail = resultDetail();
     detail.record.axes.push({
