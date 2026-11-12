@@ -18,7 +18,6 @@ const LATER_CSV: &str = "#time,accel_x,accel_y,accel_z\n\
                          200.000313,1.5,2.5,3.5\n\
                          200.000626,2.0,3.0,4.0\n";
 
-/// A multipart body of a `session` part followed by one `file` part per entry.
 fn multipart_body(session_json: &str, files: &[(&str, &[u8])]) -> Vec<u8> {
     let mut body = Vec::new();
     body.extend_from_slice(
@@ -43,7 +42,6 @@ fn multipart_body(session_json: &str, files: &[(&str, &[u8])]) -> Vec<u8> {
     body
 }
 
-/// `client_header` false makes it look like a cross-site browser write.
 fn request_with(body: Vec<u8>, client_header: bool) -> Request<Body> {
     let mut b = Request::builder()
         .method("POST")

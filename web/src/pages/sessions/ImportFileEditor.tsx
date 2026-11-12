@@ -6,7 +6,6 @@ import type { Axis } from "@/lib/generated/Axis";
 
 import type { ImportEntry } from "./importModel";
 
-/** The select entry that reveals the typed chip field. */
 const OTHER = "__other__";
 const SELECT_CLASS = "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm";
 

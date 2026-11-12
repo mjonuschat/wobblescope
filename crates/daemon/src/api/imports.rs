@@ -1,5 +1,3 @@
-//! `POST /api/imports`: several Klipper raw CSVs become one session.
-
 use axum::Json;
 use axum::extract::Multipart;
 use axum::extract::multipart::{Field, MultipartError};
@@ -13,7 +11,6 @@ use super::{IMPORT_LIMIT, ImportPermit, MAX_GROUP_FILES, Store, blocking};
 use crate::csv_import::{GroupFile, import_group};
 use crate::storage::index::Summary;
 
-/// The `session` part: when the run happened and what each `file` part is.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SessionPart {
@@ -21,7 +18,6 @@ struct SessionPart {
     files: Vec<FileSpec>,
 }
 
-/// What one `file` part is, by position.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FileSpec {
@@ -47,7 +43,6 @@ fn too_large() -> ApiError {
     }
 }
 
-/// Reads the `session` part, refusing more than `SESSION_PART_LIMIT` bytes.
 async fn read_session_part(field: &mut Field<'_>) -> Result<Vec<u8>, ApiError> {
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|e| multipart_error(&e))? {
@@ -61,7 +56,6 @@ async fn read_session_part(field: &mut Field<'_>) -> Result<Vec<u8>, ApiError> {
     Ok(bytes)
 }
 
-/// Reads one `file` part into memory, adding its size to `total`.
 async fn read_file(field: &mut Field<'_>, total: &mut usize) -> Result<Vec<u8>, ApiError> {
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|e| multipart_error(&e))? {

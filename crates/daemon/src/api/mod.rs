@@ -47,7 +47,6 @@ use crate::storage::Storage;
 /// 430 seconds at 3.2 kHz.
 const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
 
-/// The most files one `POST /api/imports` request may carry.
 const MAX_GROUP_FILES: usize = 16;
 
 const RESULT_LIMIT: usize = 16 * 1024 * 1024;

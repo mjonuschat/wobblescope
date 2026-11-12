@@ -108,7 +108,6 @@ function FilterTrigger({ label, active }: { label: string; active: boolean }) {
   );
 }
 
-/** A local `YYYY-MM-DD` as a date at local midnight. */
 function parseDay(day: string | undefined): Date | undefined {
   const match = day ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(day) : null;
   return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : undefined;
@@ -120,7 +119,6 @@ function formatDay(date: Date | undefined): string | undefined {
   return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
 }
 
-/** Limits the list to sessions created between two days, both included. */
 export function DateFilter({ filters, onChange }: Pick<Props, "filters" | "onChange">) {
   const from = parseDay(filters.createdFrom);
   const to = parseDay(filters.createdTo);

@@ -18,12 +18,9 @@ import {
 interface Props {
   group: ImportGroupState;
   number: number;
-  /** Labels of every group, for the Move choices. */
   labels: { id: string; label: string }[];
   known: string[];
-  /** What the daemon said about this group, and which file it named. */
   failure: { text: string; entryId: string | null } | null;
-  /** True while groups are being sent. */
   disabled: boolean;
   update: (change: (state: ImportState) => ImportState) => void;
 }

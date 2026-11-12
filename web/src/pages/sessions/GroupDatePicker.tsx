@@ -17,7 +17,6 @@ function timeText(date: Date): string {
   return `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
 }
 
-/** The session's local date and time: a calendar and a time field with seconds. */
 export function GroupDatePicker({ value, onChange, disabled }: Props) {
   const chooseDay = (day: Date | undefined) => {
     if (!day) return;
@@ -36,7 +35,6 @@ export function GroupDatePicker({ value, onChange, disabled }: Props) {
     if (!/^\d{2}:\d{2}(:\d{2})?$/.test(text)) return;
     const [hours, minutes, seconds] = text.split(":").map(Number);
     const date = new Date(value.getFullYear(), value.getMonth(), value.getDate(), hours, minutes, seconds || 0);
-    if (Number.isNaN(date.getTime())) return;
     onChange(date);
   };
   return (

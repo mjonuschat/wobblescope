@@ -104,29 +104,20 @@ pub enum SessionError {
         /// Samples found.
         found: usize,
     },
-    /// A group import was given no files.
     #[error("no files to import")]
     ImportNoFiles,
-    /// Two files of a group name the same chip, axis and point.
     #[error(
         "chip {chip} appears twice for axis {axis:?} at {point:?}; give the files different points"
     )]
     ImportDuplicate {
-        /// The chip named twice.
         chip: String,
-        /// The axis of the segment.
         axis: wobblescope_core::fit::Axis,
-        /// The probe point, `None` when unknown.
         point: Option<[f64; 3]>,
     },
-    /// Two chips of one segment have time ranges that do not overlap.
     #[error("these files were not recorded in the same run")]
     ImportNotSameRun {
-        /// One chip of the pair.
         chip_a: String,
-        /// The other chip of the pair.
         chip_b: String,
-        /// The axis of the segment.
         axis: wobblescope_core::fit::Axis,
     },
 }

@@ -44,23 +44,17 @@ pub enum ImportError {
     /// Every id from `csv-<time>` to its `-99` suffix is taken.
     #[error("no free session id for this second")]
     NoFreeId,
-    /// A group import was given no files.
     #[error("no files to import")]
     NoFiles,
     /// A file of a group did not parse. `index` counts from 1.
     #[error("file {index} ({name}): {reason}")]
     File {
-        /// Position of the file in the request, from 1.
         index: usize,
-        /// The file's name as uploaded.
         name: String,
-        /// Why it was refused.
         reason: String,
     },
-    /// The files parsed but do not make one session.
     #[error("{0}")]
     Group(String),
-    /// `created_at` is not an RFC 3339 timestamp.
     #[error("created_at is not an RFC 3339 timestamp: {0}")]
     BadCreatedAt(String),
     /// Admission refused the import, or storing it failed.
@@ -127,18 +121,14 @@ pub fn import_csv<B: AsRef<[u8]>>(
     Ok(storage.store(reservation, &meta, |_| Ok(std::mem::take(&mut samples)))?)
 }
 
-/// One file of a group import, as uploaded.
 #[derive(Debug, Clone)]
 pub struct GroupFile {
-    /// The uploaded file's name, kept in the metadata.
     pub name: String,
     /// Klipper config section name of the chip that recorded the file.
     pub chip: String,
-    /// Test axis the file was recorded for.
     pub axis: Axis,
     /// Probe point in machine coordinates, when known.
     pub point: Option<[f64; 3]>,
-    /// The file's content.
     pub bytes: Vec<u8>,
 }
 

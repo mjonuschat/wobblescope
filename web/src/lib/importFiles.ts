@@ -16,7 +16,6 @@ function stem(name: string): string {
   return base.replace(/\.csv$/i, "");
 }
 
-/** The text after `raw_data_<axis>_`, or undefined when the name has no x or y axis. */
 function afterAxis(name: string): { axis: Axis; rest: string } | undefined {
   const s = stem(name);
   if (!s.startsWith(PREFIX)) return undefined;
@@ -42,7 +41,6 @@ function readStamp(text: string): { stamp: Date; stampToken: string } | undefine
   return valid ? { stamp, stampToken: token } : undefined;
 }
 
-/** Reads the axis and probe point from a Klipper raw file name, and the time from any name, by its base name. */
 export function readFileName(name: string): FileNameReading {
   const reading: FileNameReading = {};
   const parts = afterAxis(name);

@@ -74,27 +74,19 @@ pub fn import_klipper_csv(text: &str, request: &ImportRequest) -> Result<Importe
     })
 }
 
-/// One parsed file of a group, with what the caller knows about its recording.
 #[derive(Debug, Clone)]
 pub struct ImportFile {
-    /// Klipper config section name of the chip that recorded the file.
     pub chip_name: String,
-    /// Test axis the file was recorded for.
     pub axis: Axis,
-    /// Probe point in machine coordinates, when known.
     pub point: Option<[f64; 3]>,
-    /// Name of the imported file, kept in the metadata.
     pub file_name: Option<String>,
-    /// The parsed samples.
     pub samples: RawSamples,
 }
 
-/// What a group of files shares: the new session's id and creation time.
 #[derive(Debug, Clone)]
 pub struct GroupRequest {
     /// Id for the new session; see [`crate::meta::validate_session_id`].
     pub id: String,
-    /// Creation time as an RFC 3339 UTC string.
     pub created_at: String,
 }
 
@@ -102,7 +94,6 @@ pub struct GroupRequest {
 /// [`ImportedGroup::take`] hands out one file at a time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportedGroup {
-    /// Validated metadata.
     pub meta: SessionMeta,
     samples: HashMap<String, RawSamples>,
     sample_count: u64,

@@ -68,7 +68,6 @@ function makeEntry(file: File, context: AddContext): { entry: ImportEntry; stamp
   };
 }
 
-/** Files with the same stamp token share a group; every other file gets a group of its own. */
 export function addFiles(
   state: ImportState,
   files: File[],
@@ -202,7 +201,6 @@ export function problems(group: ImportGroupState): ImportProblem[] {
   return found;
 }
 
-/** Two or more files that do not all carry one stamp token may not belong together. */
 export function needsConfirmation(group: ImportGroupState): boolean {
   if (group.entries.length < 2) return false;
   const first = group.entries[0].stampToken;

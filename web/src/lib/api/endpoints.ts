@@ -33,7 +33,6 @@ export interface SessionFilters {
   createdTo?: string;
 }
 
-/** The instant a local calendar day starts, `offsetDays` later, as an RFC 3339 time. */
 function dayStart(day: string, offsetDays = 0): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
   const [year, month, date] = day.split("-").map(Number);
@@ -97,7 +96,6 @@ export function deleteSession(id: string) {
   return apiJson<void>(`sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** Posts one group of CSV files as a multipart request that stores one session. */
 export function importGroup(group: ImportGroupState, signal?: AbortSignal) {
   const files = group.entries.map((entry) => {
     const point = parsePointText(entry.point);

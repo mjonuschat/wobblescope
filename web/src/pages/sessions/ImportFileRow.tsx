@@ -18,14 +18,11 @@ import type { ImportEntry } from "./importModel";
 interface Props {
   entry: ImportEntry;
   known: string[];
-  /** The other groups this file can move to. */
   targets: { id: string; label: string }[];
-  /** Why the file cannot be imported, or empty. */
   reasons: string[];
   onEdit: (patch: Partial<Pick<ImportEntry, "chip" | "axis" | "point">>) => void;
   onMove: (target: string) => void;
   onRemove: () => void;
-  /** True while groups are being sent. */
   disabled: boolean;
 }
 
