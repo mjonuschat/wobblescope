@@ -22,8 +22,7 @@ pub(super) fn sample_response(headers: &HeaderMap, bytes: Vec<u8>) -> Response {
     if let Some(if_none_match) = headers.get(IF_NONE_MATCH)
         && let Ok(value) = if_none_match.to_str()
     {
-        let tags: Vec<&str> = value.split(',').map(|s| s.trim()).collect();
-        for tag in tags {
+        for tag in value.split(',').map(str::trim) {
             let normalized = tag.strip_prefix("W/").unwrap_or(tag);
             if normalized == "*" || normalized == etag {
                 return (
