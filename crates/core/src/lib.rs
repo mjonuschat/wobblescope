@@ -1,6 +1,7 @@
 //! Pure DSP for resonance analysis. No I/O.
 
 pub mod belts;
+pub mod belts_run;
 pub mod decimate;
 pub mod direction;
 pub mod eligibility;

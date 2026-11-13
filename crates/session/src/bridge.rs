@@ -24,16 +24,71 @@ use crate::meta::{SegmentFile, SessionMeta, undersampled_note};
 pub fn dataset_inputs<F>(
     meta: &SessionMeta,
     direction: impl Into<Direction>,
+    load: F,
+) -> Result<Vec<DatasetInput>, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    inputs_where(meta, direction.into(), None, load)
+}
+
+/// As [`dataset_inputs`], for the recordings of the chip named `chip` only: `load` is never
+/// called for another chip's file. A name no chip carries gives no inputs.
+///
+/// # Errors
+/// A rule violation in `meta`.
+pub fn dataset_inputs_for_chip<F>(
+    meta: &SessionMeta,
+    direction: impl Into<Direction>,
+    chip: &str,
+    load: F,
+) -> Result<Vec<DatasetInput>, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    inputs_where(meta, direction.into(), Some(chip), load)
+}
+
+/// The probe point and the recordings of `chip` for belt A and belt B. The point is that of the
+/// segments found, or 0 when the chip has no recording of either belt. Only the chip's files are
+/// loaded.
+///
+/// # Errors
+/// A rule violation in `meta`.
+pub fn belt_inputs<F>(
+    meta: &SessionMeta,
+    chip: &str,
+    mut load: F,
+) -> Result<(usize, Option<DatasetInput>, Option<DatasetInput>), SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    let a = dataset_inputs_for_chip(meta, Direction::BELT_A, chip, &mut load)?
+        .into_iter()
+        .next();
+    let b = dataset_inputs_for_chip(meta, Direction::BELT_B, chip, &mut load)?
+        .into_iter()
+        .next();
+    let point = a.as_ref().or(b.as_ref()).map_or(0, |i| i.point);
+    Ok((point, a, b))
+}
+
+fn inputs_where<F>(
+    meta: &SessionMeta,
+    direction: Direction,
+    only_chip: Option<&str>,
     mut load: F,
 ) -> Result<Vec<DatasetInput>, SessionError>
 where
     F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
 {
     meta.validate()?;
-    let direction = direction.into();
     let mut inputs = Vec::new();
     for segment in meta.segments.iter().filter(|s| s.axis == direction) {
         for file in &segment.files {
+            if only_chip.is_some_and(|c| meta.chips[file.chip as usize].name != c) {
+                continue;
+            }
             let chip = &meta.chips[file.chip as usize];
             let loaded = load(file).and_then(|samples| {
                 if samples.len() == file.sample_count as usize {

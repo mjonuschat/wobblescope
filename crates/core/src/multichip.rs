@@ -1,5 +1,8 @@
 //! Per-chip, worst-case and summed analysis across several chips and probe points.
 
+use std::borrow::Cow;
+use std::ops::Range;
+
 use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
@@ -12,6 +15,7 @@ use crate::fit::{
 use crate::numeric::{arange, interp};
 use crate::peaks::{PsdPeaks, psd_peaks};
 use crate::psd::{CalibrationData, MAX_FREQ};
+use crate::samples::RawSamples;
 
 /// Display-only sum of several datasets' PSDs on a shared grid: the total and each of the
 /// accelerometers' x, y and z directions. No recommendation is ever computed from it.
@@ -76,6 +80,23 @@ pub(crate) fn estimation_psd(data: &[CalibrationData]) -> Option<(Vec<f64>, Vec<
             let sum = summed_psd(data, top)?;
             Some((sum.freq_bins, sum.psd))
         }
+    }
+}
+
+/// The samples of `input` cut to its time window, and the sample index range kept; borrowed whole
+/// with no range when it has no window.
+///
+/// # Errors
+/// [`CoreError::InvalidTimestamps`] as [`RawSamples::window`].
+pub(crate) fn windowed_samples(
+    input: &DatasetInput,
+) -> Result<(Cow<'_, RawSamples>, Option<Range<usize>>), CoreError> {
+    match &input.window {
+        Some(w) => {
+            let kept = input.samples.window(w.clone())?;
+            Ok((Cow::Owned(input.samples.slice(kept.clone())), Some(kept)))
+        }
+        None => Ok((Cow::Borrowed(&input.samples), None)),
     }
 }
 
@@ -175,14 +196,9 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
         let built = match &input.load_error {
             Some(message) => Err(message.clone()),
             None => (|| {
-                let mut cd = if let Some(w) = &input.window {
-                    let kept = input.samples.window(w.clone())?;
-                    let samples = input.samples.slice(kept.clone());
-                    windows[i] = Some(kept);
-                    CalibrationData::from_samples(&name, &samples)?
-                } else {
-                    CalibrationData::from_samples(&name, &input.samples)?
-                };
+                let (samples, kept) = windowed_samples(input)?;
+                windows[i] = kept;
+                let mut cd = CalibrationData::from_samples(&name, &samples)?;
                 cd.normalize_to_frequencies();
                 Ok::<_, CoreError>(cd)
             })()

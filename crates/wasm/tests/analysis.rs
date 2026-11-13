@@ -6,9 +6,13 @@ mod common;
 
 use common::{real, window_markers_x_short};
 use wobblescope_core::RawSamples;
+use wobblescope_core::belts::compare_psds;
+use wobblescope_core::belts_run::{BeltsAnalysis, analyze_belts};
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
+use wobblescope_core::psd::CalibrationData;
 use wobblescope_core::spectrogram::spectrogram_of;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::{
@@ -242,6 +246,17 @@ mod js {
     }
 
     #[wasm_bindgen_test]
+    fn belts_through_js_equal_the_direct_analysis() {
+        let w = win();
+        let mut s = WasmSession::new(to_js(&belt_meta(&w, true))).unwrap();
+        s.add_file("c0-s0.zst".to_owned(), encode_samples(&w.adxl).unwrap());
+        s.add_file("c0-s1.zst".to_owned(), encode_samples(&w.ebb).unwrap());
+        let out = s.belts("adxl345".to_owned(), 200.0, false).unwrap();
+        let got: BeltsAnalysis = serde_wasm_bindgen::from_value(out).unwrap();
+        assert_eq!(got, belt_direct(&w));
+    }
+
+    #[wasm_bindgen_test]
     fn an_absent_recommendation_reaches_js_as_null() {
         let w = win();
         // Both chips degraded, so nothing is eligible.
@@ -316,5 +331,123 @@ parity_test! {
         let w = win();
         let s = loaded(&w, two_chip_x_meta(&w, Health::Degraded));
         assert!(s.spectrogram(Axis::X, "lis2dw ebb36", 0, 200.0).is_ok());
+    }
+}
+
+/// One chip, `adxl345`, with the ADXL recording as belt A and the EBB recording as belt B, both
+/// bracketed by the capture's window. The two files differ in rate, which the comparison allows.
+fn belt_meta(w: &Win, with_b: bool) -> SessionMeta {
+    let window = Some(TimeWindow {
+        start: w.window.start,
+        end: w.window.end,
+    });
+    let file = |segment, count| SegmentFile {
+        sample_file: sample_file_name(0, segment),
+        ..entry(0, count)
+    };
+    let mut segments = vec![SegmentMeta {
+        axis: Direction::BELT_A,
+        point: 0,
+        window,
+        files: vec![file(0, w.adxl.len())],
+    }];
+    if with_b {
+        segments.push(SegmentMeta {
+            axis: Direction::BELT_B,
+            point: 0,
+            window,
+            files: vec![file(1, w.ebb.len())],
+        });
+    }
+    SessionMeta {
+        format_version: 2,
+        chips: vec![chip("adxl345", Health::Ok)],
+        segments,
+        ..two_chip_x_meta(w, Health::Ok)
+    }
+}
+
+fn belt_session(w: &Win, with_b: bool) -> Session {
+    let mut s = Session::new(belt_meta(w, with_b)).unwrap();
+    s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+    if with_b {
+        s.add_file("c0-s1.zst", encode_samples(&w.ebb).unwrap());
+    }
+    s
+}
+
+fn belt_direct(w: &Win) -> BeltsAnalysis {
+    let input = |samples: &RawSamples| DatasetInput {
+        samples: samples.clone(),
+        ..direct(w).remove(0)
+    };
+    analyze_belts(
+        "adxl345",
+        0,
+        Some(&input(&w.adxl)),
+        Some(&input(&w.ebb)),
+        200.0,
+    )
+}
+
+parity_test! {
+    fn belts_matches_compare_psds_on_the_same_recordings() {
+        let w = win();
+        let via = belt_session(&w, true).belts("adxl345", 200.0, false).unwrap();
+        assert_eq!(via, belt_direct(&w));
+        let result = via.result.as_ref().expect("both belts usable");
+        let psd = |s: &RawSamples| {
+            let cd = CalibrationData::from_samples("x", &s.slice(s.window(w.window.clone()).unwrap()))
+                .unwrap();
+            (cd.freq_bins, cd.psd_sum)
+        };
+        let ((fa, pa), (fb, pb)) = (psd(&w.adxl), psd(&w.ebb));
+        assert_eq!(result, &compare_psds(&fa, &pa, &fb, &pb, 200.0));
+    }
+}
+
+parity_test! {
+    fn a_belt_the_chip_lacks_is_absent_not_an_error() {
+        let w = win();
+        let got = belt_session(&w, false).belts("adxl345", 200.0, false).unwrap();
+        assert!(got.belt_a.spectrum.is_some());
+        assert!(!got.belt_b.present && got.result.is_none());
+    }
+}
+
+parity_test! {
+    fn a_missing_belt_file_is_named() {
+        let w = win();
+        let mut s = Session::new(belt_meta(&w, true)).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+        assert!(matches!(
+            s.belts("adxl345", 200.0, false),
+            Err(AnalyzeError::MissingFile(name)) if name == "c0-s1.zst"
+        ));
+    }
+}
+
+parity_test! {
+    fn flat_belts_reach_the_caller_with_a_nan_similarity() {
+        let w = win();
+        let flat = |len: usize| {
+            let mut s = RawSamples::default();
+            for k in 0..len {
+                s.t.push(w.window.start + k as f64 * 0.0005);
+                s.x.push(0.0);
+                s.y.push(0.0);
+                s.z.push(0.0);
+            }
+            s
+        };
+        let (a, b) = (flat(8000), flat(8000));
+        let mut meta = belt_meta(&w, true);
+        meta.segments[0].files[0].sample_count = a.len() as u32;
+        meta.segments[1].files[0].sample_count = b.len() as u32;
+        let mut s = Session::new(meta).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&a).unwrap());
+        s.add_file("c0-s1.zst", encode_samples(&b).unwrap());
+        let got = s.belts("adxl345", 200.0, false).unwrap();
+        assert!(got.result.unwrap().similarity.is_nan());
     }
 }

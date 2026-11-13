@@ -5,11 +5,12 @@ use std::collections::HashMap;
 
 use common::{real, window_markers_x_short};
 use wobblescope_core::RawSamples;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
 use wobblescope_session::SessionError;
-use wobblescope_session::bridge::{apply_overrides, dataset_inputs};
+use wobblescope_session::bridge::{apply_overrides, belt_inputs, dataset_inputs};
 use wobblescope_session::codec::{decode_samples, encode_samples};
 use wobblescope_session::meta::{
     ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
@@ -378,5 +379,89 @@ parity_test! {
         let m = two_chip_x_meta(&w, Coverage::Complete, Health::Ok);
         let inputs = dataset_inputs(&m, Axis::Y, |_| panic!("no file should be loaded")).unwrap();
         assert!(inputs.is_empty());
+    }
+}
+
+/// Two chips recorded belt A (segment 0) and belt B (segment 1) at point 0. `b_chips` lists the
+/// chips that have a belt B file.
+fn belt_meta(w: &Win, b_chips: &[u32]) -> SessionMeta {
+    let window = Some(TimeWindow {
+        start: w.window.start,
+        end: w.window.end,
+    });
+    let file = |chip: u32, segment| {
+        let count = if chip == 0 { w.adxl.len() } else { w.ebb.len() };
+        entry(chip, segment, count, Coverage::Complete)
+    };
+    let mut m = meta(
+        vec![
+            chip("adxl345", Health::Ok),
+            chip("lis2dw ebb36", Health::Ok),
+        ],
+        vec![
+            SegmentMeta {
+                axis: Direction::BELT_A,
+                point: 0,
+                window,
+                files: vec![file(0, 0), file(1, 0)],
+            },
+            SegmentMeta {
+                axis: Direction::BELT_B,
+                point: 0,
+                window,
+                files: b_chips.iter().map(|&c| file(c, 1)).collect(),
+            },
+        ],
+    );
+    m.format_version = 2;
+    m
+}
+
+fn belt_files(w: &Win) -> Vec<(&'static str, &RawSamples)> {
+    vec![
+        ("c0-s0.zst", &w.adxl),
+        ("c1-s0.zst", &w.ebb),
+        ("c0-s1.zst", &w.adxl),
+        ("c1-s1.zst", &w.ebb),
+    ]
+}
+
+parity_test! {
+    fn belt_inputs_picks_the_chips_two_segments() {
+        let w = win();
+        let m = belt_meta(&w, &[0, 1]);
+        let (point, a, b) = belt_inputs(&m, "lis2dw ebb36", loader(belt_files(&w))).unwrap();
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert_eq!(point, 0);
+        assert_eq!((a.chip.as_str(), b.chip.as_str()), ("lis2dw ebb36", "lis2dw ebb36"));
+        assert_eq!(a.samples, w.ebb);
+        assert_eq!(b.samples, w.ebb);
+        assert_eq!(a.window, Some(w.window.clone()));
+    }
+}
+
+parity_test! {
+    fn the_loader_is_never_called_for_another_chip() {
+        let w = win();
+        let m = belt_meta(&w, &[0, 1]);
+        let mut asked = Vec::new();
+        let mut inner = loader(belt_files(&w));
+        belt_inputs(&m, "adxl345", |f| {
+            asked.push(f.sample_file.clone());
+            inner(f)
+        })
+        .unwrap();
+        assert_eq!(asked, ["c0-s0.zst", "c0-s1.zst"]);
+    }
+}
+
+parity_test! {
+    fn a_chip_missing_from_belt_b_gives_none_for_b() {
+        let w = win();
+        let m = belt_meta(&w, &[0]);
+        let (point, a, b) = belt_inputs(&m, "lis2dw ebb36", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 0);
+        assert!(a.is_some());
+        assert!(b.is_none());
     }
 }
