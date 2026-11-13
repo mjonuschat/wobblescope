@@ -217,6 +217,20 @@ struct Progress {
     frequency: Option<f64>,
 }
 
+/// A Moonraker error for a sweep: a diagonal axis Klipper refused keeps its own code, anything else is the message as is.
+fn refusal_failure(segment: &Segment, message: String) -> Failure {
+    let refusal = matches!(segment.axis, Direction::Vector(_))
+        .then(|| diagonal_refusal(&message))
+        .flatten();
+    match refusal {
+        Some(text) => Failure {
+            code: Some(FailureCode::DiagonalAxisRefused),
+            ..Failure::certain(text)
+        },
+        None => Failure::certain(message),
+    }
+}
+
 /// The frequency in a console line such as `// Testing frequency 57 Hz`.
 fn tested_frequency(line: &str) -> Option<f64> {
     let rest = line.split_once("Testing frequency ")?.1;
@@ -550,18 +564,9 @@ impl Run {
                             // Klipper's own message beats the generic error of the call.
                             Err(match recorded {
                                 Some(reason) => Failure::certain(reason),
-                                None => self.klipper_down().unwrap_or_else(|| {
-                                    let refusal = matches!(segment.axis, Direction::Vector(_))
-                                        .then(|| diagonal_refusal(&message))
-                                        .flatten();
-                                    match refusal {
-                                        Some(text) => Failure {
-                                            code: Some(FailureCode::DiagonalAxisRefused),
-                                            ..Failure::certain(text)
-                                        },
-                                        None => Failure::certain(message),
-                                    }
-                                }),
+                                None => self
+                                    .klipper_down()
+                                    .unwrap_or_else(|| refusal_failure(segment, message)),
                             })
                         }
                         Err(e) => Err(Failure::unknown(format!(
