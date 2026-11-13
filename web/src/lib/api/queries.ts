@@ -12,6 +12,7 @@ import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
+import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
 import type { Summary } from "@/lib/generated/Summary";
 import type { ImportGroupState } from "@/pages/sessions/importModel";
 
@@ -37,6 +38,7 @@ import {
   homePrinter,
   pinSession,
   saveResult,
+  startAxesMap,
   startTest,
   stopPrinter,
 } from "./endpoints";
@@ -326,4 +328,8 @@ export function useDeleteResult() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
     },
   });
+}
+
+export function useStartAxesMap() {
+  return useMutation({ mutationFn: (request: AxesMapRequest) => startAxesMap(request) });
 }

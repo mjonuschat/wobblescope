@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ActivityIcon,
   AudioLinesIcon,
+  CompassIcon,
   FlaskConicalIcon,
   FolderClockIcon,
   PrinterIcon,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useStatus } from "@/lib/api/queries";
 
-type Path = "/" | "/run/shaper" | "/stream" | "/sessions" | "/results";
+type Path = "/" | "/run/shaper" | "/run/axes-map" | "/stream" | "/sessions" | "/results";
 
 interface Page {
   to: Path;
@@ -39,6 +40,7 @@ const pages: Page[] = [
     icon: FlaskConicalIcon,
     children: [
       { to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon },
+      { to: "/run/axes-map", label: "Axes map calibration", icon: CompassIcon },
       { to: "/stream", label: "Live View", icon: AudioLinesIcon },
     ],
   },

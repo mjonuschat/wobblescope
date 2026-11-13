@@ -32,7 +32,7 @@ const PHASE_WORDS: Record<Phase, string> = {
   sealing: "Saving the session",
 };
 
-const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
+export const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
   complete: "The test finished.",
   incomplete: "The test finished with missing data.",
   failed: "The test failed.",
@@ -42,6 +42,9 @@ const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
 /** What the user is told after an emergency stop. */
 export const SHUTDOWN_NOTICE =
   "Emergency stop sent. Klipper is in shutdown and needs a FIRMWARE_RESTART before it moves again.";
+
+/** The move of each axes-map segment, in the order the daemon runs them. */
+const AXES_MAP_MOVES = ["+X", "+Y", "+Z"];
 
 export const AUTO_CONTINUE_SECONDS = 5;
 
@@ -76,6 +79,8 @@ function useCountdown(active: boolean, onDone: () => void): number | null {
 export function ProgressView({ test, connected, ended, onNext }: ProgressProps) {
   useWarningToasts(test.id, test.chips);
   const left = useCountdown(ended !== null, onNext);
+  const axesMap = test.kind === "axes_map";
+  const move = AXES_MAP_MOVES[test.segment - 1];
   const where = test.axis && test.position ? ` (${test.axis} at ${formatPoint(test.position)})` : "";
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
@@ -91,17 +96,20 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
           <p className="font-medium">{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</p>
           <p className="text-sm">
             Segment {test.segment} of {test.segments}
-            {where}
+            {axesMap ? "" : where}
           </p>
+          {axesMap && move && !ended && <p className="text-sm">Moving {move}</p>}
         </div>
         <Progress value={percent} aria-label="Segment progress" />
         <p className="text-sm text-muted-foreground">
           {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}
         </p>
       </Panel>
-      <Panel title="Signal">
-        <LiveChart test={test} />
-      </Panel>
+      {!axesMap && (
+        <Panel title="Signal">
+          <LiveChart test={test} />
+        </Panel>
+      )}
       <Separator />
       <div className="flex items-center justify-between gap-4">
         <p role="status" className="text-sm text-muted-foreground">
@@ -150,7 +158,7 @@ interface ResultProps {
   onNewTest: () => void;
 }
 
-const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: string }> = {
+export const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: string }> = {
   complete: { Icon: CircleCheckIcon, className: "text-emerald-400" },
   incomplete: { Icon: TriangleAlertIcon, className: "text-amber-400" },
   failed: { Icon: OctagonXIcon, className: "text-red-400" },
