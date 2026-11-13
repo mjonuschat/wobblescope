@@ -83,6 +83,7 @@ struct State {
     behaviors: HashMap<usize, Sweep>,
     sweeps: Vec<String>,
     scripts: Vec<String>,
+    moves: Vec<([f64; 3], [f64; 3], bool)>,
     pending: Option<Gate>,
     /// How long the toolhead stays `Printing` after a sweep.
     idle_delay: Duration,
@@ -152,6 +153,7 @@ impl Sim {
             behaviors: HashMap::new(),
             sweeps: vec![],
             scripts: vec![],
+            moves: vec![],
             pending: None,
             idle_delay: Duration::ZERO,
             counters: HashMap::new(),
@@ -186,6 +188,10 @@ impl Sim {
 
     pub fn set_offset(&self, offset: [f64; 3]) {
         self.state.lock().unwrap().offset = offset;
+    }
+
+    pub fn moves(&self) -> Vec<([f64; 3], [f64; 3], bool)> {
+        self.state.lock().unwrap().moves.clone()
     }
 
     pub fn set_idle_delay(&self, delay: Duration) {
@@ -432,11 +438,21 @@ impl Sim {
                     return Script::Gated(gate);
                 }
                 Move::Normal => {
-                    let o = s.offset;
+                    let position = self.printer.field("toolhead", "position");
+                    let start = std::array::from_fn(|i| position[i].as_f64().unwrap());
+                    let relative = script.lines().any(|line| line == "G91");
+                    let end: [f64; 3] = std::array::from_fn(|i| {
+                        if relative {
+                            start[i] + at[i]
+                        } else {
+                            at[i] + s.offset[i]
+                        }
+                    });
+                    s.moves.push((start, end, script.contains("G4 P")));
                     self.printer.set_field(
                         "toolhead",
                         "position",
-                        json!([at[0] + o[0], at[1] + o[1], at[2] + o[2], 0.0]),
+                        json!([end[0], end[1], end[2], 0.0]),
                     );
                 }
                 Move::Frozen => {}

@@ -200,11 +200,12 @@ impl TestPlan {
     /// a segment without a target.
     #[must_use]
     pub fn segment_script(&self, segment: &Segment) -> String {
-        let (Some(axes_map), Some([x, y, z])) = (&self.axes_map, segment.target) else {
+        let (Some(axes_map), Some(target)) = (&self.axes_map, segment.target) else {
             return String::new();
         };
+        let [x, y, z] = std::array::from_fn::<_, 3, _>(|i| target[i] - segment.position[i]);
         format!(
-            "SAVE_GCODE_STATE NAME=wobblescope\nG90\nG4 P500\nG1 X{x} Y{y} Z{z} F{}\nG4 P500\n\
+            "SAVE_GCODE_STATE NAME=wobblescope\nG91\nG4 P500\nG1 X{x} Y{y} Z{z} F{}\nG4 P500\n\
              M400\nRESTORE_GCODE_STATE NAME=wobblescope",
             axes_map.run.speed * 60.0
         )

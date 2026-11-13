@@ -123,9 +123,32 @@ fn segment_script_is_exactly_the_documented_text() {
     let plan = plan_axes_map(&request(), &printer(), 600).unwrap();
     assert_eq!(
         plan.segment_script(&plan.segments[0]),
-        "SAVE_GCODE_STATE NAME=wobblescope\nG90\nG4 P500\nG1 X165.5 Y139 Z20 F4800\nG4 P500\n\
+        "SAVE_GCODE_STATE NAME=wobblescope\nG91\nG4 P500\nG1 X30 Y0 Z0 F4800\nG4 P500\n\
          M400\nRESTORE_GCODE_STATE NAME=wobblescope"
     );
+}
+
+#[test]
+fn segment_script_uses_signed_deltas_and_restores_state() {
+    let plan = plan_axes_map(&request(), &printer(), 600).unwrap();
+    let mut segment = plan.segments[0];
+    segment.position = [10.0, 20.0, 30.0];
+    segment.target = Some([5.0, 20.0, 32.5]);
+    assert_eq!(
+        plan.segment_script(&segment),
+        "SAVE_GCODE_STATE NAME=wobblescope\nG91\nG4 P500\nG1 X-5 Y0 Z2.5 F4800\nG4 P500\n\
+         M400\nRESTORE_GCODE_STATE NAME=wobblescope"
+    );
+}
+
+#[test]
+fn segment_script_requires_a_calibration_and_target() {
+    let mut plan = plan_axes_map(&request(), &printer(), 600).unwrap();
+    let mut segment = plan.segments[0];
+    segment.target = None;
+    assert!(plan.segment_script(&segment).is_empty());
+    plan.axes_map = None;
+    assert!(plan.segment_script(&plan.segments[0]).is_empty());
 }
 
 #[test]

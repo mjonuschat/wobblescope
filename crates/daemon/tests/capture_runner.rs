@@ -987,6 +987,30 @@ async fn a_calibration_records_three_segments_and_restores_the_printer() {
 }
 
 #[tokio::test]
+async fn calibration_moves_follow_physical_points_with_gcode_offsets() {
+    let rig = calibration_rig(Some(8.0)).await;
+    rig.sim.set_offset([8.0, -6.0, 3.0]);
+    let plan = calibration_plan();
+    let points = plan.axes_map.as_ref().unwrap().points;
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let moves: Vec<_> = rig.sim.moves().into_iter().filter(|m| m.2).collect();
+    assert_eq!(moves.len(), 3);
+    for (i, (start, end, _)) in moves.iter().enumerate() {
+        assert_eq!(*start, points[i]);
+        assert_eq!(*end, points[i + 1]);
+        let displacement: [f64; 3] = std::array::from_fn(|axis| end[axis] - start[axis]);
+        let mut expected = [0.0; 3];
+        expected[i] = 30.0;
+        assert_eq!(displacement, expected);
+    }
+    assert_eq!(rig.sim.scripts().last().unwrap(), CALIBRATION_RESTORE);
+    assert_clean(&rig);
+}
+
+#[tokio::test]
 async fn the_restore_uses_the_state_name_that_was_saved() {
     let rig = calibration_rig(Some(8.0)).await;
     let task = start(&rig, &calibration_plan()).await;
