@@ -244,6 +244,7 @@ export function createAnalysisClient({
         if (bg) {
           bg.listeners.add(fileOnBytes);
           fileProgress.set(f.name, { loaded: bg.loaded, total: bg.total });
+          reportDownloadProgress();
           try {
             const buffer = await Promise.race([
               bg.promise,
@@ -403,8 +404,11 @@ export function createAnalysisClient({
           ? fetchResultSample(job.resultId, f.chip, f.segment, signal, onBytes)
           : fetchSample(job.sessionId, f.chip, f.segment, signal, onBytes);
       // Handle errors. Remove from map so a request fetches it again, but do not rethrow.
+      // Only delete if this is still the same download (a scope change may have replaced it).
       promise.catch(() => {
-        bgDownloads.delete(f.name);
+        if (bgDownloads.get(f.name) === download) {
+          bgDownloads.delete(f.name);
+        }
       });
       download.promise = promise;
       bgDownloads.set(f.name, download);

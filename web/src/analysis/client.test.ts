@@ -810,4 +810,94 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[1].id);
     await xReq;
   });
+
+  it("an aborted prefetch rejection does not remove a new scope's download", async () => {
+    const { worker, client, job, prefetchJob, deferred, fetchSample } = setupWithDeferredFetch();
+    // X analysis for s1 to fill held
+    const first = client.analyze(job());
+    await flush();
+    deferred.find((d) => d.key === "s1:0/0")!.resolve(new Uint8Array([0, 0]).buffer);
+    deferred.find((d) => d.key === "s1:1/0")!.resolve(new Uint8Array([1, 0]).buffer);
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await first;
+
+    // Prefetch Y for s1 (starts a download)
+    client.prefetch(prefetchJob({ axis: "Y" }));
+    await flush();
+    const s1YFetch = deferred.find((d) => d.key === "s1:0/1")!;
+    expect(s1YFetch.signal?.aborted).toBe(false);
+
+    // Now switch to s2 by prefetching for it. This should abort s1's prefetch.
+    client.prefetch(prefetchJob({ sessionId: "s2", meta: twoAxisMeta("s2"), axis: "Y" }));
+    await flush();
+
+    // s1's Y fetch should now be aborted
+    expect(s1YFetch.signal?.aborted).toBe(true);
+    // s2's Y fetch should be in progress
+    const s2YFetch = deferred.find((d) => d.key === "s2:0/1")!;
+    expect(s2YFetch.signal?.aborted).toBe(false);
+
+    // Now simulate the s1 aborted fetch rejecting (as abort errors do)
+    s1YFetch.reject(new DOMException("Aborted", "AbortError"));
+    await flush();
+
+    // The s2 download should still be tracked (not removed by the s1 rejection)
+    // Start an analysis for s2/Y that reuses the background download
+    const s2YResult = client.analyze(job({ sessionId: "s2", meta: twoAxisMeta("s2"), axis: "Y" }));
+    await flush();
+
+    // Only one Y fetch for s2 should exist (the prefetch one, not a new one)
+    const s2YFetches = fetchSample.mock.calls.filter((c) => c[0] === "s2" && c[2] === 1);
+    expect(s2YFetches.length).toBe(1);
+
+    // Complete s2 downloads and finish analysis
+    for (const d of deferred.filter((d) => d.key.startsWith("s2:"))) {
+      d.resolve(new Uint8Array([d.chip, d.segment]).buffer);
+    }
+    await flush();
+    worker.answer(worker.analyses()[1].id);
+    await s2YResult;
+  });
+
+  it("already-received background bytes are reported when analysis joins", async () => {
+    const { worker, client, job, prefetchJob, deferred, findFetch } = setupWithDeferredFetch();
+    // X analysis to fill held
+    const first = client.analyze(job());
+    await flush();
+    findFetch(0, 0)!.resolve(new Uint8Array([0, 0]).buffer);
+    findFetch(1, 0)!.resolve(new Uint8Array([1, 0]).buffer);
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await first;
+
+    // Prefetch Y (one file: 0/1)
+    client.prefetch(prefetchJob({ axis: "Y" }));
+    await flush();
+
+    const yPrefetch = deferred.find((d) => d.segment === 1)!;
+    // Report progress bytes while the prefetch is running (but do not resolve yet)
+    yPrefetch.reportBytes(500, 1000);
+    await flush();
+
+    // Now start an analysis for Y while prefetch is still in progress.
+    // The analysis should immediately report the current prefetch progress.
+    const progress: AnalysisProgress[] = [];
+    const yResult = client.analyze(job({ axis: "Y" }), undefined, (p) => progress.push(p));
+    await flush();
+
+    // The downloading reports should include the background download's already-received bytes.
+    // The first report is the initial 0/null, but after joining the bg download we report again.
+    const downloadingReports = progress.filter((p) => p.phase === "downloading");
+    expect(downloadingReports.length).toBeGreaterThanOrEqual(2);
+    // The second report (after joining bg download) should have the current bytes
+    expect(downloadingReports[1]).toEqual({ phase: "downloading", loaded: 500, total: 1000 });
+
+    // Finish the prefetch
+    yPrefetch.resolve(new Uint8Array([0, 1]).buffer);
+    await flush();
+
+    worker.answer(worker.analyses()[1].id);
+    await yResult;
+  });
 });
