@@ -1,5 +1,5 @@
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ImportGroupState } from "@/pages/sessions/importModel";
 import { setBase, stubFetch } from "@/test/http";
@@ -185,5 +185,73 @@ describe("endpoints", () => {
     const http = stubFetch({ status: 201, body: {} });
     expect(() => importGroup(groupOf(["a.csv", "adxl345", "X", "1,2"]))).toThrow("a.csv");
     expect(http.fn).not.toHaveBeenCalled();
+  });
+
+  it("reports the bytes of a sample download as they arrive", async () => {
+    const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])];
+    const stream = new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const response = new Response(stream, { headers: { "Content-Length": "3" } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+
+    const calls: [number, number | null][] = [];
+    const onBytes = (loaded: number, total: number | null) => calls.push([loaded, total]);
+    const result = await fetchSample("s1", 1, 0, undefined, onBytes);
+
+    expect([...new Uint8Array(result)]).toEqual([1, 2, 3]);
+    expect(calls).toContainEqual([2, 3]);
+    expect(calls[calls.length - 1]).toEqual([3, 3]);
+  });
+
+  it("reports an unknown total when the length is missing", async () => {
+    const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])];
+    const stream = new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const response = new Response(stream);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+
+    const calls: [number, number | null][] = [];
+    const onBytes = (loaded: number, total: number | null) => calls.push([loaded, total]);
+    const result = await fetchSample("s1", 1, 0, undefined, onBytes);
+
+    expect([...new Uint8Array(result)]).toEqual([1, 2, 3]);
+    expect(calls[calls.length - 1]).toEqual([3, null]);
+  });
+
+  it("fetchResultSample reports progress", async () => {
+    const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])];
+    const stream = new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const response = new Response(stream, { headers: { "Content-Length": "3" } });
+    const fetchMock = vi.fn(async () => response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const calls: [number, number | null][] = [];
+    const onBytes = (loaded: number, total: number | null) => calls.push([loaded, total]);
+    const result = await fetchResultSample("r1", 1, 2, undefined, onBytes);
+
+    expect([...new Uint8Array(result)]).toEqual([1, 2, 3]);
+    expect(calls[calls.length - 1]).toEqual([3, 3]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const lastCall = fetchMock.mock.lastCall as unknown as [RequestInfo | URL, RequestInit?];
+    expect(new URL(String(lastCall[0])).pathname).toMatch(/\/api\/results\/r1\/samples\/1\/2$/);
   });
 });

@@ -22,6 +22,8 @@ import type { ImportGroupState } from "@/pages/sessions/importModel";
 
 import { ApiClientError, apiFetch, apiJson, apiUrl } from "./client";
 
+export type OnBytes = (loaded: number, total: number | null) => void;
+
 /** The list filters the app offers. */
 export interface SessionFilters {
   chip?: string;
@@ -111,14 +113,50 @@ export function importGroup(group: ImportGroupState, signal?: AbortSignal) {
   return apiJson<Summary>("imports", { method: "POST", body: form, signal });
 }
 
+async function readResponseWithProgress(response: Response, onBytes: OnBytes): Promise<ArrayBuffer> {
+  const body = response.body;
+  if (!body) return response.arrayBuffer();
+
+  const contentLengthHeader = response.headers.get("Content-Length");
+  let total: number | null = null;
+  if (contentLengthHeader !== null) {
+    const parsed = Number(contentLengthHeader);
+    if (Number.isFinite(parsed) && parsed >= 0 && Number.isInteger(parsed)) {
+      total = parsed;
+    }
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    onBytes(loaded, total);
+  }
+
+  const result = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result.buffer;
+}
+
 /** The stored, compressed sample file of one recording, exactly as the daemon holds it. */
 export async function fetchSample(
   id: string,
   chip: number,
   segment: number,
   signal?: AbortSignal,
+  onBytes?: OnBytes,
 ): Promise<ArrayBuffer> {
   const response = await apiFetch(`sessions/${encodeURIComponent(id)}/samples/${chip}/${segment}`, { signal });
+  if (onBytes) return readResponseWithProgress(response, onBytes);
   return response.arrayBuffer();
 }
 
@@ -147,8 +185,10 @@ export async function fetchResultSample(
   chip: number,
   segment: number,
   signal?: AbortSignal,
+  onBytes?: OnBytes,
 ): Promise<ArrayBuffer> {
   const response = await apiFetch(`results/${encodeURIComponent(id)}/samples/${chip}/${segment}`, { signal });
+  if (onBytes) return readResponseWithProgress(response, onBytes);
   return response.arrayBuffer();
 }
 
