@@ -148,6 +148,68 @@ pub struct Best {
     pub freq: f64,
 }
 
+// ---------------------------------------------------------------------------
+// Axes-map golden types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct AxesMapGolden {
+    pub pin: String,
+    pub cases: std::collections::BTreeMap<String, AxesMapCase>,
+}
+
+#[derive(Deserialize)]
+pub struct AxesMapCase {
+    pub accel: f64,
+    pub configured_map: Option<String>,
+    pub segments: Vec<AxesMapSegment>,
+    pub expected: AxesMapExpected,
+}
+
+#[derive(Deserialize)]
+pub struct AxesMapSegment {
+    pub t: Vec<f64>,
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub z: Vec<f64>,
+}
+
+#[derive(Deserialize)]
+pub struct AxesMapExpected {
+    pub per_segment: Vec<PerSegmentResult>,
+    pub extrapolated_axis: Option<usize>,
+    pub rotation_matrix: [[f64; 3]; 3],
+    pub euler_deg: [f64; 3],
+    pub formatted: String,
+    pub quality: AxesMapQuality,
+    pub gravity: f64,
+    pub noise_level: f64,
+}
+
+#[derive(Deserialize)]
+pub struct PerSegmentResult {
+    pub direction_vector: [f64; 3],
+    pub actual_direction: [f64; 3],
+    pub angle_error: f64,
+    pub confidence: f64,
+    pub noise_level: f64,
+    /// `[peak_vel_x, peak_vel_y, peak_vel_z]` in mm/s
+    pub peak_velocities: [f64; 3],
+    pub gravity: f64,
+}
+
+#[derive(Deserialize)]
+pub struct AxesMapQuality {
+    pub status: String,
+    pub messages: Vec<String>,
+}
+
+/// Load the entire axes-map golden (all nine cases) from the embedded `.json.zst`.
+pub fn axes_map_cases() -> AxesMapGolden {
+    let bytes = include_bytes!("../golden/axes_map.json.zst");
+    serde_json::from_str(&unzstd(bytes)).unwrap()
+}
+
 #[derive(Deserialize)]
 pub struct Ranking {
     pub name: String,
