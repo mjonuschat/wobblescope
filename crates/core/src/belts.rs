@@ -2,17 +2,16 @@
 //! (`belts_computation.py` and the offset table of `belts_plotter.py`, at the commit pinned in
 //! `docs/specs/shaketune-deviations.md`).
 //!
-//! The defects D8 to D17 of that file are kept on purpose: the port reproduces the figures
-//! Shake&Tune prints, so each deviation is pinned by a test and none is fixed here. This
-//! includes duplicate indices in the peak lists, which come from the peak detector's wrap of
-//! negative indices.
+//! The port keeps the defects D8 to D17 of that file on purpose, because it reproduces the
+//! figures Shake&Tune prints. A test covers each one and none is fixed here. They include
+//! duplicate indices in the peak lists, which come from the peak detector's wrap of negative
+//! indices.
 
 use serde::{Deserialize, Serialize};
 
 use crate::numeric::interp;
 use crate::peaks::detect_peaks_with;
 
-/// Points of the common frequency grid both PSDs are resampled onto.
 pub const GRID_POINTS: usize = 500;
 /// A peak must rise above this fraction of its own curve's maximum.
 pub const PEAK_THRESHOLD: f64 = 0.1;
@@ -31,7 +30,6 @@ pub const UNPAIRED_PENALTY: f64 = 30.0;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BeltPeak {
-    /// Index into the grid.
     pub index: usize,
     /// Frequency in Hz.
     pub freq: f64,
@@ -77,7 +75,6 @@ pub struct BeltsResult {
     pub b: BeltCurve,
     /// Peaks matched across the belts, in the order the greedy match found them (D16).
     pub pairs: Vec<BeltPair>,
-    /// One row per pair, in the same order.
     pub offsets: Vec<PeakOffset>,
     /// Pearson correlation of the two curves times 100, clipped to 0..100. NaN when a curve is
     /// flat (D11), as in Shake&Tune. serde_json writes NaN as `null`, which it cannot read back
@@ -231,31 +228,29 @@ fn mechanical_health(
     if pair_count >= MAX_PEAKS {
         score *= MAX_PEAKS as f64 / pair_count as f64;
     }
-    if !a.unpaired.is_empty() || !b.unpaired.is_empty() {
-        let penalty: f64 = a
-            .unpaired
-            .iter()
-            .map(|&p| a.psd[p])
-            .chain(b.unpaired.iter().map(|&p| b.psd[p]))
-            .fold(0.0, |sum, level| sum + level / highest * UNPAIRED_PENALTY);
-        score -= penalty;
-    }
+    let penalty: f64 = a
+        .unpaired
+        .iter()
+        .map(|&p| a.psd[p])
+        .chain(b.unpaired.iter().map(|&p| b.psd[p]))
+        .fold(0.0, |sum, level| sum + level / highest * UNPAIRED_PENALTY);
+    score -= penalty;
     health_text(score.clamp(0.0, 100.0))
 }
 
 /// Bands are open at the bottom, so exactly 0 matches none (D12).
 fn health_text(score: f64) -> String {
-    let text = if score > 70.0 && score <= 100.0 {
+    let text = if score > 70.0 {
         "Excellent mechanical health"
-    } else if score > 55.0 && score <= 70.0 {
+    } else if score > 55.0 {
         "Good mechanical health"
-    } else if score > 45.0 && score <= 55.0 {
+    } else if score > 45.0 {
         "Acceptable mechanical health"
-    } else if score > 30.0 && score <= 45.0 {
+    } else if score > 30.0 {
         "Potential signs of a mechanical issue"
-    } else if score > 15.0 && score <= 30.0 {
+    } else if score > 15.0 {
         "Likely a mechanical issue"
-    } else if score > 0.0 && score <= 15.0 {
+    } else if score > 0.0 {
         "Mechanical issue detected"
     } else {
         "Unknown mechanical health"
@@ -419,7 +414,7 @@ mod tests {
     #[test]
     fn the_offsets_read_belt_a_at_both_peaks_of_a_pair() {
         // Belt A has a tall peak at 50 Hz and a short one at 56 Hz, which belt B merges into
-        // one peak at 56 Hz; the pair's offsets come from belt A's curve at 50 and 56 Hz.
+        // one peak at 56 Hz. The pair's offsets come from belt A's curve at 50 and 56 Hz.
         let got = compare(&[(50.0, 1.0), (56.0, 0.4)], &[(56.0, 3.0)], MAX_FREQ);
         assert_eq!(got.pairs.len(), 1);
         let pair = &got.pairs[0];

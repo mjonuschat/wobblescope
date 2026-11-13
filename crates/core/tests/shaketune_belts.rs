@@ -29,6 +29,21 @@ parity_test! {
             let pairs: Vec<(usize, usize)> =
                 got.pairs.iter().map(|p| (p.a.index, p.b.index)).collect();
             assert_eq!(pairs, want.pairs, "{name}: pairs");
+            assert_eq!(got.offsets.len(), got.pairs.len(), "{name}: one offset per pair");
+            let highest = got.a.psd.iter().chain(&got.b.psd).fold(f64::MIN, |m, &v| m.max(v));
+            for (pair, offset) in got.pairs.iter().zip(&got.offsets) {
+                close(
+                    &format!("{name} freq delta"),
+                    offset.freq_delta,
+                    (pair.b.freq - pair.a.freq).abs(),
+                );
+                let rise = (got.a.psd[pair.b.index] - got.a.psd[pair.a.index]).abs();
+                close(
+                    &format!("{name} amplitude delta"),
+                    offset.amplitude_delta_percent,
+                    rise / highest * 100.0,
+                );
+            }
             match want.similarity {
                 Some(s) => close(&format!("{name} similarity"), got.similarity, s),
                 None => assert!(got.similarity.is_nan(), "{name}: similarity is NaN"),
