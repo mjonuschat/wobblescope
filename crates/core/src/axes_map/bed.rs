@@ -61,7 +61,7 @@ pub(crate) fn classify(
     let under: [Option<bool>; 3] = std::array::from_fn(|i| under_floor(i, &seg[i], p));
     let xy_under = under[0] == Some(true) && under[1] == Some(true);
 
-    // D17 (N1): the relative rule marks nothing when every segment is noise, so a chip that
+    // D27 (N1): the relative rule marks nothing when every segment is noise, so a chip that
     // never moved would get a map built from noise. X and Y under the floor with Z under it,
     // or with no Z floor to judge by, is "no motion seen" for both mountings.
     if xy_under && under[2] != Some(false) {
