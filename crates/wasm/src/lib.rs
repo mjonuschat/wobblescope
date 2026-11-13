@@ -102,6 +102,8 @@ impl Session {
     /// [`AnalyzeError::Session`] when `meta` is not a valid axes-map session.
     pub fn analyze_axes_map(&self) -> Result<Vec<AxesMapChip>, AnalyzeError> {
         let params = axes_map_params(&self.meta)?;
+        // `axes_map_inputs` calls `axes_map_params` again internally. The call above is kept to
+        // surface a session error before allocating the closure and iterating files.
         let captures = axes_map_inputs(&self.meta, |file| {
             let bytes = self
                 .files
