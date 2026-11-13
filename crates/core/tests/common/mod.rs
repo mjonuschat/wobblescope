@@ -474,6 +474,34 @@ pub struct Oracle {
     pub cases: BTreeMap<String, OracleCase>,
     pub edge_cases: Vec<OracleEdge>,
     pub spectrograms: BTreeMap<String, OracleSpectrogram>,
+    pub belts: Vec<BeltCase>,
+}
+
+/// Shake&Tune's belt comparison of two PSDs, with the inputs it was run on.
+#[derive(Deserialize)]
+pub struct BeltCase {
+    pub name: String,
+    pub max_freq: f64,
+    pub freqs_a: Vec<f64>,
+    pub psd_a: Vec<f64>,
+    pub freqs_b: Vec<f64>,
+    pub psd_b: Vec<f64>,
+    pub expected: BeltExpected,
+}
+
+/// `similarity` is `None` where Shake&Tune's is NaN (a flat curve has no correlation).
+#[derive(Deserialize)]
+pub struct BeltExpected {
+    pub freqs: Vec<f64>,
+    pub psd_a: Vec<f64>,
+    pub psd_b: Vec<f64>,
+    pub peaks_a: Vec<usize>,
+    pub peaks_b: Vec<usize>,
+    pub pairs: Vec<(usize, usize)>,
+    pub unpaired_a: Vec<usize>,
+    pub unpaired_b: Vec<usize>,
+    pub similarity: Option<f64>,
+    pub health: String,
 }
 
 /// Shake&Tune's spectrogram of one recording: all the times, the matrix cut at 200 Hz for the

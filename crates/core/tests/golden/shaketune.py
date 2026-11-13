@@ -12,6 +12,8 @@ import importlib.util
 import json
 import subprocess
 import sys
+import types
+from typing import NamedTuple
 from pathlib import Path
 
 import numpy as np
@@ -156,6 +158,148 @@ def spectrogram_entry(module, data: np.ndarray) -> dict:
     }
 
 
+BELT_GRID_STEP = 1.5625
+BELT_GRID_LEN = 161
+
+
+def resonators(freqs, peaks, width=3.0):
+    """Sum of Lorentzian lines, one (centre, height) pair per resonator."""
+    return sum(h / (1.0 + ((freqs - f0) / width) ** 2) for f0, h in peaks)
+
+
+def belt_case(name, rng, peaks_a, peaks_b, noise_b=0.02, max_freq=200.0):
+    freqs = np.arange(BELT_GRID_LEN) * BELT_GRID_STEP
+    floor = 0.01
+
+    def spectrum(peaks, noise):
+        return resonators(freqs, peaks) + floor + noise * rng.random(len(freqs))
+
+    return {
+        "name": name,
+        "max_freq": max_freq,
+        "freqs_a": freqs.tolist(),
+        "psd_a": spectrum(peaks_a, 0.02).tolist(),
+        "freqs_b": freqs.tolist(),
+        "psd_b": spectrum(peaks_b, noise_b).tolist(),
+    }
+
+
+def belts_cases() -> list:
+    rng = np.random.default_rng(20261113)
+    two = [(55.0, 1.0), (110.0, 0.6)]
+    cases = [
+        belt_case("matched_one_peak", rng, [(55.0, 1.0)], [(55.0, 0.9)]),
+        belt_case("matched_two_peaks", rng, two, [(55.0, 0.9), (110.0, 0.55)]),
+        belt_case("shifted_peak_6hz", rng, [(55.0, 1.0)], [(61.0, 0.9)]),
+        belt_case("extra_peak_on_b", rng, two, two + [(160.0, 0.5)]),
+        belt_case("weak_noisy_b", rng, two, [(55.0, 0.3), (110.0, 0.18)], noise_b=0.04),
+        belt_case("max_freq_100", rng, two, [(55.0, 0.9), (110.0, 0.55)], max_freq=100.0),
+    ]
+    anti = belt_case("anticorrelated", rng, [(60.0, 1.0)], [], noise_b=0.01)
+    peak = resonators(np.array(anti["freqs_a"]), [(60.0, 1.0)])
+    anti["psd_b"] = (1.2 - peak + 0.01 * rng.random(BELT_GRID_LEN)).tolist()
+    cases.append(anti)
+    flat = belt_case("flat_b", rng, two, [])
+    flat["psd_b"] = [0.5] * BELT_GRID_LEN
+    cases.append(flat)
+    by_name = {c["name"]: c for c in cases}
+    # same inputs as matched_two_peaks, only max_freq differs
+    for key in ("freqs_a", "psd_a", "freqs_b", "psd_b"):
+        by_name["max_freq_100"][key] = by_name["matched_two_peaks"][key]
+    return cases
+
+
+class _SignalData(NamedTuple):
+    freqs: np.ndarray
+    psd: np.ndarray
+    peaks: np.ndarray
+    paired_peaks: list = []
+    unpaired_peaks: list = []
+
+
+class _Record:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+class _Calibration:
+    def __init__(self, freq_bins, psd):
+        self.freq_bins = freq_bins
+        self._psd = psd
+
+    def get_psd(self, axis):
+        assert axis == "all"
+        return self._psd
+
+
+def load_belts_computation(root: Path, common):
+    """Shake&Tune's belts_computation.py, run unmodified, with its relative imports stubbed.
+
+    The stubbed accelerometer step reads the case's arrays, passed as the measurement's
+    "samples" (row 0 the frequencies, row 1 the PSD).
+    """
+
+    def module(name, **attrs):
+        mod = types.ModuleType(name)
+        mod.__dict__.update(attrs)
+        mod.__path__ = []
+        sys.modules[name] = mod
+        return mod
+
+    base = "st_pin"
+    module(base)
+    module(f"{base}.helpers")
+    module(f"{base}.helpers.accelerometer", Measurement=dict)
+    module(f"{base}.helpers.common_func", detect_peaks=common.detect_peaks)
+    module(f"{base}.helpers.console_output", ConsoleOutput=_Record(print=lambda *_: None))
+    module(
+        f"{base}.graph_creators",
+        get_shaper_calibrate_module=lambda: (None, None),
+        process_accelerometer_data_compat=lambda _shaper, data: _Calibration(data[0], data[1]),
+    )
+    module(f"{base}.graph_creators.base_models", GraphMetadata=_Record)
+    module(f"{base}.graph_creators.computation_results", BeltsResult=_Record, SignalData=_SignalData)
+    module(f"{base}.graph_creators.computations")
+    path = root / "shaketune" / "graph_creators" / "computations" / "belts_computation.py"
+    name = f"{base}.graph_creators.computations.belts_computation"
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def belts_entry(computation_module, case: dict) -> dict:
+    samples = [
+        np.array([case["freqs_a"], case["psd_a"]]),
+        np.array([case["freqs_b"], case["psd_b"]]),
+    ]
+    measurements = [
+        {"name": "belt_A", "samples": samples[0]},
+        {"name": "belt_B", "samples": samples[1]},
+    ]
+    result = computation_module.BeltsComputation(
+        measurements, "corexy", case["max_freq"], None, None, "pinned"
+    ).compute()
+    a, b = result.signal1, result.signal2
+    similarity = float(result.similarity_factor)
+    return {
+        **case,
+        "expected": {
+            "freqs": a.freqs.tolist(),
+            "psd_a": a.psd.tolist(),
+            "psd_b": b.psd.tolist(),
+            "peaks_a": [int(p) for p in a.peaks],
+            "peaks_b": [int(p) for p in b.peaks],
+            "pairs": [[int(p1[0]), int(p2[0])] for p1, p2 in a.paired_peaks],
+            "unpaired_a": [int(p) for p in a.unpaired_peaks],
+            "unpaired_b": [int(p) for p in b.unpaired_peaks],
+            "similarity": None if np.isnan(similarity) else similarity,
+            "health": result.mhi,
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shaketune", required=True, type=Path)
@@ -188,7 +332,11 @@ def main() -> None:
         "ws_x_adxl345": spectrogram_entry(spectrogram_module, read_samples(data_dir / "real" / "ws_x_adxl345.csv.zst")),
     }
 
-    out = {"pin": PIN, "cases": cases, "edge_cases": edge_cases, "spectrograms": spectrograms}
+    belts_module = load_belts_computation(root, common)
+    with np.errstate(all="ignore"):
+        belts = [belts_entry(belts_module, case) for case in belts_cases()]
+
+    out = {"pin": PIN, "cases": cases, "edge_cases": edge_cases, "spectrograms": spectrograms, "belts": belts}
     (HERE / "shaketune.json").write_text(json.dumps(out, indent=1) + "\n")
 
 
