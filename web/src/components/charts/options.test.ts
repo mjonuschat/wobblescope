@@ -549,6 +549,15 @@ type BeltSeries = {
 };
 
 describe("beltOverlayOption", () => {
+  it("the_y_axis_name_sits_beside_the_axis_inside_the_grid_margin_not_at_the_legend", () => {
+    const option = beltOverlayOption(beltsResult()) as unknown as {
+      yAxis: { nameLocation: string; nameGap: number };
+      grid: { left: number };
+    };
+    expect(option.yAxis.nameLocation).toBe("middle");
+    expect(option.yAxis.nameGap).toBeLessThan(option.grid.left);
+  });
+
   it("the_overlay_has_two_curves_and_marks_pairs_with_greek_letters_and_unpaired_with_numbers", () => {
     const option = beltOverlayOption(beltsResult());
     const [a, b] = (option as { series: BeltSeries[] }).series;

@@ -542,6 +542,18 @@ function zoomControls(both: boolean): EChartsCoreOption {
   };
 }
 
+/**
+ * An axis name centred along its axis rather than at the axis end, where it would run into the
+ * legend and toolbox. In the 380 px chart the grid spans y 40 to 324: the legend and toolbox keep
+ * the 40 px above it. A name 52 px left of the axis (scientific tick labels are about 40 px wide)
+ * spans roughly 45 to 59 px, inside the 72 px left of the grid. "Belt A" sits 30 px under the
+ * axis inside the 56 px below the grid.
+ */
+const axisName = (name: string, gap: number) => ({ name, nameLocation: "middle" as const, nameGap: gap });
+
+const PSD_AXIS_NAME = axisName("Power spectral density", 52);
+const BELT_GRID = { top: 40, left: 72, right: 24, bottom: 40 };
+
 const highest = (result: BeltsResult) => Math.max(...result.a.psd, ...result.b.psd);
 
 /**
@@ -589,12 +601,12 @@ export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
   return {
     ...base(null, result.max_freq),
     animation: false,
-    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    grid: BELT_GRID,
     legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: text } },
     ...zoomControls(false),
     yAxis: {
       type: "value",
-      name: "Power spectral density",
+      ...PSD_AXIS_NAME,
       splitLine,
       min: 0,
       max: highest(result) * 1.1,
@@ -610,12 +622,12 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string): ECharts
   return {
     ...base(null, spectrum.freqs.at(-1) ?? 0),
     animation: false,
-    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    grid: BELT_GRID,
     legend: { data: [label], top: 0, left: 56, textStyle: { color: text } },
     ...zoomControls(false),
     yAxis: {
       type: "value",
-      name: "Power spectral density",
+      ...PSD_AXIS_NAME,
       splitLine,
       min: 0,
       max: top * 1.1,
@@ -633,14 +645,6 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string): ECharts
     ],
   };
 }
-
-/**
- * An axis name centred along its axis rather than at the axis end, where the scatter's "Belt B"
- * would run into the legend. In the 380 px chart the grid spans y 40 to 324: the legend and toolbox
- * keep the 40 px above it, "Belt A" sits 30 px under the axis inside the 56 px below the grid, and
- * "Belt B" sits 52 px left of the axis inside the 72 px left of it.
- */
-const axisName = (name: string, gap: number) => ({ name, nameLocation: "middle" as const, nameGap: gap });
 
 /** Where the good zone ends above `x`, as Shake&Tune draws it. */
 export const goodZoneBoundary = (x: number, max: number) => x + 0.35 * max * Math.exp(-x / (0.6 * max));
