@@ -348,6 +348,7 @@ impl Run {
             .map(|c| (c, self.plan.segments[c.index]));
         let state = TestState {
             id: self.id.clone(),
+            kind: self.plan.kind,
             phase,
             segment: segment.map_or(0, |(c, _)| c.index as u32 + 1),
             segments: self.plan.segments.len() as u32,
@@ -822,6 +823,7 @@ impl Run {
             Some(Stored { capture, meta }) if segments > 0 => {
                 let sealing = Sealing {
                     id: self.id.clone(),
+                    kind: self.plan.kind,
                     meta,
                     summaries,
                     reason,
@@ -831,7 +833,7 @@ impl Run {
             }
             other => {
                 let capture = other.and_then(|stored| stored.capture);
-                abandon(&self.r.storage, &self.id, capture, reason).await
+                abandon(&self.r.storage, &self.id, self.plan.kind, capture, reason).await
             }
         };
         finished.code = code;

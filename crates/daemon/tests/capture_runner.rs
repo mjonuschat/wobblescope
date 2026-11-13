@@ -23,9 +23,13 @@ async fn two_chips_two_axes_one_point_finish_as_a_complete_session() {
     let Ok(task) = rig.start(&plan).await else {
         panic!("pre-flight must pass");
     };
+    rig.until("a running test", || rig.snapshot().test.is_some())
+        .await;
+    assert_eq!(rig.snapshot().test.unwrap().kind, TestKind::Axes);
     let finished = rig.finished().await;
     task.await.unwrap();
     assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    assert_eq!(finished.kind, TestKind::Axes);
     let id = finished.session_id.clone().unwrap();
     assert_eq!(rig.sessions(), std::slice::from_ref(&id));
 
@@ -662,9 +666,13 @@ async fn a_belt_run_records_both_segments_in_order_with_vector_axes() {
     let rig = rig().await;
     let plan = belt_plan(&CHIPS);
     let task = start(&rig, &plan).await;
+    rig.until("a running test", || rig.snapshot().test.is_some())
+        .await;
+    assert_eq!(rig.snapshot().test.unwrap().kind, TestKind::Belts);
     let finished = rig.finished().await;
     task.await.unwrap();
     assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    assert_eq!(finished.kind, TestKind::Belts);
     let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
     let axes: Vec<Direction> = meta.segments.iter().map(|s| s.axis).collect();
     assert_eq!(axes, [Direction::BELT_A, Direction::BELT_B]);

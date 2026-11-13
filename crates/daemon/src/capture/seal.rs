@@ -5,6 +5,7 @@ use wobblescope_session::meta::{Outcome, SessionMeta};
 use super::live::{FinishedOutcome, FinishedTest};
 use super::meta::apply_summaries;
 use super::recorder::ChipSummary;
+use super::request::TestKind;
 use crate::storage::capture::Capture;
 use crate::storage::{Storage, run_blocking};
 
@@ -13,6 +14,7 @@ use crate::storage::{Storage, run_blocking};
 pub(super) async fn abandon(
     storage: &Storage,
     id: &str,
+    kind: TestKind,
     capture: Option<Capture>,
     reason: Option<String>,
 ) -> FinishedTest {
@@ -22,6 +24,7 @@ pub(super) async fn abandon(
     }
     FinishedTest {
         id: id.to_owned(),
+        kind,
         outcome: FinishedOutcome::NoSession,
         reason: Some(reason.unwrap_or_else(|| "no segment finished".to_owned())),
         session_id: None,
@@ -32,6 +35,7 @@ pub(super) async fn abandon(
 
 pub(super) struct Sealing {
     pub id: String,
+    pub kind: TestKind,
     pub meta: SessionMeta,
     pub summaries: Vec<ChipSummary>,
     pub reason: Option<String>,
@@ -47,6 +51,7 @@ pub(super) async fn seal(
 ) -> FinishedTest {
     let Sealing {
         id,
+        kind: test_kind,
         mut meta,
         summaries,
         reason,
@@ -73,6 +78,7 @@ pub(super) async fn seal(
     meta.outcome = outcome;
     let finished = |kind, reason: Option<String>, session: Option<String>| FinishedTest {
         id: id.clone(),
+        kind: test_kind,
         outcome: kind,
         reason,
         session_id: session,

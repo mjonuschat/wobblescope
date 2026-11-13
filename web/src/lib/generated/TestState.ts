@@ -2,6 +2,7 @@
 import type { ChipLive } from "./ChipLive";
 import type { Direction } from "./Direction";
 import type { Phase } from "./Phase";
+import type { TestKind } from "./TestKind";
 
 /**
  * A running test.
@@ -11,6 +12,10 @@ export type TestState = {
  * The test id, which is also the session id.
  */
 id: string, 
+/**
+ * What the test measures.
+ */
+kind: TestKind, 
 /**
  * Where the test is.
  */

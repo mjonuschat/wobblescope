@@ -7,6 +7,7 @@ use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
 use wobblescope::capture::live::{FinishedOutcome, FinishedTest};
+use wobblescope::capture::request::TestKind;
 
 type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -123,6 +124,7 @@ async fn a_subscriber_that_falls_far_behind_gets_a_fresh_snapshot_not_a_closed_s
         rig.hub.update(|s| {
             s.last = Some(FinishedTest {
                 id: format!("test-{n}"),
+                kind: TestKind::Axes,
                 outcome: FinishedOutcome::Complete,
                 reason: None,
                 session_id: None,

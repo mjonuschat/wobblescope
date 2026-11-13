@@ -8,6 +8,7 @@ use serde::Serialize;
 use tokio::sync::broadcast;
 use wobblescope_core::direction::Direction;
 
+use super::request::TestKind;
 use crate::lock::lock;
 
 /// How many changes a subscriber may lag behind before it is given a fresh snapshot.
@@ -48,6 +49,8 @@ pub struct ChipLive {
 pub struct TestState {
     /// The test id, which is also the session id.
     pub id: String,
+    /// What the test measures.
+    pub kind: TestKind,
     /// Where the test is.
     pub phase: Phase,
     /// The current segment, counting from 1.
@@ -101,6 +104,8 @@ pub enum FailureCode {
 pub struct FinishedTest {
     /// The test id.
     pub id: String,
+    /// What the test measured.
+    pub kind: TestKind,
     /// How it ended.
     pub outcome: FinishedOutcome,
     /// Why, for anything but a complete test.

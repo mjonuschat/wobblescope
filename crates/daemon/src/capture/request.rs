@@ -128,6 +128,8 @@ pub struct Segment {
 /// A validated request: everything the runner needs to move and send commands.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TestPlan {
+    /// What the test measures.
+    pub kind: TestKind,
     /// The chips that record.
     pub chips: Vec<String>,
     /// The test mode.
@@ -308,6 +310,7 @@ pub fn plan(
         .collect();
     let pulse = request.mode == Mode::Pulse;
     Ok(TestPlan {
+        kind: request.kind,
         chips: request.chips.clone(),
         mode: request.mode,
         points,
