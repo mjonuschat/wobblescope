@@ -192,59 +192,20 @@ describe("the belt view", () => {
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ chip: "lis2dw ebb36" });
   });
 
-  it("changing_the_analysis_maximum_asks_for_a_new_analysis_and_redraws", async () => {
-    fake.belts.mockImplementation(async ({ maxFreq }: { maxFreq: number }) =>
-      beltsComparison("adxl345", beltsResult({ health: `kept to ${maxFreq}` })),
-    );
-    renderView();
-    const field = (await screen.findByLabelText("Analysis maximum (Hz)")) as HTMLInputElement;
-    expect(field.value).toBe("200");
-    expect(await screen.findByText(/kept to 200/)).toBeTruthy();
-
-    fireEvent.change(field, { target: { value: "5" } });
-    expect(screen.getByRole("alert").textContent).toContain("at least 10");
-    fireEvent.change(field, { target: { value: "" } });
-    expect(screen.getByRole("alert")).toBeTruthy();
-    expect(fake.belts).toHaveBeenCalledTimes(1);
-
-    fireEvent.change(field, { target: { value: "120" } });
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(await screen.findByText(/kept to 120/)).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Test result" })).getByText(/kept to 120/)).toBeTruthy();
-    expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ maxFreq: 120 });
-  });
-
-  it("an_invalid_analysis_maximum_hides_the_previous_result_until_it_is_valid_again", async () => {
+  it("asks_for_the_analysis_with_a_maximum_of_200_hz_and_has_no_analysis_maximum_field", async () => {
     fake.belts.mockResolvedValue(beltsComparison());
     renderView();
-    const field = (await screen.findByLabelText("Analysis maximum (Hz)")) as HTMLInputElement;
     expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
-
-    fireEvent.change(field, { target: { value: "5" } });
-    expect(screen.getByRole("alert").textContent).toContain("at least 10");
-    expect(screen.getByLabelText("Analysis maximum (Hz)")).toBeTruthy();
-    expect(screen.queryByRole("img", { name: "Belt overlay of adxl345" })).toBeNull();
-    expect(screen.queryByRole("img", { name: "Cross-belt scatter of adxl345" })).toBeNull();
-    expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.queryByText(/Estimated similarity/)).toBeNull();
-
-    fireEvent.change(field, { target: { value: "200" } });
-    expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
-    expect(screen.getByText(/Estimated similarity/)).toBeTruthy();
+    expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ maxFreq: 200 });
+    expect(screen.queryByLabelText(/Analysis maximum/)).toBeNull();
   });
 
-  it("has_no_chart_scale_dialog_and_the_analysis_maximum_says_it_decides_the_peaks", async () => {
+  it("has_no_chart_scale_dialog", async () => {
     fake.belts.mockResolvedValue(beltsComparison());
     renderView();
     const overlay = await screen.findByRole("img", { name: "Belt overlay of adxl345" });
     expect(Number(overlay.getAttribute("data-ymax"))).toBeCloseTo(6.6);
     expect(screen.queryByRole("button", { name: "Set the chart scale" })).toBeNull();
-    expect(screen.getByLabelText("Analysis maximum (Hz)")).toBeTruthy();
-    fireEvent.focus(screen.getByRole("button", { name: "About analysis maximum (hz)" }));
-    expect(
-      (await screen.findAllByText(/The comparison covers 0 to this frequency. It decides which peaks are found./))
-        .length,
-    ).toBeGreaterThan(0);
   });
 
   it("a_one_belt_session_draws_that_belt_alone_from_its_spectrum", async () => {

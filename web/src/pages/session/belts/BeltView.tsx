@@ -1,7 +1,5 @@
 import type { useBelts } from "@/analysis/useBelts";
-import { HintLabel } from "@/components/HintLabel";
 import { Panel } from "@/components/Panel";
-import { UnitInput } from "@/components/UnitInput";
 import { Waiting } from "@/components/Waiting";
 import { EChart } from "@/components/charts/EChart";
 import { beltOverlayOption, beltScatterOption, beltSingleOption } from "@/components/charts/options";
@@ -12,7 +10,6 @@ import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import { chipLabel } from "@/lib/format";
 
 import { BeltOffsetTable } from "./BeltOffsetTable";
-import { MIN_MAX_FREQ, parseMaxFreq } from "./maxFreq";
 
 /** As Shake&Tune names them. */
 const BELT_LABEL = { a: "A (axis 1,-1)", b: "B (axis 1, 1)" } as const;
@@ -86,20 +83,15 @@ export function BeltView({
   chips,
   chip,
   onChipChange,
-  maxFreqText,
-  onMaxFreqTextChange,
   query,
   onInclude,
 }: {
   chips: string[];
   chip: string;
   onChipChange: (chip: string) => void;
-  maxFreqText: string;
-  onMaxFreqTextChange: (text: string) => void;
   query: ReturnType<typeof useBelts>;
   onInclude: () => void;
 }) {
-  const parsed = parseMaxFreq(maxFreqText);
   return (
     <Panel title="Belt comparison" label={`Chip ${chip}`}>
       <Tabs value={chip} onValueChange={onChipChange}>
@@ -111,28 +103,7 @@ export function BeltView({
           ))}
         </TabsList>
       </Tabs>
-      <div className="flex max-w-xs flex-col gap-2.5">
-        <HintLabel
-          label="Analysis maximum (Hz)"
-          hint="The comparison covers 0 to this frequency. It decides which peaks are found. Use the zoom on the chart to look closer."
-        />
-        <UnitInput
-          unit="Hz"
-          aria-label="Analysis maximum (Hz)"
-          value={maxFreqText}
-          aria-invalid={parsed === undefined}
-          onChange={(event) => {
-            onMaxFreqTextChange(event.target.value);
-          }}
-        />
-        {parsed === undefined && (
-          <p role="alert" className="text-sm text-destructive">
-            Enter a number of at least {MIN_MAX_FREQ}.
-          </p>
-        )}
-      </div>
-      {/* The last valid result would otherwise stay up under the error. */}
-      {parsed === undefined ? null : query.isPending ? (
+      {query.isPending ? (
         <Waiting>Comparing the belts of {chip}…</Waiting>
       ) : query.isError ? (
         <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
