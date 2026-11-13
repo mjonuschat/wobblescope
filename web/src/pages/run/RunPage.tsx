@@ -2,11 +2,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { TestState } from "@/lib/generated/TestState";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import type { TestKind } from "@/lib/generated/TestKind";
 import { Button } from "@/components/ui/button";
 import { Steps } from "@/components/Steps";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
+import { KIND_TITLES, offersBelts } from "./kinds";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 
@@ -16,7 +18,7 @@ const STEPS = [
   { id: "results", label: "Results" },
 ];
 
-export function RunPage() {
+export function RunPage({ kind }: { kind: TestKind }) {
   const status = useStatus();
   const settings = useSettings();
   const chips = useChips();
@@ -122,8 +124,12 @@ export function RunPage() {
             {settings.error.message}
           </p>
         )}
-        {settings.data && chipList && (
+        {settings.data && kind === "belts" && !offersBelts(settings.data.machine.kinematics) && (
+          <p className="text-sm">Belt tests need a CoreXY printer.</p>
+        )}
+        {settings.data && chipList && (kind === "axes" || offersBelts(settings.data.machine.kinematics)) && (
           <TestForm
+            kind={kind}
             settings={settings.data}
             chipList={chipList}
             chips={usable}
@@ -138,7 +144,7 @@ export function RunPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <h1 className="text-xl font-semibold">Input Shaper</h1>
+      <h1 className="text-xl font-semibold">{KIND_TITLES[kind]}</h1>
       <Steps
         steps={STEPS}
         current={step}

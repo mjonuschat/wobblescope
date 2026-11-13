@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
@@ -43,9 +42,6 @@ const FREQ_KEYS = ["freq_start", "freq_end"] as const;
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
 
-/** The kinematics whose belts a belt test can tell apart. */
-const BELT_KINEMATICS = ["corexy", "limited_corexy"];
-
 const OLD_SOFTWARE_WARNING =
   "This printer runs software older than Klipper v0.12.0 or Kalico v2026.01.00. A belt test may be refused after the toolhead moves to the test point.";
 
@@ -56,6 +52,8 @@ interface PointRow {
 }
 
 interface Props {
+  /** Which test the form sets up. */
+  kind: TestKind;
   settings: PrinterSettings;
   chipList: ChipsSnapshot;
   /** The chips that will record. */
@@ -108,12 +106,9 @@ function ChoiceRow({ label, error, children }: { label: string; error: ReactNode
   );
 }
 
-export function TestForm({ settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
+export function TestForm({ kind, settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
   const printer = usePrinterState(true);
-  const [chosenKind, setChosenKind] = useState<TestKind>("axes");
-  const beltsOffered = BELT_KINEMATICS.includes(settings.machine.kinematics ?? "");
-  const kind: TestKind = beltsOffered ? chosenKind : "axes";
   const belts = kind === "belts";
   const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
@@ -254,18 +249,6 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     <form onSubmit={submit} className="space-y-4" noValidate>
       <FormCard title="Setup">
         <div className="space-y-5">
-          {beltsOffered && (
-            <Tabs value={kind} onValueChange={(value) => setChosenKind(value as TestKind)}>
-              <TabsList variant="line">
-                <TabsTrigger value="axes" className="after:bg-primary">
-                  Axes
-                </TabsTrigger>
-                <TabsTrigger value="belts" className="after:bg-primary">
-                  Belts
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          )}
           {belts && (
             <div className="space-y-1 text-sm">
               <p className="text-muted-foreground">{BELT_MINIMUMS}</p>

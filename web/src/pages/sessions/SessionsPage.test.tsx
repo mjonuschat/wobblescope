@@ -221,6 +221,7 @@ describe("the sessions page", () => {
         }
         return { body: { sessions: [summary("s1")] } };
       }
+      if (url.pathname.endsWith("/settings")) return { status: 404, body: { error: "not_found", message: "no" } };
       return { body: usage };
     });
     renderRoute("/sessions");
@@ -232,7 +233,9 @@ describe("the sessions page", () => {
     const calls = stubApi(({ url }) =>
       url.pathname.endsWith("/sessions")
         ? { status: 500, body: { error: "internal", message: "disk on fire" } }
-        : { body: usage },
+        : url.pathname.endsWith("/settings")
+          ? { status: 404, body: { error: "not_found", message: "no" } }
+          : { body: usage },
     );
     renderRoute("/sessions");
     expect(await screen.findByText("disk on fire")).toBeTruthy();

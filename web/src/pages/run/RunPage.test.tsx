@@ -346,26 +346,38 @@ describe("the belts form", () => {
     const base = printerSettings();
     return { ...base, version_support, machine: { ...base.machine, kinematics } };
   };
-  const beltsTab = () => screen.queryByRole("tab", { name: "Belts" });
   async function openBelts(settings: PrinterSettings = withMachine("corexy")) {
-    const calls = await open({ settings });
-    fireEvent.click(screen.getByRole("tab", { name: "Belts" }));
+    const calls = api({ settings });
+    renderRoute("/run/belts");
+    await screen.findByRole("button", { name: "Run Test" });
+    await waitFor(() => expect(screen.queryByText(/Checking whether the printer is homed/)).toBeNull());
     return calls;
   }
 
-  it("the_belts_type_is_offered_only_on_corexy_and_limited_corexy", async () => {
-    for (const [kinematics, offered] of [
-      ["corexy", true],
-      ["limited_corexy", true],
-      ["cartesian", false],
-      ["corexz", false],
-      [null, false],
-    ] as const) {
-      await open({ settings: withMachine(kinematics) });
-      expect(beltsTab() !== null).toBe(offered);
-      expect(screen.queryByRole("tab", { name: "Axes" }) !== null).toBe(offered);
+  it("the_belts_page_is_unavailable_on_cartesian_or_unknown_kinematics", async () => {
+    for (const kinematics of ["cartesian", "corexz", null]) {
+      api({ settings: withMachine(kinematics) });
+      renderRoute("/run/belts");
+      expect(await screen.findByText("Belt tests need a CoreXY printer.")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Run Test/ })).toBeNull();
       cleanup();
     }
+  });
+
+  it("the_belts_page_is_titled_belts_and_offered_on_limited_corexy", async () => {
+    await openBelts(withMachine("limited_corexy"));
+    expect(screen.getByRole("heading", { name: "Belts" })).toBeTruthy();
+  });
+
+  it("the_input_shaper_page_has_no_belts_tab_and_posts_kind_axes_with_axes", async () => {
+    const calls = await open({ settings: withMachine("corexy") });
+    expect(screen.queryByRole("tab", { name: "Belts" })).toBeNull();
+    expect(screen.queryByText(MINIMUMS)).toBeNull();
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    const body = JSON.parse(String(posted(calls)[0].body));
+    expect(body.kind).toBe("axes");
+    expect(body.axes).toEqual(["X", "Y"]);
   });
 
   it("the_belts_form_has_no_axis_choice_and_one_point", async () => {
