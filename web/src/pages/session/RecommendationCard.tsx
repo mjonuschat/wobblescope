@@ -32,10 +32,12 @@ interface ShaperProps {
   snippet: string | null;
   /** Names the block when there are two. The copy button then sits beside it. */
   heading?: string;
+  /** The fit's damping ratio, shown with the shaper's numbers. */
+  damping: ReactNode;
   children?: ReactNode;
 }
 
-function Shaper({ result, snippet, heading, children }: ShaperProps) {
+function Shaper({ result, snippet, heading, damping, children }: ShaperProps) {
   const copy = snippet ? <CopyButton text={snippet} /> : null;
   return (
     <div className="space-y-3">
@@ -48,12 +50,13 @@ function Shaper({ result, snippet, heading, children }: ShaperProps) {
       <p className="text-xl font-semibold">
         {result.name} at {formatHz(result.freq)} Hz
       </p>
-      <Fields className="sm:grid-cols-3 lg:grid-cols-3">
+      <Fields className="sm:grid-cols-4 lg:grid-cols-4">
         <Field label="Remaining vibrations">{(result.vibrs * 100).toFixed(1)}%</Field>
         <Field label="Smoothing">{result.smoothing.toFixed(3)} mm</Field>
         <Field label="Max acceleration" hint={MAX_ACCEL_HINT}>
           {formatAccel(result.max_accel)}
         </Field>
+        <Field label="Damping ratio">{damping}</Field>
       </Fields>
       {children}
       {snippet && (
@@ -91,18 +94,25 @@ export function RecommendationCard({
       </ul>
     </div>
   );
+  const damping = `${settings.damping_ratio.toFixed(3)} (${SOURCE_TEXT[settings.damping_source]})`;
   const body = (
     <>
-      <Shaper result={best} snippet={snippet} heading={performance ? "For low vibrations" : undefined}>
+      <Shaper
+        result={best}
+        snippet={snippet}
+        damping={damping}
+        heading={performance ? "For low vibrations" : undefined}
+      >
         {perChip}
       </Shaper>
-      {performance && <Shaper result={performance} snippet={performanceSnippet} heading="For performance" />}
-      <Fields className="sm:grid-cols-3 lg:grid-cols-3">
-        <Field label="Damping ratio">
-          {settings.damping_ratio.toFixed(3)} ({SOURCE_TEXT[settings.damping_source]})
-        </Field>
-        {settings.resonance_freq !== null && <Field label="Resonance">{formatHz(settings.resonance_freq)} Hz</Field>}
-      </Fields>
+      {performance && (
+        <Shaper result={performance} snippet={performanceSnippet} damping={damping} heading="For performance" />
+      )}
+      {settings.resonance_freq !== null && (
+        <Fields className="sm:grid-cols-4 lg:grid-cols-4">
+          <Field label="Resonance">{formatHz(settings.resonance_freq)} Hz</Field>
+        </Fields>
+      )}
     </>
   );
   return (

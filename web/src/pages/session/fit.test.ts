@@ -22,14 +22,20 @@ describe("baselineFor", () => {
   it("starts from Klipper's defaults when the session recorded nothing", () => {
     const baseline = baselineFor(twoAxisMeta(), "X");
     expect(baseline.params).toEqual(defaultFitParams);
-    expect(baseline.recorded).toEqual({ scv: false, damping: false });
+    expect(baseline.recorded).toEqual({ scv: false, damping: null });
   });
 
   it("starts from the printer's corner velocity and the damping ratio of the axis", () => {
     const meta = withPrinter({ square_corner_velocity: 8, damping_ratio_x: 0.12, damping_ratio_y: 0.08 });
-    expect(baselineFor(meta, "X").params).toMatchObject({ scv: 8, damping_ratio: 0.12 });
-    expect(baselineFor(meta, "Y").params).toMatchObject({ scv: 8, damping_ratio: 0.08 });
-    expect(baselineFor(meta, "Y").recorded).toEqual({ scv: true, damping: true });
+    expect(baselineFor(meta, "X").params).toMatchObject({ scv: 8 });
+    expect(baselineFor(meta, "Y").params).toMatchObject({ scv: 8 });
+    expect(baselineFor(meta, "X").recorded).toEqual({ scv: true, damping: 0.12 });
+    expect(baselineFor(meta, "Y").recorded).toEqual({ scv: true, damping: 0.08 });
+  });
+
+  it("leaves the damping ratio to the estimate even when the printer recorded one, as Shake&Tune does", () => {
+    const meta = withPrinter({ damping_ratio_x: 0.12 });
+    expect(baselineFor(meta, "X").params.damping_ratio).toBeNull();
   });
 
   it("estimates the damping ratio when the session recorded none", () => {
@@ -39,7 +45,7 @@ describe("baselineFor", () => {
   it("estimates the damping ratio for an axis the printer sets none for", () => {
     const meta = withPrinter({ square_corner_velocity: 8, damping_ratio_x: 0.12 });
     expect(baselineFor(meta, "Y").params.damping_ratio).toBeNull();
-    expect(baselineFor(meta, "Y").recorded).toEqual({ scv: true, damping: false });
+    expect(baselineFor(meta, "Y").recorded).toEqual({ scv: true, damping: null });
   });
 });
 

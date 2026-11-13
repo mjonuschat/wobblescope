@@ -24,8 +24,8 @@ function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string
       }`;
     case "damping_ratio":
       return `How quickly the printer's resonance dies out; lower rings longer. ${
-        recorded.damping ? "From the printer's input shaper settings." : "Empty estimates it from the data."
-      }`;
+        recorded.damping !== null ? `The printer's input shaper uses ${recorded.damping}. ` : ""
+      }Empty estimates it from the data.`;
     case "max_smoothing":
       return "Skip shapers that round corners more than this. Empty means no limit.";
     case "max_vibrations":
@@ -35,7 +35,7 @@ function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string
 
 const NOTHING_RECORDED: FitBaseline = {
   params: defaultFitParams,
-  recorded: { scv: false, damping: false },
+  recorded: { scv: false, damping: null },
 };
 
 interface FieldProps {
@@ -139,9 +139,7 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
               <RotateCcwIcon />
             </TooltipTrigger>
             <TooltipContent side="top">
-              {baseline.recorded.scv || baseline.recorded.damping
-                ? "Back to the values the printer recorded"
-                : "Back to Klipper's defaults"}
+              {baseline.recorded.scv ? "Back to the values the printer recorded" : "Back to Klipper's defaults"}
             </TooltipContent>
           </Tooltip>
         }

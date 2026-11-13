@@ -326,7 +326,7 @@ describe("the session view", () => {
     expect(screen.queryByRole("tab", { name: "All Chips" })).toBeNull();
   });
 
-  it("analyses with the printer's recorded corner velocity and damping, until the user applies others", async () => {
+  it("analyses with the printer's recorded corner velocity and an estimated damping ratio, until the user applies others", async () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
     const meta = twoAxisMeta();
     meta.printer = {
@@ -340,7 +340,7 @@ describe("the session view", () => {
     serve(meta);
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Recommended Input Shaper" });
-    expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: 0.12 });
+    expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: null });
     fireEvent.change(screen.getByLabelText(/Square Corner Velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze.mock.calls.at(-1)?.[0].params).toMatchObject({ scv: 3 }));

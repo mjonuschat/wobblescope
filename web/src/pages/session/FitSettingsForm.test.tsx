@@ -33,20 +33,21 @@ describe("FitSettingsForm", () => {
     expect((field(/Maximum Corner Rounding/) as HTMLInputElement).value).toBe("");
   });
 
-  it("starts from the printer's recorded values, says so, and Reset goes back to them", () => {
+  it("starts from the printer's recorded corner velocity, names its damping ratio without using it, and Reset goes back", () => {
     const onApply = vi.fn();
     const baseline = {
-      params: { ...defaultFitParams, scv: 8, damping_ratio: 0.12 },
-      recorded: { scv: true, damping: true },
+      params: { ...defaultFitParams, scv: 8 },
+      recorded: { scv: true, damping: 0.12 },
     };
     render(<FitSettingsForm baseline={baseline} onApply={onApply} />);
     expect((field(/Square Corner Velocity/) as HTMLInputElement).value).toBe("8");
-    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("0.12");
+    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("");
+    expect(screen.getByText(/The printer's input shaper uses 0\.12\. Empty estimates it from the data\./)).toBeTruthy();
     expect(screen.getByText(/From the printer when it was tested\./)).toBeTruthy();
     fireEvent.change(field(/Square Corner Velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect((field(/Square Corner Velocity/) as HTMLInputElement).value).toBe("8");
-    expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 8, damping_ratio: 0.12 }));
+    expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 8, damping_ratio: null }));
   });
 
   it("leaves the damping ratio empty when the printer set none, and applies null, which estimates it from the data", () => {

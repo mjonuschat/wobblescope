@@ -54,6 +54,13 @@ describe("RecommendationCard", () => {
     for_performance: candidate("zv", 55, { max_accel: 6000, vibrs: 0.04 }),
   });
 
+  it("puts the damping ratio in the row with the vibrations, smoothing and acceleration", () => {
+    render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
+    const row = screen.getByText("Remaining vibrations").closest("dl");
+    expect(row).toBe(screen.getByText("Damping ratio").closest("dl"));
+    expect(row).toBe(screen.getByText("Max acceleration").closest("dl"));
+  });
+
   it("shows one block when there is no performance recommendation", () => {
     render(<RecommendationCard title="t" recommendation={recommendation()} snippet="LOW" />);
     expect(screen.queryByText("For low vibrations")).toBeNull();
