@@ -504,13 +504,29 @@ export const pairLetter = (order: number) => PAIR_LETTERS[order] ?? String(order
 
 const scientific = (value: number) => value.toExponential(1);
 
-const peakLabel = (formatter: string, color = text, bold = false) => ({
-  formatter,
+/**
+ * A peak label drawn as the filled badge of the spectrum charts. `fill` is the belt's colour, or
+ * the alert colour for an unpaired peak.
+ */
+const peakBadge = (label: string, fill: string) => ({
+  formatter: `{badge|${label}}`,
   position: "top",
-  color,
+  color: text,
   fontSize: 13,
-  fontWeight: bold ? "bold" : "normal",
+  rich: {
+    badge: {
+      backgroundColor: fill,
+      color: "#171717",
+      fontWeight: "bold",
+      align: "center",
+      padding: [1, BADGE_PADDING],
+      borderRadius: 3,
+    },
+  },
 });
+
+const beltColor = (belt: "a" | "b") => (belt === "a" ? BELT_A_COLOR : BELT_B_COLOR);
+const beltPrefix = (belt: "a" | "b") => belt.toUpperCase();
 
 /** The label of every unpaired peak is its place in the list of belt A's followed by belt B's. */
 function unpairedPoints(result: BeltsResult, place: (belt: BeltCurve, index: number) => number[]) {
@@ -560,21 +576,20 @@ const BELT_GRID = { top: 40, left: 72, right: 24, bottom: 40 };
 const highest = (result: BeltsResult) => Math.max(...result.a.psd, ...result.b.psd);
 
 /**
- * Both belts' PSDs. Paired peaks carry a Greek letter and number 1 (belt A) or 2 (belt B) and are
- * joined by a dotted line; unpaired peaks carry a red number. The y axis ends at 1.1 times the
+ * Both belts' PSDs. Paired peaks carry a badge in the belt's colour, `A α` or `B α`, and are joined by a
+ * dotted line; unpaired peaks carry a red badge with the belt and a number. The y axis ends at 1.1 times the
  * highest value, as Shake&Tune.
  */
 export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
   const marks = (belt: "a" | "b") => {
-    const side = belt === "a" ? 1 : 2;
     return [
       ...result.pairs.map((pair, order) => ({
         coord: [pair[belt].freq, pair[belt].level],
-        label: peakLabel(`${pairLetter(order)}${side}`),
+        label: peakBadge(`${beltPrefix(belt)} ${pairLetter(order)}`, beltColor(belt)),
       })),
       ...unpairedPoints(result, (curve, index) => [result.freqs[index], curve.psd[index]])
         .filter((point) => point.belt === belt)
-        .map((point) => ({ coord: point.coord, label: peakLabel(String(point.number), PEAK_ALERT, true) })),
+        .map((point) => ({ coord: point.coord, label: peakBadge(`${beltPrefix(belt)} ${point.number}`, PEAK_ALERT) })),
     ];
   };
   const curve = (name: string, belt: "a" | "b", color: string) => ({
@@ -585,7 +600,13 @@ export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
     color,
     lineStyle: { color },
     data: zip(result.freqs, result[belt].psd),
-    markPoint: { silent: true, symbol: "circle", symbolSize: 6, itemStyle: { color: text }, data: marks(belt) },
+    markPoint: {
+      silent: true,
+      symbol: "circle",
+      symbolSize: 6,
+      itemStyle: { color, borderWidth: 0 },
+      data: marks(belt),
+    },
     ...(belt === "a"
       ? {
           markLine: {
@@ -642,7 +663,7 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string): ECharts
         type: "line",
         showSymbol: false,
         symbol: "none",
-        color: label.startsWith("A") ? BELT_A_COLOR : BELT_B_COLOR,
+        color: beltColor(label.startsWith("A") ? "a" : "b"),
         data: zip(spectrum.freqs, spectrum.psd),
       },
     ],
@@ -668,7 +689,7 @@ const ZONE_STEPS = 100;
 
 /**
  * Belt A's PSD against belt B's, with the ideal line, the good zone and the paired peaks. Where
- * the two peaks of a pair are within 1 Hz they are one point labelled letter1/letter2.
+ * the two peaks of a pair are within 1 Hz they are one point labelled with the letter alone; otherwise each belt has its own `A α` and `B α` point.
  */
 export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
   const max = highest(result);
@@ -677,24 +698,24 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
   const lower = xs.map((x) => goodZoneLowerEdge(x, max));
   const { a, b } = result;
   const curve = a.psd.map((x, i) => [x, b.psd[i]]);
-  const dot = (coord: number[], label: string, color: string, bold = false) => ({
+  const dot = (coord: number[], label: string, color: string, fill = color) => ({
     coord,
-    itemStyle: { color },
-    label: peakLabel(label, bold ? PEAK_ALERT : text, bold),
+    itemStyle: { color, borderWidth: 0 },
+    label: peakBadge(label, fill),
   });
   const points = [
     ...result.pairs.flatMap((pair, order) => {
       const letter = pairLetter(order);
       if (Math.abs(pair.a.freq - pair.b.freq) < 1) {
-        return [dot([a.psd[pair.a.index], b.psd[pair.b.index]], `${letter}1/${letter}2`, text)];
+        return [dot([a.psd[pair.a.index], b.psd[pair.b.index]], letter, text, MUTED)];
       }
       return [
-        dot([a.psd[pair.b.index], b.psd[pair.b.index]], `${letter}2`, BELT_B_COLOR),
-        dot([a.psd[pair.a.index], b.psd[pair.a.index]], `${letter}1`, BELT_A_COLOR),
+        dot([a.psd[pair.b.index], b.psd[pair.b.index]], `B ${letter}`, BELT_B_COLOR),
+        dot([a.psd[pair.a.index], b.psd[pair.a.index]], `A ${letter}`, BELT_A_COLOR),
       ];
     }),
     ...unpairedPoints(result, (_, index) => [a.psd[index], b.psd[index]]).map((point) =>
-      dot(point.coord, String(point.number), point.belt === "a" ? BELT_A_COLOR : BELT_B_COLOR, true),
+      dot(point.coord, `${beltPrefix(point.belt)} ${point.number}`, beltColor(point.belt), PEAK_ALERT),
     ),
   ];
   return {

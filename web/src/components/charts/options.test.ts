@@ -539,7 +539,14 @@ describe("spectrogramOption", () => {
   });
 });
 
-type Mark = { coord: number[]; label: { formatter: string; color: string; fontWeight: string } };
+type Mark = {
+  coord: number[];
+  itemStyle?: { color: string; borderWidth?: number };
+  label: {
+    formatter: string;
+    rich: { badge: { backgroundColor: string; color: string; fontWeight: string; borderRadius: number } };
+  };
+};
 type BeltSeries = {
   name: string;
   stack?: string;
@@ -569,17 +576,31 @@ describe("beltOverlayOption", () => {
       [150, 6],
       [200, 0],
     ]);
-    expect(a.markPoint?.data.map((m) => m.label.formatter)).toEqual(["α1", "β1"]);
-    expect(b.markPoint?.data.map((m) => m.label.formatter)).toEqual(["α2", "β2", "1"]);
-    const unpaired = b.markPoint?.data[2];
-    expect(unpaired?.coord).toEqual([150, 5.5]);
-    expect(unpaired?.label.color).toBe("#ff6b6b");
-    expect(unpaired?.label.fontWeight).toBe("bold");
+    expect(a.markPoint?.data.map((m) => m.label.formatter)).toEqual(["{badge|A α}", "{badge|A β}"]);
+    expect(b.markPoint?.data.map((m) => m.label.formatter)).toEqual(["{badge|B α}", "{badge|B β}", "{badge|B 1}"]);
+    expect(b.markPoint?.data[2]?.coord).toEqual([150, 5.5]);
     expect(a.markLine?.data).toEqual([
       [{ coord: [50, 4] }, { coord: [50, 3] }],
       [{ coord: [150, 6] }, { coord: [100, 5] }],
     ]);
     expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200);
+  });
+
+  it("fills_paired_badges_with_the_belt_colour_and_unpaired_ones_red_with_dark_text", () => {
+    const [a, b] = (beltOverlayOption(beltsResult()) as { series: BeltSeries[] }).series;
+    const fills = (series: BeltSeries) => series.markPoint?.data.map((m) => m.label.rich.badge.backgroundColor);
+    expect(fills(a)).toEqual(["#ff7a33", "#ff7a33"]);
+    expect(fills(b)).toEqual(["#c792ea", "#c792ea", "#ff6b6b"]);
+    for (const mark of [...(a.markPoint?.data ?? []), ...(b.markPoint?.data ?? [])]) {
+      expect(mark.label.rich.badge).toMatchObject({ color: "#171717", fontWeight: "bold", borderRadius: 3 });
+    }
+  });
+
+  it("colours_the_marker_dots_by_belt_without_an_outline", () => {
+    const [a, b] = (beltOverlayOption(beltsResult()) as unknown as { series: { markPoint: { itemStyle: object } }[] })
+      .series;
+    expect(a.markPoint.itemStyle).toEqual({ color: "#ff7a33", borderWidth: 0 });
+    expect(b.markPoint.itemStyle).toEqual({ color: "#c792ea", borderWidth: 0 });
   });
 
   it("the_y_axis_fits_the_data", () => {
@@ -654,8 +675,20 @@ describe("beltScatterOption", () => {
       [0, 0],
     ]);
     const marks = named("Belts").markPoint?.data ?? [];
-    expect(marks.map((m) => m.label.formatter)).toEqual(["α1/α2", "β2", "β1", "1"]);
+    expect(marks.map((m) => m.label.formatter)).toEqual(["{badge|α}", "{badge|B β}", "{badge|A β}", "{badge|B 1}"]);
     expect(marks[0].coord).toEqual([4, 3]);
+  });
+
+  it("fills_the_scatter_badges_by_belt_and_red_for_unpaired_peaks", () => {
+    const marks = named("Belts").markPoint?.data ?? [];
+    expect(marks.map((m) => m.label.rich.badge.backgroundColor)).toEqual(["#a3a3a3", "#c792ea", "#ff7a33", "#ff6b6b"]);
+    expect(marks.map((m) => m.itemStyle?.color)).toEqual(["#d4d4d4", "#c792ea", "#ff7a33", "#c792ea"]);
+  });
+
+  it("splits_a_pair_that_is_apart_at_each_belts_own_peak", () => {
+    const marks = named("Belts").markPoint?.data ?? [];
+    expect(marks[1].coord).toEqual([1, 5]);
+    expect(marks[2].coord).toEqual([6, 5.5]);
   });
 });
 
