@@ -4,9 +4,6 @@ import type { PeakOffset } from "@/lib/generated/PeakOffset";
 
 /** One row per paired peak, named by the Greek letter the overlay marks it with. */
 export function BeltOffsetTable({ offsets }: { offsets: PeakOffset[] }) {
-  if (offsets.length === 0) {
-    return <p className="text-sm">No peaks were paired across the belts.</p>;
-  }
   return (
     <Table>
       <TableHeader>

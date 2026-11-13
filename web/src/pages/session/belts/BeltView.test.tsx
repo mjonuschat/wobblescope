@@ -98,16 +98,63 @@ describe("the belt view", () => {
     expect(screen.queryByText(/NaN/)).toBeNull();
   });
 
-  it("the_similarity_is_in_the_top_card_and_not_in_the_belt_comparison_card", async () => {
+  it("the_similarity_is_in_the_top_card_and_not_in_the_belt_frequency_profile_card", async () => {
     fake.belts.mockResolvedValue(beltsComparison());
     renderView();
     await screen.findByRole("img", { name: "Belt overlay of adxl345" });
     const top = screen.getByRole("region", { name: "Test result" });
     expect(within(top).getByText("Estimated similarity")).toBeTruthy();
     expect(within(top).getByText("Mechanical health")).toBeTruthy();
-    const comparison = screen.getByRole("region", { name: "Chip adxl345" });
+    const comparison = screen.getByRole("region", { name: "Belt frequency profile of ADXL345" });
     expect(within(comparison).queryByText("Estimated similarity")).toBeNull();
     expect(within(comparison).queryByText("Mechanical health")).toBeNull();
+  });
+
+  it("a_comparison_shows_the_frequency_profile_card_and_the_cross_belt_card_in_order", async () => {
+    fake.belts.mockResolvedValue(beltsComparison());
+    renderView();
+    const profile = await screen.findByRole("region", { name: "Belt frequency profile of ADXL345" });
+    const cross = await screen.findByRole("region", { name: "Cross-belt comparison of ADXL345" });
+    expect(within(profile).getByText("Belt Frequency Profile")).toBeTruthy();
+    expect(within(profile).getByRole("tab", { name: "ADXL345" })).toBeTruthy();
+    expect(within(profile).getByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
+    expect(within(profile).queryByRole("img", { name: /scatter/ })).toBeNull();
+    expect(within(cross).getByText("Cross-belt Comparison")).toBeTruthy();
+    expect(within(cross).getByRole("img", { name: "Cross-belt scatter of adxl345" })).toBeTruthy();
+    const top = screen.getByRole("region", { name: "Test result" });
+    expect(top.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(profile.compareDocumentPosition(cross) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("the_unpaired_message_is_in_the_cross_belt_card_above_the_scatter", async () => {
+    fake.belts.mockResolvedValue(beltsComparison("adxl345", beltsResult({ offsets: [] })));
+    renderView();
+    const cross = await screen.findByRole("region", { name: "Cross-belt comparison of ADXL345" });
+    const message = within(cross).getByText("No peaks were paired across the belts.");
+    const scatter = within(cross).getByRole("img", { name: /scatter/ });
+    expect(message.compareDocumentPosition(scatter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const profile = screen.getByRole("region", { name: "Belt frequency profile of ADXL345" });
+    expect(within(profile).queryByText("No peaks were paired across the belts.")).toBeNull();
+  });
+
+  it("a_one_belt_session_renders_only_the_frequency_profile_card", async () => {
+    fake.belts.mockResolvedValue(oneBelt("a"));
+    renderView();
+    await screen.findByText("Belt B was not recorded.");
+    expect(screen.getByRole("region", { name: "Belt frequency profile of ADXL345" })).toBeTruthy();
+    expect(screen.queryByText("Cross-belt Comparison")).toBeNull();
+    expect(screen.queryByRole("region", { name: /Cross-belt/ })).toBeNull();
+  });
+
+  it("switching_chips_updates_both_cards", async () => {
+    fake.belts.mockImplementation(async ({ chip }: { chip: string }) => beltsComparison(chip));
+    renderView();
+    await screen.findByRole("region", { name: "Cross-belt comparison of ADXL345" });
+    fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
+    const profile = await screen.findByRole("region", { name: "Belt frequency profile of LIS2DW EBB36" });
+    const cross = await screen.findByRole("region", { name: "Cross-belt comparison of LIS2DW EBB36" });
+    expect(within(profile).getByRole("img", { name: "Belt overlay of lis2dw ebb36" })).toBeTruthy();
+    expect(within(cross).getByRole("img", { name: "Cross-belt scatter of lis2dw ebb36" })).toBeTruthy();
   });
 
   it("a_belt_a_only_session_says_belt_b_was_not_recorded_and_shows_belt_a", async () => {

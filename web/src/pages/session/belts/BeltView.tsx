@@ -21,14 +21,13 @@ function reasonsOf(side: BeltSide): string[] {
   return dropped ? [dropped] : side.failure ? [side.failure] : [];
 }
 
-function Comparison({ analysis }: { analysis: BeltsAnalysis }) {
+function Profile({ analysis }: { analysis: BeltsAnalysis }) {
   const { result, chip } = analysis;
   if (!result) return null;
   return (
     <>
       <EChart option={beltOverlayOption(result)} label={`Belt overlay of ${chip}`} height={380} zoom />
-      <BeltOffsetTable offsets={result.offsets} />
-      <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
+      {result.offsets.length > 0 && <BeltOffsetTable offsets={result.offsets} />}
     </>
   );
 }
@@ -68,7 +67,7 @@ function SideStatus({
 }
 
 function Outcome({ analysis, onInclude }: { analysis: BeltsAnalysis; onInclude: () => void }) {
-  if (analysis.result) return <Comparison analysis={analysis} />;
+  if (analysis.result) return <Profile analysis={analysis} />;
   return (
     <>
       <p className="text-sm">There is no comparison without both belts.</p>
@@ -92,26 +91,35 @@ export function BeltView({
   query: ReturnType<typeof useBelts>;
   onInclude: () => void;
 }) {
+  const result = query.data?.result;
   return (
-    <Panel title="Belt comparison" label={`Chip ${chip}`}>
-      <Tabs value={chip} onValueChange={onChipChange}>
-        <TabsList variant="line">
-          {chips.map((name) => (
-            <TabsTrigger key={name} value={name} className="after:bg-primary">
-              {chipLabel(name)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-      {query.isPending ? (
-        <Waiting>Comparing the belts of {chip}…</Waiting>
-      ) : query.isError ? (
-        <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
-          The belt comparison failed: {query.error.message}
-        </p>
-      ) : (
-        <Outcome analysis={query.data} onInclude={onInclude} />
+    <>
+      <Panel title="Belt Frequency Profile" label={`Belt frequency profile of ${chipLabel(chip)}`}>
+        <Tabs value={chip} onValueChange={onChipChange}>
+          <TabsList variant="line">
+            {chips.map((name) => (
+              <TabsTrigger key={name} value={name} className="after:bg-primary">
+                {chipLabel(name)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        {query.isPending ? (
+          <Waiting>Comparing the belts of {chip}…</Waiting>
+        ) : query.isError ? (
+          <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
+            The belt comparison failed: {query.error.message}
+          </p>
+        ) : (
+          <Outcome analysis={query.data} onInclude={onInclude} />
+        )}
+      </Panel>
+      {result && (
+        <Panel title="Cross-belt Comparison" label={`Cross-belt comparison of ${chipLabel(chip)}`}>
+          {result.offsets.length === 0 && <p className="text-sm">No peaks were paired across the belts.</p>}
+          <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
+        </Panel>
       )}
-    </Panel>
+    </>
   );
 }
