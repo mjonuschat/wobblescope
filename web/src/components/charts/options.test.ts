@@ -673,3 +673,32 @@ describe("the belt charts' zoom", () => {
     expect(option.dataZoom).toEqual([{ type: "inside", xAxisIndex: 0, yAxisIndex: 0 }]);
   });
 });
+
+describe("the belt chart curves", () => {
+  const lineSeries = (option: unknown) =>
+    (option as { series: { type: string; name: string; showSymbol?: boolean; symbol?: string }[] }).series.filter(
+      (s) => s.type === "line",
+    );
+
+  it.each([
+    ["overlay", beltOverlayOption(beltsResult())],
+    ["single", beltSingleOption(beltSpectrum(), "A (axis 1,-1)")],
+    ["scatter", beltScatterOption(beltsResult())],
+  ])("the_%s_draws_every_line_without_point_symbols", (_, option) => {
+    const lines = lineSeries(option);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.showSymbol).toBe(false);
+      expect(line.symbol).toBe("none");
+    }
+  });
+
+  it("the_scatter_names_its_axes_in_the_middle_so_they_stay_clear_of_the_legend", () => {
+    const option = beltScatterOption(beltsResult()) as unknown as {
+      xAxis: { name: string; nameLocation: string };
+      yAxis: { name: string; nameLocation: string };
+    };
+    expect([option.xAxis.name, option.xAxis.nameLocation]).toEqual(["Belt A", "middle"]);
+    expect([option.yAxis.name, option.yAxis.nameLocation]).toEqual(["Belt B", "middle"]);
+  });
+});

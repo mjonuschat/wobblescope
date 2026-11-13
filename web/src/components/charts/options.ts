@@ -566,6 +566,7 @@ export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
     name,
     type: "line",
     showSymbol: false,
+    symbol: "none",
     color,
     lineStyle: { color },
     data: zip(result.freqs, result[belt].psd),
@@ -625,12 +626,21 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string): ECharts
         name: label,
         type: "line",
         showSymbol: false,
+        symbol: "none",
         color: label.startsWith("A") ? BELT_A_COLOR : BELT_B_COLOR,
         data: zip(spectrum.freqs, spectrum.psd),
       },
     ],
   };
 }
+
+/**
+ * An axis name centred along its axis rather than at the axis end, where the scatter's "Belt B"
+ * would run into the legend. In the 380 px chart the grid spans y 40 to 324: the legend and toolbox
+ * keep the 40 px above it, "Belt A" sits 30 px under the axis inside the 56 px below the grid, and
+ * "Belt B" sits 52 px left of the axis inside the 72 px left of it.
+ */
+const axisName = (name: string, gap: number) => ({ name, nameLocation: "middle" as const, nameGap: gap });
 
 /** Where the good zone ends above `x`, as Shake&Tune draws it. */
 export const goodZoneBoundary = (x: number, max: number) => x + 0.35 * max * Math.exp(-x / (0.6 * max));
@@ -684,17 +694,32 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
     ...base(null, end),
     animation: false,
     tooltip: { trigger: "item" },
-    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    grid: { top: 40, left: 72, right: 24, bottom: 56 },
     legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: text } },
     ...zoomControls(true),
-    xAxis: { type: "value", name: "Belt A", min: 0, max: end, splitLine, axisLabel: { formatter: scientific } },
-    yAxis: { type: "value", name: "Belt B", min: 0, max: end, splitLine, axisLabel: { formatter: scientific } },
+    xAxis: {
+      ...axisName("Belt A", 30),
+      type: "value",
+      min: 0,
+      max: end,
+      splitLine,
+      axisLabel: { formatter: scientific },
+    },
+    yAxis: {
+      ...axisName("Belt B", 52),
+      type: "value",
+      min: 0,
+      max: end,
+      splitLine,
+      axisLabel: { formatter: scientific },
+    },
     series: [
       {
         name: "Good zone floor",
         type: "line",
         stack: "zone",
         showSymbol: false,
+        symbol: "none",
         silent: true,
         lineStyle: { opacity: 0 },
         tooltip: { show: false },
@@ -705,6 +730,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         type: "line",
         stack: "zone",
         showSymbol: false,
+        symbol: "none",
         silent: true,
         lineStyle: { opacity: 0 },
         areaStyle: { color: GOOD_ZONE },
@@ -715,6 +741,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         name: "Ideal line",
         type: "line",
         showSymbol: false,
+        symbol: "none",
         silent: true,
         color: IDEAL_LINE,
         lineStyle: { color: IDEAL_LINE, type: "dashed", width: 2 },
@@ -746,7 +773,8 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
       {
         name: "Belts",
         type: "line",
-        symbolSize: 3,
+        showSymbol: false,
+        symbol: "none",
         color: "#8a8a8a",
         lineStyle: { color: "#8a8a8a", width: 1 },
         data: curve,

@@ -31,9 +31,9 @@ describe("the registered chart parts", () => {
     ]) {
       const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 600, height: 400 });
       chart.setOption(option);
-      const model = chart.getModel();
-      expect(model.getComponent("toolbox")).toBeTruthy();
-      expect(model.getComponent("dataZoom")).toBeTruthy();
+      const applied = chart.getOption() as { toolbox?: unknown[]; dataZoom?: unknown[] };
+      expect(applied.toolbox?.length).toBeGreaterThan(0);
+      expect(applied.dataZoom?.length).toBeGreaterThan(0);
       chart.dispose();
     }
   });
