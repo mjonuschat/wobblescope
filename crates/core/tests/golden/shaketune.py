@@ -13,8 +13,8 @@ import json
 import subprocess
 import sys
 import types
-from typing import NamedTuple
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 
