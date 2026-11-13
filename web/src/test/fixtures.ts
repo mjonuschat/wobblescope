@@ -1,3 +1,5 @@
+import type { BeltSide } from "@/lib/generated/BeltSide";
+import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
 import type { Decision } from "@/lib/generated/Decision";
@@ -144,5 +146,18 @@ export function spectrogram(): Spectrogram {
     ],
     floor: 1,
     max: 1000,
+  };
+}
+
+/** A belt comparison where the second belt has no usable recording. */
+export function beltsAnalysis(chip = "adxl345"): BeltsAnalysis {
+  const side = (present: boolean): BeltSide => ({ present, decision: null, failure: null, spectrum: null });
+  return {
+    chip,
+    point: 0,
+    belt_a: side(true),
+    belt_b: side(false),
+    result: null,
+    core_version: "0.0.0",
   };
 }

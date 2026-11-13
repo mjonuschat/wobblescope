@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { analysis, candidate, defaultParams, spectrogram, twoAxisMeta } from "@/test/fixtures";
+import { analysis, beltsAnalysis, candidate, defaultParams, spectrogram, twoAxisMeta } from "@/test/fixtures";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { Spectrogram } from "@/lib/generated/Spectrogram";
@@ -31,6 +31,11 @@ class FakeSession implements SessionHandle {
   spectrogram(axis: unknown, chip: unknown, point: unknown, maxFreq: unknown) {
     this.spectrogramCalls.push([axis, chip, point, maxFreq]);
     return this.runSpectrogram();
+  }
+  beltsCalls: unknown[][] = [];
+  belts(chip: unknown, maxFreq: unknown, includeExcluded: unknown) {
+    this.beltsCalls.push([chip, maxFreq, includeExcluded]);
+    return beltsAnalysis();
   }
   free() {
     this.freed = true;
@@ -136,6 +141,24 @@ describe("the worker handler", () => {
     const response = await handle(spectrogramRequest({ id: 5, chip: "b", point: 1, maxFreq: 120 }));
     expect(response).toEqual({ type: "spectrogram", id: 5, result: spectrogram() });
     expect(sessions[0].spectrogramCalls).toEqual([["X", "b", 1, 120]]);
+  });
+
+  it("answers a belts request with the wasm result and the same id", async () => {
+    const { module, sessions } = fakeModule();
+    const handle = createHandler(async () => module);
+    const response = await handle({
+      type: "belts",
+      id: 6,
+      sessionId: "s1",
+      meta: twoAxisMeta("s1"),
+      chip: "adxl345",
+      maxFreq: 150,
+      includeExcluded: true,
+      files: { "c0-s0.zst": bytes(1) },
+    });
+    expect(response).toEqual({ type: "belts", id: 6, result: beltsAnalysis() });
+    expect(sessions[0].beltsCalls).toEqual([["adxl345", 150, true]]);
+    expect([...sessions[0].files.keys()]).toEqual(["c0-s0.zst"]);
   });
 
   it("opens the session and adds the files for a spectrogram, and reuses it for an analysis", async () => {

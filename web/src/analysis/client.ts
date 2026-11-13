@@ -1,4 +1,5 @@
 import type { Axis } from "@/lib/generated/Axis";
+import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { Spectrogram } from "@/lib/generated/Spectrogram";
@@ -41,6 +42,18 @@ export interface SpectrogramJob {
   maxFreq: number;
 }
 
+export interface BeltsJob {
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
+  sessionId: string;
+  resultId?: string;
+  meta: SessionMeta;
+  chip: string;
+  /** The comparison keeps the frequencies up to this, in Hz. */
+  maxFreq: number;
+  /** Use a recording that its health or coverage would exclude. */
+  includeExcluded: boolean;
+}
+
 /** A queued request that a newer one replaced before it was sent. */
 export class SupersededError extends Error {
   constructor() {
@@ -67,6 +80,8 @@ export interface AnalysisClient {
   spectrogram(job: SpectrogramJob, signal?: AbortSignal): Promise<Spectrogram>;
   /** Starts downloading the axis's files outside the request slot. */
   prefetch(job: PrefetchJob): void;
+  /** The comparison of one chip's two belts. It runs after the analysis in the queue. */
+  belts(job: BeltsJob, signal?: AbortSignal): Promise<BeltsAnalysis>;
   /** Drops what is held for a session id that may be written again. */
   forget(sessionId: string): void;
 }
@@ -77,7 +92,7 @@ interface Options {
   fetchResultSample?: typeof fetchResultSampleFile;
 }
 
-type Kind = "analysis" | "spectrogram";
+type Kind = "analysis" | "spectrogram" | "belts";
 
 type Queued =
   | {
@@ -93,6 +108,13 @@ type Queued =
       job: SpectrogramJob;
       signal?: AbortSignal;
       resolve: (result: Spectrogram) => void;
+      reject: (error: unknown) => void;
+    }
+  | {
+      kind: "belts";
+      job: BeltsJob;
+      signal?: AbortSignal;
+      resolve: (result: BeltsAnalysis) => void;
       reject: (error: unknown) => void;
     };
 
@@ -132,11 +154,20 @@ interface Download {
   listeners: Set<OnBytes>;
 }
 
+/** Both belts' recordings of one chip, as (chip position, segment position, file name). */
+function beltFilesFor(meta: SessionMeta, chip: string) {
+  return meta.segments.flatMap((segment, index) =>
+    segment.files
+      .filter((file) => meta.chips[file.chip]?.name === chip)
+      .map((file) => ({ chip: file.chip, segment: index, name: file.sample_file })),
+  );
+}
+
 /**
  * Owns the analysis worker. It fetches the sample files of the requested axis on the main
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
  * request at a time. A newer request replaces a waiting one of the same kind, and a waiting
- * analysis goes before a waiting spectrogram.
+ * analysis goes before a waiting spectrogram, which goes before a waiting belt comparison.
  */
 export function createAnalysisClient({
   createWorker,
@@ -150,10 +181,10 @@ export function createAnalysisClient({
   let nextId = 1;
   const pending = new Map<
     number,
-    { resolve: (r: AnalysisResult | Spectrogram) => void; reject: (e: unknown) => void }
+    { resolve: (r: AnalysisResult | Spectrogram | BeltsAnalysis) => void; reject: (e: unknown) => void }
   >();
   let active: Queued | null = null;
-  const waiting: Record<Kind, Queued | null> = { analysis: null, spectrogram: null };
+  const waiting: Record<Kind, Queued | null> = { analysis: null, spectrogram: null, belts: null };
 
   // Background download state, scoped to one identity and created_at.
   let bgIdentity: string | null = null;
@@ -200,7 +231,7 @@ export function createAnalysisClient({
     return created;
   }
 
-  async function run(queued: Queued): Promise<AnalysisResult | Spectrogram> {
+  async function run(queued: Queued): Promise<AnalysisResult | Spectrogram | BeltsAnalysis> {
     const { job, signal } = queued;
     const onProgress = queued.kind === "analysis" ? queued.onProgress : undefined;
     if (signal?.aborted) throw abortError();
@@ -208,7 +239,9 @@ export function createAnalysisClient({
     const identity = identityOf(job);
     const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at;
     const alreadyHeld = sameSession ? held : new Set<string>();
-    const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name));
+    const missing = (
+      queued.kind === "belts" ? beltFilesFor(job.meta, queued.job.chip) : filesFor(job.meta, queued.job.axis)
+    ).filter((f) => !alreadyHeld.has(f.name));
 
     if (missing.length === 0) {
       onProgress?.({ phase: "analysing" });
@@ -288,7 +321,7 @@ export function createAnalysisClient({
 
     const id = nextId++;
     const files = Object.fromEntries(missing.map((f, i) => [f.name, buffers[i]]));
-    return new Promise<AnalysisResult | Spectrogram>((resolve, reject) => {
+    return new Promise<AnalysisResult | Spectrogram | BeltsAnalysis>((resolve, reject) => {
       pending.set(id, { resolve, reject });
       signal?.addEventListener(
         "abort",
@@ -308,22 +341,33 @@ export function createAnalysisClient({
               id,
               sessionId: identity,
               meta: job.meta,
-              axis: job.axis,
+              axis: queued.job.axis,
               params: queued.job.params,
               overrides: queued.job.overrides,
               files,
             }
-          : {
-              type: "spectrogram",
-              id,
-              sessionId: identity,
-              meta: job.meta,
-              axis: job.axis,
-              chip: queued.job.chip,
-              point: queued.job.point,
-              maxFreq: queued.job.maxFreq,
-              files,
-            },
+          : queued.kind === "belts"
+            ? {
+                type: "belts",
+                id,
+                sessionId: identity,
+                meta: job.meta,
+                chip: queued.job.chip,
+                maxFreq: queued.job.maxFreq,
+                includeExcluded: queued.job.includeExcluded,
+                files,
+              }
+            : {
+                type: "spectrogram",
+                id,
+                sessionId: identity,
+                meta: job.meta,
+                axis: queued.job.axis,
+                chip: queued.job.chip,
+                point: queued.job.point,
+                maxFreq: queued.job.maxFreq,
+                files,
+              },
         buffers,
       );
     });
@@ -337,7 +381,13 @@ export function createAnalysisClient({
       entry.reject(error);
     } finally {
       active = null;
-      const kind: Kind | null = waiting.analysis ? "analysis" : waiting.spectrogram ? "spectrogram" : null;
+      const kind: Kind | null = waiting.analysis
+        ? "analysis"
+        : waiting.spectrogram
+          ? "spectrogram"
+          : waiting.belts
+            ? "belts"
+            : null;
       const next = kind && waiting[kind];
       if (kind) waiting[kind] = null;
       if (next) void start(next);
@@ -440,6 +490,15 @@ export function createAnalysisClient({
     },
     prefetch(job) {
       startPrefetch(job);
+    },
+    belts(job, signal) {
+      return new Promise<BeltsAnalysis>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        submit({ kind: "belts", job, signal, resolve, reject });
+      });
     },
     forget(sessionId) {
       if (heldSession === sessionId) {

@@ -1,5 +1,6 @@
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { Axis } from "@/lib/generated/Axis";
+import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { Recommendation } from "@/lib/generated/Recommendation";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
@@ -12,6 +13,7 @@ export interface SessionHandle {
   add_file(name: string, bytes: Uint8Array): void;
   analyze(axis: Axis, params: FitParams, overrides: string[]): Analysis;
   spectrogram(axis: Axis, chip: string, point: number, maxFreq: number): Spectrogram;
+  belts(chip: string, maxFreq: number, includeExcluded: boolean): BeltsAnalysis;
   free(): void;
 }
 
@@ -39,7 +41,7 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     current = null;
   }
 
-  async function open(request: Extract<WorkerRequest, { type: "analyze" | "spectrogram" }>) {
+  async function open(request: Extract<WorkerRequest, { type: "analyze" | "spectrogram" | "belts" }>) {
     loading ??= loadModule();
     const module = await loading;
     // A session written again under the same id has a new creation time and other files.
@@ -88,6 +90,14 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
           type: "spectrogram",
           id: request.id,
           result: session.spectrogram(request.axis, request.chip, request.point, request.maxFreq),
+        };
+      }
+      if (request.type === "belts") {
+        const { handle: session } = await open(request);
+        return {
+          type: "belts",
+          id: request.id,
+          result: session.belts(request.chip, request.maxFreq, request.includeExcluded),
         };
       }
       return { type: "result", id: request.id, result: await analyze(request) };

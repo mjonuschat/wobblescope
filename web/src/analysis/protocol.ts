@@ -1,5 +1,6 @@
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { Axis } from "@/lib/generated/Axis";
+import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { Spectrogram } from "@/lib/generated/Spectrogram";
@@ -32,13 +33,27 @@ export interface SpectrogramRequest {
   files: Record<string, ArrayBuffer>;
 }
 
+/** Compare the two belts of one chip. `files` holds only the chip's sample files the worker lacks. */
+export interface BeltsRequest {
+  type: "belts";
+  id: number;
+  sessionId: string;
+  meta: SessionMeta;
+  chip: string;
+  /** The comparison keeps the frequencies up to this, in Hz. */
+  maxFreq: number;
+  /** Use a recording that its health or coverage would exclude. */
+  includeExcluded: boolean;
+  files: Record<string, ArrayBuffer>;
+}
+
 /** Free everything the worker holds for a session id that may be written again. */
 export interface ForgetRequest {
   type: "forget";
   sessionId: string;
 }
 
-export type WorkerRequest = AnalyzeRequest | SpectrogramRequest | ForgetRequest;
+export type WorkerRequest = AnalyzeRequest | SpectrogramRequest | BeltsRequest | ForgetRequest;
 
 export interface AnalysisResult {
   analysis: Analysis;
@@ -57,4 +72,5 @@ export interface AnalysisResult {
 export type WorkerResponse =
   | { type: "result"; id: number; result: AnalysisResult }
   | { type: "spectrogram"; id: number; result: Spectrogram }
+  | { type: "belts"; id: number; result: BeltsAnalysis }
   | { type: "error"; id: number; message: string };
