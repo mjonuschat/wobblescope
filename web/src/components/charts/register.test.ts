@@ -19,7 +19,23 @@ describe("the registered chart parts", () => {
   };
 
   it("draw the belt overlay", () => {
-    expect(render(beltOverlayOption(beltsResult(), null))).toContain("<svg");
+    expect(render(beltOverlayOption(beltsResult()))).toContain("<svg");
+  });
+
+  it("draw the zoom toolbox of every belt chart", () => {
+    const result = beltsResult();
+    for (const option of [
+      beltOverlayOption(result),
+      beltScatterOption(result),
+      beltSingleOption({ freqs: result.freqs, psd: result.a.psd }, "Belt A"),
+    ]) {
+      const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 600, height: 400 });
+      chart.setOption(option);
+      const model = chart.getModel();
+      expect(model.getComponent("toolbox")).toBeTruthy();
+      expect(model.getComponent("dataZoom")).toBeTruthy();
+      chart.dispose();
+    }
   });
 
   it("draw the belt scatter with its good zone", () => {
@@ -28,6 +44,6 @@ describe("the registered chart parts", () => {
 
   it("draw a single belt", () => {
     const result = beltsResult();
-    expect(render(beltSingleOption({ freqs: result.freqs, psd: result.a.psd }, "Belt A", null))).toContain("<svg");
+    expect(render(beltSingleOption({ freqs: result.freqs, psd: result.a.psd }, "Belt A"))).toContain("<svg");
   });
 });

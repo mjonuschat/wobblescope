@@ -1,5 +1,7 @@
 import { CustomChart, HeatmapChart, LineChart } from "echarts/charts";
 import {
+  BrushComponent,
+  DataZoomComponent,
   GraphicComponent,
   GridComponent,
   LegendComponent,
@@ -7,6 +9,7 @@ import {
   MarkLineComponent,
   MarkPointComponent,
   TitleComponent,
+  ToolboxComponent,
   TooltipComponent,
   VisualMapContinuousComponent,
 } from "echarts/components";
@@ -18,6 +21,8 @@ export const CHART_PARTS = [
   CustomChart,
   HeatmapChart,
   LineChart,
+  BrushComponent,
+  DataZoomComponent,
   GraphicComponent,
   GridComponent,
   LegendComponent,
@@ -25,6 +30,7 @@ export const CHART_PARTS = [
   MarkLineComponent,
   MarkPointComponent,
   TitleComponent,
+  ToolboxComponent,
   TooltipComponent,
   VisualMapContinuousComponent,
 ];

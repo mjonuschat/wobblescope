@@ -522,14 +522,34 @@ function unpairedPoints(result: BeltsResult, place: (belt: BeltCurve, index: num
   return points;
 }
 
+/**
+ * Drag a box on the chart to zoom in, the wheel zooms too, and the toolbox button resets it. The
+ * toolbox sits top right, clear of the legend at top left. The x axis alone zooms unless `both`.
+ */
+function zoomControls(both: boolean): EChartsCoreOption {
+  return {
+    toolbox: {
+      top: 0,
+      right: 16,
+      feature: {
+        dataZoom: {
+          ...(both ? {} : { yAxisIndex: "none" }),
+          title: { zoom: "Zoom in", back: "Reset zoom" },
+        },
+      },
+    },
+    dataZoom: [{ type: "inside", xAxisIndex: 0, ...(both ? { yAxisIndex: 0 } : {}) }],
+  };
+}
+
 const highest = (result: BeltsResult) => Math.max(...result.a.psd, ...result.b.psd);
 
 /**
  * Both belts' PSDs. Paired peaks carry a Greek letter and number 1 (belt A) or 2 (belt B) and are
- * joined by a dotted line; unpaired peaks carry a red number. The y axis ends at `maxScale`, or
- * at 1.1 times the highest value, as Shake&Tune.
+ * joined by a dotted line; unpaired peaks carry a red number. The y axis ends at 1.1 times the
+ * highest value, as Shake&Tune.
  */
-export function beltOverlayOption(result: BeltsResult, maxScale: number | null): EChartsCoreOption {
+export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
   const marks = (belt: "a" | "b") => {
     const side = belt === "a" ? 1 : 2;
     return [
@@ -570,12 +590,13 @@ export function beltOverlayOption(result: BeltsResult, maxScale: number | null):
     animation: false,
     grid: { top: 40, left: 64, right: 24, bottom: 40 },
     legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: text } },
+    ...zoomControls(false),
     yAxis: {
       type: "value",
       name: "Power spectral density",
       splitLine,
       min: 0,
-      max: maxScale && maxScale > 0 ? maxScale : highest(result) * 1.1,
+      max: highest(result) * 1.1,
       axisLabel: { formatter: scientific },
     },
     series: [curve("Belt A", "a", BELT_A_COLOR), curve("Belt B", "b", BELT_B_COLOR)],
@@ -583,19 +604,20 @@ export function beltOverlayOption(result: BeltsResult, maxScale: number | null):
 }
 
 /** One belt's PSD alone, for a session where the other belt has no usable recording. */
-export function beltSingleOption(spectrum: BeltSpectrum, label: string, maxScale: number | null): EChartsCoreOption {
+export function beltSingleOption(spectrum: BeltSpectrum, label: string): EChartsCoreOption {
   const top = Math.max(...spectrum.psd);
   return {
     ...base(null, spectrum.freqs.at(-1) ?? 0),
     animation: false,
     grid: { top: 40, left: 64, right: 24, bottom: 40 },
     legend: { data: [label], top: 0, left: 56, textStyle: { color: text } },
+    ...zoomControls(false),
     yAxis: {
       type: "value",
       name: "Power spectral density",
       splitLine,
       min: 0,
-      max: maxScale && maxScale > 0 ? maxScale : top * 1.1,
+      max: top * 1.1,
       axisLabel: { formatter: scientific },
     },
     series: [
@@ -664,6 +686,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
     tooltip: { trigger: "item" },
     grid: { top: 40, left: 64, right: 24, bottom: 40 },
     legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: text } },
+    ...zoomControls(true),
     xAxis: { type: "value", name: "Belt A", min: 0, max: end, splitLine, axisLabel: { formatter: scientific } },
     yAxis: { type: "value", name: "Belt B", min: 0, max: end, splitLine, axisLabel: { formatter: scientific } },
     series: [

@@ -15,7 +15,6 @@ import { chipLabel } from "@/lib/format";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { parseNumber } from "@/lib/parse";
 
-import { ScaleDialog } from "../ScaleDialog";
 import { BeltOffsetTable } from "./BeltOffsetTable";
 
 const DEFAULT_MAX_FREQ = 200;
@@ -45,13 +44,13 @@ function Similarity({ value, health }: { value: number; health: string }) {
   );
 }
 
-function Comparison({ analysis, maxScale }: { analysis: BeltsAnalysis; maxScale: number | null }) {
+function Comparison({ analysis }: { analysis: BeltsAnalysis }) {
   const { result, chip } = analysis;
   if (!result) return null;
   return (
     <>
       <Similarity value={result.similarity} health={result.health} />
-      <EChart option={beltOverlayOption(result, maxScale)} label={`Belt overlay of ${chip}`} height={380} />
+      <EChart option={beltOverlayOption(result)} label={`Belt overlay of ${chip}`} height={380} />
       <BeltOffsetTable offsets={result.offsets} />
       <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} />
     </>
@@ -61,13 +60,11 @@ function Comparison({ analysis, maxScale }: { analysis: BeltsAnalysis; maxScale:
 function SideStatus({
   belt,
   side,
-  maxScale,
   chip,
   onInclude,
 }: {
   belt: "a" | "b";
   side: BeltSide;
-  maxScale: number | null;
   chip: string;
   onInclude: () => void;
 }) {
@@ -77,13 +74,7 @@ function SideStatus({
     return <p role="status" className="text-sm">{`Belt ${name} was not recorded.`}</p>;
   }
   if (side.spectrum) {
-    return (
-      <EChart
-        option={beltSingleOption(side.spectrum, label, maxScale)}
-        label={`Belt ${label} of ${chip}`}
-        height={380}
-      />
-    );
+    return <EChart option={beltSingleOption(side.spectrum, label)} label={`Belt ${label} of ${chip}`} height={380} />;
   }
   const reasons = reasonsOf(side);
   return (
@@ -98,28 +89,13 @@ function SideStatus({
   );
 }
 
-function Outcome({
-  analysis,
-  maxScale,
-  onInclude,
-}: {
-  analysis: BeltsAnalysis;
-  maxScale: number | null;
-  onInclude: () => void;
-}) {
-  if (analysis.result) return <Comparison analysis={analysis} maxScale={maxScale} />;
+function Outcome({ analysis, onInclude }: { analysis: BeltsAnalysis; onInclude: () => void }) {
+  if (analysis.result) return <Comparison analysis={analysis} />;
   return (
     <>
       <p className="text-sm">There is no comparison without both belts.</p>
       {(["a", "b"] as const).map((belt) => (
-        <SideStatus
-          key={belt}
-          belt={belt}
-          side={analysis[`belt_${belt}`]}
-          maxScale={maxScale}
-          chip={analysis.chip}
-          onInclude={onInclude}
-        />
+        <SideStatus key={belt} belt={belt} side={analysis[`belt_${belt}`]} chip={analysis.chip} onInclude={onInclude} />
       ))}
     </>
   );
@@ -132,8 +108,6 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
   const [maxFreqText, setMaxFreqText] = useState(String(DEFAULT_MAX_FREQ));
   const [maxFreq, setMaxFreq] = useState(DEFAULT_MAX_FREQ);
   const [includedChip, setIncludedChip] = useState<string | null>(null);
-  // Where the overlay's y axis ends; `null` fits it to the data.
-  const [maxScale, setMaxScale] = useState<number | null>(null);
   const query = useBelts({
     sessionId: id,
     meta,
@@ -148,11 +122,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
     return <p className="text-sm">This session has no recordings to analyse.</p>;
   }
   return (
-    <Panel
-      title="Belt comparison"
-      label={`Chip ${chip}`}
-      action={<ScaleDialog value={maxScale} onChange={setMaxScale} />}
-    >
+    <Panel title="Belt comparison" label={`Chip ${chip}`}>
       <Tabs value={chip} onValueChange={setSelected}>
         <TabsList variant="line">
           {chips.map((name) => (
@@ -163,7 +133,10 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
         </TabsList>
       </Tabs>
       <div className="flex max-w-xs flex-col gap-2.5">
-        <HintLabel label="Analysis maximum (Hz)" hint="The comparison keeps the frequencies up to this." />
+        <HintLabel
+          label="Analysis maximum (Hz)"
+          hint="The comparison covers 0 to this frequency. It decides which peaks are found. Use the zoom on the chart to look closer."
+        />
         <UnitInput
           unit="Hz"
           aria-label="Analysis maximum (Hz)"
@@ -189,7 +162,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
           The belt comparison failed: {query.error.message}
         </p>
       ) : (
-        <Outcome analysis={query.data} maxScale={maxScale} onInclude={() => setIncludedChip(chip)} />
+        <Outcome analysis={query.data} onInclude={() => setIncludedChip(chip)} />
       )}
     </Panel>
   );

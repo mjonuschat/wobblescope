@@ -550,7 +550,7 @@ type BeltSeries = {
 
 describe("beltOverlayOption", () => {
   it("the_overlay_has_two_curves_and_marks_pairs_with_greek_letters_and_unpaired_with_numbers", () => {
-    const option = beltOverlayOption(beltsResult(), null);
+    const option = beltOverlayOption(beltsResult());
     const [a, b] = (option as { series: BeltSeries[] }).series;
     expect([a.name, b.name]).toEqual(["Belt A", "Belt B"]);
     expect(a.data).toEqual([
@@ -573,22 +573,19 @@ describe("beltOverlayOption", () => {
     expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200);
   });
 
-  it("a_fixed_max_scale_ends_the_y_axis", () => {
-    const y = (max: number | null) => (beltOverlayOption(beltsResult(), max) as { yAxis: { max: number } }).yAxis.max;
-    expect(y(40)).toBe(40);
-    expect(y(null)).toBeCloseTo(6.6);
+  it("the_y_axis_fits_the_data", () => {
+    expect((beltOverlayOption(beltsResult()) as { yAxis: { max: number } }).yAxis.max).toBeCloseTo(6.6);
   });
 });
 
 describe("beltSingleOption", () => {
   it("draws one curve without peak marks", () => {
-    const option = beltSingleOption(beltSpectrum(), "A (axis 1,-1)", null);
+    const option = beltSingleOption(beltSpectrum(), "A (axis 1,-1)");
     const list = (option as { series: BeltSeries[] }).series;
     expect(list).toHaveLength(1);
     expect(list[0].markPoint).toBeUndefined();
     expect(list[0].data).toHaveLength(5);
     expect((option as { yAxis: { max: number } }).yAxis.max).toBeCloseTo(6.6);
-    expect((beltSingleOption(beltSpectrum(), "B (axis 1, 1)", 9) as { yAxis: { max: number } }).yAxis.max).toBe(9);
   });
 });
 
@@ -634,7 +631,7 @@ describe("beltScatterOption", () => {
       xAxis: { axisLabel: { formatter: (v: number) => string } };
       yAxis: { axisLabel: { formatter: (v: number) => string } };
     };
-    const overlay = beltOverlayOption(beltsResult(), null) as unknown as typeof axes;
+    const overlay = beltOverlayOption(beltsResult()) as unknown as typeof axes;
     expect(axes.xAxis.axisLabel.formatter(12345)).toBe(overlay.yAxis.axisLabel.formatter(12345));
     expect(axes.yAxis.axisLabel.formatter(0.5)).toBe("5.0e-1");
   });
@@ -650,5 +647,29 @@ describe("beltScatterOption", () => {
     const marks = named("Belts").markPoint?.data ?? [];
     expect(marks.map((m) => m.label.formatter)).toEqual(["α1/α2", "β2", "β1", "1"]);
     expect(marks[0].coord).toEqual([4, 3]);
+  });
+});
+
+describe("the belt charts' zoom", () => {
+  type Zoom = {
+    toolbox: { feature: Record<string, { yAxisIndex?: string; title: { zoom: string; back: string } }> };
+    dataZoom: { type: string; xAxisIndex: number; yAxisIndex?: number }[];
+  };
+  const single = beltSingleOption(beltSpectrum(), "A (axis 1,-1)") as unknown as Zoom;
+
+  it.each([
+    ["overlay", beltOverlayOption(beltsResult()) as unknown as Zoom],
+    ["single", single],
+  ])("the_%s_zooms_the_x_axis_by_box_and_wheel", (_, option) => {
+    expect(Object.keys(option.toolbox.feature)).toEqual(["dataZoom"]);
+    expect(option.toolbox.feature.dataZoom.yAxisIndex).toBe("none");
+    expect(option.toolbox.feature.dataZoom.title).toEqual({ zoom: "Zoom in", back: "Reset zoom" });
+    expect(option.dataZoom).toEqual([{ type: "inside", xAxisIndex: 0 }]);
+  });
+
+  it("the_scatter_zooms_both_axes", () => {
+    const option = beltScatterOption(beltsResult()) as unknown as Zoom;
+    expect(option.toolbox.feature.dataZoom.yAxisIndex).toBeUndefined();
+    expect(option.dataZoom).toEqual([{ type: "inside", xAxisIndex: 0, yAxisIndex: 0 }]);
   });
 });

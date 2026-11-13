@@ -207,18 +207,18 @@ describe("the belt view", () => {
     expect(screen.getByText(/Estimated similarity/)).toBeTruthy();
   });
 
-  it("the y axis maximum is a separate field that does not ask for a new analysis", async () => {
+  it("has_no_chart_scale_dialog_and_the_analysis_maximum_says_it_decides_the_peaks", async () => {
     fake.belts.mockResolvedValue(beltsComparison());
     renderView();
     const overlay = await screen.findByRole("img", { name: "Belt overlay of adxl345" });
     expect(Number(overlay.getAttribute("data-ymax"))).toBeCloseTo(6.6);
-    fireEvent.click(screen.getByRole("button", { name: "Set the chart scale" }));
-    fireEvent.change(await screen.findByLabelText("Maximum"), { target: { value: "30" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    await waitFor(() =>
-      expect(screen.getByRole("img", { name: "Belt overlay of adxl345" }).getAttribute("data-ymax")).toBe("30"),
-    );
-    expect(fake.belts).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Set the chart scale" })).toBeNull();
+    expect(screen.getByLabelText("Analysis maximum (Hz)")).toBeTruthy();
+    fireEvent.focus(screen.getByRole("button", { name: "About analysis maximum (hz)" }));
+    expect(
+      (await screen.findAllByText(/The comparison covers 0 to this frequency. It decides which peaks are found./))
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it("a_one_belt_session_draws_that_belt_alone_from_its_spectrum", async () => {
