@@ -1,8 +1,5 @@
 //! Axes-map text parsing, formatting and config comparison.
 
-// Functions are consumed in Task 4; suppress the unused warning until then.
-#![allow(dead_code)]
-
 use super::{ChipAxis, ConfigCheck};
 
 /// Return the inverse of the signed-permutation matrix encoded by `map`.

@@ -1,10 +1,13 @@
 //! Axes-map calibration: types and analysis.
 
 pub(crate) mod map;
+pub(crate) mod orientation;
+pub(crate) mod quality;
 pub(crate) mod segment;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::CoreError;
 use crate::samples::RawSamples;
 
 /// Which part of the printer the accelerometer is attached to.
@@ -187,6 +190,146 @@ pub struct AxesMapResult {
     pub curves: [SegmentCurves; 3],
     /// Version of the analysis core that produced this result.
     pub core_version: String,
+}
+
+/// Analyse three one-axis sweeps and work out how the chip is oriented.
+///
+/// This is a port of Shake&Tune's `AxesMapComputation.compute`. Bed-mounted chips are not
+/// handled separately yet and are analysed as toolhead chips.
+///
+/// # Errors
+/// Any segment error from `process_segment`, or `InvalidParameter` when two or more axes
+/// show no signal.
+pub fn analyze_axes_map(
+    input: &AxesMapInput,
+    params: &AxesMapParams,
+) -> Result<AxesMapResult, CoreError> {
+    let inverse = map::inverse_matrix(input.configured_map.as_deref());
+    let [s0, s1, s2] = &input.segments;
+    let segments = [
+        segment::process_segment(s0, inverse.as_ref())?,
+        segment::process_segment(s1, inverse.as_ref())?,
+        segment::process_segment(s2, inverse.as_ref())?,
+    ];
+
+    let mut directions = segments.each_ref().map(|s| s.direction_vector);
+    let mut actual = segments.each_ref().map(|s| s.actual_direction);
+    let mut confidences = segments.each_ref().map(|s| s.confidence);
+    let mut angle_errors = segments.each_ref().map(|s| s.angle_error);
+    let gravity = segments.iter().map(|s| s.gravity).sum::<f64>() / 3.0;
+    let noise = segments.iter().map(|s| s.noise_level).sum::<f64>() / 3.0;
+
+    let peak_magnitudes = segments.each_ref().map(|s| {
+        s.peak_velocities
+            .iter()
+            .fold(0.0_f64, |m, p| m.max(p.abs()))
+    });
+    let virtual_axis = orientation::relative_noise_only_axis(confidences, peak_magnitudes)?;
+
+    let mut degenerate = false;
+    if let Some(missing) = virtual_axis {
+        if orientation::complete_axis(&mut directions, missing) {
+            actual[missing] = directions[missing];
+        } else {
+            degenerate = true;
+        }
+        confidences[missing] = 0.0;
+        angle_errors[missing] = 0.0;
+    }
+
+    let quality = quality::validate(
+        &directions,
+        confidences,
+        angle_errors,
+        noise,
+        gravity,
+        params.accel,
+    );
+
+    let chip_axes: [usize; 3] = directions.map(|d| quality::dominant_index(&d));
+    let map = map::format_map(&std::array::from_fn(|i| {
+        let k = chip_axes[i];
+        (chip_axis_from_index(k), directions[i][k] <= 0.0)
+    }));
+    let state = if degenerate || map.is_none() {
+        MapState::Ambiguous
+    } else {
+        MapState::Complete
+    };
+    let map = if state == MapState::Ambiguous {
+        None
+    } else {
+        map
+    };
+
+    let (rotation, euler_deg) = if state == MapState::Ambiguous {
+        (None, None)
+    } else {
+        let rotation = orientation::nearest_rotation(actual);
+        (Some(rotation), Some(orientation::euler_degrees(&rotation)))
+    };
+
+    let axes: [AxisMatch; 3] = std::array::from_fn(|i| {
+        let k = chip_axes[i];
+        let is_virtual = virtual_axis == Some(i);
+        AxisMatch {
+            state: if is_virtual {
+                AxisState::Virtual
+            } else {
+                AxisState::Measured
+            },
+            chip_axis: Some(chip_axis_from_index(k)),
+            negative: directions[i][k] <= 0.0,
+            confidence: confidences[i],
+            tilt_deg: angle_errors[i],
+            peaks: if is_virtual {
+                [0.0; 3]
+            } else {
+                segments[i].peak_velocities
+            },
+            peak_velocity: if is_virtual {
+                0.0
+            } else {
+                segments[i].peak_velocities[k]
+            },
+            peak_time_s: if is_virtual {
+                0.0
+            } else {
+                segments[i].peak_time_s
+            },
+        }
+    });
+
+    let config_check = match &map {
+        Some(detected) => map::config_check(input.configured_map.as_deref(), detected),
+        None => ConfigCheck::NoneConfigured,
+    };
+
+    let [c0, c1, c2] = segments.map(|s| s.curves);
+    Ok(AxesMapResult {
+        chip: input.chip.clone(),
+        state,
+        map,
+        configured_map: input.configured_map.clone(),
+        axes,
+        euler_deg,
+        rotation,
+        gravity: gravity / 1000.0,
+        noise,
+        noise_verdict: quality::noise_verdict(noise),
+        quality,
+        config_check,
+        curves: [c0, c1, c2],
+        core_version: crate::CORE_VERSION.to_owned(),
+    })
+}
+
+fn chip_axis_from_index(index: usize) -> ChipAxis {
+    match index {
+        0 => ChipAxis::X,
+        1 => ChipAxis::Y,
+        _ => ChipAxis::Z,
+    }
 }
 
 /// The axes-map golden file, decoded for unit tests of crate-private functions. The schema

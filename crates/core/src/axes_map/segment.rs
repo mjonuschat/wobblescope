@@ -1,8 +1,5 @@
 //! Per-segment motion detection: a port of Shake&Tune's `_process_single_axis`.
 
-// Consumed in Task 4; suppress the unused warning until then.
-#![allow(dead_code)]
-
 use super::SegmentCurves;
 use crate::error::CoreError;
 use crate::numeric::strictly_increasing;

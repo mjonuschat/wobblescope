@@ -20,6 +20,7 @@ pub const ABS_PEAK_TOL: f64 = 1e-12;
 pub const NEAR_TIE_MARGIN: f64 = 0.01;
 
 /// Runs the wrapped test on both native and wasm32.
+#[allow(unused_macros)]
 macro_rules! parity_test {
     ($(#[$m:meta])* fn $name:ident() $body:block) => {
         $(#[$m])*
