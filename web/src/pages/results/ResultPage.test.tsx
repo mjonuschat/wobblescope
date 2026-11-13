@@ -152,7 +152,6 @@ describe("the result page", () => {
     fake.spectrogram.mockResolvedValue(spectrogram());
     serve(detail);
     renderRoute("/results/r1");
-    fireEvent.click(await screen.findByRole("button", { name: "Show spectrogram" }));
     expect(await screen.findByRole("img", { name: /Spectrogram of adxl345/ })).toBeTruthy();
     expect(fake.spectrogram.mock.calls[0][0]).toMatchObject({
       sessionId: "result:r1",

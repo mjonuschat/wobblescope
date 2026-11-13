@@ -56,17 +56,11 @@ beforeEach(() => {
 });
 
 describe("the spectrogram panel", () => {
-  it("starts closed and fetches nothing", () => {
-    renderPanel();
-    expect(screen.getByRole("region", { name: "Spectrogram" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show spectrogram" })).toBeTruthy();
-    expect(fake.spectrogram).not.toHaveBeenCalled();
-  });
-
-  it("a button loads the map and draws it", async () => {
+  it("makes the map as soon as it is shown, with no button to press", async () => {
     fake.spectrogram.mockResolvedValue(spectrogram());
     renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
+    expect(screen.getByRole("region", { name: "Spectrogram" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show spectrogram" })).toBeNull();
     expect(await screen.findByRole("img", { name: "Spectrogram of adxl345" })).toBeTruthy();
     expect(fake.spectrogram).toHaveBeenCalledTimes(1);
     expect(fake.spectrogram.mock.calls[0][0]).toMatchObject({
@@ -81,49 +75,63 @@ describe("the spectrogram panel", () => {
   it("shows a wait message while it loads and the error when it fails", async () => {
     fake.spectrogram.mockReturnValue(new Promise(() => {}));
     const first = renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
     expect(await screen.findByText(/Making the spectrogram/)).toBeTruthy();
     first.unmount();
 
     fake.spectrogram.mockRejectedValue(new Error("sample file c0-s0.zst holds 999 samples, metadata says 1000"));
     renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
     expect((await screen.findByRole("alert")).textContent).toContain("holds 999 samples");
+  });
+
+  it("serves a second view of the same recording from the cache", async () => {
+    fake.spectrogram.mockResolvedValue(spectrogram());
+    const client = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const element = (
+      <SpectrogramPanel chip={chipOf()} meta={twoAxisMeta()} source={{ sessionId: "s1", axis: "X" }} maxFreq={200} />
+    );
+    const first = render(element, { wrapper });
+    await screen.findByRole("img");
+    first.unmount();
+    render(element, { wrapper });
+    expect(await screen.findByRole("img")).toBeTruthy();
+    expect(fake.spectrogram).toHaveBeenCalledTimes(1);
   });
 
   it("offers a point selector only for a chip with several probe points", async () => {
     fake.spectrogram.mockResolvedValue(spectrogram());
     const single = renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
     await screen.findByRole("img");
     expect(screen.queryByRole("group", { name: "Probe point" })).toBeNull();
     single.unmount();
 
     renderPanel(chipOf(), twoPointMeta());
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
     const group = await screen.findByRole("group", { name: "Probe point" });
     fireEvent.click(within(group).getAllByRole("button")[1]);
     await waitFor(() => expect(fake.spectrogram.mock.calls.at(-1)?.[0]).toMatchObject({ point: 1 }));
   });
 
-  it("lists a failed recording as a point too, next to a good one", () => {
+  it("lists a failed recording as a point too, next to a good one", async () => {
+    fake.spectrogram.mockReturnValue(new Promise(() => {}));
     // The chip's analysis only has point 0, but the metadata also records point 1.
     renderPanel(chipOf(), twoPointMeta());
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
-    expect(within(screen.getByRole("group", { name: "Probe point" })).getAllByRole("button")).toHaveLength(2);
+    expect(
+      await within(await screen.findByRole("group", { name: "Probe point" })).findAllByRole("button"),
+    ).toHaveLength(2);
   });
 
   it("a chip with no successful PSD still has its point to load and shows the error", async () => {
     fake.spectrogram.mockRejectedValue(new Error("c0-s0.zst is damaged"));
     renderPanel(chipOf({ datasets: [], peaks: [] }));
-    fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
     expect((await screen.findByRole("alert")).textContent).toContain("damaged");
     expect(fake.spectrogram.mock.calls[0][0]).toMatchObject({ chip: "adxl345", point: 0 });
   });
 
-  it("says so when the chip has no recording on this axis", () => {
+  it("says so when the chip has no recording on this axis, and fetches nothing", () => {
     renderPanel(chipOf({ chip: "not on this axis" }));
-    expect(screen.queryByRole("button", { name: "Show spectrogram" })).toBeNull();
     expect(screen.getByText(/no recording/i)).toBeTruthy();
+    expect(fake.spectrogram).not.toHaveBeenCalled();
   });
 });

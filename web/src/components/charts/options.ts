@@ -57,6 +57,10 @@ const WARNING_BAND = "rgba(255, 209, 102, 0.14)";
 const LABEL_GAP = 0.09;
 /** How far each level lifts a peak label, in pixels. */
 const LABEL_LIFT = 16;
+/** The number badge of a peak label is this wide, so one and two digits sit alike, and it is centred on the peak. */
+const BADGE_WIDTH = 18;
+const BADGE_PADDING = 5;
+const BADGE_HALF = (BADGE_WIDTH + 2 * BADGE_PADDING) / 2;
 
 /**
  * The level of each peak label, lowest first. A peak whose label would touch an earlier one (within
@@ -117,7 +121,9 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
           label: {
             formatter: `{index|${n + 1}} {value|${formatHz(peak.freq)} Hz}`,
             position: "top",
-            offset: [0, levels[n] === 0 ? 0 : -LABEL_LIFT * levels[n]],
+            // The label starts at the peak, so half the badge moves left of it and the badge sits on the peak.
+            align: "left",
+            offset: [-BADGE_HALF, levels[n] === 0 ? 0 : -LABEL_LIFT * levels[n]],
             color: peak.above_effect ? PEAK_ALERT : text,
             fontWeight: peak.above_effect ? "bold" : "normal",
             fontSize: 13,
@@ -127,7 +133,9 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
                 backgroundColor: peak.above_effect ? PEAK_ALERT : MUTED,
                 color: "#171717",
                 fontWeight: "bold",
-                padding: [1, 5],
+                width: BADGE_WIDTH,
+                align: "center",
+                padding: [1, BADGE_PADDING],
                 borderRadius: 3,
               },
               value: {
@@ -345,6 +353,26 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
 
 const SPECTROGRAM_LABELS = 8;
 const SPECTROGRAM_PEAK_LINE = "#22d3ee";
+/** Peak labels here carry the frequency, so they need more room than the PSD chart's. */
+const SPECTROGRAM_LABEL_GAP = 0.12;
+
+/** The spacing of the frequency ticks: round figures, with 25 Hz for the usual 200 Hz range. */
+function tickStep(maxFreq: number): number {
+  return maxFreq <= 250 ? 25 : maxFreq <= 500 ? 50 : 100;
+}
+
+/** The bin that carries the tick for each multiple of `step` Hz that has a bin within half a bin of it. */
+function tickBins(freqs: number[], maxFreq: number): Map<number, number> {
+  const bins = new Map<number, number>();
+  if (freqs.length < 2) return bins;
+  const half = (freqs[1] - freqs[0]) / 2;
+  const step = tickStep(maxFreq);
+  for (let multiple = 0; multiple <= maxFreq; multiple += step) {
+    const bin = nearestIndex(freqs, multiple);
+    if (Math.abs(freqs[bin] - multiple) <= half) bins.set(bin, multiple);
+  }
+  return bins;
+}
 
 function nearestIndex(values: number[], target: number): number {
   let best = 0;
@@ -368,12 +396,18 @@ export function spectrogramOption(
   const lowest = Math.log10(floor);
   const data = power.flatMap((row, i) => row.map((p, j) => [j, i, Math.log10(Math.max(p, floor))]));
   const interval = (count: number) => Math.max(0, Math.ceil(count / SPECTROGRAM_LABELS) - 1);
+  const ticks = tickBins(freqs, maxFreq);
   const oneDecimal = (value: string) => Number(value).toFixed(1);
   const marked = (peaks?.peaks ?? []).filter((peak) => peak.freq <= maxFreq);
+  const levels = labelLevels(
+    marked.map((peak) => peak.freq),
+    maxFreq * SPECTROGRAM_LABEL_GAP,
+  );
+  const lifted = Math.max(0, ...levels) * LABEL_LIFT;
   return {
     ...base(null, maxFreq),
     animation: false,
-    grid: { top: 24, left: 64, right: 96, bottom: 48 },
+    grid: { top: 24 + lifted, left: 64, right: 96, bottom: 48 },
     tooltip: {
       formatter: (params: { data: number[] }) => {
         const [bin, row] = params.data;
@@ -384,12 +418,16 @@ export function spectrogramOption(
       type: "category",
       name: "Hz",
       data: freqs.map(String),
-      axisLabel: { interval: interval(freqs.length), formatter: oneDecimal },
+      axisTick: { interval: (index: number) => ticks.has(index), alignWithLabel: true },
+      axisLabel: {
+        interval: (index: number) => ticks.has(index),
+        formatter: (_value: string, index: number) => String(ticks.get(index) ?? ""),
+      },
       splitArea: { show: false },
     },
     yAxis: {
       type: "category",
-      name: "s",
+      name: "Seconds",
       data: times.map(String),
       axisLabel: { interval: interval(times.length), formatter: oneDecimal },
       splitArea: { show: false },
@@ -421,16 +459,22 @@ export function spectrogramOption(
                 data: marked.map((peak, n) => ({
                   xAxis: nearestIndex(freqs, peak.freq),
                   label: {
-                    formatter: `{index|${n + 1}}`,
+                    formatter: `{index|${n + 1}} {value|${formatHz(peak.freq)} Hz}`,
                     position: "end",
+                    // The label starts at the line, so half the badge moves left of it and the badge sits on the line.
+                    align: "left",
+                    offset: [-BADGE_HALF, levels[n] === 0 ? 0 : -LABEL_LIFT * levels[n]],
                     rich: {
                       index: {
                         backgroundColor: SPECTROGRAM_PEAK_LINE,
                         color: "#171717",
                         fontWeight: "bold",
-                        padding: [1, 5],
+                        width: BADGE_WIDTH,
+                        align: "center",
+                        padding: [1, BADGE_PADDING],
                         borderRadius: 3,
                       },
+                      value: { color: text },
                     },
                   },
                 })),

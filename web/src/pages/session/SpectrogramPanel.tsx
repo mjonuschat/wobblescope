@@ -4,7 +4,6 @@ import { useSpectrogram } from "@/analysis/useSpectrogram";
 import { Panel } from "@/components/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { pointLabel, spectrogramOption } from "@/components/charts/options";
-import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Axis } from "@/lib/generated/Axis";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
@@ -37,10 +36,9 @@ interface Props {
   maxFreq: number;
 }
 
-/** The time-frequency map of one chip's recording. Nothing is computed until it is asked for. */
+/** The time-frequency map of one chip's recording. It is made when the panel is shown and cached by recording. */
 export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
   const points = pointsOf(meta, source.axis, chip.chip);
-  const [shown, setShown] = useState(false);
   const [chosen, setChosen] = useState<number | null>(null);
   const point = chosen !== null && points.includes(chosen) ? chosen : (points[0] ?? null);
   const query = useSpectrogram({
@@ -51,7 +49,7 @@ export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
     chip: chip.chip,
     point,
     maxFreq,
-    enabled: shown,
+    enabled: true,
   });
 
   if (point === null) {
@@ -62,7 +60,7 @@ export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
     );
   }
   const selector =
-    shown && points.length > 1 ? (
+    points.length > 1 ? (
       <ToggleGroup
         variant="outline"
         size="sm"
@@ -82,28 +80,17 @@ export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
   const peaks = chip.peaks.find(([p]) => p === point)?.[1] ?? null;
   return (
     <Panel title="Spectrogram" action={selector}>
-      {!shown && (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            A map of how this recording's energy moves across frequencies during the sweep. It is made when you ask for
-            it.
-          </p>
-          <Button type="button" variant="outline" onClick={() => setShown(true)}>
-            Show spectrogram
-          </Button>
-        </div>
-      )}
-      {shown && query.isPending && (
+      {query.isPending && (
         <p role="status" className="text-sm text-muted-foreground">
           Making the spectrogram…
         </p>
       )}
-      {shown && query.isError && (
+      {query.isError && (
         <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
           The spectrogram could not be made: {query.error.message}
         </p>
       )}
-      {shown && query.isSuccess && (
+      {query.isSuccess && (
         <EChart
           option={spectrogramOption(query.data, peaks, maxFreq)}
           label={`Spectrogram of ${chip.chip}${points.length > 1 ? ` at ${pointLabel(point, meta.probe_points)}` : ""}`}

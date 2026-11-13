@@ -123,7 +123,7 @@ describe("the session view", () => {
     expect(list.textContent?.match(/·/g)).toHaveLength(1);
   });
 
-  it("shows the spectrogram panel under the chip panel, hides it on All Chips and starts each chip closed", async () => {
+  it("shows the spectrogram panel under the chip panel with its map, hides it on All Chips and makes each chip its own map", async () => {
     const a = analysis();
     a.per_chip = [
       { ...a.per_chip[0], chip: "adxl345" },
@@ -136,12 +136,12 @@ describe("the session view", () => {
     const chip = await chipCard("adxl345");
     const panel = await screen.findByRole("region", { name: "Spectrogram" });
     expect(chip.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(within(panel).getByRole("button", { name: "Show spectrogram" }));
-    await within(panel).findByRole("img");
+    expect(await within(panel).findByRole("img", { name: "Spectrogram of adxl345" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
     const other = await screen.findByRole("region", { name: "Spectrogram" });
-    expect(within(other).getByRole("button", { name: "Show spectrogram" })).toBeTruthy();
+    expect(await within(other).findByRole("img", { name: "Spectrogram of lis2dw ebb36" })).toBeTruthy();
+    expect(fake.spectrogram.mock.calls.map((c) => c[0].chip)).toEqual(["adxl345", "lis2dw ebb36"]);
 
     fireEvent.click(screen.getByRole("tab", { name: "All Chips" }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Spectrogram" })).toBeNull());
