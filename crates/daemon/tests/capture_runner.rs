@@ -736,10 +736,7 @@ async fn a_run_refused_on_the_diagonal_axis_ends_failed_with_no_recording() {
         finished.reason.as_deref(),
         diagonal_refusal("Unsupported axis '1,-1'").as_deref()
     );
-    assert!(matches!(
-        finished.outcome,
-        FinishedOutcome::Failed | FinishedOutcome::NoSession
-    ));
+    assert_eq!(finished.outcome, FinishedOutcome::NoSession, "{finished:?}");
     // The move to the point happened; the diagonal sweep was the only one sent.
     assert_eq!(rig.sim.g1_count(), 1);
     assert_eq!(rig.sim.sweeps().len(), 1);
@@ -747,6 +744,26 @@ async fn a_run_refused_on_the_diagonal_axis_ends_failed_with_no_recording() {
         let (_, meta) = rig.storage.session(&id).unwrap();
         assert!(meta.segments.is_empty());
     }
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn belt_b_refused_after_belt_a_is_stored_ends_failed_with_the_refusal_code() {
+    let rig = rig().await;
+    rig.sim
+        .set_behavior(1, Sweep::Error("Unsupported axis '1,1'".to_owned()));
+    let plan = belt_plan(&CHIPS);
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Failed, "{finished:?}");
+    assert_eq!(finished.code, Some(FailureCode::DiagonalAxisRefused));
+    let ids = rig.sessions();
+    assert_eq!(ids.len(), 1);
+    let (_, meta) = rig.storage.session(&ids[0]).unwrap();
+    assert_eq!(meta.segments.len(), 1);
+    assert_eq!(meta.segments[0].axis, Direction::BELT_A);
+    assert_eq!(meta.format_version, 2);
     assert_clean(&rig);
 }
 
