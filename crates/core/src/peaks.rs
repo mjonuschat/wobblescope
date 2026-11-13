@@ -39,33 +39,43 @@ pub struct PsdPeaks {
     pub effect_threshold: f64,
 }
 
-/// Indices into `psd` of Shake&Tune's `detect_peaks` (window 5, vicinity 3): the local maxima of
-/// the smoothed curve above `threshold`, each moved to the largest raw value within 3 bins.
-/// Fewer than five bins have no peaks.
+/// Indices into `psd` of Shake&Tune's `detect_peaks` (window 5, vicinity 3).
 pub fn detect_peaks(psd: &[f64], threshold: f64) -> Vec<usize> {
+    detect_peaks_with(psd, threshold, WINDOW, VICINITY)
+}
+
+/// Indices into `psd` of the local maxima of the curve smoothed with a moving average of `window`
+/// bins above `threshold`, each moved to the largest raw value within `vicinity` bins.
+/// Fewer than `window` bins have no peaks.
+pub fn detect_peaks_with(
+    psd: &[f64],
+    threshold: f64,
+    window: usize,
+    vicinity: usize,
+) -> Vec<usize> {
     let n = psd.len();
-    if n < WINDOW {
+    if n < window {
         return Vec::new();
     }
-    let kernel = 1.0 / WINDOW as f64;
-    let pad = psd[..WINDOW].iter().sum::<f64>() / WINDOW as f64;
-    let mut smoothed = vec![pad; WINDOW / 2];
+    let kernel = 1.0 / window as f64;
+    let pad = psd[..window].iter().sum::<f64>() / window as f64;
+    let mut smoothed = vec![pad; window / 2];
     // numpy accumulates the convolution with fused multiply-add. The padded mean and the first
     // window are equal except for the last bit, and the strict comparisons below see that bit.
     smoothed.extend(
-        psd.windows(WINDOW)
+        psd.windows(window)
             .map(|w| w.iter().fold(0.0, |acc, v| v.mul_add(kernel, acc))),
     );
     let mut peaks = Vec::new();
     for j in 0..smoothed.len() - 2 {
         let p = j + 1;
         if smoothed[j] < smoothed[p] && smoothed[p] > smoothed[j + 2] && smoothed[p] > threshold {
-            let start = p.saturating_sub(VICINITY);
-            let end = (p + VICINITY + 1).min(n);
+            let start = p.saturating_sub(vicinity);
+            let end = (p + vicinity + 1).min(n);
             let offset = psd[start..end].iter().enumerate().fold(0, |best, (k, v)| {
                 if *v > psd[start + best] { k } else { best }
             });
-            let index = p as isize + offset as isize - VICINITY as isize;
+            let index = p as isize + offset as isize - vicinity as isize;
             peaks.push(if index < 0 {
                 (index + n as isize) as usize
             } else {

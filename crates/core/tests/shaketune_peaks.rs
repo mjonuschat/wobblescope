@@ -4,7 +4,9 @@ mod common;
 use common::{case, close, klipper_params, load_csv, normalized, shaketune, stem};
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
 use wobblescope_core::multichip::analyze;
-use wobblescope_core::peaks::{PEAK_DETECTION, PEAK_EFFECT, detect_peaks, psd_peaks};
+use wobblescope_core::peaks::{
+    PEAK_DETECTION, PEAK_EFFECT, detect_peaks, detect_peaks_with, psd_peaks,
+};
 
 parity_test! {
     fn matches_shaketune_on_every_golden_dataset() {
@@ -96,4 +98,15 @@ fn analyze_gives_every_dataset_its_peaks() {
         assert_eq!(*point, 0);
         assert_eq!(peaks, &psd_peaks(&chip.datasets[0].1, 200.0).unwrap());
     }
+}
+
+#[test]
+fn window_and_vicinity_are_parameters() {
+    let bump = |i: usize, c: f64| (-((i as f64 - c).powi(2)) / 8.0).exp();
+    let psd: Vec<f64> = (0..500)
+        .map(|i| bump(i, 200.0) + 0.8 * bump(i, 210.0))
+        .collect();
+    assert_eq!(detect_peaks_with(&psd, 0.1, 5, 3), detect_peaks(&psd, 0.1));
+    assert_eq!(detect_peaks(&psd, 0.1).len(), 2);
+    assert_eq!(detect_peaks_with(&psd, 0.1, 20, 15).len(), 1);
 }
