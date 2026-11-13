@@ -188,6 +188,25 @@ describe("the belt view", () => {
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ maxFreq: 120 });
   });
 
+  it("an_invalid_analysis_maximum_hides_the_previous_result_until_it_is_valid_again", async () => {
+    fake.belts.mockResolvedValue(beltsComparison());
+    renderView();
+    const field = (await screen.findByLabelText("Analysis maximum (Hz)")) as HTMLInputElement;
+    expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: "5" } });
+    expect(screen.getByRole("alert").textContent).toContain("at least 10");
+    expect(screen.getByLabelText("Analysis maximum (Hz)")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Belt overlay of adxl345" })).toBeNull();
+    expect(screen.queryByRole("img", { name: "Cross-belt scatter of adxl345" })).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByText(/Estimated similarity/)).toBeNull();
+
+    fireEvent.change(field, { target: { value: "200" } });
+    expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
+    expect(screen.getByText(/Estimated similarity/)).toBeTruthy();
+  });
+
   it("the y axis maximum is a separate field that does not ask for a new analysis", async () => {
     fake.belts.mockResolvedValue(beltsComparison());
     renderView();

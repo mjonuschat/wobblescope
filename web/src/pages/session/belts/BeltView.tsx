@@ -180,7 +180,8 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
           </p>
         )}
       </div>
-      {query.isPending ? (
+      {/* The last valid result would otherwise stay up under the error. */}
+      {parsed === undefined ? null : query.isPending ? (
         <Waiting>Comparing the belts of {chip}…</Waiting>
       ) : query.isError ? (
         <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
