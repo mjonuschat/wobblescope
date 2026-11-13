@@ -113,7 +113,7 @@ impl Session {
             .meta
             .segments
             .iter()
-            .filter(|s| s.axis == axis)
+            .filter(|s| s.axis == axis.into())
             .flat_map(|s| &s.files)
         {
             if !self.files.contains_key(&file.sample_file) {

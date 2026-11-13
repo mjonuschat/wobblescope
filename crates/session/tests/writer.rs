@@ -75,7 +75,7 @@ fn add_segment(writer: &mut SessionWriter, meta: &mut SessionMeta, index: usize,
         )
         .unwrap();
     meta.segments.push(SegmentMeta {
-        axis,
+        axis: axis.into(),
         point: 0,
         window: None,
         files,

@@ -55,7 +55,7 @@ fn pins_for_missing_sessions_are_pruned_and_pins_for_skipped_ones_stay() {
     let p = sessions_dir(dir.path()).join("newer").join("meta.json");
     let text = fs::read_to_string(&p)
         .unwrap()
-        .replace("\"format_version\": 1", "\"format_version\": 2");
+        .replace("\"format_version\": 1", "\"format_version\": 3");
     fs::write(&p, text).unwrap();
     fs::write(
         dir.path().join("pins.json"),

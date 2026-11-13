@@ -92,7 +92,7 @@ fn two_chip_x_meta(w: &Win, coverage: Coverage, ebb_health: Health) -> SessionMe
             chip("lis2dw ebb36", ebb_health),
         ],
         vec![SegmentMeta {
-            axis: Axis::X,
+            axis: Axis::X.into(),
             point: 0,
             window: Some(TimeWindow {
                 start: w.window.start,
@@ -149,13 +149,13 @@ parity_test! {
             vec![chip("a", Health::Ok), chip("b", Health::Ok)],
             vec![
                 SegmentMeta {
-                    axis: Axis::X,
+                    axis: Axis::X.into(),
                     point: 0,
                     window: None,
                     files: vec![entry(1, 0, 2, Coverage::Complete), entry(0, 0, 2, Coverage::Complete)],
                 },
                 SegmentMeta {
-                    axis: Axis::Y,
+                    axis: Axis::Y.into(),
                     point: 0,
                     window: None,
                     files: vec![entry(0, 1, 2, Coverage::Complete)],
@@ -237,7 +237,7 @@ parity_test! {
         let m = meta(
             vec![chip("a", Health::Ok)],
             vec![SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: None,
                 files: vec![entry(0, 0, 1000, Coverage::Complete)],
@@ -296,13 +296,13 @@ fn two_axis_meta(
         vec![chip("adxl345", chip_health)],
         vec![
             SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window,
                 files: vec![file(0, x)],
             },
             SegmentMeta {
-                axis: Axis::Y,
+                axis: Axis::Y.into(),
                 point: 0,
                 window,
                 files: vec![file(1, y)],

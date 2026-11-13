@@ -75,7 +75,7 @@ fn two_chip_x_meta(w: &Win, ebb_health: Health) -> SessionMeta {
             chip("lis2dw ebb36", ebb_health),
         ],
         segments: vec![SegmentMeta {
-            axis: Axis::X,
+            axis: Axis::X.into(),
             point: 0,
             window: Some(TimeWindow {
                 start: w.window.start,

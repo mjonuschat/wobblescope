@@ -190,12 +190,12 @@ pub fn build_klipper_group(
         };
         let segment = match segments
             .iter()
-            .position(|s| s.axis == file.axis && s.point == point as u32)
+            .position(|s| s.axis == file.axis.into() && s.point == point as u32)
         {
             Some(i) => i,
             None => {
                 segments.push(SegmentMeta {
-                    axis: file.axis,
+                    axis: file.axis.into(),
                     point: point as u32,
                     window: None,
                     files: Vec::new(),

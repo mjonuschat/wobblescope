@@ -106,7 +106,7 @@ fn axis_and_point_come_from_the_file_name_when_not_given() {
     };
     let summary = import_csv(&s, CSV.as_bytes(), &o, at(NOON)).unwrap();
     let (_, meta) = s.session(&summary.id).unwrap();
-    assert_eq!(meta.segments[0].axis, Axis::Y);
+    assert_eq!(meta.segments[0].axis, Axis::Y.into());
     assert_eq!(meta.probe_points[0].position, Some([100.0, 100.0, 20.0]));
 }
 
@@ -122,7 +122,7 @@ fn an_explicit_axis_wins_over_the_file_name() {
     };
     let summary = import_csv(&s, CSV.as_bytes(), &o, at(NOON)).unwrap();
     let (_, meta) = s.session(&summary.id).unwrap();
-    assert_eq!(meta.segments[0].axis, Axis::X);
+    assert_eq!(meta.segments[0].axis, Axis::X.into());
 }
 
 #[test]

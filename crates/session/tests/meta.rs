@@ -1,13 +1,15 @@
 #[macro_use]
 mod common;
 
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::codec::MAX_SAMPLES;
 use wobblescope_session::meta::{
-    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionMeta,
-    Source, SweepSettings, TimeDomain, TimeWindow, sample_file_name, validate_session_id,
+    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionKind,
+    SessionMeta, Source, SweepSettings, TimeDomain, TimeWindow, sample_file_name,
+    validate_session_id,
 };
 
 fn chip(name: &str, chip_type: Option<&str>, rate: Option<f64>) -> ChipMeta {
@@ -70,7 +72,7 @@ fn capture_meta() -> SessionMeta {
         ],
         segments: vec![
             SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: Some(TimeWindow {
                     start: 41230.322878,
@@ -79,7 +81,7 @@ fn capture_meta() -> SessionMeta {
                 files: vec![file(0, 0, 100_000), file(1, 0, 12_000)],
             },
             SegmentMeta {
-                axis: Axis::Y,
+                axis: Axis::Y.into(),
                 point: 0,
                 window: None,
                 files: vec![file(0, 1, 100_000), file(1, 1, 12_000)],
@@ -144,8 +146,8 @@ parity_test! {
 
 parity_test! {
     fn a_newer_format_version_is_reported_even_when_the_shape_changed() {
-        let err = SessionMeta::from_json(r#"{"format_version": 2, "renamed": true}"#).unwrap_err();
-        assert!(matches!(err, SessionError::UnsupportedFormatVersion { found: 2 }));
+        let err = SessionMeta::from_json(r#"{"format_version": 3, "renamed": true}"#).unwrap_err();
+        assert!(matches!(err, SessionError::UnsupportedFormatVersion { found: 3 }));
     }
 }
 
@@ -207,7 +209,7 @@ parity_test! {
         );
 
         let mut dup_segment = capture_meta();
-        dup_segment.segments[1].axis = Axis::X;
+        dup_segment.segments[1].axis = Axis::X.into();
         assert_eq!(invalid_field(dup_segment.validate().unwrap_err()), "segments[1]");
 
         let mut dup_name = capture_meta();
@@ -310,5 +312,122 @@ parity_test! {
         };
         assert_eq!(original_file_name.as_deref(), Some("a.csv"));
         assert!(original_file_names.is_empty());
+    }
+}
+
+/// Segments of the given directions, each at the given point (two probe points exist).
+fn vector_meta(segments: &[(Direction, u32)]) -> SessionMeta {
+    let mut meta = capture_meta();
+    meta.format_version = 2;
+    meta.probe_points.push(ProbePoint { position: None });
+    meta.segments = segments
+        .iter()
+        .enumerate()
+        .map(|(i, &(axis, point))| SegmentMeta {
+            axis,
+            point,
+            window: None,
+            files: vec![file(0, i, 100)],
+        })
+        .collect();
+    meta
+}
+
+fn belts_at(a: u32, b: u32) -> SessionMeta {
+    vector_meta(&[(Direction::BELT_A, a), (Direction::BELT_B, b)])
+}
+
+parity_test! {
+    fn a_version_two_session_with_vector_segments_round_trips() {
+        let meta = belts_at(0, 0);
+        let json = meta.to_json().unwrap();
+        assert!(json.contains("\"Vector\""));
+        assert_eq!(SessionMeta::from_json(&json).unwrap(), meta);
+    }
+}
+
+parity_test! {
+    fn a_vector_segment_in_a_version_one_session_is_refused() {
+        let mut meta = belts_at(0, 0);
+        meta.format_version = 1;
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "format_version");
+    }
+}
+
+parity_test! {
+    fn a_version_three_session_is_refused_with_its_version() {
+        let mut meta = belts_at(0, 0);
+        meta.format_version = 3;
+        assert!(matches!(
+            meta.validate().unwrap_err(),
+            SessionError::UnsupportedFormatVersion { found: 3 }
+        ));
+    }
+}
+
+parity_test! {
+    fn x_y_and_vector_segments_cannot_mix() {
+        let mut meta = vector_meta(&[(Direction::X, 0), (Direction::BELT_A, 0)]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments");
+        meta.segments.reverse();
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments");
+    }
+}
+
+parity_test! {
+    fn a_zero_vector_is_refused() {
+        let meta = vector_meta(&[(Direction::Vector([0, 0, 0]), 0)]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[0].axis");
+    }
+}
+
+parity_test! {
+    fn a_point_holds_each_vector_once() {
+        let meta = vector_meta(&[(Direction::BELT_A, 0), (Direction::BELT_A, 0)]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[1]");
+        vector_meta(&[(Direction::BELT_A, 0), (Direction::BELT_A, 1)])
+            .validate()
+            .unwrap();
+    }
+}
+
+parity_test! {
+    fn required_version_is_two_only_with_a_vector_segment() {
+        assert_eq!(capture_meta().required_version(), 1);
+        let mut empty = capture_meta();
+        empty.segments.clear();
+        assert_eq!(empty.required_version(), 1);
+        assert_eq!(belts_at(0, 0).required_version(), 2);
+    }
+}
+
+parity_test! {
+    fn kind_is_axes_for_x_y_and_empty_sessions() {
+        assert_eq!(capture_meta().kind(), SessionKind::Axes);
+        let mut empty = capture_meta();
+        empty.segments.clear();
+        assert_eq!(empty.kind(), SessionKind::Axes);
+    }
+}
+
+parity_test! {
+    fn kind_is_belts_for_one_or_both_diagonals_at_one_point() {
+        assert_eq!(belts_at(0, 0).kind(), SessionKind::Belts);
+        assert_eq!(vector_meta(&[(Direction::BELT_B, 1)]).kind(), SessionKind::Belts);
+        assert_eq!(vector_meta(&[(Direction::BELT_A, 0)]).kind(), SessionKind::Belts);
+    }
+}
+
+parity_test! {
+    fn kind_is_other_for_another_vector_or_the_belts_at_two_points() {
+        assert_eq!(belts_at(0, 1).kind(), SessionKind::Other);
+        assert_eq!(
+            vector_meta(&[(Direction::Vector([1, 0, 1]), 0)]).kind(),
+            SessionKind::Other
+        );
+        assert_eq!(
+            vector_meta(&[(Direction::BELT_A, 0), (Direction::Vector([1, 0, 1]), 0)]).kind(),
+            SessionKind::Other
+        );
     }
 }

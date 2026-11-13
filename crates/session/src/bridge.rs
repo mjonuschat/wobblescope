@@ -1,13 +1,13 @@
 //! The only route from a session to `wobblescope-core`: one [`DatasetInput`] per recording.
 
 use wobblescope_core::RawSamples;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::DatasetInput;
-use wobblescope_core::fit::Axis;
 
 use crate::SessionError;
 use crate::meta::{SegmentFile, SessionMeta, undersampled_note};
 
-/// Builds the `core` inputs for every recording of `axis`, segments in metadata order and each
+/// Builds the `core` inputs for every recording of `direction`, segments in metadata order and each
 /// segment's files in their recorded order.
 ///
 /// Each input carries its chip's name, the segment's point position, the file's coverage and
@@ -23,15 +23,16 @@ use crate::meta::{SegmentFile, SessionMeta, undersampled_note};
 /// A rule violation in `meta`.
 pub fn dataset_inputs<F>(
     meta: &SessionMeta,
-    axis: Axis,
+    direction: impl Into<Direction>,
     mut load: F,
 ) -> Result<Vec<DatasetInput>, SessionError>
 where
     F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
 {
     meta.validate()?;
+    let direction = direction.into();
     let mut inputs = Vec::new();
-    for segment in meta.segments.iter().filter(|s| s.axis == axis) {
+    for segment in meta.segments.iter().filter(|s| s.axis == direction) {
         for file in &segment.files {
             let chip = &meta.chips[file.chip as usize];
             let loaded = load(file).and_then(|samples| {

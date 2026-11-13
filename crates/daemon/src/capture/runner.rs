@@ -667,7 +667,7 @@ impl Run {
             return Err(Failure::certain("the capture is not open"));
         };
         stored.meta.segments.push(SegmentMeta {
-            axis: segment.axis,
+            axis: segment.axis.into(),
             point: segment.point as u32,
             window: Some(window),
             files,

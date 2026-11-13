@@ -108,7 +108,7 @@ impl Spec {
             probe_points: vec![ProbePoint { position: None }],
             chips,
             segments: vec![SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: None,
                 files,

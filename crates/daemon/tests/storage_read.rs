@@ -27,7 +27,7 @@ fn session_of_an_unknown_or_skipped_id_is_not_found() {
     let p = sessions_dir(dir.path()).join("newer").join("meta.json");
     let text = fs::read_to_string(&p)
         .unwrap()
-        .replace("\"format_version\": 1", "\"format_version\": 2");
+        .replace("\"format_version\": 1", "\"format_version\": 3");
     fs::write(&p, text).unwrap();
     let (s, report) = open(dir.path(), BIG);
     assert_eq!(report.skipped.len(), 1);
