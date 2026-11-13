@@ -1,4 +1,4 @@
-import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -207,6 +207,27 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
       </DropdownMenu>
     ) : null;
 
+  const anyOverride = OVERRIDE_FIELDS.some(({ key }) => (texts[key] ?? "") !== "");
+  const resetButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Reset"
+            disabled={!anyOverride}
+            onClick={() => setTexts({})}
+          />
+        }
+      >
+        <RotateCcwIcon />
+      </TooltipTrigger>
+      <TooltipContent side="top">Back to the printer's values</TooltipContent>
+    </Tooltip>
+  );
+
   const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];
     const required = setting.needed && setting.value === null;
@@ -326,11 +347,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
         </div>
       </FormCard>
 
-      <FormCard title="Parameters">
-        <p className="mb-4 text-sm text-muted-foreground">
-          The fields start with the printer's values. Change one to override it; clear it to use the printer's value
-          again.
-        </p>
+      <FormCard title="Parameters" action={resetButton}>
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 space-y-2">
             <p className="text-sm font-medium">Frequency range</p>

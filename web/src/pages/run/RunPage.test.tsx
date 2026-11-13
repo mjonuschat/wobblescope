@@ -427,3 +427,46 @@ describe("the belts form", () => {
     expect("axes" in body).toBe(false);
   });
 });
+
+describe("the run parameters card", () => {
+  beforeEach(() => stubWebSocket({ idle: true }));
+
+  const EXPLANATION = /The fields start with the printer's values/;
+  const reset = () => screen.getByRole("button", { name: "Reset" }) as HTMLButtonElement;
+
+  it("has_no_explanatory_paragraph_on_either_page", async () => {
+    await open();
+    expect(screen.queryByText(EXPLANATION)).toBeNull();
+    cleanup();
+    api({ settings: { ...printerSettings(), machine: { ...printerSettings().machine, kinematics: "corexy" } } });
+    renderRoute("/run/belts");
+    await screen.findByRole("button", { name: "Run Test" });
+    expect(screen.queryByText(EXPLANATION)).toBeNull();
+  });
+
+  it("reset_is_disabled_until_a_parameter_is_overridden", async () => {
+    await open();
+    expect(reset().disabled).toBe(true);
+    fireEvent.change(field(/Hz per second/), { target: { value: "5" } });
+    expect(reset().disabled).toBe(false);
+  });
+
+  it("reset_restores_the_printers_values_and_leaves_chips_mode_and_points_alone", async () => {
+    await open();
+    const printerHzPerSec = field(/Hz per second/).value;
+    const printerEnd = field(/End frequency/).value;
+    await chooseMode("Pulse");
+    fireEvent.change(document.getElementById("point-0-x") as HTMLInputElement, { target: { value: "99" } });
+    fireEvent.change(field(/Hz per second/), { target: { value: "abc" } });
+    fireEvent.change(field(/End frequency/), { target: { value: "100" } });
+    const chipsBefore = screen.getAllByRole("switch").map((s) => s.getAttribute("aria-checked"));
+    fireEvent.click(reset());
+    expect(field(/Hz per second/).value).toBe(printerHzPerSec);
+    expect(field(/End frequency/).value).toBe(printerEnd);
+    expect(screen.queryByText("Enter a number.")).toBeNull();
+    expect(mode()).toContain("Pulse");
+    expect((document.getElementById("point-0-x") as HTMLInputElement).value).toBe("99");
+    expect(screen.getAllByRole("switch").map((s) => s.getAttribute("aria-checked"))).toEqual(chipsBefore);
+    expect(reset().disabled).toBe(true);
+  });
+});
