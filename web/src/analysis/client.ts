@@ -210,17 +210,14 @@ export function createAnalysisClient({
     const alreadyHeld = sameSession ? held : new Set<string>();
     const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name));
 
-    // If nothing is missing, report analysing right away.
     if (missing.length === 0) {
       onProgress?.({ phase: "analysing" });
     } else {
       onProgress?.({ phase: "downloading", loaded: 0, total: null });
     }
 
-    // Check if background downloads match this job's scope.
     const bgMatchesScope = bgIdentity === identity && bgCreatedAt === job.meta.created_at;
 
-    // Per-file progress tracking for the sum reported to onProgress.
     const fileProgress = new Map<string, { loaded: number; total: number | null }>();
     for (const f of missing) {
       fileProgress.set(f.name, { loaded: 0, total: null });
@@ -231,18 +228,11 @@ export function createAnalysisClient({
       let total: number | null = 0;
       for (const fp of fileProgress.values()) {
         loaded += fp.loaded;
-        if (total !== null) {
-          if (fp.total !== null) {
-            total += fp.total;
-          } else {
-            total = null;
-          }
-        }
+        total = total === null || fp.total === null ? null : total + fp.total;
       }
       onProgress?.({ phase: "downloading", loaded, total });
     }
 
-    // Fetch files, reusing background downloads when the scope matches.
     const buffers = await Promise.all(
       missing.map(async (f) => {
         const fileOnBytes: OnBytes = (loaded, total) => {
@@ -250,34 +240,26 @@ export function createAnalysisClient({
           reportDownloadProgress();
         };
 
-        // Try to reuse a background download.
-        if (bgMatchesScope) {
-          const bg = bgDownloads.get(f.name);
-          if (bg) {
-            // Subscribe to updates from the background download.
-            bg.listeners.add(fileOnBytes);
-            // Initialize with current progress.
-            fileProgress.set(f.name, { loaded: bg.loaded, total: bg.total });
-            try {
-              // Race between background download and request abort.
-              const buffer = await Promise.race([
-                bg.promise,
-                new Promise<never>((_, reject) => {
-                  signal?.addEventListener("abort", () => reject(abortError()), { once: true });
-                }),
-              ]);
-              bg.listeners.delete(fileOnBytes);
-              return buffer;
-            } catch {
-              bg.listeners.delete(fileOnBytes);
-              // If the request was aborted, rethrow.
-              if (signal?.aborted) throw abortError();
-              // Otherwise the background download failed; fall through to fetch directly.
-            }
+        const bg = bgMatchesScope ? bgDownloads.get(f.name) : undefined;
+        if (bg) {
+          bg.listeners.add(fileOnBytes);
+          fileProgress.set(f.name, { loaded: bg.loaded, total: bg.total });
+          try {
+            const buffer = await Promise.race([
+              bg.promise,
+              new Promise<never>((_, reject) => {
+                signal?.addEventListener("abort", () => reject(abortError()), { once: true });
+              }),
+            ]);
+            return buffer;
+          } catch {
+            if (signal?.aborted) throw abortError();
+            // Otherwise the background download failed. Fall through to fetch directly.
+          } finally {
+            bg.listeners.delete(fileOnBytes);
           }
         }
 
-        // Fetch directly.
         return job.resultId !== undefined
           ? fetchResultSample(job.resultId, f.chip, f.segment, signal, fileOnBytes)
           : fetchSample(job.sessionId, f.chip, f.segment, signal, fileOnBytes);
@@ -285,7 +267,6 @@ export function createAnalysisClient({
     );
 
     if (signal?.aborted) throw abortError();
-    // The worker failed to load while the files were downloading, so nothing can answer.
     if (worker !== target) throw new Error("The analysis module failed to load");
     if (!sameSession) {
       heldSession = identity;
@@ -294,7 +275,6 @@ export function createAnalysisClient({
     }
     for (const f of missing) {
       held.add(f.name);
-      // Remove from background downloads after posting to worker.
       if (bgMatchesScope) {
         bgDownloads.delete(f.name);
       }
@@ -372,9 +352,7 @@ export function createAnalysisClient({
     }
     waiting[kind]?.reject(new SupersededError());
     waiting[kind] = entry;
-    if (kind === "analysis") {
-      (entry as Extract<Queued, { kind: "analysis" }>).onProgress?.({ phase: "queued" });
-    }
+    if (entry.kind === "analysis") entry.onProgress?.({ phase: "queued" });
     signal?.addEventListener(
       "abort",
       () => {
@@ -390,23 +368,20 @@ export function createAnalysisClient({
   function startPrefetch(job: PrefetchJob) {
     const identity = identityOf(job);
 
-    // If scope changed, clear old background downloads.
     if (bgIdentity !== identity || bgCreatedAt !== job.meta.created_at) {
       clearBackgroundDownloads();
       bgIdentity = identity;
       bgCreatedAt = job.meta.created_at;
-      bgController = new AbortController();
     }
 
-    // Determine which files to skip (held by worker or already downloading).
     const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at;
     const alreadyHeld = sameSession ? held : new Set<string>();
     const filesToFetch = filesFor(job.meta, job.axis).filter(
       (f) => !alreadyHeld.has(f.name) && !bgDownloads.has(f.name),
     );
 
-    // bgController is always defined here because we just created it above if it was missing.
-    const signal = bgController?.signal;
+    bgController ??= new AbortController();
+    const signal = bgController.signal;
     for (const f of filesToFetch) {
       const download: Download = {
         promise: null as unknown as Promise<ArrayBuffer>,
@@ -423,12 +398,11 @@ export function createAnalysisClient({
         }
       };
 
-      const promise = (async () => {
-        return job.resultId !== undefined
-          ? await fetchResultSample(job.resultId, f.chip, f.segment, signal, onBytes)
-          : await fetchSample(job.sessionId, f.chip, f.segment, signal, onBytes);
-      })();
-      // Handle errors: remove from map so a request fetches it again, but do not rethrow.
+      const promise =
+        job.resultId !== undefined
+          ? fetchResultSample(job.resultId, f.chip, f.segment, signal, onBytes)
+          : fetchSample(job.sessionId, f.chip, f.segment, signal, onBytes);
+      // Handle errors. Remove from map so a request fetches it again, but do not rethrow.
       promise.catch(() => {
         bgDownloads.delete(f.name);
       });
@@ -445,7 +419,6 @@ export function createAnalysisClient({
           return;
         }
         const identity = identityOf(job);
-        // If the job's identity or created_at differs from the background scope, clear it.
         if (bgIdentity !== null && (bgIdentity !== identity || bgCreatedAt !== job.meta.created_at)) {
           clearBackgroundDownloads();
         }
@@ -469,7 +442,6 @@ export function createAnalysisClient({
         heldSession = null;
         held = new Set();
       }
-      // Also clear background downloads for this session.
       if (bgIdentity === sessionId) {
         clearBackgroundDownloads();
       }

@@ -45,8 +45,9 @@ export function useSessionAnalysis({
   client = getAnalysisClient(),
 }: Args) {
   const key = queryKeys.analysis(sessionId, axis ?? "X", params, overrides, meta?.created_at, resultId);
-  const currentKeyRef = useRef<string>(JSON.stringify(key));
-  currentKeyRef.current = JSON.stringify(key);
+  const serializedKey = JSON.stringify(key);
+  const currentKeyRef = useRef<string>(serializedKey);
+  currentKeyRef.current = serializedKey;
 
   const [progressState, setProgressState] = useState<{ key: string; progress: AnalysisProgress } | null>(null);
   const prefetchedRef = useRef<Set<string>>(new Set());
@@ -55,9 +56,8 @@ export function useSessionAnalysis({
     queryKey: key,
     queryFn: ({ signal }) => {
       const onProgress = (p: AnalysisProgress) => {
-        const reportKey = JSON.stringify(key);
-        if (reportKey !== currentKeyRef.current) return;
-        setProgressState({ key: reportKey, progress: p });
+        if (serializedKey !== currentKeyRef.current) return;
+        setProgressState({ key: serializedKey, progress: p });
       };
       return client.analyze({ sessionId, resultId, meta: meta!, axis: axis!, params, overrides }, signal, onProgress);
     },
@@ -69,7 +69,6 @@ export function useSessionAnalysis({
     retry: (count, error) => error instanceof ApiClientError && shouldRetry(count, error),
   });
 
-  const serializedKey = JSON.stringify(key);
   const progress: AnalysisProgress =
     progressState?.key === serializedKey ? progressState.progress : { phase: "queued" };
 
@@ -78,7 +77,7 @@ export function useSessionAnalysis({
     const otherAxes = meta.segments.map((s) => s.axis).filter((a) => a !== axis);
     const uniqueAxes = [...new Set(otherAxes)];
     for (const otherAxis of uniqueAxes) {
-      const prefetchKey = `${sessionId}:${resultId ?? "session"}:${otherAxis}`;
+      const prefetchKey = `${sessionId}:${meta.created_at}:${otherAxis}`;
       if (prefetchedRef.current.has(prefetchKey)) continue;
       prefetchedRef.current.add(prefetchKey);
       client.prefetch({ sessionId, resultId, meta, axis: otherAxis });

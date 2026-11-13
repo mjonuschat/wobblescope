@@ -491,23 +491,19 @@ describe("analysis progress", () => {
     // Both fetches are pending, but neither has reported total yet
     expect(progress).toEqual([{ phase: "downloading", loaded: 0, total: null }]);
 
-    // First file reports its progress
     const f1 = findFetch(0, 0)!;
     f1.reportBytes(500, 1000);
     expect(progress.at(-1)).toEqual({ phase: "downloading", loaded: 500, total: null });
 
-    // Second file reports its total
     const f2 = findFetch(1, 0)!;
     f2.reportBytes(200, 500);
     // Now total is the sum since both have reported
     expect(progress.at(-1)).toEqual({ phase: "downloading", loaded: 700, total: 1500 });
 
-    // Both finish
     f1.resolve(new Uint8Array([0, 0]).buffer);
     f2.resolve(new Uint8Array([1, 0]).buffer);
     await flush();
 
-    // Now analysing
     expect(progress.at(-1)).toEqual({ phase: "analysing" });
     expect(worker.analyses()).toHaveLength(1);
 
@@ -522,22 +518,18 @@ describe("analysis progress", () => {
     const first = client.analyze(job(), undefined, (p) => firstProgress.push(p));
     await flush();
 
-    // Second request while first is downloading
     const secondProgress: AnalysisProgress[] = [];
     const second = client.analyze(job({ axis: "Y" }), undefined, (p) => secondProgress.push(p));
     await flush();
 
-    // Second reports queued
     expect(secondProgress).toEqual([{ phase: "queued" }]);
 
-    // Finish first
     findFetch(0, 0)!.resolve(new Uint8Array([0, 0]).buffer);
     findFetch(1, 0)!.resolve(new Uint8Array([1, 0]).buffer);
     await flush();
     worker.answer(worker.analyses()[0].id);
     await first;
 
-    // Second now starts and reports downloading
     await flush();
     expect(secondProgress.at(-1)).toEqual({ phase: "downloading", loaded: 0, total: null });
 
@@ -563,7 +555,6 @@ describe("analysis progress", () => {
     const second = client.analyze(job({ params: { ...defaultParams, scv: 6 } }), undefined, (p) => progress.push(p));
     await flush();
 
-    // No downloading phase, straight to analysing
     expect(progress).toEqual([{ phase: "analysing" }]);
     worker.answer(worker.analyses()[1].id);
     await second;
@@ -571,7 +562,6 @@ describe("analysis progress", () => {
 
   it("prefetch downloads the other axis outside the request slot", async () => {
     const { worker, client, job, prefetchJob, findFetch, fetchSample } = setupWithDeferredFetch();
-    // X analysis
     const xResult = client.analyze(job());
     await flush();
     findFetch(0, 0)!.resolve(new Uint8Array([0, 0]).buffer);
@@ -580,7 +570,6 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await xResult;
 
-    // Prefetch Y
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
 
@@ -609,24 +598,19 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await xResult;
 
-    // Prefetch Y
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
     const yFetch = findFetch(0, 1)!;
 
-    // Request Y while prefetch is still downloading
     const progress: AnalysisProgress[] = [];
     const yResult = client.analyze(job({ axis: "Y" }), undefined, (p) => progress.push(p));
     await flush();
 
-    // Should be downloading (reusing prefetch)
     expect(progress.at(-1)?.phase).toBe("downloading");
 
-    // Report progress on the prefetch - should show in request progress
     yFetch.reportBytes(300, 1000);
     expect(progress.at(-1)).toEqual({ phase: "downloading", loaded: 300, total: 1000 });
 
-    // Complete the prefetch
     yFetch.resolve(new Uint8Array([0, 1]).buffer);
     await flush();
 
@@ -651,18 +635,15 @@ describe("analysis progress", () => {
 
     const callsBefore = fetchSample.mock.calls.length;
 
-    // Prefetch X - already held, no new fetches
     client.prefetch(prefetchJob({ axis: "X" }));
     await flush();
     expect(fetchSample.mock.calls.length).toBe(callsBefore);
 
-    // Prefetch Y starts a fetch
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
     const yFetchesA = fetchSample.mock.calls.filter((c) => c[2] === 1).length;
     expect(yFetchesA).toBe(1);
 
-    // Prefetch Y again - should not start another fetch
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
     const yFetchesB = fetchSample.mock.calls.filter((c) => c[2] === 1).length;
@@ -671,7 +652,6 @@ describe("analysis progress", () => {
 
   it("a failed background download is fetched again by the request", async () => {
     const { worker, client, job, prefetchJob, findFetch, fetchSample, deferred } = setupWithDeferredFetch();
-    // X analysis
     const first = client.analyze(job());
     await flush();
     findFetch(0, 0)!.resolve(new Uint8Array([0, 0]).buffer);
@@ -680,22 +660,18 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await first;
 
-    // Prefetch Y and fail it
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
     const yPrefetch = deferred.find((d) => d.segment === 1)!;
     yPrefetch.reject(new Error("network error"));
     await flush();
 
-    // Request Y - should fetch again
     const yResult = client.analyze(job({ axis: "Y" }));
     await flush();
 
-    // A new fetch was started
     const yFetches = fetchSample.mock.calls.filter((c) => c[2] === 1);
     expect(yFetches.length).toBe(2);
 
-    // Complete it
     const newYFetch = deferred.find((d) => d.segment === 1 && d !== yPrefetch)!;
     newYFetch.resolve(new Uint8Array([0, 1]).buffer);
     await flush();
@@ -705,7 +681,6 @@ describe("analysis progress", () => {
 
   it("opening another session aborts its background downloads", async () => {
     const { worker, client, job, prefetchJob, findFetch, deferred, fetchSample } = setupWithDeferredFetch();
-    // s1 X analysis
     const first = client.analyze(job());
     await flush();
     findFetch(0, 0)!.resolve(new Uint8Array([0, 0]).buffer);
@@ -714,24 +689,20 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await first;
 
-    // Prefetch s1 Y
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
     const s1YFetch = deferred.find((d) => d.key === "s1:0/1")!;
     expect(s1YFetch).toBeDefined();
     expect(s1YFetch.signal?.aborted).toBe(false);
 
-    // Analyze s2 - should abort s1 prefetch
     const s2 = client.analyze(job({ sessionId: "s2", meta: twoAxisMeta("s2") }));
     await flush();
 
     expect(s1YFetch.signal?.aborted).toBe(true);
 
-    // s2 should start its own fetches
     const s2Fetches = fetchSample.mock.calls.filter((c) => c[0] === "s2");
     expect(s2Fetches.length).toBe(2);
 
-    // Complete s2
     for (const d of deferred.filter((d) => d.key.startsWith("s2:"))) {
       d.resolve(new Uint8Array([d.chip, d.segment]).buffer);
     }
@@ -742,7 +713,6 @@ describe("analysis progress", () => {
 
   it("forget drops the background downloads of that session", async () => {
     const { worker, client, job, prefetchJob, findFetch, deferred, fetchSample } = setupWithDeferredFetch();
-    // s1 X analysis
     const first = client.analyze(job());
     await flush();
     findFetch(0, 0)!.resolve(new Uint8Array([0, 0]).buffer);
@@ -751,17 +721,14 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await first;
 
-    // Prefetch Y
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
     const yPrefetch = deferred.find((d) => d.segment === 1)!;
     expect(yPrefetch.signal?.aborted).toBe(false);
 
-    // Forget s1
     client.forget("s1");
     expect(yPrefetch.signal?.aborted).toBe(true);
 
-    // A later analyze(Y) fetches again
     const yResult = client.analyze(job({ axis: "Y" }));
     await flush();
     const yFetches = fetchSample.mock.calls.filter((c) => c[2] === 1);
@@ -786,29 +753,23 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await first;
 
-    // Prefetch Y
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
 
-    // Request Y with abort while waiting on download
     const controller = new AbortController();
     const yFirst = client.analyze(job({ axis: "Y" }), controller.signal);
     await flush();
     controller.abort();
     await expect(yFirst).rejects.toMatchObject({ name: "AbortError" });
 
-    // The background download is NOT aborted
     const yPrefetch = deferred.find((d) => d.segment === 1)!;
     expect(yPrefetch.signal?.aborted).toBe(false);
 
-    // Second Y request uses the same background download
     const ySecond = client.analyze(job({ axis: "Y" }));
     await flush();
 
-    // No new fetch was started
     expect(fetchSample.mock.calls.filter((c) => c[2] === 1).length).toBe(1);
 
-    // Complete and verify
     yPrefetch.resolve(new Uint8Array([0, 1]).buffer);
     await flush();
     worker.answer(worker.analyses()[1].id);
@@ -826,25 +787,20 @@ describe("analysis progress", () => {
     worker.answer(worker.analyses()[0].id);
     await first;
 
-    // Prefetch Y with hanging download
     client.prefetch(prefetchJob({ axis: "Y" }));
     await flush();
 
-    // Analyze Y, waiting on the prefetch
     const controller = new AbortController();
     const yReq = client.analyze(job({ axis: "Y" }), controller.signal);
     await flush();
 
-    // Abort it
     controller.abort();
     await expect(yReq).rejects.toMatchObject({ name: "AbortError" });
 
-    // Start X with different params - should run immediately (slot is free)
     const progress: AnalysisProgress[] = [];
     const xReq = client.analyze(job({ params: { ...defaultParams, scv: 8 } }), undefined, (p) => progress.push(p));
     await flush();
 
-    // X is analysing (not queued), slot was freed immediately
     expect(progress).toEqual([{ phase: "analysing" }]);
 
     // The Y downloads are NOT aborted (shared background download)

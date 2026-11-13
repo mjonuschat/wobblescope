@@ -121,7 +121,7 @@ async function readResponseWithProgress(response: Response, onBytes: OnBytes): P
   let total: number | null = null;
   if (contentLengthHeader !== null) {
     const parsed = Number(contentLengthHeader);
-    if (Number.isFinite(parsed) && parsed >= 0 && Number.isInteger(parsed)) {
+    if (Number.isInteger(parsed) && parsed >= 0) {
       total = parsed;
     }
   }
