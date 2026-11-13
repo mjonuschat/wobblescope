@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
+import { Panel } from "@/components/Panel";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/api/queries";
@@ -11,7 +12,7 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
-import { BeltView } from "./belts/BeltView";
+import { BeltResults } from "./belts/BeltResults";
 import { UnsupportedDirections } from "./belts/UnsupportedDirections";
 import { SaveResultButton } from "./SaveResultDialog";
 import { baselineFor } from "./fit";
@@ -85,12 +86,7 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
   const { meta, summary } = session.data;
   switch (summary.kind) {
     case "belts":
-      return (
-        <div className="space-y-4">
-          {header(null)}
-          <BeltView id={id} meta={meta} />
-        </div>
-      );
+      return <BeltResults id={id} meta={meta} header={header} />;
     case "other":
       return (
         <div className="space-y-4">
@@ -105,11 +101,19 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
 
 /**
  * What shows above the analysis. It gets the Save result button, or null while there is nothing
- * to save yet, and places it where the page wants it.
+ * to save yet, and the belt similarity rows, or null when there are none, and places them where
+ * the page wants them.
  */
-export type Header = (save: ReactNode) => ReactNode;
+export type Header = (save: ReactNode, summary?: ReactNode) => ReactNode;
 
-const defaultHeader: Header = (save) => (save ? <div className="flex justify-end">{save}</div> : null);
+const defaultHeader: Header = (save, summary) =>
+  summary ? (
+    <Panel title="Result" action={save}>
+      {summary}
+    </Panel>
+  ) : save ? (
+    <div className="flex justify-end">{save}</div>
+  ) : null;
 
 function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: Header }) {
   const [selected, setSelected] = useState<Axis | null>(null);

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
@@ -11,9 +11,9 @@ import { apiPath, stubApiWithStatus } from "@/test/status";
 import { FakeSocket, stubWebSocket } from "@/test/websocket";
 
 vi.mock("@/pages/session/SessionResults", () => ({
-  SessionResults: ({ id, header }: { id: string; header?: (save: unknown) => ReactNode }) => (
+  SessionResults: ({ id, header }: { id: string; header?: (save: unknown, summary?: ReactNode) => ReactNode }) => (
     <div>
-      {header?.(null)}
+      {header?.(null, <p>summary rows</p>)}
       <div>session results for {id}</div>
     </div>
   ),
@@ -238,6 +238,12 @@ describe("a finished test", () => {
   it("shows the session's results under a complete or incomplete test", async () => {
     await mount({ test: null, last: done });
     expect(await screen.findByText("session results for test-1")).toBeTruthy();
+  });
+
+  it("puts the session's summary rows inside the Result card", async () => {
+    await mount({ test: null, last: done });
+    const card = await screen.findByRole("region", { name: "Test result" });
+    expect(within(card).getByText("summary rows")).toBeTruthy();
   });
 
   it("shows no session results under a failed test", async () => {

@@ -198,7 +198,7 @@ export function ResultView({ last, onNewTest }: ResultProps) {
   ) : hasNotes ? (
     <div className="space-y-1">{notes}</div>
   ) : null;
-  const card = (save: ReactNode) => (
+  const card = (save: ReactNode, summary?: ReactNode) => (
     <Panel
       title="Result"
       label="Test result"
@@ -218,6 +218,7 @@ export function ResultView({ last, onNewTest }: ResultProps) {
       }
     >
       {details}
+      {summary}
       {last.motion_uncertain && (
         <div className="space-y-1">
           <p role="alert" className="text-sm text-amber-400">

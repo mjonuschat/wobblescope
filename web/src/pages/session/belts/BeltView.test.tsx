@@ -8,7 +8,8 @@ import type { BeltSide } from "@/lib/generated/BeltSide";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import { beltSpectrum, beltsComparison, beltsResult, twoAxisMeta } from "@/test/fixtures";
 
-import { BeltView } from "./BeltView";
+import type { Header } from "../SessionResults";
+import { BeltResults } from "./BeltResults";
 
 const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), belts: vi.fn(), forget: vi.fn() }));
 
@@ -42,12 +43,19 @@ function oneBelt(present: "a" | "b", chip = "adxl345"): BeltsAnalysis {
   };
 }
 
+const header: Header = (_save, summary) => (
+  <section aria-label="Test result">
+    <h2>Result</h2>
+    {summary}
+  </section>
+);
+
 function renderView() {
   const client = createQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  return render(<BeltView id="s1" meta={twoAxisMeta()} />, { wrapper });
+  return render(<BeltResults id="s1" meta={twoAxisMeta()} header={header} />, { wrapper });
 }
 
 beforeEach(() => {
@@ -94,6 +102,18 @@ describe("the belt view", () => {
     expect(screen.queryByText(/NaN/)).toBeNull();
   });
 
+  it("the_similarity_is_in_the_top_card_and_not_in_the_belt_comparison_card", async () => {
+    fake.belts.mockResolvedValue(beltsComparison());
+    renderView();
+    await screen.findByRole("img", { name: "Belt overlay of adxl345" });
+    const top = screen.getByRole("region", { name: "Test result" });
+    expect(within(top).getByText("Estimated similarity")).toBeTruthy();
+    expect(within(top).getByText("Mechanical health")).toBeTruthy();
+    const comparison = screen.getByRole("region", { name: "Chip adxl345" });
+    expect(within(comparison).queryByText("Estimated similarity")).toBeNull();
+    expect(within(comparison).queryByText("Mechanical health")).toBeNull();
+  });
+
   it("a_belt_a_only_session_says_belt_b_was_not_recorded_and_shows_belt_a", async () => {
     fake.belts.mockResolvedValue(oneBelt("a"));
     renderView();
@@ -101,6 +121,8 @@ describe("the belt view", () => {
     expect(screen.getByRole("img", { name: "Belt A (axis 1,-1) of adxl345" })).toBeTruthy();
     expect(screen.queryByRole("img", { name: /overlay|scatter/ })).toBeNull();
     expect(screen.queryByText("Belt A was not recorded.")).toBeNull();
+    expect(screen.queryByText("Estimated similarity")).toBeNull();
+    expect(screen.queryByText("Mechanical health")).toBeNull();
   });
 
   it("a_belt_b_only_session_says_belt_a_was_not_recorded_and_shows_belt_b", async () => {
@@ -138,6 +160,7 @@ describe("the belt view", () => {
     );
     renderView();
     expect(await screen.findByText(/Belt A could not be used: the recording is clipped/)).toBeTruthy();
+    expect(screen.queryByText("Estimated similarity")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Include belt A anyway" }));
     expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ includeExcluded: true });
@@ -167,6 +190,9 @@ describe("the belt view", () => {
     expect(await screen.findByText(/health of adxl345/)).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
     expect(await screen.findByText(/health of lis2dw ebb36/)).toBeTruthy();
+    const top = screen.getByRole("region", { name: "Test result" });
+    expect(within(top).getByText(/health of lis2dw ebb36/)).toBeTruthy();
+    expect(within(top).queryByText(/health of adxl345/)).toBeNull();
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ chip: "lis2dw ebb36" });
   });
 
@@ -188,6 +214,7 @@ describe("the belt view", () => {
     fireEvent.change(field, { target: { value: "120" } });
     expect(screen.queryByRole("alert")).toBeNull();
     expect(await screen.findByText(/kept to 120/)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Test result" })).getByText(/kept to 120/)).toBeTruthy();
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ maxFreq: 120 });
   });
 

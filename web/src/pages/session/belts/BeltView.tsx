@@ -1,6 +1,4 @@
-import { useState } from "react";
-
-import { useBelts } from "@/analysis/useBelts";
+import type { useBelts } from "@/analysis/useBelts";
 import { HintLabel } from "@/components/HintLabel";
 import { Panel } from "@/components/Panel";
 import { UnitInput } from "@/components/UnitInput";
@@ -12,22 +10,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BeltSide } from "@/lib/generated/BeltSide";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import { chipLabel } from "@/lib/format";
-import type { SessionMeta } from "@/lib/generated/SessionMeta";
-import { parseNumber } from "@/lib/parse";
 
 import { BeltOffsetTable } from "./BeltOffsetTable";
-
-const DEFAULT_MAX_FREQ = 200;
-const MIN_MAX_FREQ = 10;
+import { MIN_MAX_FREQ, parseMaxFreq } from "./maxFreq";
 
 /** As Shake&Tune names them. */
 const BELT_LABEL = { a: "A (axis 1,-1)", b: "B (axis 1, 1)" } as const;
-
-/** The analysis maximum from typed text; `undefined` when it is not a finite number of at least 10. */
-function parseMaxFreq(text: string): number | undefined {
-  const value = parseNumber(text);
-  return value !== undefined && Number.isFinite(value) && value >= MIN_MAX_FREQ ? value : undefined;
-}
 
 /** Why a recording that is there gave no spectrum, or nothing when it did. */
 function reasonsOf(side: BeltSide): string[] {
@@ -36,25 +24,11 @@ function reasonsOf(side: BeltSide): string[] {
   return dropped ? [dropped] : side.failure ? [side.failure] : [];
 }
 
-function Similarity({ value, health }: { value: number; health: string }) {
-  return (
-    <Panel title="Belt similarity">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">Estimated similarity</dt>
-        <dd>{Number.isFinite(value) ? `${value.toFixed(1)}%` : "\u2013"}</dd>
-        <dt className="text-muted-foreground">Mechanical health</dt>
-        <dd>{health} (experimental)</dd>
-      </dl>
-    </Panel>
-  );
-}
-
 function Comparison({ analysis }: { analysis: BeltsAnalysis }) {
   const { result, chip } = analysis;
   if (!result) return null;
   return (
     <>
-      <Similarity value={result.similarity} health={result.health} />
       <EChart option={beltOverlayOption(result)} label={`Belt overlay of ${chip}`} height={380} />
       <BeltOffsetTable offsets={result.offsets} />
       <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} />
@@ -106,29 +80,27 @@ function Outcome({ analysis, onInclude }: { analysis: BeltsAnalysis; onInclude: 
   );
 }
 
-export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
-  const chips = meta.chips.map((c) => c.name);
-  const [selected, setSelected] = useState<string | null>(null);
-  const chip = selected && chips.includes(selected) ? selected : chips[0];
-  const [maxFreqText, setMaxFreqText] = useState(String(DEFAULT_MAX_FREQ));
-  const [maxFreq, setMaxFreq] = useState(DEFAULT_MAX_FREQ);
-  const [includedChip, setIncludedChip] = useState<string | null>(null);
-  const query = useBelts({
-    sessionId: id,
-    meta,
-    chip: chip ?? "",
-    maxFreq,
-    includeExcluded: includedChip === chip,
-    enabled: chip !== undefined,
-  });
+export function BeltView({
+  chips,
+  chip,
+  onChipChange,
+  maxFreqText,
+  onMaxFreqTextChange,
+  query,
+  onInclude,
+}: {
+  chips: string[];
+  chip: string;
+  onChipChange: (chip: string) => void;
+  maxFreqText: string;
+  onMaxFreqTextChange: (text: string) => void;
+  query: ReturnType<typeof useBelts>;
+  onInclude: () => void;
+}) {
   const parsed = parseMaxFreq(maxFreqText);
-
-  if (chip === undefined) {
-    return <p className="text-sm">This session has no recordings to analyse.</p>;
-  }
   return (
     <Panel title="Belt comparison" label={`Chip ${chip}`}>
-      <Tabs value={chip} onValueChange={setSelected}>
+      <Tabs value={chip} onValueChange={onChipChange}>
         <TabsList variant="line">
           {chips.map((name) => (
             <TabsTrigger key={name} value={name} className="after:bg-primary">
@@ -148,9 +120,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
           value={maxFreqText}
           aria-invalid={parsed === undefined}
           onChange={(event) => {
-            setMaxFreqText(event.target.value);
-            const next = parseMaxFreq(event.target.value);
-            if (next !== undefined) setMaxFreq(next);
+            onMaxFreqTextChange(event.target.value);
           }}
         />
         {parsed === undefined && (
@@ -167,7 +137,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
           The belt comparison failed: {query.error.message}
         </p>
       ) : (
-        <Outcome analysis={query.data} onInclude={() => setIncludedChip(chip)} />
+        <Outcome analysis={query.data} onInclude={onInclude} />
       )}
     </Panel>
   );
