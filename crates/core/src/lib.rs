@@ -13,6 +13,7 @@ pub mod samples;
 pub mod score;
 pub mod shaper;
 pub mod signal;
+pub mod spectrogram;
 pub mod spectrum;
 
 pub use error::CoreError;

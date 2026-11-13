@@ -473,6 +473,19 @@ pub struct Oracle {
     pub pin: String,
     pub cases: BTreeMap<String, OracleCase>,
     pub edge_cases: Vec<OracleEdge>,
+    pub spectrograms: BTreeMap<String, OracleSpectrogram>,
+}
+
+/// Shake&Tune's spectrogram of one recording: all the times, the matrix cut at 200 Hz for the
+/// first rows, and the 5th percentile and maximum of the whole matrix.
+#[derive(Deserialize)]
+pub struct OracleSpectrogram {
+    pub n_segments: usize,
+    pub times: Vec<f64>,
+    pub freq_bins: Vec<f64>,
+    pub rows: Vec<Vec<f64>>,
+    pub floor: f64,
+    pub max: f64,
 }
 
 pub fn shaketune() -> Oracle {

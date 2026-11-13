@@ -121,6 +121,41 @@ def edge_psds(common) -> dict:
     }
 
 
+def load_spectrogram_module(root: Path):
+    path = root / "shaketune" / "helpers" / "spectrogram.py"
+    spec = importlib.util.spec_from_file_location("st_spectrogram", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def read_samples(path: Path) -> np.ndarray:
+    """A Klipper accelerometer CSV (plain or zstd) as an (N, 4) array of t, x, y, z."""
+    if path.suffix == ".zst":
+        text = subprocess.run(["zstd", "-d", "-c", str(path)], check=True, capture_output=True, text=True).stdout
+    else:
+        text = path.read_text()
+    rows = [[float(v) for v in line.split(",")] for line in text.splitlines() if line and not line.startswith("#")]
+    return np.array(rows)
+
+
+SPECTROGRAM_ROWS = 20
+
+
+def spectrogram_entry(module, data: np.ndarray) -> dict:
+    """Shake&Tune's compute_spectrogram, with the matrix cut at 200 Hz and kept for the first rows."""
+    pdata, times, freqs = module.compute_spectrogram(data)
+    keep = freqs <= MAX_FREQ
+    return {
+        "n_segments": int(pdata.shape[1]),
+        "times": [float(t) for t in times],
+        "freq_bins": [float(f) for f in freqs[keep]],
+        "rows": [[float(v) for v in pdata[keep, i]] for i in range(SPECTROGRAM_ROWS)],
+        "floor": float(np.percentile(pdata, 5)),
+        "max": float(pdata.max()),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shaketune", required=True, type=Path)
@@ -146,7 +181,14 @@ def main() -> None:
         edge_case(common, name, psd) for name, psd in edge_psds(common).items()
     ]
 
-    out = {"pin": PIN, "cases": cases, "edge_cases": edge_cases}
+    spectrogram_module = load_spectrogram_module(root)
+    data_dir = HERE.parent / "data"
+    spectrograms = {
+        "chip_a": spectrogram_entry(spectrogram_module, read_samples(data_dir / "synthetic" / "chip_a.csv")),
+        "ws_x_adxl345": spectrogram_entry(spectrogram_module, read_samples(data_dir / "real" / "ws_x_adxl345.csv.zst")),
+    }
+
+    out = {"pin": PIN, "cases": cases, "edge_cases": edge_cases, "spectrograms": spectrograms}
     (HERE / "shaketune.json").write_text(json.dumps(out, indent=1) + "\n")
 
 
