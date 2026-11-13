@@ -4,6 +4,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use common::{Spec, app, json, open, request, seal_in, send};
 use serde_json::{Value, json};
+use sha2::Digest;
 use tempfile::TempDir;
 use wobblescope::storage::Storage;
 
@@ -159,10 +160,26 @@ async fn downloads_a_result_sample_byte_for_byte() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers["content-type"], "application/octet-stream");
-    assert_eq!(headers["cache-control"], "no-store");
+    assert_eq!(headers["cache-control"], "private, no-cache");
     let on_disk =
         std::fs::read(common::sessions_dir(d.path()).join("s1").join("c1-s0.zst")).unwrap();
     assert_eq!(body, on_disk);
+    let expected_etag = format!(
+        "\"{}\"",
+        sha2::Sha256::digest(&body)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
+    assert_eq!(headers["etag"], expected_etag);
+    let mut req = request("GET", &format!("/api/results/{id}/samples/1/0"));
+    req.headers_mut()
+        .insert("if-none-match", expected_etag.parse().unwrap());
+    let (status, headers, body) = send(&app, req).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+    assert!(body.is_empty());
+    assert_eq!(headers["etag"], expected_etag);
+    assert_eq!(headers["cache-control"], "private, no-cache");
     let (status, _, _) = send(
         &app,
         request("GET", &format!("/api/results/{id}/samples/9/0")),

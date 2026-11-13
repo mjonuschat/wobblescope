@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use axum::http::StatusCode;
 use common::{Spec, app, json, open, probe, request, seal_in, send, sessions_dir, settings};
+use sha2::Digest;
 use tempfile::TempDir;
 use wobblescope::storage::Storage;
 
@@ -142,7 +143,7 @@ async fn detail_returns_the_summary_and_the_stored_metadata() {
 }
 
 #[tokio::test]
-async fn samples_are_the_stored_file_unchanged_and_uncached() {
+async fn samples_are_the_stored_file_with_a_content_etag() {
     let dir = TempDir::new().unwrap();
     seal_in(dir.path(), &Spec::new("b", "2026-10-02T10:00:00Z"));
     let (s, _) = open(dir.path(), BIG);
@@ -150,11 +151,85 @@ async fn samples_are_the_stored_file_unchanged_and_uncached() {
         send(&app(Some(s)), request("GET", "/api/sessions/b/samples/0/0")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers["content-type"], "application/octet-stream");
-    assert_eq!(headers["cache-control"], "no-store");
-    assert_eq!(
-        body,
-        std::fs::read(sessions_dir(dir.path()).join("b/c0-s0.zst")).unwrap()
+    assert_eq!(headers["cache-control"], "private, no-cache");
+    let on_disk = std::fs::read(sessions_dir(dir.path()).join("b/c0-s0.zst")).unwrap();
+    assert_eq!(body, on_disk);
+    let expected_etag = format!(
+        "\"{}\"",
+        sha2::Sha256::digest(&body)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
     );
+    assert_eq!(headers["etag"], expected_etag);
+}
+
+#[tokio::test]
+async fn a_matching_if_none_match_answers_304_without_a_body() {
+    let dir = TempDir::new().unwrap();
+    seal_in(dir.path(), &Spec::new("b", "2026-10-02T10:00:00Z"));
+    let (s, _) = open(dir.path(), BIG);
+    let app = app(Some(s));
+    let (_, headers, _) = send(&app, request("GET", "/api/sessions/b/samples/0/0")).await;
+    let etag = headers["etag"].to_str().unwrap();
+    for test_tag in [
+        etag.to_owned(),
+        format!("W/{}", etag),
+        format!("\"x\", {}", etag),
+        "*".to_owned(),
+    ] {
+        let mut req = request("GET", "/api/sessions/b/samples/0/0");
+        *req.headers_mut() = axum::http::HeaderMap::new();
+        req.headers_mut()
+            .insert("if-none-match", test_tag.parse().unwrap());
+        let (status, headers, body) = send(&app, req).await;
+        assert_eq!(status, StatusCode::NOT_MODIFIED, "tag: {}", test_tag);
+        assert!(body.is_empty(), "tag: {}", test_tag);
+        assert_eq!(headers["etag"], etag, "tag: {}", test_tag);
+        assert_eq!(
+            headers["cache-control"], "private, no-cache",
+            "tag: {}",
+            test_tag
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_stale_if_none_match_answers_200_with_the_body() {
+    let dir = TempDir::new().unwrap();
+    seal_in(dir.path(), &Spec::new("b", "2026-10-02T10:00:00Z"));
+    let (s, _) = open(dir.path(), BIG);
+    let app = app(Some(s));
+    let mut req = request("GET", "/api/sessions/b/samples/0/0");
+    req.headers_mut()
+        .insert("if-none-match", "\"0000\"".parse().unwrap());
+    let (status, _, body) = send(&app, req).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.is_empty());
+}
+
+#[tokio::test]
+async fn a_reused_id_with_other_bytes_is_never_answered_304() {
+    let dir1 = TempDir::new().unwrap();
+    let dir2 = TempDir::new().unwrap();
+    seal_in(dir1.path(), &Spec::new("b", "2026-10-02T10:00:00Z"));
+    seal_in(
+        dir2.path(),
+        &Spec::new("b", "2026-10-02T10:00:00Z").samples(300),
+    );
+    let (s1, _) = open(dir1.path(), BIG);
+    let (s2, _) = open(dir2.path(), BIG);
+    let app1 = app(Some(s1));
+    let app2 = app(Some(s2));
+    let (_, headers1, body1) = send(&app1, request("GET", "/api/sessions/b/samples/0/0")).await;
+    let etag1 = headers1["etag"].to_str().unwrap();
+    let mut req = request("GET", "/api/sessions/b/samples/0/0");
+    req.headers_mut()
+        .insert("if-none-match", etag1.parse().unwrap());
+    let (status, headers2, body2) = send(&app2, req).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(body1, body2);
+    assert_ne!(headers1["etag"], headers2["etag"]);
 }
 
 #[tokio::test]

@@ -3,18 +3,57 @@
 use std::io::Read;
 
 use axum::body::{Body, Bytes};
-use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH,
+};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use tokio::io::AsyncReadExt;
 
 use super::error::{ApiError, ApiPath};
 use super::{Store, blocking};
+use crate::results::container::sha256_hex;
+
+/// Builds a sample file response with content-based caching. The browser is told to revalidate
+/// every time (so a reused id never gets stale bytes), but if the content still matches its
+/// stored etag, the server answers `304 Not Modified` without sending the body again.
+pub(super) fn sample_response(headers: &HeaderMap, bytes: Vec<u8>) -> Response {
+    let etag = format!("\"{}\"", sha256_hex(&bytes));
+    if let Some(if_none_match) = headers.get(IF_NONE_MATCH)
+        && let Ok(value) = if_none_match.to_str()
+    {
+        let tags: Vec<&str> = value.split(',').map(|s| s.trim()).collect();
+        for tag in tags {
+            let normalized = tag.strip_prefix("W/").unwrap_or(tag);
+            if normalized == "*" || normalized == etag {
+                return (
+                    StatusCode::NOT_MODIFIED,
+                    [
+                        (ETAG, etag.clone()),
+                        (CACHE_CONTROL, "private, no-cache".to_owned()),
+                    ],
+                )
+                    .into_response();
+            }
+        }
+    }
+    (
+        [
+            (CONTENT_TYPE, "application/octet-stream".to_owned()),
+            (CACHE_CONTROL, "private, no-cache".to_owned()),
+            (ETAG, etag),
+        ],
+        bytes,
+    )
+        .into_response()
+}
 
 /// Serves one recording exactly as stored. The session stays leased while its file is read.
-/// Nothing is cached: a deleted id can be written again with different data.
+/// Cached by content, revalidated every time, so a reused id never gets stale bytes.
 pub(super) async fn download(
     Store(storage): Store,
     ApiPath((id, chip, segment)): ApiPath<(String, u32, usize)>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let bytes = blocking(move || {
         let mut guard = storage.open_sample(&id, chip, segment)?;
@@ -25,14 +64,7 @@ pub(super) async fn download(
         Ok(bytes)
     })
     .await?;
-    Ok((
-        [
-            (CONTENT_TYPE, "application/octet-stream"),
-            (CACHE_CONTROL, "no-store"),
-        ],
-        bytes,
-    )
-        .into_response())
+    Ok(sample_response(&headers, bytes))
 }
 
 /// `GET /api/sessions/{id}/download`: the session as a zip with its `meta.json` and sample files,
