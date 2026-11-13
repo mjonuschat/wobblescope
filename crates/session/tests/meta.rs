@@ -477,6 +477,36 @@ parity_test! {
 }
 
 parity_test! {
+    fn legacy_unit_vector_sessions_remain_valid_without_axes_map_run() {
+        for len in 1..=3 {
+            let mut m = axes_map_meta();
+            m.axes_map_run = None;
+            m.segments.truncate(len);
+            m.mode = Some(Mode::Pulse);
+            m.segments.iter_mut().for_each(|s| s.point = 0);
+            assert_eq!(m.kind(), SessionKind::Other);
+            m.validate().unwrap();
+            let mut value = serde_json::to_value(&m).unwrap();
+            value.as_object_mut().unwrap().remove("axes_map_run");
+            assert_eq!(SessionMeta::from_json(&value.to_string()).unwrap(), m);
+        }
+    }
+}
+
+parity_test! {
+    fn axes_map_run_rejects_empty_and_malformed_metadata() {
+        let mut m = axes_map_meta();
+        m.segments.clear();
+        m.outcome = Outcome::Failed { reason: "stopped".to_owned() };
+        assert_eq!(m.kind(), SessionKind::AxesMap);
+        assert_eq!(invalid_field(m.validate().unwrap_err()), "axes_map_run");
+        let mut value = serde_json::to_value(axes_map_meta()).unwrap();
+        value["axes_map_run"] = serde_json::json!({"speed": 80});
+        assert!(SessionMeta::from_json(&value.to_string()).is_err());
+    }
+}
+
+parity_test! {
     fn an_axes_map_session_round_trips_as_version_2() {
         let m = axes_map_meta();
         assert_eq!(m.kind(), SessionKind::AxesMap);
@@ -492,7 +522,7 @@ parity_test! {
 }
 
 parity_test! {
-    fn kind_is_axes_map_for_the_first_one_to_three_unit_moves_in_order() {
+    fn axes_map_run_identifies_calibrations_even_with_invalid_directions() {
         for len in 1..=3 {
             let mut m = axes_map_meta();
             m.segments.truncate(len);
@@ -500,19 +530,22 @@ parity_test! {
         }
         let mut swapped = axes_map_meta();
         swapped.segments.swap(0, 1);
-        assert_eq!(swapped.kind(), SessionKind::Other);
+        assert_eq!(swapped.kind(), SessionKind::AxesMap);
+        assert_eq!(invalid_field(swapped.validate().unwrap_err()), "axes_map_run");
         let mut skipped = axes_map_meta();
         skipped.segments.remove(0);
-        assert_eq!(skipped.kind(), SessionKind::Other);
+        assert_eq!(skipped.kind(), SessionKind::AxesMap);
+        assert_eq!(invalid_field(skipped.validate().unwrap_err()), "axes_map_run");
         assert_eq!(serde_json::to_string(&SessionKind::AxesMap).unwrap(), "\"axesmap\"");
     }
 }
 
 parity_test! {
-    fn axes_map_run_is_required_by_and_kept_to_an_axes_map_session() {
+    fn axes_map_run_requires_valid_calibration_segments() {
         let mut m = axes_map_meta();
         m.axes_map_run = None;
-        assert_eq!(invalid_field(m.validate().unwrap_err()), "axes_map_run");
+        assert_eq!(m.kind(), SessionKind::Other);
+        m.validate().unwrap();
 
         let mut r = capture_meta();
         r.axes_map_run = axes_map_meta().axes_map_run;
@@ -526,7 +559,7 @@ parity_test! {
             window: None,
             files: vec![],
         });
-        assert_eq!(four.kind(), SessionKind::Other);
+        assert_eq!(four.kind(), SessionKind::AxesMap);
         assert_eq!(invalid_field(four.validate().unwrap_err()), "axes_map_run");
     }
 }

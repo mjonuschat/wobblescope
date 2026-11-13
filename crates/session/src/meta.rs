@@ -224,7 +224,7 @@ pub struct SegmentMeta {
     pub files: Vec<SegmentFile>,
 }
 
-/// What kind of analysis a session's segments allow, derived from them and never stored.
+/// What kind of analysis a session allows, derived from its metadata and never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
@@ -391,24 +391,17 @@ impl SessionMeta {
         }
     }
 
-    /// The session's kind, from its segments. `Belts` needs at least one segment, every segment
-    /// a belt direction, no belt twice and all at one point. `AxesMap` needs one to three
-    /// segments whose directions are the first of [`AXES_MAP_DIRECTIONS`], in order.
+    /// The session's kind. Run settings identify `AxesMap`; `Belts` needs at least one
+    /// segment, every segment a belt direction, no belt twice and all at one point.
     pub fn kind(&self) -> SessionKind {
+        if self.axes_map_run.is_some() {
+            return SessionKind::AxesMap;
+        }
         let Some(first) = self.segments.first() else {
             return SessionKind::Axes;
         };
         if self.segments.iter().all(|s| s.axis.axis().is_some()) {
             return SessionKind::Axes;
-        }
-        if self.segments.len() <= AXES_MAP_DIRECTIONS.len()
-            && self
-                .segments
-                .iter()
-                .zip(AXES_MAP_DIRECTIONS)
-                .all(|(s, d)| s.axis == d)
-        {
-            return SessionKind::AxesMap;
         }
         let belts = self.segments.iter().enumerate().all(|(i, s)| {
             (s.axis == Direction::BELT_A || s.axis == Direction::BELT_B)
@@ -525,19 +518,23 @@ impl SessionMeta {
         Ok(())
     }
 
-    /// The rules of an axes-map session, and that no other session carries its run settings.
+    /// The rules of an axes-map session.
     fn validate_axes_map(&self) -> Result<(), SessionError> {
-        if self.kind() != SessionKind::AxesMap {
-            if self.axes_map_run.is_some() {
-                return Err(invalid(
-                    "axes_map_run",
-                    "only an axes-map session has run settings",
-                ));
-            }
+        if self.axes_map_run.is_none() {
             return Ok(());
         }
-        if self.axes_map_run.is_none() {
-            return Err(invalid("axes_map_run", "an axes-map session needs it"));
+        if self.segments.is_empty()
+            || self.segments.len() > AXES_MAP_DIRECTIONS.len()
+            || !self
+                .segments
+                .iter()
+                .zip(AXES_MAP_DIRECTIONS)
+                .all(|(s, d)| s.axis == d)
+        {
+            return Err(invalid(
+                "axes_map_run",
+                "an axes-map session needs one to three ordered +X, +Y, +Z segments",
+            ));
         }
         if self.mode.is_some() {
             return Err(invalid("mode", "an axes-map session has no test mode"));
