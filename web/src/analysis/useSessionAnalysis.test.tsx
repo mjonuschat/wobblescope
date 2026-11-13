@@ -425,4 +425,50 @@ describe("useSessionAnalysis", () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(prefetch).toHaveBeenCalledTimes(1);
   });
+
+  it("prefetches again when returning to a session after another session", async () => {
+    const prefetch = vi.fn();
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage(message) {
+        if (message.type !== "analyze") return;
+        const response: WorkerResponse = {
+          type: "result",
+          id: message.id,
+          result: {
+            analysis: analysis(),
+            snippets: { worstCase: "s", worstCasePerformance: null, perChip: [["s"], null] },
+          },
+        };
+        queueMicrotask(() => this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>));
+      },
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.prefetch = prefetch;
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const meta = twoAxisMeta();
+    const { result, rerender } = renderHook(
+      ({ sid, m }) => useSessionAnalysis({ sessionId: sid, meta: m, axis: "X", params: defaultParams, client }),
+      { wrapper, initialProps: { sid: "s1", m: meta } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).toHaveBeenCalledTimes(1);
+    expect(prefetch).toHaveBeenCalledWith({ sessionId: "s1", resultId: undefined, meta, axis: "Y" });
+    rerender({ sid: "s2", m: meta });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).toHaveBeenCalledTimes(2);
+    expect(prefetch).toHaveBeenCalledWith({ sessionId: "s2", resultId: undefined, meta, axis: "Y" });
+    rerender({ sid: "s1", m: meta });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).toHaveBeenCalledTimes(3);
+    expect(prefetch).toHaveBeenCalledWith({ sessionId: "s1", resultId: undefined, meta, axis: "Y" });
+  });
 });

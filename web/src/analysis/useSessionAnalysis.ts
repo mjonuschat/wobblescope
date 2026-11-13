@@ -50,7 +50,7 @@ export function useSessionAnalysis({
   currentKeyRef.current = serializedKey;
 
   const [progressState, setProgressState] = useState<{ key: string; progress: AnalysisProgress } | null>(null);
-  const prefetchedRef = useRef<Set<string>>(new Set());
+  const prefetchedScopeRef = useRef<string | null>(null);
 
   const query = useQuery({
     queryKey: key,
@@ -74,12 +74,12 @@ export function useSessionAnalysis({
 
   useEffect(() => {
     if (!query.isSuccess || !meta || !axis || resultId !== undefined) return;
+    const scope = `${sessionId}:${meta.created_at}`;
+    if (prefetchedScopeRef.current === scope) return;
+    prefetchedScopeRef.current = scope;
     const otherAxes = meta.segments.map((s) => s.axis).filter((a) => a !== axis);
     const uniqueAxes = [...new Set(otherAxes)];
     for (const otherAxis of uniqueAxes) {
-      const prefetchKey = `${sessionId}:${meta.created_at}:${otherAxis}`;
-      if (prefetchedRef.current.has(prefetchKey)) continue;
-      prefetchedRef.current.add(prefetchKey);
       client.prefetch({ sessionId, resultId, meta, axis: otherAxis });
     }
   }, [query.isSuccess, sessionId, resultId, meta, axis, client]);
