@@ -9,6 +9,7 @@ import { ChipResult } from "./ChipResult";
 import { CombinedResult } from "./CombinedResult";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { RecommendationCard } from "./RecommendationCard";
+import { type SpectrogramSource, SpectrogramPanel } from "./SpectrogramPanel";
 import { effectiveSettings } from "./fit";
 
 const ALL_CHIPS = "*all-chips*";
@@ -20,11 +21,13 @@ interface Props {
   result: AnalysisResult;
   meta: SessionMeta;
   overrides: string[];
+  /** Where the samples come from, for the spectrogram. */
+  source: SpectrogramSource;
   onOverridesChange?: (overrides: string[]) => void;
   readOnly?: boolean;
 }
 
-export function AxisResults({ result, meta, overrides, onOverridesChange, readOnly }: Props) {
+export function AxisResults({ result, meta, overrides, source, onOverridesChange, readOnly }: Props) {
   const { analysis, snippets } = result;
   const settings = effectiveSettings(analysis);
   const maxFreq = settings?.max_freq ?? 200;
@@ -83,13 +86,16 @@ export function AxisResults({ result, meta, overrides, onOverridesChange, readOn
         <CombinedResult summed={analysis.summed} maxFreq={maxFreq} switcher={switcher} />
       ) : (
         shown && (
-          <ChipResult
-            chip={shown}
-            switcher={switcher}
-            snippets={snippets.perChip[shownIndex]}
-            maxFreq={maxFreq}
-            decisions={analysis.eligibility.decisions}
-          />
+          <>
+            <ChipResult
+              chip={shown}
+              switcher={switcher}
+              snippets={snippets.perChip[shownIndex]}
+              maxFreq={maxFreq}
+              decisions={analysis.eligibility.decisions}
+            />
+            <SpectrogramPanel key={shown.chip} chip={shown} meta={meta} source={source} maxFreq={maxFreq} />
+          </>
         )
       )}
     </div>

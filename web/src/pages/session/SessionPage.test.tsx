@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AnalysisResult } from "@/analysis/protocol";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
-import { analysis, decision, recommendation, twoAxisMeta } from "@/test/fixtures";
+import { analysis, decision, recommendation, spectrogram, twoAxisMeta } from "@/test/fixtures";
 import { stubApiWithStatus as stubApi } from "@/test/status";
 import { renderRoute } from "@/test/render";
 import { summary } from "@/test/summaries";
 
-const fake = vi.hoisted(() => ({ analyze: vi.fn(), forget: vi.fn() }));
+const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn() }));
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
@@ -57,6 +57,7 @@ function clipboard(value: unknown) {
 
 beforeEach(() => {
   fake.analyze.mockReset();
+  fake.spectrogram.mockReset();
 });
 afterEach(() => clipboard(undefined));
 
@@ -120,6 +121,30 @@ describe("the session view", () => {
     expect(list.className).toContain("flex-wrap");
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(list.textContent?.match(/·/g)).toHaveLength(1);
+  });
+
+  it("shows the spectrogram panel under the chip panel, hides it on All Chips and starts each chip closed", async () => {
+    const a = analysis();
+    a.per_chip = [
+      { ...a.per_chip[0], chip: "adxl345" },
+      { ...a.per_chip[1], chip: "lis2dw ebb36" },
+    ];
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
+    fake.spectrogram.mockResolvedValue(spectrogram());
+    serve();
+    renderRoute("/sessions/s1");
+    const chip = await chipCard("adxl345");
+    const panel = await screen.findByRole("region", { name: "Spectrogram" });
+    expect(chip.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Show spectrogram" }));
+    await within(panel).findByRole("img");
+
+    fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
+    const other = await screen.findByRole("region", { name: "Spectrogram" });
+    expect(within(other).getByRole("button", { name: "Show spectrogram" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "All Chips" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Spectrogram" })).toBeNull());
   });
 
   it("sets the chart scale in a dialog next to the expand button and restores auto from it", async () => {

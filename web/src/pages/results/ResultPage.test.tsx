@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
 import type { Analysis } from "@/lib/generated/Analysis";
-import { analysis, candidate, recommendation } from "@/test/fixtures";
+import { analysis, candidate, recommendation, spectrogram } from "@/test/fixtures";
 import { renderRoute } from "@/test/render";
 import { resultDetail } from "@/test/results";
 import { stubApiWithStatus as stubApi } from "@/test/status";
 
-const fake = vi.hoisted(() => ({ analyze: vi.fn(), forget: vi.fn() }));
+const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn() }));
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
@@ -35,6 +35,7 @@ function serve(detail = resultDetail()) {
 
 beforeEach(() => {
   fake.analyze.mockReset();
+  fake.spectrogram.mockReset();
 });
 
 function pending(_job: unknown, signal?: AbortSignal) {
@@ -141,6 +142,24 @@ describe("the result page", () => {
     expect((await screen.findAllByText("PERFORMANCE SNIPPET")).length).toBeGreaterThan(0);
     expect(screen.getByText("For low vibrations")).toBeTruthy();
     expect(screen.getByText("For performance")).toBeTruthy();
+  });
+
+  it("a saved result gets the spectrogram panel and fetches from the result route", async () => {
+    const detail = resultDetail();
+    const saved = detail.record.axes[0].analysis;
+    saved.per_chip = saved.per_chip.map((c, i) => ({ ...c, chip: ["adxl345", "lis2dw ebb36"][i] }));
+    fake.analyze.mockImplementation(pending);
+    fake.spectrogram.mockResolvedValue(spectrogram());
+    serve(detail);
+    renderRoute("/results/r1");
+    fireEvent.click(await screen.findByRole("button", { name: "Show spectrogram" }));
+    expect(await screen.findByRole("img", { name: /Spectrogram of adxl345/ })).toBeTruthy();
+    expect(fake.spectrogram.mock.calls[0][0]).toMatchObject({
+      sessionId: "result:r1",
+      resultId: "r1",
+      axis: "X",
+      chip: "adxl345",
+    });
   });
 
   it("switches between the axes of a result", async () => {

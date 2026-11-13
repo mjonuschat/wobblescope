@@ -17,12 +17,14 @@ import { baselineFor } from "./fit";
 type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
 
 function AnalysisView({
+  sessionId,
   query,
   axis,
   meta,
   overrides,
   onOverridesChange,
 }: {
+  sessionId: string;
   query: AnalysisQuery;
   axis: Axis;
   meta: SessionMeta;
@@ -39,7 +41,15 @@ function AnalysisView({
       </p>
     );
   }
-  return <AxisResults result={query.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
+  return (
+    <AxisResults
+      result={query.data}
+      meta={meta}
+      overrides={overrides}
+      source={{ sessionId, axis }}
+      onOverridesChange={onOverridesChange}
+    />
+  );
 }
 
 export function SessionResults({ id, header = defaultHeader }: { id: string; header?: Header }) {
@@ -113,7 +123,14 @@ function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: H
               ))}
             </TabsList>
           </Tabs>
-          <AnalysisView query={query} axis={axis} meta={meta} overrides={overrides} onOverridesChange={setOverrides} />
+          <AnalysisView
+            sessionId={id}
+            query={query}
+            axis={axis}
+            meta={meta}
+            overrides={overrides}
+            onOverridesChange={setOverrides}
+          />
           <FitSettingsForm
             key={applied ? "applied" : axis}
             baseline={baseline}

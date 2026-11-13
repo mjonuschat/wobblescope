@@ -84,7 +84,13 @@ function AxisView({ rid, detail, axis }: { rid: string; detail: ResultDetail; ax
   return (
     <div className="space-y-4">
       <Comparison rid={rid} detail={detail} axis={axis} />
-      <AxisResults result={result} meta={meta} overrides={record.overrides} readOnly />
+      <AxisResults
+        result={result}
+        meta={meta}
+        overrides={record.overrides}
+        source={{ sessionId: `result:${rid}`, resultId: rid, axis: axis.axis }}
+        readOnly
+      />
     </div>
   );
 }
