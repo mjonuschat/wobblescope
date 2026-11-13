@@ -22,7 +22,7 @@ import { SessionResults } from "@/pages/session/SessionResults";
 
 import { LiveChart } from "./LiveChart";
 import { useWarningToasts } from "./useWarningToasts";
-import { directionName, formatDuration, formatPoint } from "./planning";
+import { formatDuration, formatPosition, segmentLabel } from "./planning";
 
 const PHASE_WORDS: Record<Phase, string> = {
   positioning: "Moving to the test point",
@@ -79,7 +79,7 @@ function useCountdown(active: boolean, onDone: () => void): number | null {
 export function ProgressView({ test, connected, ended, onNext }: ProgressProps) {
   useWarningToasts(test.id, test.chips);
   const left = useCountdown(ended !== null, onNext);
-  const where = test.axis && test.position ? ` (${directionName(test.axis)} at ${formatPoint(test.position)})` : "";
+  const segment = `${test.segment} of ${test.segments}${test.axis ? `: ${segmentLabel(test.axis)}` : ""}`;
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
   return (
@@ -90,13 +90,18 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
         </p>
       )}
       <Panel title="Progress">
-        <div className="space-y-1">
-          <p className="font-medium">{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</p>
-          <p className="text-sm">
-            Segment {test.segment} of {test.segments}
-            {where}
-          </p>
-        </div>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-muted-foreground">Status</dt>
+          <dd>{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</dd>
+          <dt className="text-muted-foreground">Segment</dt>
+          <dd>{segment}</dd>
+          {test.position && (
+            <>
+              <dt className="text-muted-foreground">Position</dt>
+              <dd>{formatPosition(test.position)}</dd>
+            </>
+          )}
+        </dl>
         <Progress value={percent} aria-label="Segment progress" />
         <p className="text-sm text-muted-foreground">
           {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}

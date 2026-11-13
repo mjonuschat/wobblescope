@@ -24,11 +24,6 @@ export function formatDuration(seconds: number): string {
   return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
 }
 
-/** A point as `x, y, z`. */
-export function formatPoint(point: readonly number[]): string {
-  return point.map((v) => String(Math.round(v * 1000) / 1000)).join(", ");
-}
-
 export type PointPattern = "center" | "five" | "nine";
 
 export const POINT_PATTERNS: { value: PointPattern; label: string }[] = [
@@ -74,11 +69,20 @@ export function patternPoints(pattern: PointPattern, limits: AxisLimits, z: numb
   }
 }
 
-/** The belt a diagonal direction tests, or the vector's own text for any other direction. */
-export function directionName(axis: Direction): string {
-  if (typeof axis === "string") return axis;
+/**
+ * The progress panel's name for a segment's direction: the belt a diagonal tests, `X Axis` or
+ * `Y Axis`, or the vector's own text for any other direction.
+ */
+export function segmentLabel(axis: Direction): string {
+  if (typeof axis === "string") return `${axis} Axis`;
   const [x, y, z] = axis.Vector;
-  if (z === 0 && x === 1 && y === -1) return "belt A";
-  if (z === 0 && x === 1 && y === 1) return "belt B";
+  if (z === 0 && x === 1 && y === -1) return "Belt A (Axis 1,-1)";
+  if (z === 0 && x === 1 && y === 1) return "Belt B (Axis 1,1)";
   return axis.Vector.join(",");
+}
+
+/** A point as `X 75, Y 75, Z 20 mm`. */
+export function formatPosition(point: readonly [number, number, number]): string {
+  const [x, y, z] = point.map((v) => String(Math.round(v * 1000) / 1000));
+  return `X ${x}, Y ${y}, Z ${z} mm`;
 }

@@ -86,12 +86,12 @@ const currentStep = () => document.querySelector('[aria-current="step"]')?.textC
 describe("a running test", () => {
   it("shows the segment and the elapsed time and follows the latest event", async () => {
     await mount({ test: running, last: null });
-    expect(await screen.findByText("Segment 3 of 4 (X at 150.5, 154, 20)")).toBeTruthy();
+    expect(await screen.findByText("3 of 4: X Axis")).toBeTruthy();
     expect(screen.getByText("12 s of about 2 min 25 s")).toBeTruthy();
     expect(screen.getByRole("img", { name: /Signal against frequency/ })).toBeTruthy();
 
     send({ test: { ...running, segment: 4, elapsed_seconds: 30 }, last: null });
-    expect(screen.getByText(/Segment 4 of 4/)).toBeTruthy();
+    expect(screen.getByText(/^4 of 4/)).toBeTruthy();
     expect(screen.getByText("30 s of about 2 min 25 s")).toBeTruthy();
   });
 
@@ -125,7 +125,7 @@ describe("a running test", () => {
       send({ test: null, last: done });
       expect(await screen.findByText("The test finished.")).toBeTruthy();
       expect(currentStep()).toContain("Measuring");
-      expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
+      expect(screen.getByText(/^3 of 4/)).toBeTruthy();
       expect(screen.getByText("Continuing to the results in 5 s")).toBeTruthy();
       expect(nextButton().disabled).toBe(false);
       fireEvent.click(nextButton());
@@ -213,14 +213,14 @@ describe("a running test", () => {
     await screen.findByText("Progress");
     act(() => FakeSocket.latest.drop());
     expect(await screen.findByText(/Connection lost, this may be out of date/)).toBeTruthy();
-    expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
+    expect(screen.getByText(/^3 of 4/)).toBeTruthy();
 
     // The page reconnects on its own; the new snapshot replaces the old state.
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(1), { timeout: 3000 });
     act(() => FakeSocket.latest.open());
     send({ test: { ...running, segment: 4 }, last: null });
     expect(screen.queryByText(/Connection lost/)).toBeNull();
-    expect(screen.getByText(/Segment 4 of 4/)).toBeTruthy();
+    expect(screen.getByText(/^4 of 4/)).toBeTruthy();
   });
 });
 
@@ -342,11 +342,24 @@ describe("belt tests", () => {
 
   it("the_progress_view_names_the_segment_belt_A_or_B", async () => {
     await mount({ test: { ...running, segment: 1, segments: 2, axis: { Vector: [1, -1, 0] } }, last: null });
-    expect(await screen.findByText("Segment 1 of 2 (belt A at 150.5, 154, 20)")).toBeTruthy();
+    expect(await screen.findByText("1 of 2: Belt A (Axis 1,-1)")).toBeTruthy();
+    expect(screen.getByText("Status").nextElementSibling?.textContent).toBe("Measuring");
+    expect(screen.getByText("Segment")).toBeTruthy();
+    expect(screen.getByText("Position")).toBeTruthy();
+    expect(screen.getByText("X 150.5, Y 154, Z 20 mm")).toBeTruthy();
     send({ test: { ...running, segment: 2, segments: 2, axis: { Vector: [1, 1, 0] } }, last: null });
-    expect(screen.getByText("Segment 2 of 2 (belt B at 150.5, 154, 20)")).toBeTruthy();
-    send({ test: { ...running, axis: { Vector: [1, 2, 0] } }, last: null });
-    expect(screen.getByText(/\(1,2,0 at 150.5, 154, 20\)/)).toBeTruthy();
+    expect(screen.getByText("2 of 2: Belt B (Axis 1,1)")).toBeTruthy();
+  });
+
+  it("an_unknown_vector_keeps_its_numbers", async () => {
+    await mount({ test: { ...running, axis: { Vector: [1, 2, 0] } }, last: null });
+    expect(await screen.findByText("3 of 4: 1,2,0")).toBeTruthy();
+  });
+
+  it("a_missing_position_or_axis_drops_that_part", async () => {
+    await mount({ test: { ...running, position: null, axis: null }, last: null });
+    expect(await screen.findByText("3 of 4")).toBeTruthy();
+    expect(screen.queryByText("Position")).toBeNull();
   });
 
   it.each(["failed", "no_session"] as const)(
