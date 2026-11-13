@@ -39,6 +39,17 @@ impl WasmSession {
         self.inner.add_file(&name, bytes);
     }
 
+    /// Analyses every chip in an axes-map calibration session, returning `AxesMapChip[]`.
+    /// A chip whose files are not all loaded is `Incomplete`; one whose analysis fails is
+    /// `Failed`. The call throws only when the session is not a valid axes-map session.
+    pub fn analyze_axes_map(&self) -> Result<JsValue, JsError> {
+        let chips = self
+            .inner
+            .analyze_axes_map()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        to_js(&chips)
+    }
+
     /// Analyses one axis (`"X"` or `"Y"`). Fit parameters left out take Klipper's defaults.
     /// `overrides` names chips to include although their health or coverage would exclude them.
     pub fn analyze(

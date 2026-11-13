@@ -9,12 +9,15 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 use wobblescope_core::CORE_VERSION;
+use wobblescope_core::axes_map::analyze_axes_map as core_analyze_axes_map;
 use wobblescope_core::error::CoreError;
 use wobblescope_core::fit::{Axis, FitParams, Recommendation};
 use wobblescope_core::multichip::{Analysis, analyze};
 use wobblescope_core::spectrum::{LiveSpectrum, Peak, Spectrum, top_peaks};
 use wobblescope_session::SessionError;
-use wobblescope_session::bridge::{apply_overrides, dataset_inputs};
+use wobblescope_session::bridge::{
+    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, dataset_inputs,
+};
 use wobblescope_session::codec::decode_samples;
 use wobblescope_session::meta::SessionMeta;
 
@@ -89,6 +92,54 @@ impl Session {
         })?;
         apply_overrides(&mut inputs, overrides);
         Ok(analyze(&inputs, params)?)
+    }
+
+    /// Analyses every chip in an axes-map calibration session. A chip whose files are not all
+    /// loaded is reported as [`AxesMapChip::Incomplete`], not an error of the call. A chip whose
+    /// analysis fails is reported as [`AxesMapChip::Failed`]; the other chips are still returned.
+    ///
+    /// # Errors
+    /// [`AnalyzeError::Session`] when `meta` is not a valid axes-map session.
+    pub fn analyze_axes_map(&self) -> Result<Vec<AxesMapChip>, AnalyzeError> {
+        let params = axes_map_params(&self.meta)?;
+        let captures = axes_map_inputs(&self.meta, |file| {
+            let bytes = self
+                .files
+                .get(&file.sample_file)
+                .ok_or_else(|| SessionError::Invalid {
+                    field: file.sample_file.clone(),
+                    reason: "sample file is not loaded".to_owned(),
+                })?;
+            decode_samples(bytes)
+        })?;
+        let mut out = Vec::with_capacity(captures.len());
+        for capture in captures {
+            match capture {
+                ChipCapture::Incomplete { chip, missing } => {
+                    out.push(AxesMapChip::Incomplete { chip, missing });
+                }
+                ChipCapture::Ready {
+                    input,
+                    health,
+                    health_notes,
+                } => {
+                    let chip = input.chip.clone();
+                    match core_analyze_axes_map(&input, &params) {
+                        Ok(result) => out.push(AxesMapChip::Analysed {
+                            chip,
+                            health,
+                            health_notes,
+                            result,
+                        }),
+                        Err(e) => out.push(AxesMapChip::Failed {
+                            chip,
+                            message: e.to_string(),
+                        }),
+                    }
+                }
+            }
+        }
+        Ok(out)
     }
 }
 

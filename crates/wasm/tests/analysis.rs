@@ -9,10 +9,11 @@ use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
+use wobblescope_session::bridge::AxesMapChip;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::{
-    ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source,
-    TimeDomain, TimeWindow, sample_file_name,
+    AXES_MAP_FORMAT_VERSION, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
+    SessionKind, SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
 };
 use wobblescope_wasm::{Session, config_snippet};
 
@@ -271,6 +272,281 @@ mod js {
         assert!(
             msg.contains("chips") || msg.contains("missing field"),
             "{msg}"
+        );
+    }
+}
+
+// ── axes-map helpers ────────────────────────────────────────────────────────
+
+/// Sample rate used for synthetic axes-map recordings.
+const AXES_MAP_RATE: f64 = 3200.0;
+/// Peak velocity (mm/s) a healthy segment sees. Above the analysis floor.
+const AXES_MAP_ABOVE: f64 = 80.0;
+
+/// A trapezoid velocity move: `peak` mm/s on chip axis `axis`. Pass `None` for noise only.
+/// Gravity on chip Z, deterministic noise on every axis.
+///
+/// Copied from the approach in `crates/core/src/axes_map/bed.rs` tests. Not imported
+/// because that helper is private to its crate.
+fn axes_map_trapezoid(axis: Option<usize>, peak: f64) -> RawSamples {
+    let n = (0.6 * AXES_MAP_RATE) as usize;
+    let ramp = 0.1;
+    let mut cols = [vec![0.0; n], vec![0.0; n], vec![9810.0; n]];
+    let mut state = 12345_u32;
+    for i in 0..n {
+        let t = i as f64 / AXES_MAP_RATE;
+        for col in &mut cols {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            col[i] += (f64::from(state >> 16) / 65536.0 - 0.5) * 100.0;
+        }
+        if let Some(k) = axis {
+            let a = peak / ramp;
+            cols[k][i] += if t < ramp {
+                a
+            } else if t > 0.3 && t < 0.3 + ramp {
+                -a
+            } else {
+                0.0
+            };
+        }
+    }
+    let [x, y, z] = cols;
+    RawSamples {
+        t: (0..n).map(|i| i as f64 / AXES_MAP_RATE).collect(),
+        x,
+        y,
+        z,
+    }
+}
+
+/// A minimal axes-map chip with the given name and health.
+fn am_chip(name: &str, health: Health, notes: Vec<String>) -> ChipMeta {
+    ChipMeta {
+        name: name.to_owned(),
+        chip_type: None,
+        nominal_rate_hz: None,
+        observed_rate_hz: None,
+        axes_map: None,
+        mounting: None,
+        health,
+        health_notes: notes,
+    }
+}
+
+/// A `SegmentFile` entry with complete coverage and the standard file name.
+fn am_file(chip: u32, segment: usize, count: usize) -> SegmentFile {
+    SegmentFile {
+        chip,
+        sample_file: sample_file_name(chip as usize, segment),
+        sample_count: count as u32,
+        coverage: Coverage::Complete,
+        health: None,
+        health_notes: Vec::new(),
+    }
+}
+
+/// Axes-map run settings that match the AXES_MAP_ABOVE peak (speed 80 mm/s, accel 3000 mm/s²).
+fn am_run() -> AxesMapRun {
+    AxesMapRun {
+        speed: 80.0,
+        accel: 3000.0,
+        z_height: 30.0,
+        travel_speed: 150.0,
+        max_z_velocity: Some(100.0),
+        max_z_accel: Some(3000.0),
+    }
+}
+
+/// A valid axes-map `SessionMeta` with `chips.len()` chips and three full segments.
+/// `counts[chip][segment]` is the sample count for that file. Pass `None` to omit the file.
+fn axes_map_meta(
+    chips: Vec<ChipMeta>,
+    counts: Vec<[Option<usize>; 3]>,
+    segments: usize,
+) -> SessionMeta {
+    let n_chips = chips.len();
+    SessionMeta {
+        format_version: AXES_MAP_FORMAT_VERSION,
+        id: "am-wasm-test".to_owned(),
+        created_at: "2026-11-12T00:00:00Z".to_owned(),
+        source: Source::Capture,
+        time_domain: TimeDomain::KlipperPrintTime,
+        kind: SessionKind::AxesMap,
+        axes_map_run: Some(am_run()),
+        mode: None,
+        settings: None,
+        printer: None,
+        outcome: Outcome::Complete,
+        notes: vec![],
+        probe_points: (0..segments)
+            .map(|_| ProbePoint { position: None })
+            .collect(),
+        chips,
+        segments: (0..segments)
+            .map(|s| SegmentMeta {
+                axis: Axis::X,
+                point: s as u32,
+                window: None,
+                files: (0..n_chips)
+                    .filter_map(|c| {
+                        counts
+                            .get(c)
+                            .and_then(|row| row[s])
+                            .map(|n| am_file(c as u32, s, n))
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+/// Three-sweep recordings for chip `c` as encoded bytes. Axes 0, 1, 2 each in turn.
+fn am_encoded_segs(_c: usize) -> [Vec<u8>; 3] {
+    std::array::from_fn(|seg| {
+        encode_samples(&axes_map_trapezoid(Some(seg), AXES_MAP_ABOVE)).unwrap()
+    })
+}
+
+/// Sample count produced by `axes_map_trapezoid`.
+fn am_n() -> usize {
+    (0.6 * AXES_MAP_RATE) as usize
+}
+
+/// Creates a `Session` with one chip and all three recordings loaded.
+fn am_loaded_1chip() -> Session {
+    let n = am_n();
+    let chip = am_chip("adxl345", Health::Ok, vec![]);
+    let meta = axes_map_meta(vec![chip], vec![[Some(n), Some(n), Some(n)]], 3);
+    let mut s = Session::new(meta).unwrap();
+    for (seg, bytes) in am_encoded_segs(0).into_iter().enumerate() {
+        s.add_file(&sample_file_name(0, seg), bytes);
+    }
+    s
+}
+
+// ── axes-map tests ───────────────────────────────────────────────────────────
+
+parity_test! {
+    fn a_calibration_session_analyses_every_chip() {
+        let s = am_loaded_1chip();
+        let chips = s.analyze_axes_map().unwrap();
+        assert_eq!(chips.len(), 1);
+        assert!(
+            matches!(&chips[0], AxesMapChip::Analysed { chip, .. } if chip == "adxl345"),
+            "expected Analysed, got {chips:?}",
+        );
+    }
+}
+
+parity_test! {
+    fn an_incomplete_chip_is_reported_not_analysed() {
+        // Session with only two segments: Z sweep is absent.
+        let n = am_n();
+        let chip = am_chip("adxl345", Health::Ok, vec![]);
+        let meta = axes_map_meta(vec![chip], vec![[Some(n), Some(n), Some(n)]], 2);
+        let mut s = Session::new(meta).unwrap();
+        for seg in 0..2 {
+            s.add_file(&sample_file_name(0, seg), am_encoded_segs(0)[seg].clone());
+        }
+        let chips = s.analyze_axes_map().unwrap();
+        assert_eq!(chips.len(), 1);
+        assert!(
+            matches!(&chips[0], AxesMapChip::Incomplete { missing, .. } if missing.contains('Z')),
+            "expected Incomplete naming Z, got {chips:?}",
+        );
+    }
+}
+
+parity_test! {
+    fn a_missing_sample_file_makes_only_that_chip_incomplete() {
+        let n = am_n();
+        let chips_meta = vec![
+            am_chip("adxl345", Health::Ok, vec![]),
+            am_chip("lis2dw", Health::Ok, vec![]),
+        ];
+        let counts = vec![
+            [Some(n), Some(n), Some(n)],
+            [Some(n), Some(n), Some(n)],
+        ];
+        let meta = axes_map_meta(chips_meta, counts, 3);
+        let mut s = Session::new(meta).unwrap();
+        // Load all files for chip 0 but omit chip 1's first segment.
+        for seg in 0..3 {
+            s.add_file(&sample_file_name(0, seg), am_encoded_segs(0)[seg].clone());
+        }
+        for seg in 1..3 {
+            s.add_file(&sample_file_name(1, seg), am_encoded_segs(1)[seg].clone());
+        }
+        // c1-s0.zst is never added.
+        let chips = s.analyze_axes_map().unwrap();
+        assert_eq!(chips.len(), 2);
+        assert!(
+            matches!(&chips[0], AxesMapChip::Analysed { chip, .. } if chip == "adxl345"),
+            "chip 0 should be Analysed, got {chips:?}",
+        );
+        assert!(
+            matches!(&chips[1], AxesMapChip::Incomplete { missing, .. } if missing.contains("c1-s0.zst")),
+            "chip 1 should be Incomplete naming c1-s0.zst, got {chips:?}",
+        );
+    }
+}
+
+parity_test! {
+    fn a_degraded_chip_is_analysed_with_its_notes() {
+        let n = am_n();
+        let note = "mounting screw loose".to_owned();
+        let chip = am_chip("adxl345", Health::Degraded, vec![note.clone()]);
+        let meta = axes_map_meta(vec![chip], vec![[Some(n), Some(n), Some(n)]], 3);
+        let mut s = Session::new(meta).unwrap();
+        for (seg, bytes) in am_encoded_segs(0).into_iter().enumerate() {
+            s.add_file(&sample_file_name(0, seg), bytes);
+        }
+        let chips = s.analyze_axes_map().unwrap();
+        assert_eq!(chips.len(), 1);
+        let AxesMapChip::Analysed { health, health_notes, .. } = &chips[0] else {
+            panic!("expected Analysed, got {chips:?}");
+        };
+        assert_eq!(*health, Health::Degraded);
+        assert!(health_notes.contains(&note), "notes: {health_notes:?}");
+    }
+}
+
+parity_test! {
+    fn a_chip_with_too_few_samples_fails_alone() {
+        let n = am_n();
+        // Chip 1 has only 5 samples per segment, below MIN_SAMPLES=10.
+        let tiny = 5_usize;
+        let chips_meta = vec![
+            am_chip("adxl345", Health::Ok, vec![]),
+            am_chip("lis2dw", Health::Ok, vec![]),
+        ];
+        let counts = vec![
+            [Some(n), Some(n), Some(n)],
+            [Some(tiny), Some(tiny), Some(tiny)],
+        ];
+        let meta = axes_map_meta(chips_meta, counts, 3);
+        let mut s = Session::new(meta).unwrap();
+        for seg in 0..3 {
+            s.add_file(&sample_file_name(0, seg), am_encoded_segs(0)[seg].clone());
+        }
+        for seg in 0..3 {
+            let tiny_data = RawSamples {
+                t: (0..tiny).map(|i| i as f64 / AXES_MAP_RATE).collect(),
+                x: vec![0.0; tiny],
+                y: vec![0.0; tiny],
+                z: vec![9810.0; tiny],
+            };
+            s.add_file(&sample_file_name(1, seg), encode_samples(&tiny_data).unwrap());
+        }
+        let chips = s.analyze_axes_map().unwrap();
+        assert_eq!(chips.len(), 2);
+        assert!(
+            matches!(&chips[0], AxesMapChip::Analysed { chip, .. } if chip == "adxl345"),
+            "chip 0 should be Analysed, got {chips:?}",
+        );
+        assert!(
+            matches!(&chips[1], AxesMapChip::Failed { chip, .. } if chip == "lis2dw"),
+            "chip 1 should be Failed, got {chips:?}",
         );
     }
 }
