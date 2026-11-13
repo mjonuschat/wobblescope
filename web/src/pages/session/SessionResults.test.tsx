@@ -82,16 +82,19 @@ describe("the session results", () => {
     serve("belts", vectorMeta());
     renderResults();
     const top = await screen.findByRole("region", { name: "Result" });
-    expect(within(top).getByText("Estimated similarity").nextElementSibling?.textContent).toBe("87.7%");
+    expect((await within(top).findByText("Estimated similarity")).nextElementSibling?.textContent).toBe("87.7%");
+    expect(within(top).getByRole("tab", { name: "ADXL345" })).toBeTruthy();
     expect(within(top).getByText("Mechanical health")).toBeTruthy();
   });
 
-  it("belts_history_page_has_no_result_card_without_a_comparison", async () => {
+  it("belts_history_page_shows_the_chip_tabs_but_no_similarity_without_a_comparison", async () => {
     fake.belts.mockResolvedValue({ ...beltsComparison(), result: null });
     serve("belts", vectorMeta());
     renderResults();
     await screen.findByText("There is no comparison without both belts.");
-    expect(screen.queryByRole("region", { name: "Result" })).toBeNull();
+    const top = screen.getByRole("region", { name: "Result" });
+    expect(within(top).getByRole("tab", { name: "ADXL345" })).toBeTruthy();
+    expect(within(top).queryByText("Estimated similarity")).toBeNull();
   });
 
   it("other_renders_the_no_analysis_message_and_lists_the_segments", async () => {

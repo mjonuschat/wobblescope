@@ -116,12 +116,13 @@ describe("the belt view", () => {
     const profile = await screen.findByRole("region", { name: "Belt frequency profile of ADXL345" });
     const cross = await screen.findByRole("region", { name: "Cross-belt comparison of ADXL345" });
     expect(within(profile).getByText("Belt Frequency Profile")).toBeTruthy();
-    expect(within(profile).getByRole("tab", { name: "ADXL345" })).toBeTruthy();
+    expect(within(profile).queryByRole("tab")).toBeNull();
     expect(within(profile).getByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
     expect(within(profile).queryByRole("img", { name: /scatter/ })).toBeNull();
     expect(within(cross).getByText("Cross-belt Comparison")).toBeTruthy();
     expect(within(cross).getByRole("img", { name: "Cross-belt scatter of adxl345" })).toBeTruthy();
     const top = screen.getByRole("region", { name: "Test result" });
+    expect(within(top).getByRole("tab", { name: "ADXL345" })).toBeTruthy();
     expect(top.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(profile.compareDocumentPosition(cross) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

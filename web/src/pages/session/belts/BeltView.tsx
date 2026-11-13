@@ -4,7 +4,6 @@ import { Waiting } from "@/components/Waiting";
 import { EChart } from "@/components/charts/EChart";
 import { beltOverlayOption, beltScatterOption, beltSingleOption } from "@/components/charts/options";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BeltSide } from "@/lib/generated/BeltSide";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import { chipLabel } from "@/lib/format";
@@ -79,15 +78,11 @@ function Outcome({ analysis, onInclude }: { analysis: BeltsAnalysis; onInclude: 
 }
 
 export function BeltView({
-  chips,
   chip,
-  onChipChange,
   query,
   onInclude,
 }: {
-  chips: string[];
   chip: string;
-  onChipChange: (chip: string) => void;
   query: ReturnType<typeof useBelts>;
   onInclude: () => void;
 }) {
@@ -95,15 +90,6 @@ export function BeltView({
   return (
     <>
       <Panel title="Belt Frequency Profile" label={`Belt frequency profile of ${chipLabel(chip)}`}>
-        <Tabs value={chip} onValueChange={onChipChange}>
-          <TabsList variant="line">
-            {chips.map((name) => (
-              <TabsTrigger key={name} value={name} className="after:bg-primary">
-                {chipLabel(name)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
         {query.isPending ? (
           <Waiting>Comparing the belts of {chip}…</Waiting>
         ) : query.isError ? (

@@ -1,6 +1,8 @@
 import { type ReactNode, useState } from "react";
 
 import { useBelts } from "@/analysis/useBelts";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { chipLabel } from "@/lib/format";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import type { Header } from "../SessionResults";
@@ -19,6 +21,21 @@ function BeltSummary({ similarity, health }: { similarity: number; health: strin
       <dt className="text-muted-foreground">Mechanical health</dt>
       <dd>{healthGrade(health)} (experimental)</dd>
     </dl>
+  );
+}
+
+/** The chip switcher; it sits in the Result card and drives both cards below it. */
+function ChipTabs({ chips, chip, onChange }: { chips: string[]; chip: string; onChange: (chip: string) => void }) {
+  return (
+    <Tabs value={chip} onValueChange={onChange}>
+      <TabsList variant="line">
+        {chips.map((name) => (
+          <TabsTrigger key={name} value={name} className="after:bg-primary">
+            {chipLabel(name)}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
 
@@ -41,7 +58,13 @@ export function BeltResults({ id, meta, header }: { id: string; meta: SessionMet
   });
 
   const result = query.data ? query.data.result : null;
-  const summary: ReactNode = result ? <BeltSummary similarity={result.similarity} health={result.health} /> : null;
+  const summary: ReactNode =
+    chip === undefined ? null : (
+      <div className="space-y-4">
+        <ChipTabs chips={chips} chip={chip} onChange={setSelected} />
+        {result && <BeltSummary similarity={result.similarity} health={result.health} />}
+      </div>
+    );
 
   return (
     <div className="space-y-4">
@@ -49,13 +72,7 @@ export function BeltResults({ id, meta, header }: { id: string; meta: SessionMet
       {chip === undefined ? (
         <p className="text-sm">This session has no recordings to analyse.</p>
       ) : (
-        <BeltView
-          chips={chips}
-          chip={chip}
-          onChipChange={setSelected}
-          query={query}
-          onInclude={() => setIncludedChip(chip)}
-        />
+        <BeltView chip={chip} query={query} onInclude={() => setIncludedChip(chip)} />
       )}
     </div>
   );
