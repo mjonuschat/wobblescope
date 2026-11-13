@@ -182,7 +182,7 @@ export function beltsResult(over: Partial<BeltsResult> = {}): BeltsResult {
       { freq_delta: 50, amplitude_delta_percent: 12.345 },
     ],
     similarity: 87.65,
-    health: "Mechanical health: good",
+    health: "Good mechanical health",
     max_freq: 200,
     ...over,
   };

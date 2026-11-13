@@ -38,9 +38,14 @@ function reasonsOf(side: BeltSide): string[] {
 
 function Similarity({ value, health }: { value: number; health: string }) {
   return (
-    <p className="text-sm">
-      Estimated similarity: {Number.isFinite(value) ? `${value.toFixed(1)}%` : "\u2013"} | {health} (experimental)
-    </p>
+    <Panel title="Belt similarity">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt className="text-muted-foreground">Estimated similarity</dt>
+        <dd>{Number.isFinite(value) ? `${value.toFixed(1)}%` : "\u2013"}</dd>
+        <dt className="text-muted-foreground">Mechanical health</dt>
+        <dd>{health} (experimental)</dd>
+      </dl>
+    </Panel>
   );
 }
 

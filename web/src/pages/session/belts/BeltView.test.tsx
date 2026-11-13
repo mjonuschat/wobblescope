@@ -60,8 +60,10 @@ describe("the belt view", () => {
     renderView();
     expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Cross-belt scatter of adxl345" })).toBeTruthy();
-    expect(screen.getByText(/Estimated similarity: 87\.7%/)).toBeTruthy();
-    expect(screen.getByText(/Mechanical health: good \(experimental\)/)).toBeTruthy();
+    expect(screen.getByText("Estimated similarity").nextElementSibling?.textContent).toBe("87.7%");
+    expect(screen.getByText("Mechanical health").nextElementSibling?.textContent).toBe(
+      "Good mechanical health (experimental)",
+    );
     const rows = screen.getAllByRole("row");
     expect(
       within(rows[0])
@@ -85,9 +87,10 @@ describe("the belt view", () => {
       beltsComparison("adxl345", beltsResult({ similarity: Number.NaN, health: "Unknown mechanical health" })),
     );
     renderView();
-    expect(
-      await screen.findByText(/Estimated similarity: \u2013 \| Unknown mechanical health \(experimental\)/),
-    ).toBeTruthy();
+    expect((await screen.findByText("Estimated similarity")).nextElementSibling?.textContent).toBe("\u2013");
+    expect(screen.getByText("Mechanical health").nextElementSibling?.textContent).toBe(
+      "Unknown mechanical health (experimental)",
+    );
     expect(screen.queryByText(/NaN/)).toBeNull();
   });
 
