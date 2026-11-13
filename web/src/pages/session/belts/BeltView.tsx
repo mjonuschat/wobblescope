@@ -29,9 +29,9 @@ function Comparison({ analysis }: { analysis: BeltsAnalysis }) {
   if (!result) return null;
   return (
     <>
-      <EChart option={beltOverlayOption(result)} label={`Belt overlay of ${chip}`} height={380} />
+      <EChart option={beltOverlayOption(result)} label={`Belt overlay of ${chip}`} height={380} zoom />
       <BeltOffsetTable offsets={result.offsets} />
-      <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} />
+      <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
     </>
   );
 }
@@ -53,7 +53,9 @@ function SideStatus({
     return <p role="status" className="text-sm">{`Belt ${name} was not recorded.`}</p>;
   }
   if (side.spectrum) {
-    return <EChart option={beltSingleOption(side.spectrum, label)} label={`Belt ${label} of ${chip}`} height={380} />;
+    return (
+      <EChart option={beltSingleOption(side.spectrum, label)} label={`Belt ${label} of ${chip}`} height={380} zoom />
+    );
   }
   const reasons = reasonsOf(side);
   return (

@@ -22,7 +22,7 @@ describe("the registered chart parts", () => {
     expect(render(beltOverlayOption(beltsResult()))).toContain("<svg");
   });
 
-  it("draw the zoom toolbox of every belt chart", () => {
+  it("zoom every belt chart from dispatched actions", () => {
     const result = beltsResult();
     for (const option of [
       beltOverlayOption(result),
@@ -31,16 +31,14 @@ describe("the registered chart parts", () => {
     ]) {
       const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 600, height: 400 });
       chart.setOption(option);
-      const applied = chart.getOption() as {
-        toolbox?: { feature: { dataZoom: { icon: { zoom: string; back: string }; title: object } } }[];
-        dataZoom?: unknown[];
-      };
-      expect(applied.toolbox?.length).toBeGreaterThan(0);
-      const { icon, title } = applied.toolbox![0].feature.dataZoom;
-      expect(icon.zoom).toMatch(/^path:\/\//);
-      expect(icon.back).toMatch(/^path:\/\//);
-      expect(title).toEqual({ zoom: "Zoom in", back: "Reset zoom" });
-      expect(applied.dataZoom?.length).toBeGreaterThan(0);
+      type Zoom = { start: number; end: number }[];
+      const ranges = () => (chart.getOption() as { dataZoom: Zoom }).dataZoom.map(({ start, end }) => [start, end]);
+      const full = ranges();
+      chart.dispatchAction({ type: "takeGlobalCursor", key: "dataZoomSelect", dataZoomSelectActive: true });
+      chart.dispatchAction({ type: "dataZoom", dataZoomIndex: 0, start: 20, end: 60 });
+      expect(ranges()[0]).toEqual([20, 60]);
+      chart.dispatchAction({ type: "restore" });
+      expect(ranges()).toEqual(full);
       chart.dispose();
     }
   });

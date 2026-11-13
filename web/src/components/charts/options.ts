@@ -15,7 +15,6 @@ import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { AXIS_LABEL, type Axis3 } from "@/pages/stream/axes";
 import { chipColor } from "@/pages/stream/colors";
 import { RAMP } from "@/stream/spectrogramScale";
-import { RESET_ZOOM_ICON, ZOOM_IN_ICON } from "./lucidePath";
 
 /** Where a probe point is, or its number when its position is not known. */
 export function pointLabel(index: number, probePoints: ProbePoint[]): string {
@@ -493,7 +492,8 @@ export function spectrogramOption(
 /** Shake&Tune's names for paired peaks, in pair order. */
 export const PAIR_LETTERS = "αβγδεζηθικλμνξοπρστυφχψω";
 
-const BELT_A_COLOR = "#ff7a33";
+const BELT_A_COLOR = PALETTE[0];
+const ZOOM_BOX_FILL = "rgba(255, 122, 51, 0.15)";
 const BELT_B_COLOR = "#c792ea";
 const BELT_SHADING = "rgba(242, 5, 92, 0.1)";
 const GOOD_ZONE = "rgba(126, 224, 129, 0.15)";
@@ -524,23 +524,20 @@ function unpairedPoints(result: BeltsResult, place: (belt: BeltCurve, index: num
 }
 
 /**
- * Drag a box on the chart to zoom in, the wheel zooms too, and the toolbox button resets it. The
- * toolbox sits top right, clear of the legend at top left. The x axis alone zooms unless `both`.
+ * Box-select and wheel zoom, driven from the page's own buttons (see ChartZoomControls). The
+ * toolbox is what registers the box-select brush, and `show: false` would skip it, so it stays
+ * shown but is moved off the canvas where it can be neither seen nor clicked. The x axis alone
+ * zooms unless `both`.
  */
 function zoomControls(both: boolean): EChartsCoreOption {
   return {
     toolbox: {
-      top: 0,
-      right: 16,
-      // Stroke-only icons to match the 16px lucide buttons elsewhere in the app.
-      iconStyle: { color: "none", borderColor: MUTED, borderWidth: 2 },
-      emphasis: { iconStyle: { color: "none", borderColor: PALETTE[0], borderWidth: 2 } },
-      itemSize: 16,
+      top: -100,
       feature: {
         dataZoom: {
           ...(both ? {} : { yAxisIndex: "none" }),
-          title: { zoom: "Zoom in", back: "Reset zoom" },
-          icon: { zoom: ZOOM_IN_ICON, back: RESET_ZOOM_ICON },
+          // A flat accent box instead of the default gradient.
+          brushStyle: { color: ZOOM_BOX_FILL, borderColor: PALETTE[0], borderWidth: 1 },
         },
       },
     },
@@ -550,7 +547,7 @@ function zoomControls(both: boolean): EChartsCoreOption {
 
 /**
  * An axis name centred along its axis rather than at the axis end, where it would run into the
- * legend and toolbox. In the 380 px chart the grid spans y 40 to 324: the legend and toolbox keep
+ * legend and zoom buttons. In the 380 px chart the grid spans y 40 to 324: the legend and buttons keep
  * the 40 px above it. A name 52 px left of the axis (scientific tick labels are about 40 px wide)
  * spans roughly 45 to 59 px, inside the 72 px left of the grid. "Belt A" sits 30 px under the
  * axis inside the 56 px below the grid.

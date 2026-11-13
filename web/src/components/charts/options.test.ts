@@ -661,7 +661,7 @@ describe("beltScatterOption", () => {
 
 describe("the belt charts' zoom", () => {
   type Zoom = {
-    toolbox: { feature: Record<string, { yAxisIndex?: string; title: { zoom: string; back: string } }> };
+    toolbox: { top: number; feature: Record<string, { yAxisIndex?: string; brushStyle: object }> };
     dataZoom: { type: string; xAxisIndex: number; yAxisIndex?: number }[];
   };
   const single = beltSingleOption(beltSpectrum(), "A (axis 1,-1)") as unknown as Zoom;
@@ -672,7 +672,12 @@ describe("the belt charts' zoom", () => {
   ])("the_%s_zooms_the_x_axis_by_box_and_wheel", (_, option) => {
     expect(Object.keys(option.toolbox.feature)).toEqual(["dataZoom"]);
     expect(option.toolbox.feature.dataZoom.yAxisIndex).toBe("none");
-    expect(option.toolbox.feature.dataZoom.title).toEqual({ zoom: "Zoom in", back: "Reset zoom" });
+    expect(option.toolbox.top).toBeLessThan(0);
+    expect(option.toolbox.feature.dataZoom.brushStyle).toEqual({
+      color: "rgba(255, 122, 51, 0.15)",
+      borderColor: "#ff7a33",
+      borderWidth: 1,
+    });
     expect(option.dataZoom).toEqual([{ type: "inside", xAxisIndex: 0 }]);
   });
 
