@@ -10,3 +10,10 @@ export const KIND_TITLES: Record<TestKind, string> = {
   belts: "Belts",
   axes_map: "Axes map calibration",
 };
+
+/** The run page that shows a test of each kind. */
+export const KIND_PAGES = {
+  axes: "/run/shaper",
+  belts: "/run/belts",
+  axes_map: "/run/axes-map",
+} as const satisfies Record<TestKind, string>;

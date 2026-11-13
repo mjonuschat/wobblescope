@@ -2,6 +2,8 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
+import type { TestKind } from "@/lib/generated/TestKind";
+import type { TestState } from "@/lib/generated/TestState";
 import { chipsSnapshot, printerSettings } from "@/test/capture";
 import type { ApiCall, Reply } from "@/test/http";
 import { renderRoute } from "@/test/render";
@@ -192,5 +194,51 @@ describe("the axes-map run page", () => {
     });
     expect(await screen.findByText("2 of 3: Moving +Y")).toBeTruthy();
     expect(screen.queryByRole("img", { name: /Signal against frequency/ })).toBeNull();
+  });
+});
+
+describe("a test of another kind on the axes-map run page", () => {
+  beforeEach(() => stubWebSocket({ idle: true }));
+
+  const running = (kind: TestKind): TestState => ({
+    id: "test-9",
+    kind,
+    phase: "measuring",
+    segment: 1,
+    segments: 2,
+    axis: null,
+    position: [150, 150, 20],
+    expected_segment_seconds: 100,
+    elapsed_seconds: 5,
+    frequency_hz: 20,
+    frequency_range: [10, 135],
+    chips: [],
+  });
+
+  async function openWith(snapshot: { test: TestState | null; last: FinishedTest | null }) {
+    api();
+    renderRoute("/run/axes-map");
+    await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
+    act(() => {
+      FakeSocket.latest.open();
+      FakeSocket.latest.send(snapshot);
+    });
+  }
+
+  it.each([
+    ["axes", "A Input Shaper test is running.", "/run/shaper"],
+    ["belts", "A Belts test is running.", "/run/belts"],
+  ] as const)("a running %s test is a notice with a link and the form", async (other, text, to) => {
+    await openWith({ test: running(other), last: null });
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
+    expect(await screen.findByRole("button", { name: /Start calibration|Checking printer/ })).toBeTruthy();
+    expect(screen.queryByLabelText("Segment progress")).toBeNull();
+  });
+
+  it("a finished test of another kind shows the form, not the result", async () => {
+    await openWith({ test: null, last: finished({ kind: "belts", outcome: "failed", reason: "boom" }) });
+    expect(await screen.findByRole("button", { name: /Start calibration|Checking printer/ })).toBeTruthy();
+    expect(screen.queryByText("boom")).toBeNull();
   });
 });

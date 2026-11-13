@@ -9,7 +9,7 @@ import { Steps } from "@/components/Steps";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
-import { KIND_TITLES, offersBelts } from "./kinds";
+import { KIND_PAGES, KIND_TITLES, offersBelts } from "./kinds";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 
@@ -35,8 +35,7 @@ export function RunPage({ kind }: { kind: TestKind }) {
   // Only a test of this page's kind is shown here, so a test of the other kind never becomes
   // `lastSeen` and cannot be held on screen when it ends.
   const ownTest = live.test?.kind === kind ? live.test : null;
-  const otherKind: TestKind = kind === "axes" ? "belts" : "axes";
-  const otherRunning = live.test !== null && live.test.kind !== kind;
+  const otherKind: TestKind | null = live.test !== null && live.test.kind !== kind ? live.test.kind : null;
   useEffect(() => {
     if (ownTest) setLastSeen(ownTest);
   }, [ownTest]);
@@ -118,10 +117,10 @@ export function RunPage({ kind }: { kind: TestKind }) {
   } else {
     body = (
       <>
-        {otherRunning && (
+        {otherKind && (
           <p className="text-sm">
             A {KIND_TITLES[otherKind]} test is running.{" "}
-            <Link to={otherKind === "belts" ? "/run/belts" : "/run/shaper"} className="underline">
+            <Link to={KIND_PAGES[otherKind]} className="underline">
               Go to the {KIND_TITLES[otherKind]} page
             </Link>
           </p>

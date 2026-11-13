@@ -612,6 +612,16 @@ describe("a test of the other kind", () => {
   });
 
   it.each([
+    ["/run/shaper", "axes_map"],
+    ["/run/belts", "axes_map"],
+  ] as const)("on %s a running %s test links to the axes-map page", async (path, other) => {
+    await openWith(path, { test: running(other), last: null });
+    expect(await screen.findByText("A Axes map calibration test is running.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe("/run/axes-map");
+    expect(screen.queryByLabelText("Segment progress")).toBeNull();
+  });
+
+  it.each([
     ["/run/shaper", "belts"],
     ["/run/belts", "axes"],
   ] as const)("on %s a finished %s test shows the form, not the result", async (path, other) => {

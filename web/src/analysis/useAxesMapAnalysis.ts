@@ -18,7 +18,11 @@ export function useAxesMapAnalysis(id: string, client: AnalysisClient = getAnaly
   const meta = session.data?.meta;
   return useQuery({
     queryKey: queryKeys.axesMapAnalysis(id, meta?.created_at),
-    queryFn: ({ signal }) => client.analyzeAxesMap({ sessionId: id, meta: meta! }, signal),
+    queryFn: ({ signal }) => {
+      // `enabled` keeps this from running without it.
+      if (!meta) throw new Error("The calibration analysis needs the session's metadata");
+      return client.analyzeAxesMap({ sessionId: id, meta }, signal);
+    },
     enabled: meta !== undefined,
     gcTime: CACHE_MS,
     // The answer depends only on the key, so a cached result never goes stale.

@@ -63,9 +63,9 @@ export const queryKeys = {
   /** One chip's belt comparison. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
   belts: (id: string, chip: string, maxFreq: number, includeExcluded: boolean, createdAt = "", resultId = "") =>
     ["belts", id, chip, maxFreq, includeExcluded, createdAt, resultId] as const,
-  /** `createdAt` tells a session written again under the same id from the one analysed before. */
   /** Per-chip outcomes of a calibration session; under `analysesOf` so deleting the session drops them. */
   axesMapAnalysis: (id: string, createdAt = "") => ["analysis", id, "axes-map", createdAt] as const,
+  /** `createdAt` tells a session written again under the same id from the one analysed before. */
   analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = [], createdAt = "", resultId = "") =>
     ["analysis", id, axis, params, overrides, createdAt, resultId] as const,
 };
