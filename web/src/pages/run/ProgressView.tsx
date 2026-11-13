@@ -172,6 +172,32 @@ const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: strin
 export function ResultView({ last, onNewTest }: ResultProps) {
   const { Icon, className } = OUTCOME_ICON[last.outcome];
   const analysed = last.session_id !== null && (last.outcome === "complete" || last.outcome === "incomplete");
+  const announced = last.outcome !== "complete";
+  const notes = (
+    <>
+      {last.reason && <p className="text-sm">{last.reason}</p>}
+      {last.code === "diagonal_axis_refused" && <p className="text-sm text-muted-foreground">{BELT_MINIMUMS}</p>}
+      {last.reason === "emergency stop" && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {SHUTDOWN_NOTICE}
+        </p>
+      )}
+      {!last.session_id && <p className="text-sm text-muted-foreground">No session was saved.</p>}
+    </>
+  );
+  const hasNotes = Boolean(last.reason) || last.code === "diagonal_axis_refused" || !last.session_id;
+  // A completed test is not announced; its notes, if any, stand alone.
+  const details = announced ? (
+    <div className="flex items-start gap-3">
+      <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
+      <div className="space-y-1">
+        <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
+        {notes}
+      </div>
+    </div>
+  ) : hasNotes ? (
+    <div className="space-y-1">{notes}</div>
+  ) : null;
   const card = (save: ReactNode) => (
     <Panel
       title="Result"
@@ -191,20 +217,7 @@ export function ResultView({ last, onNewTest }: ResultProps) {
         </div>
       }
     >
-      <div className="flex items-start gap-3">
-        <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
-        <div className="space-y-1">
-          <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
-          {last.reason && <p className="text-sm">{last.reason}</p>}
-          {last.code === "diagonal_axis_refused" && <p className="text-sm text-muted-foreground">{BELT_MINIMUMS}</p>}
-          {last.reason === "emergency stop" && (
-            <p role="status" className="text-sm text-muted-foreground">
-              {SHUTDOWN_NOTICE}
-            </p>
-          )}
-          {!last.session_id && <p className="text-sm text-muted-foreground">No session was saved.</p>}
-        </div>
-      </div>
+      {details}
       {last.motion_uncertain && (
         <div className="space-y-1">
           <p role="alert" className="text-sm text-amber-400">

@@ -227,6 +227,14 @@ describe("a running test", () => {
 });
 
 describe("a finished test", () => {
+  it("does not announce a completed test with a heading, but does announce an incomplete one", async () => {
+    await mount({ test: null, last: done });
+    await screen.findByText("session results for test-1");
+    expect(screen.queryByRole("heading", { name: "The test finished." })).toBeNull();
+    send({ test: null, last: { ...done, outcome: "incomplete", reason: "x" } });
+    expect(await screen.findByRole("heading", { name: "The test finished with missing data." })).toBeTruthy();
+  });
+
   it("shows the session's results under a complete or incomplete test", async () => {
     await mount({ test: null, last: done });
     expect(await screen.findByText("session results for test-1")).toBeTruthy();
@@ -275,11 +283,11 @@ describe("a finished test", () => {
 
   it("stays on screen until New test is clicked, and a reload after the end shows it too", async () => {
     await mount({ test: null, last: done });
-    expect(await screen.findByText("The test finished.")).toBeTruthy();
+    expect(await screen.findByText("session results for test-1")).toBeTruthy();
     expect(currentStep()).toContain("Results");
     // Nothing else on the page takes it away.
     send({ test: null, last: done });
-    expect(screen.getByText("The test finished.")).toBeTruthy();
+    expect(screen.getByText("session results for test-1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New test" }));
     expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
     expect(screen.queryByText("The test finished.")).toBeNull();
