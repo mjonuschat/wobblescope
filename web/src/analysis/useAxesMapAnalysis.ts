@@ -25,8 +25,9 @@ export function useAxesMapAnalysis(id: string, client: AnalysisClient = getAnaly
     },
     enabled: meta !== undefined,
     gcTime: CACHE_MS,
-    // The answer depends only on the key, so a cached result never goes stale.
-    staleTime: Infinity,
+    // Incomplete results can include transient download failures and must be retried.
+    staleTime: (query) =>
+      query.state.data?.some((chip) => chip.state === "Incomplete") ? 0 : Infinity,
     retry: (count, error) => error instanceof ApiClientError && shouldRetry(count, error),
   });
 }

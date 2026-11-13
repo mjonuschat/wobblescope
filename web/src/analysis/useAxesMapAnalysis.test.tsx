@@ -59,4 +59,18 @@ describe("useAxesMapAnalysis", () => {
       ["b", "Incomplete", undefined],
     ]);
   });
+  it("retries_a_transient_download_after_incomplete_result", async () => {
+    let fail = true;
+    const fetchSample = vi.fn(async (_id: string, chip: number, segment: number) => {
+      if (fail && chip === 1 && segment === 2) throw new Error("connection reset");
+      return calibrationFile(chip, segment);
+    });
+    const first = setup(fetchSample);
+    await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Incomplete"));
+    expect(first.result.current.isStale).toBe(true);
+    fail = false;
+    await first.result.current.refetch();
+    await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Analysed"));
+  });
+
 });
