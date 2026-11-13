@@ -390,9 +390,12 @@ describe("the belts form", () => {
     expect(field(/End frequency/).value).toBe("135");
   });
 
-  it("the_belts_form_states_the_supported_minimums", async () => {
-    await openBelts();
-    expect(screen.getByText(MINIMUMS)).toBeTruthy();
+  it("the_belts_form_does_not_state_the_supported_minimums", async () => {
+    for (const support of ["supported", "unknown", "too_old"] as const) {
+      await openBelts(withMachine("corexy", support));
+      expect(screen.queryByText(MINIMUMS)).toBeNull();
+      cleanup();
+    }
   });
 
   it("the_belts_form_warns_when_version_support_is_too_old_and_still_allows_starting", async () => {
@@ -405,7 +408,6 @@ describe("the belts form", () => {
     for (const support of ["supported", "unknown"] as const) {
       await openBelts(withMachine("corexy", support));
       expect(screen.queryByText(OLD_WARNING)).toBeNull();
-      expect(screen.getByText(MINIMUMS)).toBeTruthy();
       cleanup();
     }
   });

@@ -27,7 +27,6 @@ import type { TestKind } from "@/lib/generated/TestKind";
 import { parseNumber } from "@/lib/parse";
 import { homedTone } from "@/components/PrinterControls";
 
-import { BELT_MINIMUMS } from "./ProgressView";
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
@@ -249,11 +248,8 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
     <form onSubmit={submit} className="space-y-4" noValidate>
       <FormCard title="Setup">
         <div className="space-y-5">
-          {belts && (
-            <div className="space-y-1 text-sm">
-              <p className="text-muted-foreground">{BELT_MINIMUMS}</p>
-              {settings.version_support === "too_old" && <p className="text-amber-400">{OLD_SOFTWARE_WARNING}</p>}
-            </div>
+          {belts && settings.version_support === "too_old" && (
+            <p className="text-sm text-amber-400">{OLD_SOFTWARE_WARNING}</p>
           )}
           <ChoiceRow label="Chips" error={<FieldError name="chips" text={errorFor("chips")} />}>
             {chipList.chips.length === 0 ? (
