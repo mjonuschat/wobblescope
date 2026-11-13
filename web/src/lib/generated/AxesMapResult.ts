@@ -43,7 +43,7 @@ rotation: [[number, number, number], [number, number, number], [number, number, 
  */
 gravity: number, 
 /**
- * Noise floor estimate.
+ * Noise floor estimate (mm/s^2). Gravity above is in m/s^2.
  */
 noise: number, 
 /**

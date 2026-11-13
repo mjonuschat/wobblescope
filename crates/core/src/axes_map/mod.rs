@@ -1,5 +1,6 @@
 //! Axes-map calibration: types and analysis.
 
+pub(crate) mod bed;
 pub(crate) mod map;
 pub(crate) mod orientation;
 pub(crate) mod quality;
@@ -178,7 +179,7 @@ pub struct AxesMapResult {
     pub rotation: Option<[[f64; 3]; 3]>,
     /// Estimated gravitational acceleration (m/s²).
     pub gravity: f64,
-    /// Noise floor estimate.
+    /// Noise floor estimate (mm/s^2). Gravity above is in m/s^2.
     pub noise: f64,
     /// Noise level verdict.
     pub noise_verdict: NoiseVerdict,
@@ -194,8 +195,8 @@ pub struct AxesMapResult {
 
 /// Analyse three one-axis sweeps and work out how the chip is oriented.
 ///
-/// This is a port of Shake&Tune's `AxesMapComputation.compute`. Bed-mounted chips are not
-/// handled separately yet and are analysed as toolhead chips.
+/// This is a port of Shake&Tune's `AxesMapComputation.compute`, extended with the no-motion
+/// guard (deviation N1) and bed-mounted chips (`bed::classify` picks the case).
 ///
 /// # Errors
 /// Any segment error from `process_segment`, or `InvalidParameter` when two or more axes
@@ -212,19 +213,169 @@ pub fn analyze_axes_map(
         segment::process_segment(s2, inverse.as_ref())?,
     ];
 
-    let mut directions = segments.each_ref().map(|s| s.direction_vector);
-    let mut actual = segments.each_ref().map(|s| s.actual_direction);
-    let mut confidences = segments.each_ref().map(|s| s.confidence);
-    let mut angle_errors = segments.each_ref().map(|s| s.angle_error);
+    let case = bed::classify(input.mounting, &segments, params)?;
     let gravity = segments.iter().map(|s| s.gravity).sum::<f64>() / 3.0;
     let noise = segments.iter().map(|s| s.noise_level).sum::<f64>() / 3.0;
 
-    let peak_magnitudes = segments.each_ref().map(|s| {
-        s.peak_velocities
-            .iter()
-            .fold(0.0_f64, |m, p| m.max(p.abs()))
+    let outcome = match case {
+        bed::MotionCase::NoMotion => no_motion_outcome(params),
+        bed::MotionCase::Partial { moving } => partial_outcome(&segments, &moving, input.mounting),
+        bed::MotionCase::Full => {
+            complete_outcome(&segments, None, input.mounting, noise, gravity, params)
+        }
+        bed::MotionCase::Complete { missing } => complete_outcome(
+            &segments,
+            Some(missing),
+            input.mounting,
+            noise,
+            gravity,
+            params,
+        ),
+    };
+    let Outcome {
+        state,
+        map,
+        axes,
+        euler_deg,
+        rotation,
+        quality,
+    } = outcome;
+
+    let config_check = match &map {
+        Some(detected) => map::config_check(input.configured_map.as_deref(), detected),
+        None => ConfigCheck::NoneConfigured,
+    };
+
+    let [c0, c1, c2] = segments.map(|s| s.curves);
+    Ok(AxesMapResult {
+        chip: input.chip.clone(),
+        state,
+        map,
+        configured_map: input.configured_map.clone(),
+        axes,
+        euler_deg,
+        rotation,
+        gravity: gravity / 1000.0,
+        noise,
+        noise_verdict: quality::noise_verdict(noise),
+        quality,
+        config_check,
+        curves: [c0, c1, c2],
+        core_version: crate::CORE_VERSION.to_owned(),
+    })
+}
+
+/// The parts of an `AxesMapResult` that depend on which axes could be determined.
+struct Outcome {
+    state: MapState,
+    map: Option<String>,
+    axes: [AxisMatch; 3],
+    euler_deg: Option<[f64; 3]>,
+    rotation: Option<[[f64; 3]; 3]>,
+    quality: Quality,
+}
+
+fn undetermined_axis() -> AxisMatch {
+    AxisMatch {
+        state: AxisState::NotDetermined,
+        chip_axis: None,
+        negative: false,
+        confidence: 0.0,
+        tilt_deg: 0.0,
+        peaks: [0.0; 3],
+        peak_velocity: 0.0,
+        peak_time_s: 0.0,
+    }
+}
+
+fn no_motion_outcome(params: &AxesMapParams) -> Outcome {
+    let mut messages = vec!["No motion seen by this chip.".to_owned()];
+    if params.max_z_velocity.is_none() || params.max_z_accel.is_none() {
+        messages.push(
+            "Z cannot be judged without Klipper's Z limits (max_z_velocity and max_z_accel)."
+                .to_owned(),
+        );
+    }
+    Outcome {
+        state: MapState::NoMotion,
+        map: None,
+        axes: std::array::from_fn(|_| undetermined_axis()),
+        euler_deg: None,
+        rotation: None,
+        quality: Quality {
+            status: QualityStatus::Error,
+            messages,
+        },
+    }
+}
+
+/// Sign applied to every measured direction: a bed chip moves opposite to the toolhead.
+fn mounting_sign(mounting: Mounting) -> f64 {
+    match mounting {
+        Mounting::Toolhead => 1.0,
+        Mounting::Bed => -1.0,
+    }
+}
+
+fn partial_outcome(
+    segments: &[segment::SegmentResult; 3],
+    moving: &[usize],
+    mounting: Mounting,
+) -> Outcome {
+    let sign = mounting_sign(mounting);
+    let axes = std::array::from_fn(|i| {
+        if !moving.contains(&i) {
+            return undetermined_axis();
+        }
+        let s = &segments[i];
+        let k = quality::dominant_index(&s.direction_vector);
+        AxisMatch {
+            state: AxisState::Measured,
+            chip_axis: Some(chip_axis_from_index(k)),
+            negative: s.direction_vector[k] * sign <= 0.0,
+            confidence: s.confidence,
+            tilt_deg: s.angle_error,
+            peaks: s.peak_velocities,
+            peak_velocity: s.peak_velocities[k],
+            peak_time_s: s.peak_time_s,
+        }
     });
-    let virtual_axis = orientation::relative_noise_only_axis(confidences, peak_magnitudes)?;
+    let names: Vec<&str> = moving.iter().map(|&i| ["X", "Y", "Z"][i]).collect();
+    Outcome {
+        state: MapState::Partial,
+        map: None,
+        axes,
+        euler_deg: None,
+        rotation: None,
+        quality: Quality {
+            status: QualityStatus::Warning,
+            messages: vec![format!(
+                "Only the {} axis was seen moving; the other axes could not be determined.",
+                names.join(" and ")
+            )],
+        },
+    }
+}
+
+/// All three axes are measured (`virtual_axis` is `None`) or two are measured and one is
+/// completed by cross product.
+fn complete_outcome(
+    segments: &[segment::SegmentResult; 3],
+    virtual_axis: Option<usize>,
+    mounting: Mounting,
+    noise: f64,
+    gravity: f64,
+    params: &AxesMapParams,
+) -> Outcome {
+    let sign = mounting_sign(mounting);
+    let mut directions = segments
+        .each_ref()
+        .map(|s| s.direction_vector.map(|c| c * sign));
+    let mut actual = segments
+        .each_ref()
+        .map(|s| s.actual_direction.map(|c| c * sign));
+    let mut confidences = segments.each_ref().map(|s| s.confidence);
+    let mut angle_errors = segments.each_ref().map(|s| s.angle_error);
 
     let mut degenerate = false;
     if let Some(missing) = virtual_axis {
@@ -300,28 +451,14 @@ pub fn analyze_axes_map(
         }
     });
 
-    let config_check = match &map {
-        Some(detected) => map::config_check(input.configured_map.as_deref(), detected),
-        None => ConfigCheck::NoneConfigured,
-    };
-
-    let [c0, c1, c2] = segments.map(|s| s.curves);
-    Ok(AxesMapResult {
-        chip: input.chip.clone(),
+    Outcome {
         state,
         map,
-        configured_map: input.configured_map.clone(),
         axes,
         euler_deg,
         rotation,
-        gravity: gravity / 1000.0,
-        noise,
-        noise_verdict: quality::noise_verdict(noise),
         quality,
-        config_check,
-        curves: [c0, c1, c2],
-        core_version: crate::CORE_VERSION.to_owned(),
-    })
+    }
 }
 
 fn chip_axis_from_index(index: usize) -> ChipAxis {
