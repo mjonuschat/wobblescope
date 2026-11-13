@@ -441,6 +441,23 @@ parity_test! {
 }
 
 parity_test! {
+    fn the_point_of_a_belt_session_is_the_shared_segment_point_or_0_without_belts() {
+        let w = win();
+        let mut m = belt_meta(&w, &[0, 1]);
+        m.probe_points = vec![ProbePoint { position: None }; 4];
+        for segment in &mut m.segments {
+            segment.point = 3;
+        }
+        let (point, a, b) = belt_inputs(&m, "adxl345", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 3);
+        assert!(a.is_some() && b.is_some());
+        let (point, a, b) = belt_inputs(&m, "no such chip", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 0);
+        assert!(a.is_none() && b.is_none());
+    }
+}
+
+parity_test! {
     fn the_loader_is_never_called_for_another_chip() {
         let w = win();
         let m = belt_meta(&w, &[0, 1]);
