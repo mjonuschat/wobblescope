@@ -8,4 +8,8 @@ index: number,
 /**
  * Frequency in Hz.
  */
-freq: number, level: number, };
+freq: number, 
+/**
+ * The value of this belt's own curve at the peak.
+ */
+level: number, };

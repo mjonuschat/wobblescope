@@ -35,6 +35,7 @@ pub struct BeltPeak {
     pub index: usize,
     /// Frequency in Hz.
     pub freq: f64,
+    /// The value of this belt's own curve at the peak.
     pub level: f64,
 }
 
@@ -413,6 +414,35 @@ mod tests {
         let got = compare(&[(50.0, 1.0)], &[(50.0, 5.0)], MAX_FREQ);
         assert_eq!(got.offsets.len(), 1);
         assert_eq!(got.offsets[0].amplitude_delta_percent, 0.0);
+    }
+
+    #[test]
+    fn the_offsets_read_belt_a_at_both_peaks_of_a_pair() {
+        // Belt A has a tall peak at 50 Hz and a short one at 56 Hz, which belt B merges into
+        // one peak at 56 Hz; the pair's offsets come from belt A's curve at 50 and 56 Hz.
+        let got = compare(&[(50.0, 1.0), (56.0, 0.4)], &[(56.0, 3.0)], MAX_FREQ);
+        assert_eq!(got.pairs.len(), 1);
+        let pair = &got.pairs[0];
+        let (i, j) = (pair.a.index, pair.b.index);
+        assert_ne!(i, j);
+        let highest = got
+            .a
+            .psd
+            .iter()
+            .chain(&got.b.psd)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
+        // belts_plotter.py `_add_offset_table`: abs((psd[peak2] - psd[peak1]) / highest * 100)
+        // with psd and freqs taken from belt A (signal1).
+        let want_amplitude = ((got.a.psd[j] - got.a.psd[i]) / highest * 100.0).abs();
+        let want_freq = (got.freqs[j] - got.freqs[i]).abs();
+        assert!(want_amplitude > 1.0);
+        assert!((got.offsets[0].freq_delta - want_freq).abs() < 1e-12);
+        assert!((got.offsets[0].amplitude_delta_percent - want_amplitude).abs() < 1e-9);
+        assert!(got.offsets[0].freq_delta > 0.0);
+        // Belt B's own curve would give another number, so this reads belt A.
+        let from_b = ((got.b.psd[j] - got.b.psd[i]) / highest * 100.0).abs();
+        assert!((got.offsets[0].amplitude_delta_percent - from_b).abs() > 1.0);
     }
 
     #[test]
