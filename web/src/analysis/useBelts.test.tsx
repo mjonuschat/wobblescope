@@ -63,7 +63,9 @@ describe("useBelts", () => {
 
   it("it_waits_until_enabled_and_meta_is_there", async () => {
     const { hook, belts, fetchSample } = setup();
-    hook({ meta: undefined });
+    const withoutMeta = hook({ meta: undefined });
+    expect(withoutMeta.result.current.fetchStatus).toBe("idle");
+    expect(belts()).toHaveLength(0);
     const { result, rerender } = hook({}, false);
     expect(belts()).toHaveLength(0);
     expect(fetchSample).not.toHaveBeenCalled();
