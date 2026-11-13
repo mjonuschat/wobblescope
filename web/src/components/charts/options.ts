@@ -494,11 +494,14 @@ export const PAIR_LETTERS = "αβγδεζηθικλμνξοπρστυφχψω";
 
 const BELT_A_COLOR = "#ff7a33";
 const BELT_B_COLOR = "#c792ea";
+const BELT_SHADING = "rgba(242, 5, 92, 0.1)";
 const GOOD_ZONE = "rgba(126, 224, 129, 0.15)";
 const IDEAL_LINE = "#ef5b7b";
 
 /** The letter of the pair at `order`; past the alphabet it is the number. */
 export const pairLetter = (order: number) => PAIR_LETTERS[order] ?? String(order + 1);
+
+const scientific = (value: number) => value.toExponential(1);
 
 const peakLabel = (formatter: string, color = text, bold = false) => ({
   formatter,
@@ -573,7 +576,7 @@ export function beltOverlayOption(result: BeltsResult, maxScale: number | null):
       splitLine,
       min: 0,
       max: maxScale && maxScale > 0 ? maxScale : highest(result) * 1.1,
-      axisLabel: { formatter: (value: number) => value.toExponential(1) },
+      axisLabel: { formatter: scientific },
     },
     series: [curve("Belt A", "a", BELT_A_COLOR), curve("Belt B", "b", BELT_B_COLOR)],
   };
@@ -593,7 +596,7 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string, maxScale
       splitLine,
       min: 0,
       max: maxScale && maxScale > 0 ? maxScale : top * 1.1,
-      axisLabel: { formatter: (value: number) => value.toExponential(1) },
+      axisLabel: { formatter: scientific },
     },
     series: [
       {
@@ -634,6 +637,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
   const xs = Array.from({ length: ZONE_STEPS + 1 }, (_, i) => (end * i) / ZONE_STEPS);
   const lower = xs.map((x) => goodZoneLowerEdge(x, max));
   const { a, b } = result;
+  const curve = a.psd.map((x, i) => [x, b.psd[i]]);
   const dot = (coord: number[], label: string, color: string, bold = false) => ({
     coord,
     itemStyle: { color },
@@ -660,8 +664,8 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
     tooltip: { trigger: "item" },
     grid: { top: 40, left: 64, right: 24, bottom: 40 },
     legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: text } },
-    xAxis: { type: "value", name: "Belt A", min: 0, max: end, splitLine },
-    yAxis: { type: "value", name: "Belt B", min: 0, max: end, splitLine },
+    xAxis: { type: "value", name: "Belt A", min: 0, max: end, splitLine, axisLabel: { formatter: scientific } },
+    yAxis: { type: "value", name: "Belt B", min: 0, max: end, splitLine, axisLabel: { formatter: scientific } },
     series: [
       {
         name: "Good zone floor",
@@ -697,12 +701,32 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         ],
       },
       {
+        // ECharts areas only fill vertically, so the horizontal fill to the y axis is a polygon.
+        name: "Belt curve shading",
+        type: "custom",
+        silent: true,
+        tooltip: { show: false },
+        z: 0,
+        data: [0],
+        renderItem: (_: unknown, api: { coord: (point: number[]) => number[] }) => ({
+          type: "polygon",
+          shape: {
+            points: [
+              ...curve.map(([x, y]) => api.coord([x, y])),
+              api.coord([0, curve[curve.length - 1][1]]),
+              api.coord([0, curve[0][1]]),
+            ],
+          },
+          style: { fill: BELT_SHADING },
+        }),
+      },
+      {
         name: "Belts",
         type: "line",
         symbolSize: 3,
         color: "#8a8a8a",
         lineStyle: { color: "#8a8a8a", width: 1 },
-        data: a.psd.map((x, i) => [x, b.psd[i]]),
+        data: curve,
         markPoint: { silent: true, symbol: "circle", symbolSize: 8, data: points },
       },
     ],

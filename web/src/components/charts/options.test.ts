@@ -613,6 +613,32 @@ describe("beltScatterOption", () => {
     });
   });
 
+  it("shades_between_the_curve_and_the_y_axis", () => {
+    const shading = (
+      list as unknown as { name: string; renderItem: (p: unknown, api: unknown) => { shape: { points: number[][] } } }[]
+    ).find((s) => s.name === "Belt curve shading")!;
+    const { shape } = shading.renderItem(null, { coord: (point: number[]) => point });
+    expect(shape.points).toEqual([
+      [0, 0],
+      [4, 3],
+      [1, 5],
+      [6, 5.5],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+    ]);
+  });
+
+  it("formats_both_scatter_axes_like_the_overlay_y_axis", () => {
+    const axes = option as {
+      xAxis: { axisLabel: { formatter: (v: number) => string } };
+      yAxis: { axisLabel: { formatter: (v: number) => string } };
+    };
+    const overlay = beltOverlayOption(beltsResult(), null) as unknown as typeof axes;
+    expect(axes.xAxis.axisLabel.formatter(12345)).toBe(overlay.yAxis.axisLabel.formatter(12345));
+    expect(axes.yAxis.axisLabel.formatter(0.5)).toBe("5.0e-1");
+  });
+
   it("plots belt A against belt B and marks the pairs", () => {
     expect(named("Belts").data).toEqual([
       [0, 0],
