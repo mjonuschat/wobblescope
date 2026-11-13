@@ -331,10 +331,12 @@ async fn the_sealed_calibration_appears_in_the_session_list_detail_and_download(
         .unwrap_or_else(|| panic!("{id} is not listed: {body}"));
     assert_eq!(listed["mode"], Value::Null);
     assert_eq!(listed["outcome"], "Complete");
+    assert_eq!(listed["kind"], "axesmap");
 
     let (status, body) = answer(&rig, common::request("GET", &format!("/api/sessions/{id}"))).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["meta"]["kind"], "AxesMap");
+    assert_eq!(body["summary"]["kind"], "axesmap");
+    assert!(body["meta"]["axes_map_run"].is_object(), "{body}");
     assert_eq!(body["meta"]["segments"].as_array().unwrap().len(), 3);
 
     let (status, headers, bytes) = send(

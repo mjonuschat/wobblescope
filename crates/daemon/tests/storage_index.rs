@@ -192,7 +192,7 @@ fn unusable_sessions_are_skipped_with_a_reason_and_left_alone() {
     let p = root.path().join("newer").join("meta.json");
     let text = fs::read_to_string(&p)
         .unwrap()
-        .replace("\"format_version\": 1", "\"format_version\": 2");
+        .replace("\"format_version\": 1", "\"format_version\": 3");
     fs::write(&p, text).unwrap();
 
     seal(root.path(), &Spec::new("badtime", "yesterday"));
@@ -216,7 +216,7 @@ fn unusable_sessions_are_skipped_with_a_reason_and_left_alone() {
 
     assert_eq!(ids(&index, &ListFilter::default()), ["ok"]);
     let reason = |name: &str| skipped.iter().find(|(n, _)| n == name).unwrap().1.clone();
-    assert!(reason("newer").contains('2'), "{}", reason("newer"));
+    assert!(reason("newer").contains('3'), "{}", reason("newer"));
     assert!(
         reason("badtime").contains("created_at"),
         "{}",

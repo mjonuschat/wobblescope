@@ -32,7 +32,7 @@ fn segment(c: &mut wobblescope::storage::capture::Capture, meta: &mut SessionMet
         )
         .unwrap();
     meta.segments.push(SegmentMeta {
-        axis: if index == 0 { Axis::X } else { Axis::Y },
+        axis: if index == 0 { Axis::X } else { Axis::Y }.into(),
         point: 0,
         window: None,
         files,

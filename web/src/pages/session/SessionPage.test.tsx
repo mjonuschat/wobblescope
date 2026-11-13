@@ -1,22 +1,26 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
+import { chipLabel } from "@/lib/format";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
-import { analysis, decision, recommendation, twoAxisMeta } from "@/test/fixtures";
+import { analysis, decision, recommendation, spectrogram, twoAxisMeta } from "@/test/fixtures";
 import { stubApiWithStatus as stubApi } from "@/test/status";
 import { renderRoute } from "@/test/render";
 import { summary } from "@/test/summaries";
 
-const fake = vi.hoisted(() => ({ analyze: vi.fn(), forget: vi.fn() }));
+const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn(), prefetch: vi.fn() }));
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
   getAnalysisClient: () => fake,
 }));
 vi.mock("@/components/charts/EChart", () => ({
-  EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
+  EChart: ({ label, option }: { label: string; option: { yAxis?: { max?: number } | { max?: number }[] } }) => {
+    const left = Array.isArray(option.yAxis) ? option.yAxis[0] : option.yAxis;
+    return <div role="img" aria-label={label} data-ymax={left?.max} />;
+  },
 }));
 
 const SNIPPET = "[input_shaper]\nshaper_type_x: mzv\nshaper_freq_x: 48.2\ndamping_ratio_x: 0.1\n";
@@ -27,6 +31,7 @@ function result(a: Analysis, perChip: (string | null)[]): AnalysisResult {
     analysis: a,
     snippets: {
       worstCase: a.worst_case ? SNIPPET : null,
+      worstCasePerformance: null,
       perChip: perChip.map((snippet, i) =>
         snippet === null ? null : (a.per_chip[i]?.recommendation?.all.map(() => snippet) ?? [snippet]),
       ),
@@ -43,7 +48,7 @@ function serve(meta = twoAxisMeta()) {
 }
 
 async function chipCard(name: string) {
-  fireEvent.click(await screen.findByRole("tab", { name }));
+  fireEvent.click(await screen.findByRole("tab", { name: chipLabel(name) }));
   return screen.findByRole("region", { name: `Chip ${name}` });
 }
 
@@ -53,6 +58,7 @@ function clipboard(value: unknown) {
 
 beforeEach(() => {
   fake.analyze.mockReset();
+  fake.spectrogram.mockReset();
 });
 afterEach(() => clipboard(undefined));
 
@@ -74,7 +80,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     expect((await screen.findAllByText(/shaper_type_x: mzv/)).length).toBeGreaterThan(0);
     const worst = screen.getByRole("region", { name: "Recommended Input Shaper" });
-    fireEvent.click(worst.querySelector("button")!);
+    fireEvent.click(within(worst).getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SNIPPET));
     expect(await screen.findByText("Copied")).toBeTruthy();
   });
@@ -88,7 +94,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const worst = await screen.findByRole("region", { name: "Recommended Input Shaper" });
-    fireEvent.click(worst.querySelector("button")!);
+    fireEvent.click(within(worst).getByRole("button", { name: "Copy" }));
     expect(await screen.findByText(/Copy failed/)).toBeTruthy();
     expect(worst.textContent).toContain("shaper_type_x: mzv");
   });
@@ -103,6 +109,95 @@ describe("the session view", () => {
     expect(degraded.textContent).toContain("No recommendation for this chip: degraded capture health");
     expect(degraded.querySelector('[role="img"]')).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recommended Input Shaper" }).textContent).toContain("mzv at 48.2 Hz");
+  });
+
+  it("lists the chips of the data quality panel on one line, separated by a mid dot", async () => {
+    const a = analysis();
+    a.eligibility.decisions = [decision("a", "Included"), decision("b", "Included")];
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const panel = await screen.findByRole("region", { name: "Data Quality" });
+    const list = panel.querySelector("ul") as HTMLElement;
+    expect(list.className).toContain("flex-wrap");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(list.textContent?.match(/·/g)).toHaveLength(1);
+  });
+
+  it("shows the spectrogram panel under the chip panel with its map, hides it on All Chips and makes each chip its own map", async () => {
+    const a = analysis();
+    a.per_chip = [
+      { ...a.per_chip[0], chip: "adxl345" },
+      { ...a.per_chip[1], chip: "lis2dw ebb36" },
+    ];
+    fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
+    fake.spectrogram.mockResolvedValue(spectrogram());
+    serve();
+    renderRoute("/sessions/s1");
+    const chip = await chipCard("adxl345");
+    const panel = await screen.findByRole("region", { name: "Spectrogram" });
+    expect(chip.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await within(panel).findByRole("img", { name: "Spectrogram of adxl345" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
+    const other = await screen.findByRole("region", { name: "Spectrogram" });
+    expect(await within(other).findByRole("img", { name: "Spectrogram of lis2dw ebb36" })).toBeTruthy();
+    expect(fake.spectrogram.mock.calls.map((c) => c[0].chip)).toEqual(["adxl345", "lis2dw ebb36"]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "All Chips" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Spectrogram" })).toBeNull());
+  });
+
+  it("sets the chart scale in a dialog next to the expand button and restores auto from it", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const card = await chipCard("a");
+    const chart = () => card.querySelector('[role="img"]') as HTMLElement;
+    expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
+    const scale = within(card).getByRole("button", { name: "Set the chart scale" });
+    const expand = within(card).getByRole("button", { name: "Expand the chart and table" });
+    expect(scale.compareDocumentPosition(expand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(scale);
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByLabelText("Maximum") as HTMLInputElement;
+    expect(input.type).toBe("number");
+    fireEvent.change(input, { target: { value: "-5" } });
+    expect((within(dialog).getByRole("button", { name: "Apply" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).getByText(/positive number/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: "10" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(chart().dataset.ymax).toBe("10");
+
+    fireEvent.click(scale);
+    const again = await screen.findByRole("dialog");
+    expect((within(again).getByLabelText("Maximum") as HTMLInputElement).value).toBe("10");
+    fireEvent.click(within(again).getByRole("button", { name: "Restore Auto" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
+  });
+
+  it("explains the scale and expand buttons in a tooltip", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const card = await chipCard("a");
+    fireEvent.focus(within(card).getByRole("button", { name: "Set the chart scale" }));
+    expect(await screen.findByText(/Set where the vibration axis ends/)).toBeTruthy();
+    fireEvent.blur(within(card).getByRole("button", { name: "Set the chart scale" }));
+    fireEvent.focus(within(card).getByRole("button", { name: "Expand the chart and table" }));
+    expect(await screen.findByText(/Open the chart and table in a larger view/)).toBeTruthy();
+  });
+
+  it("offers the chart scale for a chip that has no recommendation to expand", async () => {
+    fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+    serve();
+    renderRoute("/sessions/s1");
+    const degraded = await chipCard("b");
+    expect(within(degraded).getByRole("button", { name: "Set the chart scale" })).toBeTruthy();
+    expect(within(degraded).queryByRole("button", { name: "Expand the chart and table" })).toBeNull();
   });
 
   it("lets the user include an excluded chip, and analyses again with it named", async () => {
@@ -251,7 +346,7 @@ describe("the session view", () => {
     const first = await screen.findByRole("region", { name: "Chip a" });
     expect(first).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Chip b" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "b" }));
+    fireEvent.click(screen.getByRole("tab", { name: "B" }));
     expect(await screen.findByRole("region", { name: "Chip b" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
   });
@@ -264,7 +359,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Chip adxl345" });
-    expect(screen.getByRole("tab", { name: "adxl345" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "ADXL345" })).toBeTruthy();
   });
 
   it("expands the chart and table in a dialog and closes it again", async () => {
@@ -286,14 +381,14 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
     serve();
     renderRoute("/sessions/s1");
-    const tabs = await screen.findAllByRole("tab", { name: /^(a|b|All Chips)$/ });
-    expect(tabs.map((t) => t.textContent)).toEqual(["a", "b", "All Chips"]);
+    const tabs = await screen.findAllByRole("tab", { name: /^(A|B|All Chips)$/ });
+    expect(tabs.map((t) => t.textContent)).toEqual(["A", "B", "All Chips"]);
     fireEvent.click(tabs[2]);
     const all = await screen.findByRole("region", { name: "All chips" });
     expect(all.textContent).toContain("adds the chips together");
     expect(all.textContent).toContain("only for looking");
     expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "a" }));
+    fireEvent.click(screen.getByRole("tab", { name: "A" }));
     expect(await screen.findByRole("region", { name: "Chip a" })).toBeTruthy();
   });
 
@@ -308,7 +403,7 @@ describe("the session view", () => {
     expect(screen.queryByRole("tab", { name: "All Chips" })).toBeNull();
   });
 
-  it("analyses with the printer's recorded corner velocity and damping, until the user applies others", async () => {
+  it("analyses with the printer's recorded corner velocity and an estimated damping ratio, until the user applies others", async () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
     const meta = twoAxisMeta();
     meta.printer = {
@@ -322,7 +417,7 @@ describe("the session view", () => {
     serve(meta);
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Recommended Input Shaper" });
-    expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: 0.12 });
+    expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: null });
     fireEvent.change(screen.getByLabelText(/Square Corner Velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze.mock.calls.at(-1)?.[0].params).toMatchObject({ scv: 3 }));
@@ -418,6 +513,7 @@ describe("the session view", () => {
           snippets: {
             worst_case: result(a, [SNIPPET, null]).snippets.worstCase,
             per_chip: result(a, [SNIPPET, null]).snippets.perChip,
+            worst_case_performance: result(a, [SNIPPET, null]).snippets.worstCasePerformance,
           },
         },
       ],
@@ -530,6 +626,52 @@ describe("the session view", () => {
       expect(await screen.findByText("disk is full")).toBeTruthy();
       fireEvent.click(saveButton());
       expect(await screen.findByText("Saved as r-1")).toBeTruthy();
+    });
+  });
+
+  describe("analysis progress", () => {
+    it("shows the queue, the download and the analysis in turn", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/sessions/s1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: 4194304 });
+      });
+      expect(await screen.findByText("Downloading samples for axis X…")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.getAttribute("aria-valuenow")).toBe("25");
+      expect(screen.getByText("1 MiB of 4 MiB")).toBeTruthy();
+
+      await act(async () => {
+        onProgress?.({ phase: "analysing" });
+      });
+      expect(await screen.findByText("Analysing axis X…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("an unknown total shows an indeterminate bar", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/sessions/s1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: null });
+      });
+      expect(await screen.findByText("Downloading samples for axis X…")).toBeTruthy();
+      expect(screen.getByText("1 MiB")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.hasAttribute("aria-valuenow")).toBe(false);
     });
   });
 });

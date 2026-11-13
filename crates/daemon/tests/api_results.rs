@@ -4,6 +4,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use common::{Spec, app, json, open, request, seal_in, send};
 use serde_json::{Value, json};
+use sha2::Digest;
 use tempfile::TempDir;
 use wobblescope::storage::Storage;
 
@@ -159,10 +160,26 @@ async fn downloads_a_result_sample_byte_for_byte() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers["content-type"], "application/octet-stream");
-    assert_eq!(headers["cache-control"], "no-store");
+    assert_eq!(headers["cache-control"], "private, no-cache");
     let on_disk =
         std::fs::read(common::sessions_dir(d.path()).join("s1").join("c1-s0.zst")).unwrap();
     assert_eq!(body, on_disk);
+    let expected_etag = format!(
+        "\"{}\"",
+        sha2::Sha256::digest(&body)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
+    assert_eq!(headers["etag"], expected_etag);
+    let mut req = request("GET", &format!("/api/results/{id}/samples/1/0"));
+    req.headers_mut()
+        .insert("if-none-match", expected_etag.parse().unwrap());
+    let (status, headers, body) = send(&app, req).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+    assert!(body.is_empty());
+    assert_eq!(headers["etag"], expected_etag);
+    assert_eq!(headers["cache-control"], "private, no-cache");
     let (status, _, _) = send(
         &app,
         request("GET", &format!("/api/results/{id}/samples/9/0")),
@@ -331,4 +348,114 @@ async fn a_second_session_download_is_refused_while_the_first_is_unread() {
     ));
     drop(guard);
     assert!(s.session_zip("s1").is_ok());
+}
+
+fn install_legacy(dir: &std::path::Path, label: &str) -> String {
+    let from = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("tests/data/results/legacy_{label}.zip"));
+    let id = format!("legacy-{label}");
+    std::fs::copy(from, dir.join("results").join(format!("{id}.zip"))).unwrap();
+    id
+}
+
+/// Keys of `Analysis` that results saved by older versions do not have.
+const ADDED: [&str; 4] = [
+    "damping_source",
+    "resonance_freq",
+    "for_performance",
+    "peaks",
+];
+
+fn without_added_keys(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for key in ADDED {
+                map.remove(key);
+            }
+            map.values_mut().for_each(without_added_keys);
+        }
+        Value::Array(items) => items.iter_mut().for_each(without_added_keys),
+        _ => {}
+    }
+}
+
+fn assert_same(label: &str, got: &Value, want: &Value) {
+    match (got, want) {
+        (Value::Number(g), Value::Number(w)) => {
+            let (g, w) = (g.as_f64().unwrap(), w.as_f64().unwrap());
+            assert!(
+                (g - w).abs() <= 1e-9 * w.abs().max(1e-300) + 1e-12,
+                "{label}: {g} vs {w}"
+            );
+        }
+        (Value::Object(g), Value::Object(w)) => {
+            assert_eq!(
+                g.keys().collect::<Vec<_>>(),
+                w.keys().collect::<Vec<_>>(),
+                "{label}: keys"
+            );
+            for (key, g) in g {
+                assert_same(&format!("{label}.{key}"), g, &w[key]);
+            }
+        }
+        (Value::Array(g), Value::Array(w)) => {
+            assert_eq!(g.len(), w.len(), "{label}: length");
+            for (i, (g, w)) in g.iter().zip(w).enumerate() {
+                assert_same(&format!("{label}[{i}]"), g, w);
+            }
+        }
+        _ => assert_eq!(got, want, "{label}"),
+    }
+}
+
+async fn open_legacy(label: &str) {
+    let dir = TempDir::new().unwrap();
+    let (s, _) = open(dir.path(), BIG);
+    let id = install_legacy(dir.path(), label);
+    let app = app(Some(s));
+    let (status, detail) = json(&app, "GET", &format!("/api/results/{id}")).await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["record"]["version"], 1);
+    // A missing or zero damping ratio meant 0.1 when this was saved. It must not become "estimate".
+    assert_eq!(
+        detail["record"]["fit_params"]["damping_ratio"], 0.1,
+        "{label}"
+    );
+
+    let (status, _, bytes) = send(
+        &app,
+        request("GET", &format!("/api/results/{id}/samples/0/0")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let meta: wobblescope_session::meta::SessionMeta =
+        serde_json::from_value(detail["meta"].clone()).unwrap();
+    let params: wobblescope_core::fit::FitParams =
+        serde_json::from_value(detail["record"]["fit_params"].clone()).unwrap();
+    let inputs =
+        wobblescope_session::bridge::dataset_inputs(&meta, wobblescope_core::fit::Axis::X, |_| {
+            wobblescope_session::codec::decode_samples(&bytes)
+        })
+        .unwrap();
+    let fresh = wobblescope_core::multichip::analyze(&inputs, &params).unwrap();
+    let mut fresh = serde_json::to_value(fresh).unwrap();
+    let mut saved = detail["record"]["axes"][0]["analysis"].clone();
+    without_added_keys(&mut fresh);
+    without_added_keys(&mut saved);
+    assert_same("analysis", &fresh, &saved);
+}
+
+#[tokio::test]
+async fn a_legacy_result_with_a_null_damping_ratio_opens_and_reanalyses_to_its_saved_answer() {
+    open_legacy("null").await;
+}
+
+#[tokio::test]
+async fn a_legacy_result_with_a_zero_damping_ratio_opens_and_reanalyses_to_its_saved_answer() {
+    open_legacy("zero").await;
+}
+
+#[tokio::test]
+async fn a_legacy_result_with_a_damping_ratio_opens_and_reanalyses_to_its_saved_answer() {
+    open_legacy("number").await;
 }

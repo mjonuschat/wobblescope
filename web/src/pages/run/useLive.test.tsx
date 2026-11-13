@@ -13,7 +13,7 @@ import { RECONNECT_START_MS, liveUrl, useLive } from "./useLive";
 
 const running: TestState = {
   id: "test-1",
-  kind: "resonance",
+  kind: "axes",
   phase: "positioning",
   segment: 1,
   segments: 2,
@@ -28,8 +28,10 @@ const running: TestState = {
 
 const finished: FinishedTest = {
   id: "test-1",
+  kind: "axes",
   outcome: "complete",
   reason: null,
+  code: null,
   session_id: "test-1",
   motion_uncertain: false,
   needs_restart: false,

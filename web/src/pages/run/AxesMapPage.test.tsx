@@ -49,8 +49,10 @@ async function chooseMounting(chip: string, name: "Toolhead" | "Bed") {
 
 const finished = (over: Partial<FinishedTest> = {}): FinishedTest => ({
   id: "run-1",
+  kind: "axes_map",
   outcome: "complete",
   reason: null,
+  code: null,
   session_id: "run-1",
   motion_uncertain: false,
   needs_restart: false,
@@ -188,8 +190,7 @@ describe("the axes-map run page", () => {
         last: null,
       });
     });
-    expect(await screen.findByText("Moving +Y")).toBeTruthy();
-    expect(screen.getByText("Segment 2 of 3")).toBeTruthy();
+    expect(await screen.findByText("2 of 3: Moving +Y")).toBeTruthy();
     expect(screen.queryByRole("img", { name: /Signal against frequency/ })).toBeNull();
   });
 });

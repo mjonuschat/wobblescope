@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatHz, formatTime } from "./format";
+import { chipLabel, formatBytes, formatHz, formatTime } from "./format";
 
 describe("formatBytes", () => {
   it.each([
@@ -35,5 +35,20 @@ describe("formatTime", () => {
 
   it("returns text that is not a time as it was", () => {
     expect(formatTime("later")).toBe("later");
+  });
+});
+
+describe("chipLabel", () => {
+  it.each([
+    ["adxl345", "ADXL345"],
+    ["beacon", "Beacon"],
+    ["mcu expander", "Mcu Expander"],
+    ["lis2dw12 tool", "LIS2DW12 Tool"],
+    ["mpu9250_bed", "MPU9250 Bed"],
+    ["icm20948", "ICM20948"],
+    ["ldc1612", "LDC1612"],
+    ["a", "A"],
+  ])("shows %s as %s", (name, label) => {
+    expect(chipLabel(name)).toBe(label);
   });
 });

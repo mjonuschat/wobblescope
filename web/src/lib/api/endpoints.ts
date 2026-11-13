@@ -1,5 +1,6 @@
 import type { Axis } from "@/lib/generated/Axis";
 import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
+import type { TestKind } from "@/lib/generated/TestKind";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Homed } from "@/lib/generated/Homed";
 import type { Mode } from "@/lib/generated/Mode";
@@ -22,6 +23,8 @@ import { parsePointText } from "@/lib/importFiles";
 import type { ImportGroupState } from "@/pages/sessions/importModel";
 
 import { ApiClientError, apiFetch, apiJson, apiUrl } from "./client";
+
+export type OnBytes = (loaded: number, total: number | null) => void;
 
 /** The list filters the app offers. */
 export interface SessionFilters {
@@ -112,14 +115,50 @@ export function importGroup(group: ImportGroupState, signal?: AbortSignal) {
   return apiJson<Summary>("imports", { method: "POST", body: form, signal });
 }
 
+async function readResponseWithProgress(response: Response, onBytes: OnBytes): Promise<ArrayBuffer> {
+  const body = response.body;
+  if (!body) return response.arrayBuffer();
+
+  const contentLengthHeader = response.headers.get("Content-Length");
+  let total: number | null = null;
+  if (contentLengthHeader !== null) {
+    const parsed = Number(contentLengthHeader);
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      total = parsed;
+    }
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    onBytes(loaded, total);
+  }
+
+  const result = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result.buffer;
+}
+
 /** The stored, compressed sample file of one recording, exactly as the daemon holds it. */
 export async function fetchSample(
   id: string,
   chip: number,
   segment: number,
   signal?: AbortSignal,
+  onBytes?: OnBytes,
 ): Promise<ArrayBuffer> {
   const response = await apiFetch(`sessions/${encodeURIComponent(id)}/samples/${chip}/${segment}`, { signal });
+  if (onBytes) return readResponseWithProgress(response, onBytes);
   return response.arrayBuffer();
 }
 
@@ -148,8 +187,10 @@ export async function fetchResultSample(
   chip: number,
   segment: number,
   signal?: AbortSignal,
+  onBytes?: OnBytes,
 ): Promise<ArrayBuffer> {
   const response = await apiFetch(`results/${encodeURIComponent(id)}/samples/${chip}/${segment}`, { signal });
+  if (onBytes) return readResponseWithProgress(response, onBytes);
   return response.arrayBuffer();
 }
 
@@ -171,7 +212,9 @@ export function checkChips() {
 /** What the run form sends. Only the settings the user changed are in `overrides`. */
 export interface StartTestRequest {
   chips: string[];
-  axes: Axis[];
+  kind: TestKind;
+  /** Present for an axes test only: the daemon refuses it on a belt test. */
+  axes?: Axis[];
   mode: Mode;
   overrides: Partial<Overrides>;
   points: [number, number, number][];

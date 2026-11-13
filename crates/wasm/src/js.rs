@@ -66,6 +66,38 @@ impl WasmSession {
             .map_err(|e| JsError::new(&e.to_string()))?;
         to_js(&analysis)
     }
+
+    /// Compares the two belts of one chip up to `max_freq` Hz. `include_excluded` uses a
+    /// recording that health or coverage would exclude.
+    pub fn belts(
+        &self,
+        chip: String,
+        max_freq: f64,
+        include_excluded: bool,
+    ) -> Result<JsValue, JsError> {
+        let analysis = self
+            .inner
+            .belts(&chip, max_freq, include_excluded)
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        to_js(&analysis)
+    }
+
+    /// The time-frequency map of one chip's recording at one probe point of `axis`, up to
+    /// `max_freq` Hz.
+    pub fn spectrogram(
+        &self,
+        axis: JsValue,
+        chip: String,
+        point: usize,
+        max_freq: f64,
+    ) -> Result<JsValue, JsError> {
+        let axis: Axis = from_js("axis", axis)?;
+        let map = self
+            .inner
+            .spectrogram(axis, &chip, point, max_freq)
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        to_js(&map)
+    }
 }
 
 /// A live spectrum over the latest seconds of a streamed accelerometer.

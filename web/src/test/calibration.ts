@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { Direction } from "@/lib/generated/Direction";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { WasmModule } from "@/analysis/handler";
 import { config_snippet, initSync, WasmSession } from "../wasm/wobblescope_wasm.js";
@@ -104,6 +105,9 @@ const CHIP_AXES = [
 
 export const CALIBRATION_CHIPS = ["a", "b"];
 
+/** The directions of the X, Y and Z moves, in segment order. */
+const MOVES: Direction[] = [{ Vector: [1, 0, 0] }, { Vector: [0, 1, 0] }, { Vector: [0, 0, 1] }];
+
 /** Three segments, two chips, one file per chip and segment. */
 export function calibrationMeta(id = "cal1"): SessionMeta {
   return {
@@ -116,7 +120,6 @@ export function calibrationMeta(id = "cal1"): SessionMeta {
     settings: null,
     printer: null,
     outcome: "Complete",
-    kind: "AxesMap",
     axes_map_run: { speed: 80, accel: 3000, z_height: 30, travel_speed: 150, max_z_velocity: 100, max_z_accel: 3000 },
     notes: [],
     probe_points: [{ position: null }, { position: null }, { position: null }],
@@ -131,7 +134,7 @@ export function calibrationMeta(id = "cal1"): SessionMeta {
       health_notes: [],
     })),
     segments: [0, 1, 2].map((segment) => ({
-      axis: "X" as const,
+      axis: MOVES[segment],
       point: segment,
       window: null,
       files: CALIBRATION_CHIPS.map((_, chip) => ({

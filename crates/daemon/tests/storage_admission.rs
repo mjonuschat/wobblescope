@@ -263,7 +263,7 @@ fn ae4_a_newer_format_session_survives_every_admission() {
     let p = sessions_dir(dir.path()).join("newer").join("meta.json");
     let text = fs::read_to_string(&p)
         .unwrap()
-        .replace("\"format_version\": 1", "\"format_version\": 2");
+        .replace("\"format_version\": 1", "\"format_version\": 3");
     fs::write(&p, text).unwrap();
     let (_, one) = totals(dir.path());
     let s = open_with(dir.path(), one * 4, 0, probe(u64::MAX / 4));

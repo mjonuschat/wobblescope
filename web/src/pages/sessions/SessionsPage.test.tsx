@@ -46,6 +46,15 @@ describe("the sessions page", () => {
     expect(text[2]).toContain("CSV");
   });
 
+  it("a_belt_session_is_tagged_belts", async () => {
+    api([summary("belt", { kind: "belts" }), summary("axes"), summary("odd", { kind: "other" })]);
+    renderRoute("/sessions");
+    const rows = (await screen.findAllByRole("row")).slice(1);
+    expect(within(rows[0]).getByText("Belts")).toBeTruthy();
+    expect(within(rows[1]).queryByText("Belts")).toBeNull();
+    expect(within(rows[2]).queryByText("Belts")).toBeNull();
+  });
+
   it("links each row to the session's zip download", async () => {
     api([summary("s1")]);
     renderRoute("/sessions");
@@ -212,6 +221,7 @@ describe("the sessions page", () => {
         }
         return { body: { sessions: [summary("s1")] } };
       }
+      if (url.pathname.endsWith("/settings")) return { status: 404, body: { error: "not_found", message: "no" } };
       return { body: usage };
     });
     renderRoute("/sessions");
@@ -223,7 +233,9 @@ describe("the sessions page", () => {
     const calls = stubApi(({ url }) =>
       url.pathname.endsWith("/sessions")
         ? { status: 500, body: { error: "internal", message: "disk on fire" } }
-        : { body: usage },
+        : url.pathname.endsWith("/settings")
+          ? { status: 404, body: { error: "not_found", message: "no" } }
+          : { body: usage },
     );
     renderRoute("/sessions");
     expect(await screen.findByText("disk on fire")).toBeTruthy();

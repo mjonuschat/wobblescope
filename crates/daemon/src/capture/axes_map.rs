@@ -3,11 +3,10 @@
 
 use serde::Deserialize;
 use wobblescope_core::axes_map::Mounting;
-use wobblescope_core::fit::Axis;
-use wobblescope_session::meta::{AxesMapRun, Mode};
+use wobblescope_session::meta::{AXES_MAP_DIRECTIONS, AxesMapRun, Mode};
 
 use super::request::{
-    Effective, Overrides, PlanKind, RequestError, Segment, TestPlan, check_chips, refuse,
+    Effective, Overrides, RequestError, Segment, TestKind, TestPlan, check_chips, refuse,
 };
 use crate::moonraker::settings::PrinterSettings;
 
@@ -146,9 +145,11 @@ pub fn plan_axes_map(
             }
         }
     }
-    let segments = (0..3)
-        .map(|i| Segment {
-            axis: Axis::X,
+    let segments = AXES_MAP_DIRECTIONS
+        .iter()
+        .enumerate()
+        .map(|(i, &axis)| Segment {
+            axis,
             point: i,
             position: points[i],
             target: Some(points[i + 1]),
@@ -168,6 +169,7 @@ pub fn plan_axes_map(
         .map(|c| (c.chip.clone(), c.mounting))
         .collect();
     Ok(TestPlan {
+        kind: TestKind::AxesMap,
         chips,
         mode: Mode::Pulse,
         points: points[..3].to_vec(),
@@ -184,7 +186,7 @@ pub fn plan_axes_map(
         segments,
         segment_seconds: SEGMENT_SECONDS,
         pulse_zeroes_period: false,
-        kind: PlanKind::AxesMap(AxesMapPlan {
+        axes_map: Some(AxesMapPlan {
             run,
             mountings,
             points,
@@ -198,7 +200,7 @@ impl TestPlan {
     /// a segment without a target.
     #[must_use]
     pub fn segment_script(&self, segment: &Segment) -> String {
-        let (PlanKind::AxesMap(axes_map), Some([x, y, z])) = (&self.kind, segment.target) else {
+        let (Some(axes_map), Some([x, y, z])) = (&self.axes_map, segment.target) else {
             return String::new();
         };
         format!(

@@ -9,6 +9,7 @@ export function summary(id: string, over: Partial<Summary> = {}): Summary {
     source: "Capture",
     outcome: "Complete",
     mode: "Sweep",
+    kind: "axes",
     printer: "voron",
     chips: ["adxl345"],
     size_bytes: 1536,

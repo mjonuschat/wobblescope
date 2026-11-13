@@ -29,3 +29,17 @@ export function formatTime(iso: string): string {
   const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
   return `${day} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
 }
+
+/**
+ * A chip's Klipper section name for display: "lis2dw12 tool" becomes "LIS2DW12 Tool". A word that
+ * mixes letters and digits is a part number, so it is upper-cased. Never use it for a request or key.
+ */
+export function chipLabel(name: string): string {
+  return name
+    .split(/[_\s]+/)
+    .filter((word) => word !== "")
+    .map((word) =>
+      /\d/.test(word) && /[a-z]/i.test(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(" ");
+}

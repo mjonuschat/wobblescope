@@ -3,10 +3,11 @@ mod common;
 use common::fake_printer::fixture;
 use wobblescope::capture::axes_map::{AxesMapRequest, ChipChoice, plan_axes_map};
 use wobblescope::capture::meta::{ChipFacts, initial};
-use wobblescope::capture::request::PlanKind;
+use wobblescope::capture::request::TestKind;
 use wobblescope::moonraker::settings::{PrinterSettings, parse_settings};
 use wobblescope_core::axes_map::Mounting;
-use wobblescope_session::meta::SessionKind;
+use wobblescope_core::direction::Direction;
+use wobblescope_session::meta::FORMAT_VERSION;
 
 fn printer() -> PrinterSettings {
     parse_settings(
@@ -44,7 +45,8 @@ fn refused(request: &AxesMapRequest, printer: &PrinterSettings) -> String {
 #[test]
 fn defaults_match_shake_and_tune() {
     let plan = plan_axes_map(&request(), &printer(), 600).unwrap();
-    let PlanKind::AxesMap(axes_map) = &plan.kind else {
+    assert_eq!(plan.kind, TestKind::AxesMap);
+    let Some(axes_map) = &plan.axes_map else {
         panic!("not an axes-map plan");
     };
     assert_eq!(
@@ -67,7 +69,14 @@ fn defaults_match_shake_and_tune() {
             [mx + 15.0, my + 15.0, 50.0],
         ]
     );
-    assert_eq!(plan.segments.len(), 3);
+    assert_eq!(
+        plan.segments.iter().map(|s| s.axis).collect::<Vec<_>>(),
+        [
+            Direction::Vector([1, 0, 0]),
+            Direction::Vector([0, 1, 0]),
+            Direction::Vector([0, 0, 1]),
+        ]
+    );
     assert_eq!(plan.segments[2].position, axes_map.points[2]);
     assert_eq!(plan.segments[2].target, Some(axes_map.points[3]));
 }
@@ -120,7 +129,7 @@ fn segment_script_is_exactly_the_documented_text() {
 }
 
 #[test]
-fn meta_for_a_calibration_has_kind_run_mounting_and_three_points() {
+fn meta_for_a_calibration_has_mounting_and_three_points_and_no_mode() {
     let plan = plan_axes_map(&request(), &printer(), 600).unwrap();
     let facts = |section: &str| ChipFacts {
         section: section.to_owned(),
@@ -137,14 +146,11 @@ fn meta_for_a_calibration_has_kind_run_mounting_and_three_points() {
         &[facts("adxl345"), facts("adxl345 bed")],
         None,
     );
-    assert_eq!(meta.kind, SessionKind::AxesMap);
-    assert_eq!(meta.format_version, meta.required_version());
-    assert_ne!(
-        meta.format_version,
-        wobblescope_session::meta::FORMAT_VERSION
-    );
-    let run = meta.axes_map_run.as_ref().unwrap();
-    assert_eq!(run.speed, 80.0);
+    // The run settings and version 2 come with the first segment; the first journal is a
+    // valid session without them.
+    assert_eq!(meta.format_version, FORMAT_VERSION);
+    assert!(meta.axes_map_run.is_none());
+    meta.validate().unwrap();
     assert!(meta.mode.is_none() && meta.settings.is_none());
     assert_eq!(meta.probe_points.len(), 3);
     assert_eq!(meta.probe_points[1].position, Some([165.5, 139.0, 20.0]));

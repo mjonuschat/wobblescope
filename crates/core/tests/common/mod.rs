@@ -289,7 +289,8 @@ pub fn normalized(name: &str) -> wobblescope_core::CalibrationData {
 pub fn fit_params(p: &Params) -> wobblescope_core::fit::FitParams {
     wobblescope_core::fit::FitParams {
         scv: p.scv,
-        damping_ratio: p.damping_ratio,
+        // Klipper's goldens fix the ratio; `None` there is its default 0.1, not an estimate.
+        damping_ratio: p.damping_ratio.or(Some(0.1)),
         max_smoothing: p.max_smoothing,
         max_vibrations: p.max_vibrations,
         test_damping_ratios: p.test_damping_ratios.clone(),
@@ -487,4 +488,104 @@ pub fn energy_between(s: &RawSamples, range: std::ops::Range<f64>) -> f64 {
         idx.iter().map(|&i| (v[i] - m).powi(2)).sum::<f64>() / idx.len() as f64
     };
     var(&s.x) + var(&s.y) + var(&s.z)
+}
+
+#[derive(Deserialize)]
+pub struct OraclePeak {
+    pub freq: f64,
+    pub level: f64,
+    pub above_effect: bool,
+}
+
+#[derive(Deserialize)]
+pub struct OracleDataset {
+    pub name: String,
+    pub fr: f64,
+    pub zeta: Option<f64>,
+    pub peaks: Vec<OraclePeak>,
+    pub detect_threshold: f64,
+    pub effect_threshold: f64,
+}
+
+#[derive(Deserialize)]
+pub struct OraclePerformance {
+    pub name: Option<String>,
+    pub shown: bool,
+}
+
+#[derive(Deserialize)]
+pub struct OracleCase {
+    pub datasets: Vec<OracleDataset>,
+    pub performance: OraclePerformance,
+}
+
+#[derive(Deserialize)]
+pub struct OracleEdge {
+    pub name: String,
+    pub freq_bins: Vec<f64>,
+    pub psd: Vec<f64>,
+    pub peaks: Vec<OraclePeak>,
+    pub detect_threshold: f64,
+    pub effect_threshold: f64,
+}
+
+/// Shake&Tune's own results for the golden inputs, written by `golden/shaketune.py`.
+#[derive(Deserialize)]
+pub struct Oracle {
+    pub pin: String,
+    pub cases: BTreeMap<String, OracleCase>,
+    pub edge_cases: Vec<OracleEdge>,
+    pub spectrograms: BTreeMap<String, OracleSpectrogram>,
+    pub belts: Vec<BeltCase>,
+}
+
+/// Shake&Tune's belt comparison of two PSDs, with the inputs it was run on.
+#[derive(Deserialize)]
+pub struct BeltCase {
+    pub name: String,
+    pub max_freq: f64,
+    pub freqs_a: Vec<f64>,
+    pub psd_a: Vec<f64>,
+    pub freqs_b: Vec<f64>,
+    pub psd_b: Vec<f64>,
+    pub expected: BeltExpected,
+}
+
+/// `similarity` is `None` where Shake&Tune's is NaN (a flat curve has no correlation).
+#[derive(Deserialize)]
+pub struct BeltExpected {
+    pub freqs: Vec<f64>,
+    pub psd_a: Vec<f64>,
+    pub psd_b: Vec<f64>,
+    pub peaks_a: Vec<usize>,
+    pub peaks_b: Vec<usize>,
+    pub pairs: Vec<(usize, usize)>,
+    pub unpaired_a: Vec<usize>,
+    pub unpaired_b: Vec<usize>,
+    pub similarity: Option<f64>,
+    pub health: String,
+}
+
+/// Shake&Tune's spectrogram of one recording: all the times, the matrix cut at 200 Hz for the
+/// first rows, and the 5th percentile and maximum of the whole matrix.
+#[derive(Deserialize)]
+pub struct OracleSpectrogram {
+    pub n_segments: usize,
+    pub times: Vec<f64>,
+    pub freq_bins: Vec<f64>,
+    pub rows: Vec<Vec<f64>>,
+    pub floor: f64,
+    pub max: f64,
+}
+
+pub fn shaketune() -> Oracle {
+    serde_json::from_str(include_str!("../golden/shaketune.json")).unwrap()
+}
+
+/// Klipper's default fit, which fixes the damping ratio at 0.1.
+pub fn klipper_params() -> wobblescope_core::fit::FitParams {
+    wobblescope_core::fit::FitParams {
+        damping_ratio: Some(0.1),
+        ..Default::default()
+    }
 }

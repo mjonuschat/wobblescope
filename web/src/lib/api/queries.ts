@@ -55,6 +55,14 @@ export const queryKeys = {
   status: ["status"] as const,
   printer: ["printer"] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
+  spectrogramsOf: (id: string) => ["spectrogram", id] as const,
+  /** One chip's map at one probe point. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
+  spectrogram: (id: string, axis: Axis, chip: string, point: number, maxFreq: number, createdAt = "", resultId = "") =>
+    ["spectrogram", id, axis, chip, point, maxFreq, createdAt, resultId] as const,
+  beltsOf: (id: string) => ["belts", id] as const,
+  /** One chip's belt comparison. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
+  belts: (id: string, chip: string, maxFreq: number, includeExcluded: boolean, createdAt = "", resultId = "") =>
+    ["belts", id, chip, maxFreq, includeExcluded, createdAt, resultId] as const,
   /** `createdAt` tells a session written again under the same id from the one analysed before. */
   /** Per-chip outcomes of a calibration session; under `analysesOf` so deleting the session drops them. */
   axesMapAnalysis: (id: string, createdAt = "") => ["analysis", id, "axes-map", createdAt] as const,
@@ -192,6 +200,8 @@ export function useDeleteSession() {
       queryClient.removeQueries({ queryKey: queryKeys.session(id) });
       // The id can be written again with other data, so nothing of the old session may stay.
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(id) });
+      queryClient.removeQueries({ queryKey: queryKeys.spectrogramsOf(id) });
+      queryClient.removeQueries({ queryKey: queryKeys.beltsOf(id) });
       getAnalysisClient().forget(id);
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
@@ -275,11 +285,14 @@ export function useStartTest() {
   return useMutation({ mutationFn: (request: StartTestRequest) => startTest(request) });
 }
 
+const BUSY_POLL_MS = 1000;
+
 export function usePrinterState(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.printer,
     queryFn: ({ signal }) => getPrinter(signal),
-    refetchInterval: STATUS_POLL_MS,
+    // A busy printer is watched closely so the Run button frees up soon after it settles.
+    refetchInterval: (query) => (query.state.data?.busy ? BUSY_POLL_MS : STATUS_POLL_MS),
     retry: false,
     enabled,
   });
@@ -297,10 +310,15 @@ export function useStopPrinter() {
   });
 }
 
+/** The key that lets other components see that homing is in flight in this browser. */
+export const homeMutationKey = ["printer", "home"] as const;
+
 export function useHomePrinter() {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: homeMutationKey,
     mutationFn: () => homePrinter(),
+    onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });
 }
@@ -323,6 +341,8 @@ export function useDeleteResult() {
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: queryKeys.result(id) });
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(`result:${id}`) });
+      queryClient.removeQueries({ queryKey: queryKeys.spectrogramsOf(`result:${id}`) });
+      queryClient.removeQueries({ queryKey: queryKeys.beltsOf(`result:${id}`) });
       getAnalysisClient().forget(`result:${id}`);
       void queryClient.invalidateQueries({ queryKey: queryKeys.results });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });

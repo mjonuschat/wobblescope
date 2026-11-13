@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Panel } from "@/components/Panel";
@@ -8,6 +8,7 @@ import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
 
+import { ScaleDialog } from "./ScaleDialog";
 import { ShaperTable } from "./ShaperTable";
 
 interface Props {
@@ -23,9 +24,12 @@ function ChipDetails({
   snippets,
   maxFreq,
   decisions,
+  maxScale,
   chartHeight,
   corner,
 }: Omit<Props, "switcher"> & {
+  /** The left axis of the PSD chart ends here; `null` scales it to the data. */
+  maxScale: number | null;
   chartHeight?: number | string;
   corner?: ReactNode;
 }) {
@@ -37,7 +41,7 @@ function ChipDetails({
     <>
       <div className="relative">
         <EChart
-          option={psdOption({ chip, recommendation: rec, maxFreq })}
+          option={psdOption({ chip, recommendation: rec, maxFreq, maxScale })}
           label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
           height={chartHeight}
         />
@@ -55,7 +59,9 @@ function ChipDetails({
 }
 
 export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Props) {
-  const details = { chip, snippets, maxFreq, decisions };
+  // Where the vibration axis ends. `null` fits it to the data.
+  const [maxScale, setMaxScale] = useState<number | null>(null);
+  const details = { chip, snippets, maxFreq, decisions, maxScale };
   const expand = (
     <ExpandDialog title={`Resonance and Shapers: ${chip.chip}`}>
       <ChipDetails {...details} chartHeight={EXPANDED_CHART_HEIGHT} />
@@ -64,7 +70,15 @@ export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Pro
   return (
     <Panel title="Resonance and Shapers" label={`Chip ${chip.chip}`}>
       {switcher}
-      <ChipDetails {...details} corner={chip.recommendation ? expand : undefined} />
+      <ChipDetails
+        {...details}
+        corner={
+          <div className="flex gap-2">
+            <ScaleDialog value={maxScale} onChange={setMaxScale} />
+            {chip.recommendation && expand}
+          </div>
+        }
+      />
     </Panel>
   );
 }

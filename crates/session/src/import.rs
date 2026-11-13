@@ -11,8 +11,8 @@ use wobblescope_core::signal::value_problems;
 use crate::SessionError;
 use crate::codec::MAX_SAMPLES;
 use crate::meta::{
-    ChipMeta, FORMAT_VERSION, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionKind,
-    SessionMeta, Source, TimeDomain, sample_file_name,
+    ChipMeta, FORMAT_VERSION, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source,
+    TimeDomain, sample_file_name,
 };
 
 /// What the caller knows about the file being imported. Klipper's file name does not carry the
@@ -190,12 +190,12 @@ pub fn build_klipper_group(
         };
         let segment = match segments
             .iter()
-            .position(|s| s.axis == file.axis && s.point == point as u32)
+            .position(|s| s.axis == file.axis.into() && s.point == point as u32)
         {
             Some(i) => i,
             None => {
                 segments.push(SegmentMeta {
-                    axis: file.axis,
+                    axis: file.axis.into(),
                     point: point as u32,
                     window: None,
                     files: Vec::new(),
@@ -261,7 +261,6 @@ pub fn build_klipper_group(
             original_file_names: names,
         },
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::Resonance,
         axes_map_run: None,
         mode: None,
         settings: None,

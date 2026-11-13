@@ -1,4 +1,5 @@
-import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
+import { useIsMutating } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,13 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
-import { usePrinterState, useStartTest } from "@/lib/api/queries";
+import { homeMutationKey, usePrinterState, useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
 import type { CheckFailure } from "@/lib/generated/CheckFailure";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
+import type { TestKind } from "@/lib/generated/TestKind";
 import { parseNumber } from "@/lib/parse";
 import { homedTone } from "@/components/PrinterControls";
 
@@ -36,9 +38,15 @@ const FREQ_MAX = 300;
 
 const FIELD_STEPS: Partial<Record<OverrideKey, number>> = { hz_per_sec: 0.1, sweeping_period: 0.1 };
 
+/** Klipper reads a sweeping period of 0 as pulse mode; 1.2 s is its default sweeping period when sweep mode is on. */
+const SWEEP_PERIOD_FALLBACK = 1.2;
+
 const FREQ_KEYS = ["freq_start", "freq_end"] as const;
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
+
+const OLD_SOFTWARE_WARNING =
+  "This printer runs software older than Klipper v0.12.0 or Kalico v2026.01.00. A belt test may be refused after the toolhead moves to the test point.";
 
 interface PointRow {
   x: string;
@@ -47,6 +55,8 @@ interface PointRow {
 }
 
 interface Props {
+  /** Which test the form sets up. */
+  kind: TestKind;
   settings: PrinterSettings;
   chipList: ChipsSnapshot;
   /** The chips that will record. */
@@ -89,6 +99,40 @@ function FormCard({ title, action, children }: { title: string; action?: ReactNo
   );
 }
 
+/** The X, Y and Z inputs of one test point; ids and labels are what the tests and error links rely on. */
+function PointInputs({
+  row,
+  index,
+  labelled,
+  onChange,
+}: {
+  row: PointRow;
+  index: number;
+  labelled: boolean;
+  onChange: (axis: "x" | "y" | "z", value: string) => void;
+}) {
+  return (
+    <>
+      {(["x", "y", "z"] as const).map((axis) => (
+        <div key={axis} className="space-y-1">
+          <Label htmlFor={`point-${index}-${axis}`} className={labelled ? undefined : "sr-only"}>
+            {axis.toUpperCase()}
+          </Label>
+          <UnitInput
+            id={`point-${index}-${axis}`}
+            aria-label={`Point ${index + 1} ${axis.toUpperCase()}`}
+            unit="mm"
+            step={1}
+            className="w-32"
+            value={row[axis]}
+            onChange={(e) => onChange(axis, e.target.value)}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ChoiceRow({ label, error, children }: { label: string; error: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-2">
@@ -99,9 +143,10 @@ function ChoiceRow({ label, error, children }: { label: string; error: ReactNode
   );
 }
 
-export function TestForm({ settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
+export function TestForm({ kind, settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
   const printer = usePrinterState(true);
+  const belts = kind === "belts";
   const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
   const [texts, setTexts] = useState<Partial<Record<OverrideKey, string>>>({});
@@ -113,6 +158,14 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     if (limits) setPoints(patternPoints(next, limits, patternZ).map((point) => rowFrom(point)));
   }
   const mode = chosenMode ?? settings.default_mode;
+
+  /** The value a field starts from: the printer's, except that a sweep needs a period above 0. */
+  const defaultOf = (key: OverrideKey): number | null => {
+    const value = settings.settings[key].value;
+    return key === "sweeping_period" && mode === "Sweep" && !(value !== null && value > 0)
+      ? SWEEP_PERIOD_FALLBACK
+      : value;
+  };
 
   const overrides: Partial<Record<OverrideKey, number>> = {};
   const typos: Partial<Record<OverrideKey, string>> = {};
@@ -128,19 +181,24 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   const pointsValid =
     parsedPoints.length > 0 && parsedPoints.every((p) => p.every((v) => v !== undefined && !Number.isNaN(v)));
   const missing = OVERRIDE_FIELDS.filter(
-    ({ key }) => settings.settings[key].needed && settings.settings[key].value === null && overrides[key] === undefined,
+    ({ key }) => settings.settings[key].needed && defaultOf(key) === null && overrides[key] === undefined,
   );
 
+  // The poll may lag behind a Home pressed here, so the pending mutation counts at once.
+  const homing = useIsMutating({ mutationKey: homeMutationKey }) > 0;
   let problem = blocked;
   if (!problem && printer.isPending) problem = "Checking whether the printer is homed…";
+  if (!problem && homing) problem = "The printer is homing.";
+  if (!problem && printer.data?.busy) problem = printer.data.busy;
   if (!problem && printer.data && homedTone(printer.data.homed_axes) !== "full") {
     const axes = printer.data.homed_axes ?? "";
     const notHomed = ["X", "Y", "Z"].filter((a) => !axes.toLowerCase().includes(a.toLowerCase()));
     problem = `Home the printer first. Not homed: ${notHomed.join(", ")}.`;
   }
   if (!problem && chips.length === 0) problem = "Choose at least one chip.";
-  if (!problem && axes.length === 0) problem = "Choose at least one axis.";
+  if (!problem && !belts && axes.length === 0) problem = "Choose at least one axis.";
   if (!problem && !pointsValid) problem = "Give every test point an X, Y and Z.";
+  if (!problem && belts && points.length !== 1) problem = "A belt test uses one test point.";
   if (!problem && missing.length > 0) {
     problem = `Set ${missing.map((m) => m.label.toLowerCase()).join(", ")}: the printer does not report it.`;
   }
@@ -164,10 +222,16 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     start.mutate(
       {
         chips,
-        axes,
+        kind,
+        ...(belts ? {} : { axes }),
         mode,
         overrides: Object.fromEntries(
-          Object.entries(overrides).filter(
+          Object.entries({
+            ...(mode === "Sweep" && defaultOf("sweeping_period") !== settings.settings.sweeping_period.value
+              ? { sweeping_period: SWEEP_PERIOD_FALLBACK }
+              : {}),
+            ...overrides,
+          }).filter(
             ([key, value]) => !sweepOnly(key as OverrideKey) && value !== settings.settings[key as OverrideKey].value,
           ),
         ),
@@ -181,26 +245,49 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   const rangeStart = clampFreq(overrides.freq_start ?? settings.settings.freq_start.value ?? FREQ_MIN);
   const rangeEnd = clampFreq(overrides.freq_end ?? settings.settings.freq_end.value ?? FREQ_MAX);
 
-  const patternMenu = limits ? (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
-        Pattern
-        <ChevronDownIcon />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        {POINT_PATTERNS.map(({ value, label }) => (
-          <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
-            {label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  ) : null;
+  const patternMenu =
+    limits && !belts ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
+          Pattern
+          <ChevronDownIcon />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          {POINT_PATTERNS.map(({ value, label }) => (
+            <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
+
+  const anyOverride = OVERRIDE_FIELDS.some(({ key }) => (texts[key] ?? "") !== "");
+  const resetButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Reset"
+            disabled={!anyOverride}
+            onClick={() => setTexts({})}
+          />
+        }
+      >
+        <RotateCcwIcon />
+      </TooltipTrigger>
+      <TooltipContent side="top">Back to the printer's values</TooltipContent>
+    </Tooltip>
+  );
 
   const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];
-    const required = setting.needed && setting.value === null;
-    const placeholder = setting.value !== null ? String(setting.value) : required ? "required" : "printer default";
+    const initial = defaultOf(key);
+    const required = setting.needed && initial === null;
+    const placeholder = initial !== null ? String(initial) : required ? "required" : "printer default";
     return (
       <UnitInput
         id={`override-${key}`}
@@ -209,7 +296,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         aria-label={extra.label}
         className={extra.className}
         placeholder={placeholder}
-        value={texts[key] ?? (setting.value !== null ? String(setting.value) : "")}
+        value={texts[key] ?? (initial !== null ? String(initial) : "")}
         disabled={!setting.overridable}
         aria-required={required}
         aria-invalid={Boolean(typos[key] ?? errorFor(key))}
@@ -221,7 +308,7 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
 
   const overrideField = ({ key, label, unit }: (typeof OVERRIDE_FIELDS)[number]) => {
     const setting = settings.settings[key];
-    const required = setting.needed && setting.value === null;
+    const required = setting.needed && defaultOf(key) === null;
     return (
       <div key={key} className="space-y-1">
         <Label htmlFor={`override-${key}`}>
@@ -238,6 +325,9 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     <form onSubmit={submit} className="space-y-4" noValidate>
       <FormCard title="Setup">
         <div className="space-y-5">
+          {belts && settings.version_support === "too_old" && (
+            <p className="text-sm text-amber-400">{OLD_SOFTWARE_WARNING}</p>
+          )}
           <ChoiceRow label="Chips" error={<FieldError name="chips" text={errorFor("chips")} />}>
             {chipList.chips.length === 0 ? (
               <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
@@ -274,28 +364,36 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
               </div>
             )}
           </ChoiceRow>
-          <ChoiceRow label="Axes" error={<FieldError name="axes" text={errorFor("axes")} />}>
-            <div className="flex gap-6">
-              {AXIS_ORDER.map((axis) => (
-                <div key={axis} className="flex items-center gap-2">
-                  <Switch
-                    id={`axis-${axis}`}
-                    checked={axes.includes(axis)}
-                    onCheckedChange={(on) =>
-                      setAxes((old) =>
-                        on ? AXIS_ORDER.filter((a) => a === axis || old.includes(a)) : old.filter((a) => a !== axis),
-                      )
-                    }
-                  />
-                  <Label htmlFor={`axis-${axis}`}>{axis}</Label>
-                </div>
-              ))}
-            </div>
-          </ChoiceRow>
+          {!belts && (
+            <ChoiceRow label="Axes" error={<FieldError name="axes" text={errorFor("axes")} />}>
+              <div className="flex gap-6">
+                {AXIS_ORDER.map((axis) => (
+                  <div key={axis} className="flex items-center gap-2">
+                    <Switch
+                      id={`axis-${axis}`}
+                      checked={axes.includes(axis)}
+                      onCheckedChange={(on) =>
+                        setAxes((old) =>
+                          on ? AXIS_ORDER.filter((a) => a === axis || old.includes(a)) : old.filter((a) => a !== axis),
+                        )
+                      }
+                    />
+                    <Label htmlFor={`axis-${axis}`}>{axis}</Label>
+                  </div>
+                ))}
+              </div>
+            </ChoiceRow>
+          )}
           <div className="grid grid-cols-3 items-start gap-4">
             <div className="space-y-2">
               <Label htmlFor="mode">Mode</Label>
-              <Select value={mode} onValueChange={(value) => setChosenMode(value as Mode)}>
+              <Select
+                value={mode}
+                onValueChange={(value) => {
+                  setChosenMode(value as Mode);
+                  setTexts(({ sweeping_period: _stale, ...rest }) => rest);
+                }}
+              >
                 <SelectTrigger id="mode" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -308,14 +406,22 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
             </div>
             {OVERRIDE_FIELDS.filter(({ key }) => isModeField(key) && !sweepOnly(key)).map(overrideField)}
           </div>
+          {belts && (
+            <ChoiceRow label="Test point" error={<FieldError name="points" text={errorFor("points")} />}>
+              <div className="flex items-end gap-2">
+                <PointInputs
+                  row={points[0]}
+                  index={0}
+                  labelled
+                  onChange={(axis, value) => setPoints([{ ...points[0], [axis]: value }])}
+                />
+              </div>
+            </ChoiceRow>
+          )}
         </div>
       </FormCard>
 
-      <FormCard title="Parameters">
-        <p className="mb-4 text-sm text-muted-foreground">
-          The fields start with the printer's values. Change one to override it; clear it to use the printer's value
-          again.
-        </p>
+      <FormCard title="Parameters" action={resetButton}>
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 space-y-2">
             <p className="text-sm font-medium">Frequency range</p>
@@ -344,63 +450,55 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
         </div>
       </FormCard>
 
-      <FormCard title="Points" action={patternMenu}>
-        <div className="space-y-2">
-          {points.map((row, i) => {
-            return (
-              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
-              <div key={i} className="flex items-end gap-2">
-                {(["x", "y", "z"] as const).map((axis) => (
-                  <div key={axis} className="space-y-1">
-                    <Label htmlFor={`point-${i}-${axis}`} className={i === 0 ? undefined : "sr-only"}>
-                      {axis.toUpperCase()}
-                    </Label>
-                    <UnitInput
-                      id={`point-${i}-${axis}`}
-                      aria-label={`Point ${i + 1} ${axis.toUpperCase()}`}
-                      unit="mm"
-                      step={1}
-                      className="w-32"
-                      value={row[axis]}
-                      onChange={(e) =>
-                        editPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
-                      }
-                    />
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label={`Remove point ${i + 1}`}
-                    className={points.length === 1 ? "invisible" : undefined}
-                    onClick={() => editPoints((old) => old.filter((_, j) => j !== i))}
-                  >
-                    <MinusIcon />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label={`Add a point after point ${i + 1}`}
-                    onClick={() =>
-                      editPoints((old) => [
-                        ...old.slice(0, i + 1),
-                        rowFrom(settings.default_point),
-                        ...old.slice(i + 1),
-                      ])
+      {!belts && (
+        <FormCard title="Points" action={patternMenu}>
+          <div className="space-y-2">
+            {points.map((row, i) => {
+              return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
+                <div key={i} className="flex items-end gap-2">
+                  <PointInputs
+                    row={row}
+                    index={i}
+                    labelled={i === 0}
+                    onChange={(axis, value) =>
+                      editPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: value } : r)))
                     }
-                  >
-                    <PlusIcon />
-                  </Button>
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Remove point ${i + 1}`}
+                      className={points.length === 1 ? "invisible" : undefined}
+                      onClick={() => editPoints((old) => old.filter((_, j) => j !== i))}
+                    >
+                      <MinusIcon />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Add a point after point ${i + 1}`}
+                      onClick={() =>
+                        editPoints((old) => [
+                          ...old.slice(0, i + 1),
+                          rowFrom(settings.default_point),
+                          ...old.slice(i + 1),
+                        ])
+                      }
+                    >
+                      <PlusIcon />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-          <FieldError name="points" text={errorFor("points")} />
-        </div>
-      </FormCard>
+              );
+            })}
+            <FieldError name="points" text={errorFor("points")} />
+          </div>
+        </FormCard>
+      )}
 
       <Separator />
 

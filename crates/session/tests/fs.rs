@@ -13,8 +13,8 @@ use wobblescope_session::fs::{
     list_sealed, open_session, remove_session, sweep_leftovers, write_session,
 };
 use wobblescope_session::meta::{
-    ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source,
-    TimeDomain, sample_file_name,
+    ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
+    sample_file_name,
 };
 
 fn samples(n: usize, seed: f64) -> RawSamples {
@@ -53,7 +53,6 @@ fn meta(id: &str) -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::Resonance,
         axes_map_run: None,
         mode: None,
         settings: None,
@@ -64,13 +63,13 @@ fn meta(id: &str) -> SessionMeta {
         chips: vec![chip("a"), chip("b")],
         segments: vec![
             SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: None,
                 files: vec![file(0, 0, 800), file(1, 0, 500)],
             },
             SegmentMeta {
-                axis: Axis::Y,
+                axis: Axis::Y.into(),
                 point: 0,
                 window: None,
                 files: vec![file(0, 1, 800)],

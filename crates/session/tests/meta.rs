@@ -2,14 +2,15 @@
 mod common;
 
 use wobblescope_core::axes_map::Mounting;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::codec::MAX_SAMPLES;
 use wobblescope_session::meta::{
-    AXES_MAP_FORMAT_VERSION, AxesMapRun, ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint,
-    SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source, SweepSettings, TimeDomain,
-    TimeWindow, sample_file_name, validate_session_id,
+    AXES_MAP_DIRECTIONS, AxesMapRun, ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile,
+    SegmentMeta, SessionKind, SessionMeta, Source, SweepSettings, TimeDomain, TimeWindow,
+    sample_file_name, validate_session_id,
 };
 
 fn chip(name: &str, chip_type: Option<&str>, rate: Option<f64>) -> ChipMeta {
@@ -44,8 +45,6 @@ fn capture_meta() -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::Resonance,
-        axes_map_run: None,
         mode: Some(Mode::Sweep),
         settings: Some(SweepSettings {
             freq_start: 5.0,
@@ -64,6 +63,7 @@ fn capture_meta() -> SessionMeta {
             damping_ratio_y: None,
         }),
         outcome: Outcome::Complete,
+        axes_map_run: None,
         notes: vec![],
         probe_points: vec![ProbePoint {
             position: Some([150.0, 150.0, 50.0]),
@@ -74,7 +74,7 @@ fn capture_meta() -> SessionMeta {
         ],
         segments: vec![
             SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: Some(TimeWindow {
                     start: 41230.322878,
@@ -83,7 +83,7 @@ fn capture_meta() -> SessionMeta {
                 files: vec![file(0, 0, 100_000), file(1, 0, 12_000)],
             },
             SegmentMeta {
-                axis: Axis::Y,
+                axis: Axis::Y.into(),
                 point: 0,
                 window: None,
                 files: vec![file(0, 1, 100_000), file(1, 1, 12_000)],
@@ -211,7 +211,7 @@ parity_test! {
         );
 
         let mut dup_segment = capture_meta();
-        dup_segment.segments[1].axis = Axis::X;
+        dup_segment.segments[1].axis = Axis::X.into();
         assert_eq!(invalid_field(dup_segment.validate().unwrap_err()), "segments[1]");
 
         let mut dup_name = capture_meta();
@@ -317,10 +317,127 @@ parity_test! {
     }
 }
 
+/// Segments of the given directions, each at the given point (two probe points exist).
+fn vector_meta(segments: &[(Direction, u32)]) -> SessionMeta {
+    let mut meta = capture_meta();
+    meta.format_version = 2;
+    meta.probe_points.push(ProbePoint { position: None });
+    meta.segments = segments
+        .iter()
+        .enumerate()
+        .map(|(i, &(axis, point))| SegmentMeta {
+            axis,
+            point,
+            window: None,
+            files: vec![file(0, i, 100)],
+        })
+        .collect();
+    meta
+}
+
+fn belts_at(a: u32, b: u32) -> SessionMeta {
+    vector_meta(&[(Direction::BELT_A, a), (Direction::BELT_B, b)])
+}
+
+parity_test! {
+    fn a_version_two_session_with_vector_segments_round_trips() {
+        let meta = belts_at(0, 0);
+        let json = meta.to_json().unwrap();
+        assert!(json.contains("\"Vector\""));
+        assert_eq!(SessionMeta::from_json(&json).unwrap(), meta);
+    }
+}
+
+parity_test! {
+    fn a_vector_segment_in_a_version_one_session_is_refused() {
+        let mut meta = belts_at(0, 0);
+        meta.format_version = 1;
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "format_version");
+    }
+}
+
+parity_test! {
+    fn a_version_three_session_is_refused_with_its_version() {
+        let mut meta = belts_at(0, 0);
+        meta.format_version = 3;
+        assert!(matches!(
+            meta.validate().unwrap_err(),
+            SessionError::UnsupportedFormatVersion { found: 3 }
+        ));
+    }
+}
+
+parity_test! {
+    fn x_y_and_vector_segments_cannot_mix() {
+        let mut meta = vector_meta(&[(Direction::X, 0), (Direction::BELT_A, 0)]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments");
+        meta.segments.reverse();
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments");
+    }
+}
+
+parity_test! {
+    fn a_zero_vector_is_refused() {
+        let meta = vector_meta(&[(Direction::Vector([0, 0, 0]), 0)]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[0].axis");
+    }
+}
+
+parity_test! {
+    fn a_point_holds_each_vector_once() {
+        let meta = vector_meta(&[(Direction::BELT_A, 0), (Direction::BELT_A, 0)]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[1]");
+        vector_meta(&[(Direction::BELT_A, 0), (Direction::BELT_A, 1)])
+            .validate()
+            .unwrap();
+    }
+}
+
+parity_test! {
+    fn required_version_is_two_only_with_a_vector_segment() {
+        assert_eq!(capture_meta().required_version(), 1);
+        let mut empty = capture_meta();
+        empty.segments.clear();
+        assert_eq!(empty.required_version(), 1);
+        assert_eq!(belts_at(0, 0).required_version(), 2);
+    }
+}
+
+parity_test! {
+    fn kind_is_axes_for_x_y_and_empty_sessions() {
+        assert_eq!(capture_meta().kind(), SessionKind::Axes);
+        let mut empty = capture_meta();
+        empty.segments.clear();
+        assert_eq!(empty.kind(), SessionKind::Axes);
+    }
+}
+
+parity_test! {
+    fn kind_is_belts_for_one_or_both_diagonals_at_one_point() {
+        assert_eq!(belts_at(0, 0).kind(), SessionKind::Belts);
+        assert_eq!(vector_meta(&[(Direction::BELT_B, 1)]).kind(), SessionKind::Belts);
+        assert_eq!(vector_meta(&[(Direction::BELT_A, 0)]).kind(), SessionKind::Belts);
+    }
+}
+
+parity_test! {
+    fn kind_is_other_for_another_vector_or_the_belts_at_two_points() {
+        assert_eq!(belts_at(0, 1).kind(), SessionKind::Other);
+        assert_eq!(
+            vector_meta(&[(Direction::Vector([1, 0, 1]), 0)]).kind(),
+            SessionKind::Other
+        );
+        assert_eq!(
+            vector_meta(&[(Direction::BELT_A, 0), (Direction::Vector([1, 0, 1]), 0)]).kind(),
+            SessionKind::Other
+        );
+    }
+}
+
+/// A complete axes-map session: one chip file in each of the X, Y and Z moves.
 fn axes_map_meta() -> SessionMeta {
     let mut m = capture_meta();
-    m.format_version = AXES_MAP_FORMAT_VERSION;
-    m.kind = SessionKind::AxesMap;
+    m.format_version = 2;
     m.axes_map_run = Some(AxesMapRun {
         speed: 80.0,
         accel: 1000.0,
@@ -336,9 +453,11 @@ fn axes_map_meta() -> SessionMeta {
             position: Some([100.0 + f64::from(i), 100.0, 30.0]),
         })
         .collect();
-    m.segments = (0..3)
-        .map(|i| SegmentMeta {
-            axis: Axis::X,
+    m.segments = AXES_MAP_DIRECTIONS
+        .iter()
+        .enumerate()
+        .map(|(i, &axis)| SegmentMeta {
+            axis,
             point: i as u32,
             window: None,
             files: vec![file(0, i, 10)],
@@ -348,20 +467,11 @@ fn axes_map_meta() -> SessionMeta {
 }
 
 parity_test! {
-    fn a_resonance_session_still_reads_as_version_1() {
+    fn a_session_without_axes_map_run_reads_as_before() {
         let m = capture_meta();
-        assert_eq!(m.kind, SessionKind::Resonance);
-        assert_eq!(m.required_version(), 1);
         let json = m.to_json().unwrap();
-        assert!(json.contains("\"format_version\": 1"));
-        let back = SessionMeta::from_json(&json).unwrap();
-        assert_eq!(back, m);
-
-        // A file written before `kind` existed has neither new key.
         let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let object = value.as_object_mut().unwrap();
-        object.remove("kind");
-        object.remove("axes_map_run");
+        value.as_object_mut().unwrap().remove("axes_map_run");
         assert_eq!(SessionMeta::from_json(&value.to_string()).unwrap(), m);
     }
 }
@@ -369,6 +479,7 @@ parity_test! {
 parity_test! {
     fn an_axes_map_session_round_trips_as_version_2() {
         let m = axes_map_meta();
+        assert_eq!(m.kind(), SessionKind::AxesMap);
         assert_eq!(m.required_version(), 2);
         let json = m.to_json().unwrap();
         assert!(json.contains("\"format_version\": 2"));
@@ -376,37 +487,85 @@ parity_test! {
 
         let mut wrong = m.clone();
         wrong.format_version = 1;
-        assert!(matches!(
-            wrong.validate(),
-            Err(SessionError::UnsupportedFormatVersion { found: 1 })
-        ));
+        assert_eq!(invalid_field(wrong.validate().unwrap_err()), "format_version");
     }
 }
 
 parity_test! {
-    fn an_axes_map_session_without_run_settings_is_refused() {
+    fn kind_is_axes_map_for_the_first_one_to_three_unit_moves_in_order() {
+        for len in 1..=3 {
+            let mut m = axes_map_meta();
+            m.segments.truncate(len);
+            assert_eq!(m.kind(), SessionKind::AxesMap, "{len} segments");
+        }
+        let mut swapped = axes_map_meta();
+        swapped.segments.swap(0, 1);
+        assert_eq!(swapped.kind(), SessionKind::Other);
+        let mut skipped = axes_map_meta();
+        skipped.segments.remove(0);
+        assert_eq!(skipped.kind(), SessionKind::Other);
+        assert_eq!(serde_json::to_string(&SessionKind::AxesMap).unwrap(), "\"axesmap\"");
+    }
+}
+
+parity_test! {
+    fn axes_map_run_is_required_by_and_kept_to_an_axes_map_session() {
         let mut m = axes_map_meta();
         m.axes_map_run = None;
-        assert!(matches!(m.validate(), Err(SessionError::Invalid { field, .. }) if field == "axes_map_run"));
+        assert_eq!(invalid_field(m.validate().unwrap_err()), "axes_map_run");
 
         let mut r = capture_meta();
         r.axes_map_run = axes_map_meta().axes_map_run;
-        assert!(matches!(r.validate(), Err(SessionError::Invalid { field, .. }) if field == "axes_map_run"));
+        assert_eq!(invalid_field(r.validate().unwrap_err()), "axes_map_run");
 
         let mut four = axes_map_meta();
         four.probe_points.push(ProbePoint { position: None });
-        four.segments.push(SegmentMeta { axis: Axis::X, point: 3, window: None, files: vec![] });
-        assert!(matches!(four.validate(), Err(SessionError::Invalid { field, .. }) if field == "segments"));
-
-        let mut swapped = axes_map_meta();
-        swapped.segments[1].point = 2;
-        swapped.segments[2].point = 1;
-        assert!(matches!(swapped.validate(), Err(SessionError::Invalid { field, .. }) if field == "segments[1].point"));
+        four.segments.push(SegmentMeta {
+            axis: AXES_MAP_DIRECTIONS[0],
+            point: 3,
+            window: None,
+            files: vec![],
+        });
+        assert_eq!(four.kind(), SessionKind::Other);
+        assert_eq!(invalid_field(four.validate().unwrap_err()), "axes_map_run");
     }
 }
 
 parity_test! {
-    fn version_3_is_refused_with_the_version_found() {
+    fn an_axes_map_session_keeps_each_segment_at_its_own_point() {
+        let mut swapped = axes_map_meta();
+        swapped.segments[1].point = 2;
+        swapped.segments[2].point = 1;
+        assert_eq!(invalid_field(swapped.validate().unwrap_err()), "segments[1].point");
+    }
+}
+
+parity_test! {
+    fn an_axes_map_session_has_no_test_mode_or_sweep_settings() {
+        let mut m = axes_map_meta();
+        m.mode = Some(Mode::Pulse);
+        assert_eq!(invalid_field(m.validate().unwrap_err()), "mode");
+        let mut m = axes_map_meta();
+        m.settings = capture_meta().settings;
+        assert_eq!(invalid_field(m.validate().unwrap_err()), "settings");
+    }
+}
+
+parity_test! {
+    fn a_complete_axes_map_session_has_three_probe_points() {
+        let mut m = axes_map_meta();
+        m.segments.truncate(2);
+        m.probe_points.truncate(2);
+        assert_eq!(invalid_field(m.validate().unwrap_err()), "probe_points");
+        m.outcome = Outcome::Failed {
+            reason: "stopped".to_owned(),
+        };
+        m.validate().unwrap();
+    }
+}
+
+parity_test! {
+    fn an_axes_map_session_at_version_3_is_refused_with_the_version_found() {
         let mut m = axes_map_meta();
         m.format_version = 3;
         let json = serde_json::to_string(&m).unwrap();

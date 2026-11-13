@@ -16,8 +16,8 @@ use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::fs::write_session;
 use wobblescope_session::meta::{
-    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionKind,
-    SessionMeta, Source, TimeDomain, sample_file_name,
+    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionMeta,
+    Source, TimeDomain, sample_file_name,
 };
 
 /// What a test session looks like. Defaults: a complete capture with one chip.
@@ -93,7 +93,6 @@ impl Spec {
             created_at: self.created_at.clone(),
             source: self.source.clone(),
             time_domain: TimeDomain::KlipperPrintTime,
-            kind: SessionKind::Resonance,
             axes_map_run: None,
             mode: self.mode,
             settings: None,
@@ -110,7 +109,7 @@ impl Spec {
             probe_points: vec![ProbePoint { position: None }],
             chips,
             segments: vec![SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: None,
                 files,
@@ -249,7 +248,28 @@ pub fn test_plan(
     .unwrap();
     let request = TestRequest {
         chips: chips.iter().map(|c| (*c).to_owned()).collect(),
-        axes: axes.to_vec(),
+        kind: wobblescope::capture::request::TestKind::Axes,
+        axes: Some(axes.to_vec()),
+        mode: wobblescope_session::meta::Mode::Pulse,
+        overrides: Overrides::default(),
+        points: None,
+    };
+    plan(&request, &printer, 600).unwrap()
+}
+
+/// A plan for a pulse belt test of `chips` at the printer's default point.
+pub fn belt_plan(chips: &[&str]) -> wobblescope::capture::request::TestPlan {
+    use wobblescope::capture::request::{Overrides, TestKind, TestRequest, plan};
+    use wobblescope::moonraker::settings::parse_settings;
+    let printer = parse_settings(
+        &fake_printer::fixture("real_settings.json"),
+        &fake_printer::fixture("real_printer_info.json"),
+    )
+    .unwrap();
+    let request = TestRequest {
+        chips: chips.iter().map(|c| (*c).to_owned()).collect(),
+        kind: TestKind::Belts,
+        axes: None,
         mode: wobblescope_session::meta::Mode::Pulse,
         overrides: Overrides::default(),
         points: None,

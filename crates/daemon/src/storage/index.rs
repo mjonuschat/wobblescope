@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use wobblescope_session::SessionError;
 use wobblescope_session::fs::{list_sealed, open_session};
-use wobblescope_session::meta::{Mode, Outcome, SessionMeta, Source};
+use wobblescope_session::meta::{Mode, Outcome, SessionKind, SessionMeta, Source};
 
 use super::pins::Pins;
 
@@ -52,6 +52,8 @@ pub struct Summary {
     pub outcome: OutcomeKind,
     /// Test mode, when recorded.
     pub mode: Option<Mode>,
+    /// What the segments allow to analyse.
+    pub kind: SessionKind,
     /// Printer name, when recorded.
     pub printer: Option<String>,
     /// Names of the chips in the session.
@@ -93,6 +95,7 @@ impl Summary {
                 Outcome::Failed { .. } => OutcomeKind::Failed,
             },
             mode: meta.mode,
+            kind: meta.kind(),
             printer: meta.printer.as_ref().and_then(|p| p.name.clone()),
             chips: meta.chips.iter().map(|c| c.name.clone()).collect(),
             size_bytes,

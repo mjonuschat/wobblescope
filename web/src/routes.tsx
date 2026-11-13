@@ -30,7 +30,13 @@ const runRoute = createRoute({
 const shaperRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/run/shaper",
-  component: RunPage,
+  component: () => <RunPage kind="axes" />,
+});
+
+const beltsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/run/belts",
+  component: () => <RunPage kind="belts" />,
 });
 
 const axesMapRoute = createRoute({
@@ -79,6 +85,7 @@ export const routeTree = rootRoute.addChildren([
   printerRoute,
   runRoute,
   shaperRoute,
+  beltsRoute,
   axesMapRoute,
   streamRoute,
   historyRoute.addChildren([sessionsRoute, resultsRoute]),

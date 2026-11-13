@@ -3,13 +3,13 @@
 use serde::Serialize;
 use wobblescope_core::RawSamples;
 use wobblescope_core::axes_map::{AxesMapInput, AxesMapParams, AxesMapResult, Mounting};
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
-use wobblescope_core::fit::Axis;
 
 use crate::SessionError;
-use crate::meta::{AXES_MAP_SEGMENTS, SegmentFile, SessionKind, SessionMeta, undersampled_note};
+use crate::meta::{AXES_MAP_DIRECTIONS, SegmentFile, SessionKind, SessionMeta, undersampled_note};
 
-/// Builds the `core` inputs for every recording of `axis`, segments in metadata order and each
+/// Builds the `core` inputs for every recording of `direction`, segments in metadata order and each
 /// segment's files in their recorded order.
 ///
 /// Each input carries its chip's name, the segment's point position, the file's coverage and
@@ -25,7 +25,64 @@ use crate::meta::{AXES_MAP_SEGMENTS, SegmentFile, SessionKind, SessionMeta, unde
 /// A rule violation in `meta`.
 pub fn dataset_inputs<F>(
     meta: &SessionMeta,
-    axis: Axis,
+    direction: impl Into<Direction>,
+    load: F,
+) -> Result<Vec<DatasetInput>, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    inputs_where(meta, direction.into(), None, load)
+}
+
+/// As [`dataset_inputs`], for the recordings of the chip named `chip` only: `load` is never
+/// called for another chip's file. A name no chip carries gives no inputs.
+///
+/// # Errors
+/// A rule violation in `meta`.
+pub fn dataset_inputs_for_chip<F>(
+    meta: &SessionMeta,
+    direction: impl Into<Direction>,
+    chip: &str,
+    load: F,
+) -> Result<Vec<DatasetInput>, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    inputs_where(meta, direction.into(), Some(chip), load)
+}
+
+/// The probe point and the recordings of `chip` for belt A and belt B. The point is the one the
+/// session's belt segments share, or 0 when it has none, whatever the chip recorded. Only the chip's files are
+/// loaded.
+///
+/// # Errors
+/// A rule violation in `meta`.
+pub fn belt_inputs<F>(
+    meta: &SessionMeta,
+    chip: &str,
+    mut load: F,
+) -> Result<(usize, Option<DatasetInput>, Option<DatasetInput>), SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    let a = dataset_inputs_for_chip(meta, Direction::BELT_A, chip, &mut load)?
+        .into_iter()
+        .next();
+    let b = dataset_inputs_for_chip(meta, Direction::BELT_B, chip, &mut load)?
+        .into_iter()
+        .next();
+    let point = meta
+        .segments
+        .iter()
+        .find(|s| s.axis == Direction::BELT_A || s.axis == Direction::BELT_B)
+        .map_or(0, |s| s.point as usize);
+    Ok((point, a, b))
+}
+
+fn inputs_where<F>(
+    meta: &SessionMeta,
+    direction: Direction,
+    only_chip: Option<&str>,
     mut load: F,
 ) -> Result<Vec<DatasetInput>, SessionError>
 where
@@ -33,8 +90,11 @@ where
 {
     meta.validate()?;
     let mut inputs = Vec::new();
-    for segment in meta.segments.iter().filter(|s| s.axis == axis) {
+    for segment in meta.segments.iter().filter(|s| s.axis == direction) {
         for file in &segment.files {
+            if only_chip.is_some_and(|c| meta.chips[file.chip as usize].name != c) {
+                continue;
+            }
             let chip = &meta.chips[file.chip as usize];
             let loaded = load(file).and_then(|samples| {
                 if samples.len() == file.sample_count as usize {
@@ -140,7 +200,7 @@ pub enum ChipCapture {
     },
 }
 
-const SEGMENT_LABELS: [&str; AXES_MAP_SEGMENTS] = ["X", "Y", "Z"];
+const SEGMENT_LABELS: [&str; AXES_MAP_DIRECTIONS.len()] = ["X", "Y", "Z"];
 
 /// The run settings of an axes-map session as analysis parameters.
 ///
@@ -148,7 +208,7 @@ const SEGMENT_LABELS: [&str; AXES_MAP_SEGMENTS] = ["X", "Y", "Z"];
 /// [`SessionError::Invalid`] when `meta` is not a valid axes-map session.
 pub fn axes_map_params(meta: &SessionMeta) -> Result<AxesMapParams, SessionError> {
     meta.validate()?;
-    let run = match (&meta.kind, &meta.axes_map_run) {
+    let run = match (meta.kind(), &meta.axes_map_run) {
         (SessionKind::AxesMap, Some(run)) => run,
         _ => {
             return Err(SessionError::Invalid {
@@ -186,7 +246,7 @@ where
             chip: chip.name.clone(),
             missing,
         };
-        let mut files = Vec::with_capacity(AXES_MAP_SEGMENTS);
+        let mut files = Vec::with_capacity(AXES_MAP_DIRECTIONS.len());
         let mut problem = None;
         for (segment, label) in SEGMENT_LABELS.iter().enumerate() {
             match meta.find_file(index as u32, segment) {
@@ -208,7 +268,7 @@ where
             continue;
         }
 
-        let mut loaded = Vec::with_capacity(AXES_MAP_SEGMENTS);
+        let mut loaded = Vec::with_capacity(AXES_MAP_DIRECTIONS.len());
         for (file, label) in files.iter().zip(SEGMENT_LABELS) {
             let result = load(file).and_then(|samples| {
                 if samples.len() == file.sample_count as usize {
@@ -233,7 +293,7 @@ where
             out.push(incomplete(missing));
             continue;
         }
-        let Ok(segments) = <[RawSamples; AXES_MAP_SEGMENTS]>::try_from(loaded) else {
+        let Ok(segments) = <[RawSamples; AXES_MAP_DIRECTIONS.len()]>::try_from(loaded) else {
             unreachable!("three files were loaded");
         };
 

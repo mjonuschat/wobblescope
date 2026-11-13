@@ -2,6 +2,7 @@
 import type { Axis } from "./Axis";
 import type { Mode } from "./Mode";
 import type { Overrides } from "./Overrides";
+import type { TestKind } from "./TestKind";
 
 /**
  * `POST /api/tests`.
@@ -10,11 +11,11 @@ export type TestRequest = {
 /**
  * Config sections of the chips that record, for every axis.
  */
-chips: Array<string>, 
+chips: Array<string>, kind: TestKind, 
 /**
- * The axes to test, in order.
+ * The axes to test, in order. Required for an axes test and refused for a belt test.
  */
-axes: Array<Axis>, 
+axes: Array<Axis> | null, 
 /**
  * Pulse or sweep.
  */

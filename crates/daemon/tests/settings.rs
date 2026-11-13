@@ -9,7 +9,7 @@ use common::{cell, json};
 use serde_json::{Value, json};
 use wobblescope::api::mount;
 use wobblescope::config::Settings;
-use wobblescope::moonraker::settings::{Variant, parse_settings};
+use wobblescope::moonraker::settings::{Variant, VersionSupport, parse_settings, version_support};
 use wobblescope::moonraker::tls::Tls;
 use wobblescope::moonraker::{Moonraker, Timings, spawn};
 use wobblescope_session::meta::Mode;
@@ -204,4 +204,77 @@ fn shaping_is_unknown_for_what_klipper_did_not_report() {
     use wobblescope::moonraker::settings::{Shaping, parse_shaping};
     assert_eq!(parse_shaping(&real()), Shaping::default());
     assert_eq!(parse_shaping(&json!({})), Shaping::default());
+}
+
+#[test]
+fn version_support_is_supported_for_mainline_from_0_12_0() {
+    for version in [
+        "v0.12.0",
+        "v0.13.0",
+        "v0.12.0-232-g1f2e3d4",
+        "v0.12.0-1-gabc1234-dirty",
+        "v1.0.0",
+    ] {
+        assert_eq!(
+            version_support(Variant::Mainline, Some(version)),
+            VersionSupport::Supported,
+            "{version}"
+        );
+    }
+}
+
+#[test]
+fn version_support_is_too_old_for_mainline_below_0_12_0() {
+    for version in ["v0.11.0", "v0.11.0-999-gabc1234", "v0.9.1"] {
+        assert_eq!(
+            version_support(Variant::Mainline, Some(version)),
+            VersionSupport::TooOld,
+            "{version}"
+        );
+    }
+}
+
+#[test]
+fn version_support_uses_the_kalico_minimum_for_kalico() {
+    for version in ["v2026.01.00", "v2026.11.00-5-gabc1234"] {
+        assert_eq!(
+            version_support(Variant::Kalico, Some(version)),
+            VersionSupport::Supported,
+            "{version}"
+        );
+    }
+    assert_eq!(
+        version_support(Variant::Kalico, Some("v0.12.0")),
+        VersionSupport::TooOld
+    );
+}
+
+#[test]
+fn version_support_is_unknown_without_a_parseable_version() {
+    for version in [None, Some(""), Some("garbage"), Some("v0.12")] {
+        assert_eq!(
+            version_support(Variant::Mainline, version),
+            VersionSupport::Unknown,
+            "{version:?}"
+        );
+    }
+    for version in [None, Some("v0.12.0"), Some("v2026.01.00")] {
+        assert_eq!(
+            version_support(Variant::Unknown, version),
+            VersionSupport::Unknown,
+            "{version:?}"
+        );
+    }
+}
+
+#[test]
+fn the_settings_carry_the_version_support_of_the_printer() {
+    let settings = parse_settings(&real(), &info(None)).unwrap();
+    assert_eq!(
+        settings.version_support,
+        version_support(
+            settings.variant,
+            settings.machine.klipper_version.as_deref()
+        )
+    );
 }

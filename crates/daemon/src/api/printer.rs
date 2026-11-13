@@ -11,10 +11,8 @@ use crate::capture::CheckFailure;
 use crate::capture::preflight::quarantine_duration;
 use crate::capture::preflight::read_printer_state;
 use crate::capture::runner::watch_idle;
+use crate::capture::slot::HOMING_ID;
 use crate::moonraker::rpc::RpcError;
-
-/// The id the motion-uncertain marker carries after a homing request of unknown outcome.
-const HOMING_MARK: &str = "homing";
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -28,6 +26,8 @@ const HOME_TIMEOUT: Duration = Duration::from_secs(300);
 pub struct PrinterState {
     /// The axes Klipper has homed, such as `xy` or `xyz`; empty when none is.
     pub homed_axes: Option<String>,
+    /// Why the printer cannot take a test right now, or null when it can.
+    pub busy: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -56,8 +56,22 @@ pub(super) async fn printer(State(state): State<ApiState>) -> Result<Json<Printe
         .await
         .map_err(|_| unavailable("Moonraker did not answer the printer state query"))?
         .map_err(|e| unavailable(format!("cannot read the printer's state: {e}")))?;
+    let slot = &state.capture.slot;
+    let quarantined = slot.quarantine_remaining().is_some();
+    let busy = match slot.current_id() {
+        Some(id) if id == HOMING_ID => Some("The printer is homing."),
+        Some(id) if id.starts_with("hold-") => Some("A hold is running."),
+        Some(_) => Some("A test is running."),
+        None if slot.is_held() => Some("A test is running."),
+        None if !read.idle(quarantined) => Some("The toolhead is moving."),
+        None if quarantined || slot.motion_uncertain().is_some() => {
+            Some("The printer may still be moving.")
+        }
+        None => None,
+    };
     Ok(Json(PrinterState {
         homed_axes: read.homed_axes,
+        busy: busy.map(str::to_owned),
     }))
 }
 
@@ -102,7 +116,7 @@ pub(super) async fn emergency_stop(
 /// test may still be moving the toolhead. It holds the test slot meanwhile, so no test starts
 /// during the move.
 pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, ApiError> {
-    let Some(_permit) = state.capture.slot.try_acquire() else {
+    let Some(_permit) = state.capture.slot.try_acquire_as(HOMING_ID) else {
         return Err(ApiError::preflight(vec![CheckFailure::new(
             "no_test_running",
             "a test is running; the printer cannot home until it ends",
@@ -127,7 +141,7 @@ pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, A
         // whether the move did, so motion stays blocked until the toolhead is seen idle or the
         // user stops the printer.
         if !matches!(e, RpcError::Moonraker { .. }) {
-            state.capture.slot.set_motion_uncertain(HOMING_MARK);
+            state.capture.slot.set_motion_uncertain(HOMING_ID);
             // The quarantine is what keeps test admission from treating the printer as idle.
             state
                 .capture
@@ -138,7 +152,7 @@ pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, A
                 state.capture.slot.clone(),
                 state.capture.hub.clone(),
                 state.capture.timings,
-                HOMING_MARK.to_owned(),
+                HOMING_ID.to_owned(),
             );
         }
         return Err(unavailable(format!("homing failed: {e}")));

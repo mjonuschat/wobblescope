@@ -114,7 +114,7 @@ parity_test! {
         assert!((rate - 1.0 / step).abs() < 1e-6 * rate, "{rate}");
         assert_eq!(m.outcome, Outcome::Complete);
         assert_eq!(m.segments.len(), 1);
-        assert_eq!(m.segments[0].axis, Axis::X);
+        assert_eq!(m.segments[0].axis, Axis::X.into());
         assert!(m.segments[0].window.is_none());
         assert_eq!(m.segments[0].files[0].coverage, Coverage::Complete);
         assert_eq!(m.segments[0].files[0].sample_count, 3);

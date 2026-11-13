@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
@@ -11,9 +11,9 @@ import { apiPath, stubApiWithStatus } from "@/test/status";
 import { FakeSocket, stubWebSocket } from "@/test/websocket";
 
 vi.mock("@/pages/session/SessionResults", () => ({
-  SessionResults: ({ id, header }: { id: string; header?: (save: unknown) => ReactNode }) => (
+  SessionResults: ({ id, header }: { id: string; header?: (save: unknown, summary?: ReactNode) => ReactNode }) => (
     <div>
-      {header?.(null)}
+      {header?.(null, <p>summary rows</p>)}
       <div>session results for {id}</div>
     </div>
   ),
@@ -25,7 +25,7 @@ vi.mock("@/components/charts/EChart", () => ({
 
 const running: TestState = {
   id: "test-1",
-  kind: "resonance",
+  kind: "axes",
   phase: "measuring",
   segment: 3,
   segments: 4,
@@ -43,8 +43,10 @@ const running: TestState = {
 
 const done: FinishedTest = {
   id: "test-1",
+  kind: "axes",
   outcome: "complete",
   reason: null,
+  code: null,
   session_id: "test-1",
   motion_uncertain: false,
   needs_restart: false,
@@ -61,16 +63,16 @@ function api(start: Reply = { status: 202, body: { id: "test-1" } }) {
     const path = apiPath(call);
     if (path === "settings") return { body: printerSettings() };
     if (path === "chips") return { body: chipsSnapshot() };
-    if (path === "printer") return { body: { homed_axes: "xyz" } };
+    if (path === "printer") return { body: { homed_axes: "xyz", busy: null } };
     if (path === "tests") return start;
     return { status: 404, body: { error: "not_found", message: "no" } };
   });
 }
 
 /** Renders the run screen and opens the live socket with `snapshot`. */
-async function mount(snapshot: { test: TestState | null; last: FinishedTest | null }) {
+async function mount(snapshot: { test: TestState | null; last: FinishedTest | null }, path = "/run/shaper") {
   const calls = api();
-  renderRoute("/run/shaper");
+  renderRoute(path);
   await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
   act(() => FakeSocket.latest.open());
   act(() => FakeSocket.latest.send(snapshot));
@@ -87,12 +89,12 @@ const currentStep = () => document.querySelector('[aria-current="step"]')?.textC
 describe("a running test", () => {
   it("shows the segment and the elapsed time and follows the latest event", async () => {
     await mount({ test: running, last: null });
-    expect(await screen.findByText("Segment 3 of 4 (X at 150.5, 154, 20)")).toBeTruthy();
+    expect(await screen.findByText("3 of 4: X Axis")).toBeTruthy();
     expect(screen.getByText("12 s of about 2 min 25 s")).toBeTruthy();
     expect(screen.getByRole("img", { name: /Signal against frequency/ })).toBeTruthy();
 
     send({ test: { ...running, segment: 4, elapsed_seconds: 30 }, last: null });
-    expect(screen.getByText(/Segment 4 of 4/)).toBeTruthy();
+    expect(screen.getByText(/^4 of 4/)).toBeTruthy();
     expect(screen.getByText("30 s of about 2 min 25 s")).toBeTruthy();
   });
 
@@ -126,7 +128,7 @@ describe("a running test", () => {
       send({ test: null, last: done });
       expect(await screen.findByText("The test finished.")).toBeTruthy();
       expect(currentStep()).toContain("Measuring");
-      expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
+      expect(screen.getByText(/^3 of 4/)).toBeTruthy();
       expect(screen.getByText("Continuing to the results in 5 s")).toBeTruthy();
       expect(nextButton().disabled).toBe(false);
       fireEvent.click(nextButton());
@@ -169,7 +171,7 @@ describe("a running test", () => {
   });
 
   it("shows each chip's signal level as text during an axes-map run", async () => {
-    await mount({ test: { ...running, kind: "axes_map" }, last: null });
+    await mount({ test: { ...running, kind: "axes_map" }, last: null }, "/run/axes-map");
     expect(await screen.findByText("adxl345: 120 / 40 / 8 mm/s²")).toBeTruthy();
     expect(screen.queryByText(/lis2dw ebb36:/)).toBeNull();
     expect(screen.queryByRole("img", { name: /Signal against frequency/ })).toBeNull();
@@ -221,21 +223,35 @@ describe("a running test", () => {
     await screen.findByText("Progress");
     act(() => FakeSocket.latest.drop());
     expect(await screen.findByText(/Connection lost, this may be out of date/)).toBeTruthy();
-    expect(screen.getByText(/Segment 3 of 4/)).toBeTruthy();
+    expect(screen.getByText(/^3 of 4/)).toBeTruthy();
 
     // The page reconnects on its own; the new snapshot replaces the old state.
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(1), { timeout: 3000 });
     act(() => FakeSocket.latest.open());
     send({ test: { ...running, segment: 4 }, last: null });
     expect(screen.queryByText(/Connection lost/)).toBeNull();
-    expect(screen.getByText(/Segment 4 of 4/)).toBeTruthy();
+    expect(screen.getByText(/^4 of 4/)).toBeTruthy();
   });
 });
 
 describe("a finished test", () => {
+  it("does not announce a completed test with a heading, but does announce an incomplete one", async () => {
+    await mount({ test: null, last: done });
+    await screen.findByText("session results for test-1");
+    expect(screen.queryByRole("heading", { name: "The test finished." })).toBeNull();
+    send({ test: null, last: { ...done, outcome: "incomplete", reason: "x" } });
+    expect(await screen.findByRole("heading", { name: "The test finished with missing data." })).toBeTruthy();
+  });
+
   it("shows the session's results under a complete or incomplete test", async () => {
     await mount({ test: null, last: done });
     expect(await screen.findByText("session results for test-1")).toBeTruthy();
+  });
+
+  it("puts the session's summary rows inside the Result card", async () => {
+    await mount({ test: null, last: done });
+    const card = await screen.findByRole("region", { name: "Test result" });
+    expect(within(card).getByText("summary rows")).toBeTruthy();
   });
 
   it("shows no session results under a failed test", async () => {
@@ -281,11 +297,11 @@ describe("a finished test", () => {
 
   it("stays on screen until New test is clicked, and a reload after the end shows it too", async () => {
     await mount({ test: null, last: done });
-    expect(await screen.findByText("The test finished.")).toBeTruthy();
+    expect(await screen.findByText("session results for test-1")).toBeTruthy();
     expect(currentStep()).toContain("Results");
     // Nothing else on the page takes it away.
     send({ test: null, last: done });
-    expect(screen.getByText("The test finished.")).toBeTruthy();
+    expect(screen.getByText("session results for test-1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New test" }));
     expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
     expect(screen.queryByText("The test finished.")).toBeNull();
@@ -342,5 +358,57 @@ describe("starting a test", () => {
     send({ test: running, last: null });
     expect(await screen.findByText("Progress")).toBeTruthy();
     expect(screen.queryByText("Starting…")).toBeNull();
+  });
+});
+
+describe("belt tests", () => {
+  const HINT = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
+
+  it("the_progress_view_names_the_segment_belt_A_or_B", async () => {
+    await mount({ test: { ...running, segment: 1, segments: 2, axis: { Vector: [1, -1, 0] } }, last: null });
+    expect(await screen.findByText("1 of 2: Belt A (Axis 1,-1)")).toBeTruthy();
+    expect(screen.getByText("Status").nextElementSibling?.textContent).toBe("Measuring");
+    expect(screen.getByText("Segment")).toBeTruthy();
+    expect(screen.getByText("Position")).toBeTruthy();
+    expect(screen.getByText("X 150.5, Y 154, Z 20 mm")).toBeTruthy();
+    send({ test: { ...running, segment: 2, segments: 2, axis: { Vector: [1, 1, 0] } }, last: null });
+    expect(screen.getByText("2 of 2: Belt B (Axis 1,1)")).toBeTruthy();
+  });
+
+  it("an_unknown_vector_keeps_its_numbers", async () => {
+    await mount({ test: { ...running, axis: { Vector: [1, 2, 0] } }, last: null });
+    expect(await screen.findByText("3 of 4: 1,2,0")).toBeTruthy();
+  });
+
+  it("a_missing_position_or_axis_drops_that_part", async () => {
+    await mount({ test: { ...running, position: null, axis: null }, last: null });
+    expect(await screen.findByText("3 of 4")).toBeTruthy();
+    expect(screen.queryByText("Position")).toBeNull();
+  });
+
+  it.each(["failed", "no_session"] as const)(
+    "a_diagonal_axis_refusal_shows_its_reason_and_the_newer_Klipper_hint (%s)",
+    async (outcome) => {
+      await mount({ test: null, last: null });
+      send({
+        test: null,
+        last: {
+          ...done,
+          outcome,
+          code: "diagonal_axis_refused",
+          reason: "this Klipper does not accept diagonal axes (AXIS=1,-1)",
+          session_id: outcome === "failed" ? "test-1" : null,
+        },
+      });
+      expect(await screen.findByText("this Klipper does not accept diagonal axes (AXIS=1,-1)")).toBeTruthy();
+      expect(screen.getByText(HINT)).toBeTruthy();
+    },
+  );
+
+  it("shows no hint for another failure", async () => {
+    await mount({ test: null, last: null });
+    send({ test: null, last: { ...done, outcome: "failed", reason: "boom" } });
+    expect(await screen.findByText("boom")).toBeTruthy();
+    expect(screen.queryByText(HINT)).toBeNull();
   });
 });

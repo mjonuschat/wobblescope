@@ -2,21 +2,25 @@
 
 use serde::{Deserialize, Serialize};
 use wobblescope_core::axes_map::Mounting;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
-use wobblescope_core::fit::Axis;
 
 use crate::SessionError;
 use crate::codec::MAX_SAMPLES;
 
-/// Version of the metadata shape this crate writes and reads.
+/// Version of the metadata shape for sessions without a vector direction.
 pub const FORMAT_VERSION: u32 = 1;
 
-/// Version of sessions that hold an axes-map calibration capture. Resonance sessions stay at
-/// [`FORMAT_VERSION`].
-pub const AXES_MAP_FORMAT_VERSION: u32 = 2;
+/// Version of the metadata shape for sessions holding a vector direction. A reader accepts this
+/// and [`FORMAT_VERSION`].
+pub const FORMAT_VERSION_VECTOR: u32 = 2;
 
-/// Segments of an axes-map session: X, Y, Z.
-pub const AXES_MAP_SEGMENTS: usize = 3;
+/// The directions of an axes-map session's segments, in order: +X, +Y, +Z.
+pub const AXES_MAP_DIRECTIONS: [Direction; 3] = [
+    Direction::Vector([1, 0, 0]),
+    Direction::Vector([0, 1, 0]),
+    Direction::Vector([0, 0, 1]),
+];
 
 const MAX_ID_LEN: usize = 64;
 
@@ -54,17 +58,6 @@ pub enum Mode {
     Pulse,
     /// `SWEEPING_PERIOD` above 0: the toolhead also moves back and forth.
     Sweep,
-}
-
-/// What a session recorded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-pub enum SessionKind {
-    /// A resonance test.
-    #[default]
-    Resonance,
-    /// An axes-map calibration: three segments in the order X, Y, Z.
-    AxesMap,
 }
 
 /// The moves an axes-map calibration ran with.
@@ -220,8 +213,8 @@ pub struct SegmentFile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SegmentMeta {
-    /// Test axis.
-    pub axis: Axis,
+    /// Test direction; serialised as `"X"`, `"Y"` or `{"Vector":[x,y,z]}`.
+    pub axis: Direction,
     /// Position of the point in [`SessionMeta::probe_points`].
     pub point: u32,
     /// Sample timestamps that belong to the segment; `None` keeps every sample.
@@ -229,6 +222,21 @@ pub struct SegmentMeta {
     pub window: Option<TimeWindow>,
     /// One entry per chip that recorded this segment.
     pub files: Vec<SegmentFile>,
+}
+
+/// What kind of analysis a session's segments allow, derived from them and never stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum SessionKind {
+    /// X and Y segments, or no segments.
+    Axes,
+    /// Belt A and belt B, each at most once, all at one point.
+    Belts,
+    /// An axes-map calibration: one to three segments moving along +X, +Y and +Z, in that order.
+    AxesMap,
+    /// Any other vector session.
+    Other,
 }
 
 /// The contents of `meta.json`.
@@ -256,10 +264,8 @@ pub struct SessionMeta {
     pub printer: Option<PrinterInfo>,
     /// How the session ended.
     pub outcome: Outcome,
-    /// What the session recorded. Sessions written before this field hold resonance tests.
-    #[serde(default)]
-    pub kind: SessionKind,
-    /// The moves of an axes-map calibration; present exactly when `kind` is `AxesMap`.
+    /// The moves of an axes-map calibration; present exactly when [`SessionMeta::kind`] is
+    /// [`SessionKind::AxesMap`].
     #[serde(default)]
     pub axes_map_run: Option<AxesMapRun>,
     /// Free-text notes.
@@ -322,6 +328,10 @@ pub fn undersampled_note(nominal_hz: Option<f64>, observed_hz: Option<f64>) -> O
     })
 }
 
+fn is_supported_version(version: u32) -> bool {
+    version == FORMAT_VERSION || version == FORMAT_VERSION_VECTOR
+}
+
 fn positive_finite(v: f64) -> bool {
     v.is_finite() && v > 0.0
 }
@@ -339,10 +349,7 @@ impl SessionMeta {
     /// A [`SessionError`] for bad JSON, a newer version or a rule violation.
     pub fn from_json(json: &str) -> Result<Self, SessionError> {
         let probe: VersionProbe = serde_json::from_str(json)?;
-        if !matches!(
-            probe.format_version,
-            FORMAT_VERSION | AXES_MAP_FORMAT_VERSION
-        ) {
+        if !is_supported_version(probe.format_version) {
             return Err(SessionError::UnsupportedFormatVersion {
                 found: probe.format_version,
             });
@@ -361,15 +368,6 @@ impl SessionMeta {
         Ok(serde_json::to_string_pretty(self)?)
     }
 
-    /// The format version this session is written as: [`AXES_MAP_FORMAT_VERSION`] for an
-    /// axes-map calibration, [`FORMAT_VERSION`] otherwise.
-    pub fn required_version(&self) -> u32 {
-        match self.kind {
-            SessionKind::AxesMap => AXES_MAP_FORMAT_VERSION,
-            SessionKind::Resonance => FORMAT_VERSION,
-        }
-    }
-
     /// The recording `chip` made in `segment` (positions in the metadata lists), if any.
     pub fn find_file(&self, chip: u32, segment: usize) -> Option<&SegmentFile> {
         self.segments
@@ -379,46 +377,80 @@ impl SessionMeta {
             .find(|f| f.chip == chip)
     }
 
+    /// The format version a writer must give this session: 2 when any segment has a vector
+    /// direction, else 1.
+    pub fn required_version(&self) -> u32 {
+        if self
+            .segments
+            .iter()
+            .any(|s| matches!(s.axis, Direction::Vector(_)))
+        {
+            FORMAT_VERSION_VECTOR
+        } else {
+            FORMAT_VERSION
+        }
+    }
+
+    /// The session's kind, from its segments. `Belts` needs at least one segment, every segment
+    /// a belt direction, no belt twice and all at one point. `AxesMap` needs one to three
+    /// segments whose directions are the first of [`AXES_MAP_DIRECTIONS`], in order.
+    pub fn kind(&self) -> SessionKind {
+        let Some(first) = self.segments.first() else {
+            return SessionKind::Axes;
+        };
+        if self.segments.iter().all(|s| s.axis.axis().is_some()) {
+            return SessionKind::Axes;
+        }
+        if self.segments.len() <= AXES_MAP_DIRECTIONS.len()
+            && self
+                .segments
+                .iter()
+                .zip(AXES_MAP_DIRECTIONS)
+                .all(|(s, d)| s.axis == d)
+        {
+            return SessionKind::AxesMap;
+        }
+        let belts = self.segments.iter().enumerate().all(|(i, s)| {
+            (s.axis == Direction::BELT_A || s.axis == Direction::BELT_B)
+                && s.point == first.point
+                && self.segments[..i].iter().all(|o| o.axis != s.axis)
+        });
+        if belts {
+            SessionKind::Belts
+        } else {
+            SessionKind::Other
+        }
+    }
+
     /// Checks every rule of the format.
     ///
     /// # Errors
     /// [`SessionError::UnsupportedFormatVersion`] or [`SessionError::Invalid`] naming the field.
     pub fn validate(&self) -> Result<(), SessionError> {
-        if self.format_version != self.required_version() {
+        if !is_supported_version(self.format_version) {
             return Err(SessionError::UnsupportedFormatVersion {
                 found: self.format_version,
             });
         }
         validate_session_id(&self.id)?;
-        match self.kind {
-            SessionKind::Resonance => {
-                if self.axes_map_run.is_some() {
-                    return Err(invalid(
-                        "axes_map_run",
-                        "only an axes-map session has run settings",
-                    ));
-                }
-            }
-            SessionKind::AxesMap => {
-                if self.axes_map_run.is_none() {
-                    return Err(invalid("axes_map_run", "an axes-map session needs it"));
-                }
-                if self.segments.len() > AXES_MAP_SEGMENTS {
-                    return Err(invalid("segments", "an axes-map session has at most three"));
-                }
-                if let Some(s) = self
-                    .segments
-                    .iter()
-                    .enumerate()
-                    .position(|(i, seg)| seg.point as usize != i)
-                {
-                    return Err(invalid(
-                        format!("segments[{s}].point"),
-                        "must equal the segment's position",
-                    ));
-                }
-            }
+        let vectors = self
+            .segments
+            .iter()
+            .filter(|s| matches!(s.axis, Direction::Vector(_)))
+            .count();
+        if vectors > 0 && self.format_version < FORMAT_VERSION_VECTOR {
+            return Err(invalid(
+                "format_version",
+                "a vector direction needs format version 2",
+            ));
         }
+        if vectors > 0 && vectors < self.segments.len() {
+            return Err(invalid(
+                "segments",
+                "X or Y segments and vector segments cannot be mixed",
+            ));
+        }
+        self.validate_axes_map()?;
         for (i, chip) in self.chips.iter().enumerate() {
             if self.chips[..i].iter().any(|c| c.name == chip.name) {
                 return Err(invalid(format!("chips[{i}].name"), "duplicate chip name"));
@@ -440,6 +472,12 @@ impl SessionMeta {
                 return Err(invalid(
                     format!("segments[{s}].point"),
                     "no such probe point",
+                ));
+            }
+            if segment.axis == Direction::Vector([0, 0, 0]) {
+                return Err(invalid(
+                    format!("segments[{s}].axis"),
+                    "a direction vector cannot be all zero",
                 ));
             }
             if self.segments[..s]
@@ -483,6 +521,50 @@ impl SessionMeta {
                     ));
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// The rules of an axes-map session, and that no other session carries its run settings.
+    fn validate_axes_map(&self) -> Result<(), SessionError> {
+        if self.kind() != SessionKind::AxesMap {
+            if self.axes_map_run.is_some() {
+                return Err(invalid(
+                    "axes_map_run",
+                    "only an axes-map session has run settings",
+                ));
+            }
+            return Ok(());
+        }
+        if self.axes_map_run.is_none() {
+            return Err(invalid("axes_map_run", "an axes-map session needs it"));
+        }
+        if self.mode.is_some() {
+            return Err(invalid("mode", "an axes-map session has no test mode"));
+        }
+        if self.settings.is_some() {
+            return Err(invalid(
+                "settings",
+                "an axes-map session has no sweep settings",
+            ));
+        }
+        if let Some(s) = self
+            .segments
+            .iter()
+            .enumerate()
+            .position(|(i, seg)| seg.point as usize != i)
+        {
+            return Err(invalid(
+                format!("segments[{s}].point"),
+                "must equal the segment's position",
+            ));
+        }
+        if self.outcome == Outcome::Complete && self.probe_points.len() != AXES_MAP_DIRECTIONS.len()
+        {
+            return Err(invalid(
+                "probe_points",
+                "a complete axes-map session has three, the start of each move",
+            ));
         }
         Ok(())
     }

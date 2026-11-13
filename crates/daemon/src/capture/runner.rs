@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_session::meta::{
     PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
@@ -18,14 +19,14 @@ use wobblescope_session::meta::{
 
 use super::availability::OpenChip;
 use super::calibration;
-use super::live::{ChipLive, FinishedTest, LiveHub, Phase, RunKind, TestState};
+use super::live::{ChipLive, FailureCode, FinishedTest, LiveHub, Phase, TestState};
 use super::meta::{ChipFacts, initial};
 use super::position::{
     PositionError, Timeouts, move_to_point, window_end, window_start, window_start_plain,
 };
 use super::preflight::{Started, check_printer, quarantine_duration};
 use super::recorder::{Level, Missing, Recorder, Taken};
-use super::request::{PlanKind, Segment, TestPlan};
+use super::request::{Segment, TestPlan, diagonal_refusal};
 use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
 use crate::hold::settings::{Saved, calibration_setup};
@@ -128,6 +129,7 @@ struct Failure {
     from_klipper: bool,
     /// Whether the runner stopped waiting for a motion command that had not answered.
     in_flight: bool,
+    code: Option<FailureCode>,
 }
 
 impl Failure {
@@ -137,6 +139,7 @@ impl Failure {
             uncertain: false,
             from_klipper: false,
             in_flight: false,
+            code: None,
         }
     }
 
@@ -146,6 +149,7 @@ impl Failure {
             uncertain: true,
             from_klipper: false,
             in_flight: false,
+            code: None,
         }
     }
 
@@ -215,6 +219,20 @@ struct Progress {
     chips: Vec<ChipLive>,
     console: broadcast::Receiver<String>,
     frequency: Option<f64>,
+}
+
+/// A Moonraker error for a sweep: a diagonal axis Klipper refused keeps its own code, anything else is the message as is.
+fn refusal_failure(segment: &Segment, message: String) -> Failure {
+    let refusal = matches!(segment.axis, Direction::Vector(_))
+        .then(|| diagonal_refusal(&message))
+        .flatten();
+    match refusal {
+        Some(text) => Failure {
+            code: Some(FailureCode::DiagonalAxisRefused),
+            ..Failure::certain(text)
+        },
+        None => Failure::certain(message),
+    }
 }
 
 /// The frequency in a console line such as `// Testing frequency 57 Hz`.
@@ -335,17 +353,16 @@ impl Run {
             .current
             .as_ref()
             .map(|c| (c, self.plan.segments[c.index]));
-        let (kind, axis, frequency_range) = match self.plan.kind {
-            PlanKind::Resonance => (
-                RunKind::Resonance,
+        let (axis, frequency_range) = match self.plan.axes_map {
+            None => (
                 segment.map(|(_, s)| s.axis),
                 [self.plan.effective.freq_start, self.plan.effective.freq_end],
             ),
-            PlanKind::AxesMap(_) => (RunKind::AxesMap, None, [0.0, 0.0]),
+            Some(_) => (None, [0.0, 0.0]),
         };
         let state = TestState {
             id: self.id.clone(),
-            kind,
+            kind: self.plan.kind,
             phase,
             segment: segment.map_or(0, |(c, _)| c.index as u32 + 1),
             segments: self.plan.segments.len() as u32,
@@ -385,9 +402,9 @@ impl Run {
         let control = self.control()?;
         // A calibration reads what it changes before it changes anything, and refuses to run
         // when it could not put that back.
-        let calibration = match &self.plan.kind {
-            PlanKind::Resonance => None,
-            PlanKind::AxesMap(axes_map) => {
+        let calibration = match &self.plan.axes_map {
+            None => None,
+            Some(axes_map) => {
                 let saved = calibration::read_saved(&control, self.r.timings.positioning.query)
                     .await
                     .map_err(Failure::certain)?;
@@ -600,9 +617,9 @@ impl Run {
     /// a stop, and recording a lost chip without leaving the slot while the toolhead may move.
     async fn sweep(&mut self, segment: &Segment) -> Result<(), Failure> {
         let control = self.control()?;
-        let script = match self.plan.kind {
-            PlanKind::Resonance => format!("{}\nM400", self.plan.command(segment, &self.id)),
-            PlanKind::AxesMap(_) => self.plan.segment_script(segment),
+        let script = match self.plan.axes_map {
+            None => format!("{}\nM400", self.plan.command(segment, &self.id)),
+            Some(_) => self.plan.segment_script(segment),
         };
         let timeout = self.r.timings.sweep_timeout.unwrap_or_else(|| {
             Duration::from_secs(
@@ -627,7 +644,9 @@ impl Run {
                             // Klipper's own message beats the generic error of the call.
                             Err(match recorded {
                                 Some(reason) => Failure::certain(reason),
-                                None => self.klipper_down().unwrap_or_else(|| Failure::certain(message)),
+                                None => self
+                                    .klipper_down()
+                                    .unwrap_or_else(|| refusal_failure(segment, message)),
                             })
                         }
                         Err(e) => Err(Failure::unknown(format!(
@@ -753,6 +772,12 @@ impl Run {
             window: Some(window),
             files,
         });
+        // Version 2 is written only once a vector segment is in the journal, so a session with
+        // none stays readable by a daemon that predates belt tests.
+        stored.meta.format_version = stored.meta.required_version();
+        // The run settings join with the first segment: before it the session is not yet an
+        // axes-map session and may not carry them.
+        stored.meta.axes_map_run = self.plan.axes_map.as_ref().map(|a| a.run.clone());
         let journal = stored.meta.clone();
         self.with_capture(move |capture| capture.journal(&journal))
             .await
@@ -875,11 +900,13 @@ impl Run {
         self.recorders.clear();
 
         let reason = failure.as_ref().map(|f| f.reason.clone());
+        let code = failure.as_ref().and_then(|f| f.code);
         let segments = self.segments_stored();
         let mut finished = match self.stored.take() {
             Some(Stored { capture, meta }) if segments > 0 => {
                 let sealing = Sealing {
                     id: self.id.clone(),
+                    kind: self.plan.kind,
                     meta,
                     summaries,
                     reason,
@@ -889,9 +916,10 @@ impl Run {
             }
             other => {
                 let capture = other.and_then(|stored| stored.capture);
-                abandon(&self.r.storage, &self.id, capture, reason).await
+                abandon(&self.r.storage, &self.id, self.plan.kind, capture, reason).await
             }
         };
+        finished.code = code;
         finished.needs_restart = needs_restart;
         self.end(finished, failure.is_some_and(|f| f.uncertain));
     }

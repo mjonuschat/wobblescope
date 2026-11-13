@@ -1,5 +1,8 @@
 //! Per-chip, worst-case and summed analysis across several chips and probe points.
 
+use std::borrow::Cow;
+use std::ops::Range;
+
 use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
@@ -10,7 +13,9 @@ use crate::fit::{
     validate_params, validate_shapers,
 };
 use crate::numeric::{arange, interp};
+use crate::peaks::{PsdPeaks, psd_peaks};
 use crate::psd::{CalibrationData, MAX_FREQ};
+use crate::samples::RawSamples;
 
 /// Display-only sum of several datasets' PSDs on a shared grid: the total and each of the
 /// accelerometers' x, y and z directions. No recommendation is ever computed from it.
@@ -61,6 +66,40 @@ pub fn summed_psd(data: &[CalibrationData], max_freq: f64) -> Option<SummedPsd> 
     })
 }
 
+/// The spectrum a damping ratio is estimated from. One dataset gives its own PSD, several give
+/// their sum (see [`summed_psd`]) up to the highest bin any of them has. `None` for no data.
+pub(crate) fn estimation_psd(data: &[CalibrationData]) -> Option<(Vec<f64>, Vec<f64>)> {
+    match data {
+        [] => None,
+        [only] => Some((only.freq_bins.clone(), only.psd_sum.clone())),
+        _ => {
+            let top = data
+                .iter()
+                .filter_map(|d| d.freq_bins.last().copied())
+                .reduce(f64::max)?;
+            let sum = summed_psd(data, top)?;
+            Some((sum.freq_bins, sum.psd))
+        }
+    }
+}
+
+/// The samples of `input` cut to its time window, and the sample index range kept; borrowed whole
+/// with no range when it has no window.
+///
+/// # Errors
+/// [`CoreError::InvalidTimestamps`] as [`RawSamples::window`].
+pub(crate) fn windowed_samples(
+    input: &DatasetInput,
+) -> Result<(Cow<'_, RawSamples>, Option<Range<usize>>), CoreError> {
+    match &input.window {
+        Some(w) => {
+            let kept = input.samples.window(w.clone())?;
+            Ok((Cow::Owned(input.samples.slice(kept.clone())), Some(kept)))
+        }
+        None => Ok((Cow::Borrowed(&input.samples), None)),
+    }
+}
+
 /// An input that could not be processed and was not eligible anyway.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -99,6 +138,10 @@ pub struct ChipAnalysis {
     /// For inputs analysed with a time `window`, the sample index range kept, keyed by probe
     /// point.
     pub windows: Vec<(usize, std::ops::Range<usize>)>,
+    /// The peaks of every input's PSD and the thresholds they were judged against, keyed by probe
+    /// point like `datasets`. An input whose PSD has no power has none.
+    #[serde(default)]
+    pub peaks: Vec<(usize, PsdPeaks)>,
     /// Recommendation from the chip's eligible datasets that could be analysed; `None` when it
     /// has none.
     pub recommendation: Option<Recommendation>,
@@ -153,14 +196,9 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
         let built = match &input.load_error {
             Some(message) => Err(message.clone()),
             None => (|| {
-                let mut cd = if let Some(w) = &input.window {
-                    let kept = input.samples.window(w.clone())?;
-                    let samples = input.samples.slice(kept.clone());
-                    windows[i] = Some(kept);
-                    CalibrationData::from_samples(&name, &samples)?
-                } else {
-                    CalibrationData::from_samples(&name, &input.samples)?
-                };
+                let (samples, kept) = windowed_samples(input)?;
+                windows[i] = kept;
+                let mut cd = CalibrationData::from_samples(&name, &samples)?;
                 cd.normalize_to_frequencies();
                 Ok::<_, CoreError>(cd)
             })()
@@ -198,6 +236,7 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
             chips.push(&input.chip);
         }
     }
+    let peaks_max_freq = params.max_freq.filter(|f| *f != 0.0).unwrap_or(MAX_FREQ);
     let mut per_chip = Vec::new();
     for chip in chips {
         let idx: Vec<usize> = (0..inputs.len())
@@ -226,6 +265,13 @@ pub fn analyze(inputs: &[DatasetInput], params: &FitParams) -> Result<Analysis, 
             datasets: idx
                 .iter()
                 .filter_map(|&i| psds[i].clone().map(|p| (inputs[i].point, p)))
+                .collect(),
+            peaks: idx
+                .iter()
+                .filter_map(|&i| {
+                    let peaks = psd_peaks(psds[i].as_ref()?, peaks_max_freq)?;
+                    Some((inputs[i].point, peaks))
+                })
                 .collect(),
             recommendation,
         });

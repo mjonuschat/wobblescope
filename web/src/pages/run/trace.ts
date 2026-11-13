@@ -1,7 +1,7 @@
 import type { EChartsCoreOption } from "echarts/core";
 
-import type { Axis } from "@/lib/generated/Axis";
 import type { ChipLive } from "@/lib/generated/ChipLive";
+import type { Direction } from "@/lib/generated/Direction";
 import type { TestState } from "@/lib/generated/TestState";
 
 export interface Trace {
@@ -16,8 +16,10 @@ export interface Traces {
 
 export const NO_TRACES: Traces = { key: "", series: [] };
 
-export function levelOf(chip: ChipLive, axis: Axis | null): number | null {
+/** The signal along `axis`. A diagonal moves both X and Y, so its signal is the two combined. */
+export function levelOf(chip: ChipLive, axis: Direction | null): number | null {
   if (!chip.level) return null;
+  if (axis !== null && typeof axis === "object") return Math.hypot(chip.level[0], chip.level[1]);
   return chip.level[axis === "Y" ? 1 : 0];
 }
 

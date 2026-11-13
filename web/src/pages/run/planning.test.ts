@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { printerSettings } from "@/test/capture";
 
-import { patternPoints } from "./planning";
+import { formatPosition, patternPoints, segmentLabel } from "./planning";
 
 const limits = { x: { min: 0, max: 300 }, y: { min: 0, max: 200 }, z: { min: 0, max: 300 } };
 
@@ -41,5 +41,24 @@ describe("patternPoints", () => {
     expect(patternPoints("center", axis_limits as NonNullable<typeof axis_limits>, 20)[0].slice(0, 2)).toEqual([
       150.5, 154,
     ]);
+  });
+});
+
+describe("segmentLabel", () => {
+  it("names the belts and the axes in title case", () => {
+    expect(segmentLabel({ Vector: [1, -1, 0] })).toBe("Belt A (Axis 1,-1)");
+    expect(segmentLabel({ Vector: [1, 1, 0] })).toBe("Belt B (Axis 1,1)");
+    expect(segmentLabel("X")).toBe("X Axis");
+    expect(segmentLabel("Y")).toBe("Y Axis");
+  });
+
+  it("keeps the vector's own text for any other vector", () => {
+    expect(segmentLabel({ Vector: [1, 2, 0] })).toBe("1,2,0");
+  });
+});
+
+describe("formatPosition", () => {
+  it("labels each coordinate and adds the unit", () => {
+    expect(formatPosition([75, 75.12345, 20])).toBe("X 75, Y 75.123, Z 20 mm");
   });
 });

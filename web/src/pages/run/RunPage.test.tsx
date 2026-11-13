@@ -1,6 +1,9 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { FinishedTest } from "@/lib/generated/FinishedTest";
+import type { TestKind } from "@/lib/generated/TestKind";
+import type { TestState } from "@/lib/generated/TestState";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { queryKeys } from "@/lib/api/queries";
@@ -8,23 +11,35 @@ import { chip, chipsSnapshot, printerSettings } from "@/test/capture";
 import type { ApiCall, Reply } from "@/test/http";
 import { renderRoute } from "@/test/render";
 import { apiPath, healthyStatus, stubApiWithStatus } from "@/test/status";
-import { stubWebSocket } from "@/test/websocket";
+import { FakeSocket, stubWebSocket } from "@/test/websocket";
+
+vi.mock("@/components/charts/EChart", () => ({
+  EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
+}));
 
 interface Options {
   settings?: PrinterSettings;
   chips?: ChipsSnapshot;
   checked?: ChipsSnapshot;
   homed?: string | null;
+  busy?: string | null;
   start?: Reply | ((call: ApiCall) => Reply);
 }
 
-function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, start, homed = "xyz" }: Options = {}) {
+function api({
+  settings = printerSettings(),
+  chips = chipsSnapshot(),
+  checked,
+  start,
+  homed = "xyz",
+  busy = null,
+}: Options = {}) {
   return stubApiWithStatus((call) => {
     const path = apiPath(call);
     if (path === "settings") return { body: settings };
     if (path === "chips") return { body: chips };
     if (path === "chips/check") return { body: checked ?? chips };
-    if (path === "printer") return { body: { homed_axes: homed } };
+    if (path === "printer") return { body: { homed_axes: homed, busy } };
     if (path === "tests" && call.method === "POST") {
       const reply = typeof start === "function" ? start(call) : start;
       return reply ?? { status: 202, body: { id: "test-1" } };
@@ -63,6 +78,19 @@ describe("the run screen", () => {
     renderRoute("/run/shaper");
     expect(await screen.findByText("Home the printer first. Not homed: Z.")).toBeTruthy();
     expect(startButton().disabled).toBe(true);
+  });
+
+  it("disables Start and says why while the printer is busy", async () => {
+    api({ busy: "The printer is homing." });
+    renderRoute("/run/shaper");
+    expect(await screen.findByText("The printer is homing.")).toBeTruthy();
+    expect(startButton().disabled).toBe(true);
+  });
+
+  it("enables Start when the printer is not busy", async () => {
+    api({ busy: null });
+    renderRoute("/run/shaper");
+    await waitFor(() => expect(startButton().disabled).toBe(false));
   });
 
   it("names every axis when none is homed", async () => {
@@ -106,6 +134,7 @@ describe("the run screen", () => {
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
     expect(JSON.parse(String(posted(calls)[0].body))).toEqual({
       chips: ["lis2dw ebb36"],
+      kind: "axes",
       axes: ["X"],
       mode: "Sweep",
       overrides: { freq_end: 100 },
@@ -120,6 +149,68 @@ describe("the run screen", () => {
     fireEvent.click(startButton());
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
     expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({});
+  });
+
+  describe("the sweeping period", () => {
+    const withPeriod = (value: number | null) => ({
+      settings: {
+        ...printerSettings({ sweeping_period: { value, overridable: true, needed: false } }),
+        default_mode: "Pulse" as const,
+      },
+    });
+    const sentBody = async (calls: ApiCall[]) => {
+      fireEvent.click(startButton());
+      await waitFor(() => expect(posted(calls)).toHaveLength(1));
+      return JSON.parse(String(posted(calls)[0].body));
+    };
+
+    it("falls back to 1.2 and sends it when the printer reports 0", async () => {
+      const calls = await open(withPeriod(0));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("1.2"));
+      expect(field(/Sweeping period/).placeholder).toBe("1.2");
+      const body = await sentBody(calls);
+      expect(body.mode).toBe("Sweep");
+      expect(body.overrides.sweeping_period).toBe(1.2);
+    });
+
+    it("falls back to 1.2 when the printer reports nothing", async () => {
+      const calls = await open(withPeriod(null));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("1.2"));
+      expect((await sentBody(calls)).overrides.sweeping_period).toBe(1.2);
+    });
+
+    it("keeps the printer's value above 0 and sends no override", async () => {
+      const calls = await open(withPeriod(0.8));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("0.8"));
+      expect((await sentBody(calls)).overrides).toEqual({});
+    });
+
+    it("lets a typed value win and returns to the default when cleared", async () => {
+      const calls = await open(withPeriod(0));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("1.2"));
+      fireEvent.change(field(/Sweeping period/), { target: { value: "2" } });
+      fireEvent.change(field(/Sweeping period/), { target: { value: "" } });
+      expect(field(/Sweeping period/).placeholder).toBe("1.2");
+      fireEvent.change(field(/Sweeping period/), { target: { value: "2" } });
+      expect((await sentBody(calls)).overrides.sweeping_period).toBe(2);
+    });
+
+    it("sends the default when the typed value was cleared", async () => {
+      const calls = await open(withPeriod(0));
+      await chooseMode("Sweep");
+      fireEvent.change(await waitFor(() => field(/Sweeping period/)), { target: { value: "" } });
+      expect((await sentBody(calls)).overrides.sweeping_period).toBe(1.2);
+    });
+
+    it("leaves pulse mode alone", async () => {
+      const calls = await open(withPeriod(0));
+      expect(screen.queryByLabelText(/Sweeping period/)).toBeNull();
+      expect((await sentBody(calls)).overrides).toEqual({});
+    });
   });
 
   it("shows a daemon message beside the field it names", async () => {
@@ -174,7 +265,7 @@ describe("the run screen", () => {
             : path === "settings"
               ? printerSettings()
               : path === "printer"
-                ? { homed_axes: "xyz" }
+                ? { homed_axes: "xyz", busy: null }
                 : chipsSnapshot();
         return new Response(JSON.stringify(body), { status: 200 });
       }),
@@ -328,5 +419,223 @@ describe("the run test routes", () => {
     const { router } = renderRoute("/run");
     await screen.findByRole("heading", { name: "Input Shaper" });
     expect(router.state.location.pathname).toBe("/run/shaper");
+  });
+});
+
+describe("the belts form", () => {
+  beforeEach(() => stubWebSocket({ idle: true }));
+
+  const MINIMUMS = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
+  const OLD_WARNING =
+    "This printer runs software older than Klipper v0.12.0 or Kalico v2026.01.00. A belt test may be refused after the toolhead moves to the test point.";
+
+  const withMachine = (
+    kinematics: string | null,
+    version_support: PrinterSettings["version_support"] = "supported",
+  ): PrinterSettings => {
+    const base = printerSettings();
+    return { ...base, version_support, machine: { ...base.machine, kinematics } };
+  };
+  async function openBelts(settings: PrinterSettings = withMachine("corexy")) {
+    const calls = api({ settings });
+    renderRoute("/run/belts");
+    await screen.findByRole("button", { name: "Run Test" });
+    await waitFor(() => expect(screen.queryByText(/Checking whether the printer is homed/)).toBeNull());
+    return calls;
+  }
+
+  it("the_belts_page_is_unavailable_on_cartesian_or_unknown_kinematics", async () => {
+    for (const kinematics of ["cartesian", "corexz", null]) {
+      api({ settings: withMachine(kinematics) });
+      renderRoute("/run/belts");
+      expect(await screen.findByText("Belt tests need a CoreXY printer.")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Run Test/ })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("the_belts_page_is_titled_belts_and_offered_on_limited_corexy", async () => {
+    await openBelts(withMachine("limited_corexy"));
+    expect(screen.getByRole("heading", { name: "Belts" })).toBeTruthy();
+  });
+
+  it("the_input_shaper_page_has_no_belts_tab_and_posts_kind_axes_with_axes", async () => {
+    const calls = await open({ settings: withMachine("corexy") });
+    expect(screen.queryByRole("tab", { name: "Belts" })).toBeNull();
+    expect(screen.queryByText(MINIMUMS)).toBeNull();
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    const body = JSON.parse(String(posted(calls)[0].body));
+    expect(body.kind).toBe("axes");
+    expect(body.axes).toEqual(["X", "Y"]);
+  });
+
+  it("the_belts_form_has_no_axis_choice_and_one_point", async () => {
+    await openBelts();
+    expect(screen.queryByRole("switch", { name: "X" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Y" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add a point after/ })).toBeNull();
+    expect(document.querySelectorAll('input[id^="point-"][id$="-x"]')).toHaveLength(1);
+    expect(screen.queryByText("Points")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pattern" })).toBeNull();
+    expect(screen.getByText("Test point")).toBeTruthy();
+    expect(field("Point 1 X").value).toBe("150.5");
+    expect(screen.getByRole("combobox", { name: "Mode" })).toBeTruthy();
+    expect(field(/End frequency/).value).toBe("135");
+  });
+
+  it("the_belts_form_does_not_state_the_supported_minimums", async () => {
+    for (const support of ["supported", "unknown", "too_old"] as const) {
+      await openBelts(withMachine("corexy", support));
+      expect(screen.queryByText(MINIMUMS)).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("the_belts_form_warns_when_version_support_is_too_old_and_still_allows_starting", async () => {
+    await openBelts(withMachine("corexy", "too_old"));
+    expect(screen.getByText(OLD_WARNING)).toBeTruthy();
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("the_belts_form_shows_no_warning_when_version_support_is_supported_or_unknown", async () => {
+    for (const support of ["supported", "unknown"] as const) {
+      await openBelts(withMachine("corexy", support));
+      expect(screen.queryByText(OLD_WARNING)).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("starting_a_belt_test_posts_kind_belts_without_axes", async () => {
+    const calls = await openBelts();
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    const body = JSON.parse(String(posted(calls)[0].body));
+    expect(body).toEqual({
+      chips: ["lis2dw ebb36"],
+      kind: "belts",
+      mode: "Sweep",
+      overrides: {},
+      points: [[150.5, 154, 20]],
+    });
+    expect("axes" in body).toBe(false);
+  });
+});
+
+describe("the run parameters card", () => {
+  beforeEach(() => stubWebSocket({ idle: true }));
+
+  const EXPLANATION = /The fields start with the printer's values/;
+  const reset = () => screen.getByRole("button", { name: "Reset" }) as HTMLButtonElement;
+
+  it("has_no_explanatory_paragraph_on_either_page", async () => {
+    await open();
+    expect(screen.queryByText(EXPLANATION)).toBeNull();
+    cleanup();
+    api({ settings: { ...printerSettings(), machine: { ...printerSettings().machine, kinematics: "corexy" } } });
+    renderRoute("/run/belts");
+    await screen.findByRole("button", { name: "Run Test" });
+    expect(screen.queryByText(EXPLANATION)).toBeNull();
+  });
+
+  it("reset_is_disabled_until_a_parameter_is_overridden", async () => {
+    await open();
+    expect(reset().disabled).toBe(true);
+    fireEvent.change(field(/Hz per second/), { target: { value: "5" } });
+    expect(reset().disabled).toBe(false);
+  });
+
+  it("reset_restores_the_printers_values_and_leaves_chips_mode_and_points_alone", async () => {
+    await open();
+    const printerHzPerSec = field(/Hz per second/).value;
+    const printerEnd = field(/End frequency/).value;
+    await chooseMode("Pulse");
+    fireEvent.change(document.getElementById("point-0-x") as HTMLInputElement, { target: { value: "99" } });
+    fireEvent.change(field(/Hz per second/), { target: { value: "abc" } });
+    fireEvent.change(field(/End frequency/), { target: { value: "100" } });
+    const chipsBefore = screen.getAllByRole("switch").map((s) => s.getAttribute("aria-checked"));
+    fireEvent.click(reset());
+    expect(field(/Hz per second/).value).toBe(printerHzPerSec);
+    expect(field(/End frequency/).value).toBe(printerEnd);
+    expect(screen.queryByText("Enter a number.")).toBeNull();
+    expect(mode()).toContain("Pulse");
+    expect((document.getElementById("point-0-x") as HTMLInputElement).value).toBe("99");
+    expect(screen.getAllByRole("switch").map((s) => s.getAttribute("aria-checked"))).toEqual(chipsBefore);
+    expect(reset().disabled).toBe(true);
+  });
+});
+
+describe("a test of the other kind", () => {
+  beforeEach(() => stubWebSocket());
+
+  const running = (kind: TestKind): TestState => ({
+    id: "test-9",
+    kind,
+    phase: "measuring",
+    segment: 1,
+    segments: 2,
+    axis: null,
+    position: [150, 150, 20],
+    expected_segment_seconds: 100,
+    elapsed_seconds: 5,
+    frequency_hz: 20,
+    frequency_range: [10, 135],
+    chips: [{ chip: "lis2dw ebb36", level: null, warnings: [] }],
+  });
+  const ended = (kind: TestKind): FinishedTest => ({
+    id: "test-9",
+    kind,
+    outcome: "failed",
+    reason: "boom",
+    code: null,
+    session_id: null,
+    motion_uncertain: false,
+    needs_restart: false,
+  });
+  async function openWith(path: string, snapshot: { test: TestState | null; last: FinishedTest | null }) {
+    api({ settings: { ...printerSettings(), machine: { ...printerSettings().machine, kinematics: "corexy" } } });
+    renderRoute(path);
+    await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
+    FakeSocket.latest.open();
+    FakeSocket.latest.send(snapshot);
+  }
+
+  it.each([
+    ["/run/shaper", "belts", "A Belts test is running.", "/run/belts"],
+    ["/run/belts", "axes", "A Input Shaper test is running.", "/run/shaper"],
+  ] as const)("on %s a running %s test is a notice with a link and the form", async (path, other, text, to) => {
+    await openWith(path, { test: running(other), last: null });
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
+    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(screen.queryByLabelText("Segment progress")).toBeNull();
+  });
+
+  it.each([
+    ["/run/shaper", "belts"],
+    ["/run/belts", "axes"],
+  ] as const)("on %s a finished %s test shows the form, not the result", async (path, other) => {
+    await openWith(path, { test: null, last: ended(other) });
+    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(screen.queryByText("Result")).toBeNull();
+    expect(screen.queryByText("boom")).toBeNull();
+  });
+
+  it.each([
+    ["/run/shaper", "axes"],
+    ["/run/belts", "belts"],
+  ] as const)("on %s a finished %s test shows its result", async (path, own) => {
+    await openWith(path, { test: null, last: ended(own) });
+    expect(await screen.findByText("Result")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+  });
+
+  it.each([
+    ["/run/shaper", "axes"],
+    ["/run/belts", "belts"],
+  ] as const)("on %s a running %s test shows progress, no notice", async (path, own) => {
+    await openWith(path, { test: running(own), last: null });
+    expect(await screen.findByLabelText("Segment progress")).toBeTruthy();
+    expect(screen.queryByText(/test is running\./)).toBeNull();
   });
 });

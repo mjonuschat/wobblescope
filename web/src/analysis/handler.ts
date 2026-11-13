@@ -1,9 +1,11 @@
-import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { Analysis } from "@/lib/generated/Analysis";
+import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { Axis } from "@/lib/generated/Axis";
+import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { Recommendation } from "@/lib/generated/Recommendation";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
 
 import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 
@@ -11,6 +13,8 @@ import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 export interface SessionHandle {
   add_file(name: string, bytes: Uint8Array): void;
   analyze(axis: Axis, params: FitParams, overrides: string[]): Analysis;
+  spectrogram(axis: Axis, chip: string, point: number, maxFreq: number): Spectrogram;
+  belts(chip: string, maxFreq: number, includeExcluded: boolean): BeltsAnalysis;
   analyze_axes_map(): AxesMapChip[];
   free(): void;
 }
@@ -39,8 +43,7 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     current = null;
   }
 
-  /** The worker's session for the request, opened if the id or creation time differs. */
-  async function open(request: { sessionId: string; meta: SessionMeta; files: Record<string, ArrayBuffer> }) {
+  async function open(request: Extract<WorkerRequest, { type: "analyze" | "spectrogram" | "belts" | "axesMap" }>) {
     loading ??= loadModule();
     const module = await loading;
     // A session written again under the same id has a new creation time and other files.
@@ -52,11 +55,10 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
         handle: new module.WasmSession(request.meta),
       };
     }
-    const { handle } = current;
     for (const [name, buffer] of Object.entries(request.files)) {
-      handle.add_file(name, new Uint8Array(buffer));
+      current!.handle.add_file(name, new Uint8Array(buffer));
     }
-    return { module, handle };
+    return { module, handle: current!.handle };
   }
 
   async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
@@ -69,6 +71,9 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
       analysis,
       snippets: {
         worstCase: snippet(analysis.worst_case),
+        worstCasePerformance: analysis.worst_case?.for_performance
+          ? module.config_snippet({ ...analysis.worst_case, best: analysis.worst_case.for_performance }, request.axis)
+          : null,
         perChip: analysis.per_chip.map((chip) => candidates(chip.recommendation)),
       },
     };
@@ -81,9 +86,25 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
       return null;
     }
     try {
-      if (request.type === "analyzeAxesMap") {
-        const { handle } = await open(request);
-        return { type: "axesMapResult", id: request.id, chips: handle.analyze_axes_map() };
+      if (request.type === "spectrogram") {
+        const { handle: session } = await open(request);
+        return {
+          type: "spectrogram",
+          id: request.id,
+          result: session.spectrogram(request.axis, request.chip, request.point, request.maxFreq),
+        };
+      }
+      if (request.type === "belts") {
+        const { handle: session } = await open(request);
+        return {
+          type: "belts",
+          id: request.id,
+          result: session.belts(request.chip, request.maxFreq, request.includeExcluded),
+        };
+      }
+      if (request.type === "axesMap") {
+        const { handle: session } = await open(request);
+        return { type: "axesMap", id: request.id, result: session.analyze_axes_map() };
       }
       return { type: "result", id: request.id, result: await analyze(request) };
     } catch (error) {

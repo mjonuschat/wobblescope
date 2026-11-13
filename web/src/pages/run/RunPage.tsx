@@ -1,12 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { TestState } from "@/lib/generated/TestState";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import type { TestKind } from "@/lib/generated/TestKind";
 import { Button } from "@/components/ui/button";
 import { Steps } from "@/components/Steps";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
+import { KIND_TITLES, offersBelts } from "./kinds";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 
@@ -16,7 +19,7 @@ const STEPS = [
   { id: "results", label: "Results" },
 ];
 
-export function RunPage() {
+export function RunPage({ kind }: { kind: TestKind }) {
   const status = useStatus();
   const settings = useSettings();
   const chips = useChips();
@@ -29,9 +32,14 @@ export function RunPage() {
   // The running test as last seen, so its progress can stay on screen when it ends.
   const [lastSeen, setLastSeen] = useState<TestState | null>(null);
   const [advanced, setAdvanced] = useState<string | null>(null);
+  // Only a test of this page's kind is shown here, so a test of the other kind never becomes
+  // `lastSeen` and cannot be held on screen when it ends.
+  const ownTest = live.test?.kind === kind ? live.test : null;
+  const otherKind: TestKind = kind === "axes" ? "belts" : "axes";
+  const otherRunning = live.test !== null && live.test.kind !== kind;
   useEffect(() => {
-    if (live.test) setLastSeen(live.test);
-  }, [live.test]);
+    if (ownTest) setLastSeen(ownTest);
+  }, [ownTest]);
 
   const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
   const notReady = klippyReady ? null : "Klipper is not ready.";
@@ -41,7 +49,7 @@ export function RunPage() {
   // becomes ready.
   const queryClient = useQueryClient();
   function newTest() {
-    if (live.last) setDismissed(live.last.id);
+    if (finished) setDismissed(finished.id);
     setStartedId(null);
   }
   const wasReady = useRef<boolean | null>(null);
@@ -66,13 +74,13 @@ export function RunPage() {
     (s) => chipList?.chips.find((c) => c.section === s)?.availability.state !== "unavailable",
   );
 
-  const finished = live.last;
-  const starting = startedId !== null && finished?.id !== startedId;
+  const finished = live.last?.kind === kind ? live.last : null;
+  const starting = startedId !== null && live.last?.id !== startedId;
   const holding =
-    !live.test && !starting && lastSeen !== null && finished?.id === lastSeen.id && advanced !== finished.id;
-  const showResult = !live.test && !starting && !holding && finished !== null && finished.id !== dismissed;
+    !ownTest && !starting && lastSeen !== null && finished?.id === lastSeen.id && advanced !== finished.id;
+  const showResult = !ownTest && !starting && !holding && finished !== null && finished.id !== dismissed;
   const step: "setup" | "measuring" | "results" =
-    live.test || starting || holding ? "measuring" : showResult ? "results" : "setup";
+    ownTest || starting || holding ? "measuring" : showResult ? "results" : "setup";
 
   let body: ReactNode;
   if (!live.known && startedId === null) {
@@ -92,8 +100,8 @@ export function RunPage() {
         </Button>
       </div>
     );
-  } else if (live.test) {
-    body = <ProgressView test={live.test} connected={live.connected} ended={null} onNext={() => {}} />;
+  } else if (ownTest) {
+    body = <ProgressView test={ownTest} connected={live.connected} ended={null} onNext={() => {}} />;
   } else if (holding && lastSeen && finished) {
     body = (
       <ProgressView
@@ -110,6 +118,14 @@ export function RunPage() {
   } else {
     body = (
       <>
+        {otherRunning && (
+          <p className="text-sm">
+            A {KIND_TITLES[otherKind]} test is running.{" "}
+            <Link to={otherKind === "belts" ? "/run/belts" : "/run/shaper"} className="underline">
+              Go to the {KIND_TITLES[otherKind]} page
+            </Link>
+          </p>
+        )}
         {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
         {chips.isError && (
           <p role="alert" className="text-sm text-destructive">
@@ -122,8 +138,12 @@ export function RunPage() {
             {settings.error.message}
           </p>
         )}
-        {settings.data && chipList && (
+        {settings.data && kind === "belts" && !offersBelts(settings.data.machine.kinematics) && (
+          <p className="text-sm">Belt tests need a CoreXY printer.</p>
+        )}
+        {settings.data && chipList && (kind === "axes" || offersBelts(settings.data.machine.kinematics)) && (
           <TestForm
+            kind={kind}
             settings={settings.data}
             chipList={chipList}
             chips={usable}
@@ -138,7 +158,7 @@ export function RunPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <h1 className="text-xl font-semibold">Input Shaper</h1>
+      <h1 className="text-xl font-semibold">{KIND_TITLES[kind]}</h1>
       <Steps
         steps={STEPS}
         current={step}

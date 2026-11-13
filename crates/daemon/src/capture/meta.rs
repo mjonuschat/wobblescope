@@ -2,12 +2,12 @@
 
 use wobblescope_core::eligibility::Health;
 use wobblescope_session::meta::{
-    ChipMeta, FORMAT_VERSION, Outcome, PrinterInfo, ProbePoint, SessionKind, SessionMeta, Source,
-    TimeDomain, undersampled_note,
+    ChipMeta, FORMAT_VERSION, Outcome, PrinterInfo, ProbePoint, SessionMeta, Source, TimeDomain,
+    undersampled_note,
 };
 
 use super::recorder::ChipSummary;
-use super::request::{PlanKind, TestPlan};
+use super::request::TestPlan;
 use crate::moonraker::chips::{Chip, ChipType};
 
 /// What a chip contributes to the metadata before the test runs.
@@ -51,7 +51,8 @@ fn type_name(t: ChipType) -> &'static str {
 }
 
 /// The metadata a capture starts with: no segment yet, chips with unknown health. It becomes the
-/// first journal.
+/// first journal. An axes-map calibration records no test mode or sweep settings; its run
+/// settings are added with its first segment, which is what makes it an axes-map session.
 #[must_use]
 pub fn initial(
     plan: &TestPlan,
@@ -60,22 +61,14 @@ pub fn initial(
     chips: &[ChipFacts],
     printer: Option<PrinterInfo>,
 ) -> SessionMeta {
-    let axes_map = match &plan.kind {
-        PlanKind::AxesMap(axes_map) => Some(axes_map),
-        PlanKind::Resonance => None,
-    };
-    let mut meta = SessionMeta {
+    let axes_map = plan.axes_map.as_ref();
+    SessionMeta {
         format_version: FORMAT_VERSION,
         id: id.to_owned(),
         created_at: created_at.to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: if axes_map.is_some() {
-            SessionKind::AxesMap
-        } else {
-            SessionKind::Resonance
-        },
-        axes_map_run: axes_map.map(|a| a.run.clone()),
+        axes_map_run: None,
         mode: axes_map.is_none().then_some(plan.mode),
         settings: axes_map.is_none().then(|| plan.sweep_settings()),
         printer,
@@ -105,9 +98,7 @@ pub fn initial(
             })
             .collect(),
         segments: Vec::new(),
-    };
-    meta.format_version = meta.required_version();
-    meta
+    }
 }
 
 /// Writes each chip's health, notes and observed rate into `meta`. `summaries` follow the order

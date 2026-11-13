@@ -1,14 +1,14 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
 import type { Analysis } from "@/lib/generated/Analysis";
-import { analysis, candidate, recommendation } from "@/test/fixtures";
+import { analysis, candidate, recommendation, spectrogram } from "@/test/fixtures";
 import { renderRoute } from "@/test/render";
 import { resultDetail } from "@/test/results";
 import { stubApiWithStatus as stubApi } from "@/test/status";
 
-const fake = vi.hoisted(() => ({ analyze: vi.fn(), forget: vi.fn() }));
+const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn(), prefetch: vi.fn() }));
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
@@ -19,7 +19,10 @@ vi.mock("@/components/charts/EChart", () => ({
 }));
 
 function fresh(a: Analysis): AnalysisResult {
-  return { analysis: a, snippets: { worstCase: "fresh snippet", perChip: [["fresh snippet"], null] } };
+  return {
+    analysis: a,
+    snippets: { worstCase: "fresh snippet", worstCasePerformance: null, perChip: [["fresh snippet"], null] },
+  };
 }
 
 function serve(detail = resultDetail()) {
@@ -32,6 +35,7 @@ function serve(detail = resultDetail()) {
 
 beforeEach(() => {
   fake.analyze.mockReset();
+  fake.spectrogram.mockReset();
 });
 
 function pending(_job: unknown, signal?: AbortSignal) {
@@ -124,12 +128,45 @@ describe("the result page", () => {
     expect(fake.analyze).not.toHaveBeenCalled();
   });
 
+  it("reopening a saved result with both recommendations shows both snippets", async () => {
+    const detail = resultDetail();
+    const axis = detail.record.axes[0];
+    axis.analysis.worst_case = {
+      ...recommendation(),
+      for_performance: candidate("zv", 55, { max_accel: 6000, vibrs: 0.04 }),
+    };
+    axis.snippets.worst_case_performance = "PERFORMANCE SNIPPET";
+    fake.analyze.mockImplementation(pending);
+    serve(detail);
+    renderRoute("/results/r1");
+    expect((await screen.findAllByText("PERFORMANCE SNIPPET")).length).toBeGreaterThan(0);
+    expect(screen.getByText("For low vibrations")).toBeTruthy();
+    expect(screen.getByText("For performance")).toBeTruthy();
+  });
+
+  it("a saved result gets the spectrogram panel and fetches from the result route", async () => {
+    const detail = resultDetail();
+    const saved = detail.record.axes[0].analysis;
+    saved.per_chip = saved.per_chip.map((c, i) => ({ ...c, chip: ["adxl345", "lis2dw ebb36"][i] }));
+    fake.analyze.mockImplementation(pending);
+    fake.spectrogram.mockResolvedValue(spectrogram());
+    serve(detail);
+    renderRoute("/results/r1");
+    expect(await screen.findByRole("img", { name: /Spectrogram of adxl345/ })).toBeTruthy();
+    expect(fake.spectrogram.mock.calls[0][0]).toMatchObject({
+      sessionId: "result:r1",
+      resultId: "r1",
+      axis: "X",
+      chip: "adxl345",
+    });
+  });
+
   it("switches between the axes of a result", async () => {
     const detail = resultDetail();
     detail.record.axes.push({
       ...detail.record.axes[0],
       axis: "Y",
-      snippets: { worst_case: "y snippet", per_chip: [["y snippet"], null] },
+      snippets: { worst_case: "y snippet", per_chip: [["y snippet"], null], worst_case_performance: null },
     });
     fake.analyze.mockImplementation(pending);
     serve(detail);
@@ -138,5 +175,51 @@ describe("the result page", () => {
     fireEvent.mouseDown(tab);
     fireEvent.click(tab);
     expect(await screen.findAllByText(/y snippet/)).toBeTruthy();
+  });
+
+  describe("analysis progress", () => {
+    it("shows the queue, the download and the analysis in turn", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/results/r1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: 4194304 });
+      });
+      expect(await screen.findByText("Downloading the saved samples…")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.getAttribute("aria-valuenow")).toBe("25");
+      expect(screen.getByText("1 MiB of 4 MiB")).toBeTruthy();
+
+      await act(async () => {
+        onProgress?.({ phase: "analysing" });
+      });
+      expect(await screen.findByText("Checking the saved data with a fresh analysis…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("an unknown total shows an indeterminate bar", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/results/r1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: null });
+      });
+      expect(await screen.findByText("Downloading the saved samples…")).toBeTruthy();
+      expect(screen.getByText("1 MiB")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.hasAttribute("aria-valuenow")).toBe(false);
+    });
   });
 });

@@ -7,13 +7,13 @@ import { defaultFitParams } from "./fit";
 const field = (label: RegExp) => screen.getByLabelText(label);
 
 describe("FitSettingsForm", () => {
-  it("applies Klipper\u2019s defaults, with the damping ratio filled in as 0.1, when nothing is changed", () => {
+  it("applies Klipper\u2019s defaults, with the damping ratio left to the estimate, when nothing is changed", () => {
     const onApply = vi.fn();
     render(<FitSettingsForm onApply={onApply} />);
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onApply).toHaveBeenCalledWith({
       scv: 5,
-      damping_ratio: 0.1,
+      damping_ratio: null,
       max_smoothing: null,
       max_vibrations: null,
       test_damping_ratios: null,
@@ -33,29 +33,33 @@ describe("FitSettingsForm", () => {
     expect((field(/Maximum Corner Rounding/) as HTMLInputElement).value).toBe("");
   });
 
-  it("starts from the printer's recorded values, says so, and Reset goes back to them", () => {
+  it("starts from the printer's recorded corner velocity, names its damping ratio without using it, and Reset goes back", () => {
     const onApply = vi.fn();
     const baseline = {
-      params: { ...defaultFitParams, scv: 8, damping_ratio: 0.12 },
-      recorded: { scv: true, damping: true },
+      params: { ...defaultFitParams, scv: 8 },
+      recorded: { scv: true, damping: 0.12 },
     };
     render(<FitSettingsForm baseline={baseline} onApply={onApply} />);
     expect((field(/Square Corner Velocity/) as HTMLInputElement).value).toBe("8");
-    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("0.12");
+    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("");
+    expect(screen.getByText(/The printer's input shaper uses 0\.12\. Empty estimates it from the data\./)).toBeTruthy();
     expect(screen.getByText(/From the printer when it was tested\./)).toBeTruthy();
     fireEvent.change(field(/Square Corner Velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect((field(/Square Corner Velocity/) as HTMLInputElement).value).toBe("8");
-    expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 8, damping_ratio: 0.12 }));
+    expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ scv: 8, damping_ratio: null }));
   });
 
-  it("fills the damping ratio with 0.1 when the printer set none, and an empty field still means 0.1", () => {
+  it("leaves the damping ratio empty when the printer set none, and applies null, which estimates it from the data", () => {
     const onApply = vi.fn();
     render(<FitSettingsForm onApply={onApply} />);
-    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("0.1");
-    fireEvent.change(field(/Damping Ratio/), { target: { value: "" } });
+    expect((field(/Damping Ratio/) as HTMLInputElement).value).toBe("");
+    expect(screen.getByText(/Empty estimates it from the data\./)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ damping_ratio: null }));
+    fireEvent.change(field(/Damping Ratio/), { target: { value: "0.05" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onApply).toHaveBeenLastCalledWith(expect.objectContaining({ damping_ratio: 0.05 }));
   });
 
   it("says Klipper's default is used when nothing was recorded", () => {

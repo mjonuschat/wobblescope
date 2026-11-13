@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function ShaperTable({ recommendation, snippets = null }: Props) {
-  const { best, all } = recommendation;
+  const { best, all, for_performance: performance } = recommendation;
   return (
     <Table>
       <TableHeader>
@@ -29,13 +29,20 @@ export function ShaperTable({ recommendation, snippets = null }: Props) {
       <TableBody>
         {all.map((c, i) => {
           const isBest = c.name === best.name && c.freq === best.freq;
+          const isPerformance = performance !== null && c.name === performance.name && c.freq === performance.freq;
           return (
             <TableRow
               key={`${c.name}-${c.freq}`}
               data-best={isBest}
+              data-performance={isPerformance}
               className={isBest ? "bg-muted font-medium" : undefined}
             >
-              <TableCell>{c.name}</TableCell>
+              <TableCell>
+                {c.name}
+                {isPerformance && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">for performance</span>
+                )}
+              </TableCell>
               <TableCell>{formatHz(c.freq)} Hz</TableCell>
               <TableCell>{(c.vibrs * 100).toFixed(1)}%</TableCell>
               <TableCell>{c.smoothing.toFixed(3)} mm</TableCell>

@@ -1,6 +1,7 @@
-import { InfoIcon, RotateCcwIcon } from "lucide-react";
+import { RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
+import { HintLabel } from "@/components/HintLabel";
 import { Panel } from "@/components/Panel";
 import { UnitInput } from "@/components/UnitInput";
 import { Button } from "@/components/ui/button";
@@ -24,8 +25,8 @@ function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string
       }`;
     case "damping_ratio":
       return `How quickly the printer's resonance dies out; lower rings longer. ${
-        recorded.damping ? "From the printer's input shaper settings." : "Empty uses 0.1."
-      }`;
+        recorded.damping !== null ? `The printer's input shaper uses ${recorded.damping}. ` : ""
+      }Empty estimates it from the data.`;
     case "max_smoothing":
       return "Skip shapers that round corners more than this. Empty means no limit.";
     case "max_vibrations":
@@ -35,7 +36,7 @@ function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string
 
 const NOTHING_RECORDED: FitBaseline = {
   params: defaultFitParams,
-  recorded: { scv: false, damping: false },
+  recorded: { scv: false, damping: null },
 };
 
 interface FieldProps {
@@ -51,23 +52,7 @@ function FitField({ name, value, hint, invalid, onChange }: FieldProps) {
   const id = `fit-${name}`;
   return (
     <div className="flex flex-col gap-2.5">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={`About ${label.toLowerCase()}`}
-              className="-mx-1 flex cursor-help items-center gap-1 rounded px-1 py-0.5 text-sm leading-none font-medium"
-            />
-          }
-        >
-          {label}
-          <InfoIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-64">
-          {hint}
-        </TooltipContent>
-      </Tooltip>
+      <HintLabel label={label} hint={hint} />
       <UnitInput
         id={id}
         unit={unit}
@@ -139,9 +124,7 @@ export function FitSettingsForm({ baseline = NOTHING_RECORDED, applied = null, o
               <RotateCcwIcon />
             </TooltipTrigger>
             <TooltipContent side="top">
-              {baseline.recorded.scv || baseline.recorded.damping
-                ? "Back to the values the printer recorded"
-                : "Back to Klipper's defaults"}
+              {baseline.recorded.scv ? "Back to the values the printer recorded" : "Back to Klipper's defaults"}
             </TooltipContent>
           </Tooltip>
         }

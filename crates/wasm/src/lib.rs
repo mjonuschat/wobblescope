@@ -10,13 +10,18 @@ use std::collections::HashMap;
 use thiserror::Error;
 use wobblescope_core::CORE_VERSION;
 use wobblescope_core::axes_map::analyze_axes_map as core_analyze_axes_map;
+use wobblescope_core::belts_run::{BeltsAnalysis, analyze_belts};
+use wobblescope_core::direction::Direction;
+use wobblescope_core::eligibility::DatasetInput;
 use wobblescope_core::error::CoreError;
 use wobblescope_core::fit::{Axis, FitParams, Recommendation};
 use wobblescope_core::multichip::{Analysis, analyze};
+use wobblescope_core::spectrogram::{Spectrogram, spectrogram_of};
 use wobblescope_core::spectrum::{LiveSpectrum, Peak, Spectrum, top_peaks};
 use wobblescope_session::SessionError;
 use wobblescope_session::bridge::{
-    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, dataset_inputs,
+    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, belt_inputs,
+    dataset_inputs,
 };
 use wobblescope_session::codec::decode_samples;
 use wobblescope_session::meta::SessionMeta;
@@ -35,6 +40,8 @@ pub enum AnalyzeError {
     /// `core` refused the data or the fit parameters.
     #[error(transparent)]
     Core(#[from] CoreError),
+    #[error("no recording of chip {chip} at point {point} on this axis")]
+    NoSuchDataset { chip: String, point: usize },
 }
 
 /// One session's metadata and its compressed sample files, held in wasm memory.
@@ -76,22 +83,86 @@ impl Session {
         params: &FitParams,
         overrides: &[String],
     ) -> Result<Analysis, AnalyzeError> {
+        let mut inputs = self.inputs(axis)?;
+        apply_overrides(&mut inputs, overrides);
+        Ok(analyze(&inputs, params)?)
+    }
+
+    /// The time-frequency map of the recording of `chip` at probe point `point` on `axis`, up to
+    /// `max_freq`, cut to the segment's time window as `analyze` cuts it. It is made for any
+    /// recording that loaded, whatever its health, since a bad capture is worth a look.
+    ///
+    /// # Errors
+    /// A file of the axis that was never added, [`AnalyzeError::NoSuchDataset`] for a chip or
+    /// point the axis has no recording of, or a [`CoreError`] from the map.
+    pub fn spectrogram(
+        &self,
+        axis: Axis,
+        chip: &str,
+        point: usize,
+        max_freq: f64,
+    ) -> Result<Spectrogram, AnalyzeError> {
+        let inputs = self.inputs(axis)?;
+        let input = inputs
+            .iter()
+            .find(|i| i.chip == chip && i.point == point)
+            .ok_or_else(|| AnalyzeError::NoSuchDataset {
+                chip: chip.to_owned(),
+                point,
+            })?;
+        Ok(spectrogram_of(input, max_freq)?)
+    }
+
+    /// Compares the belt A and belt B recordings of `chip` up to `max_freq`. Only that chip's
+    /// files are decoded, for the call only. With `include_excluded` a recording that health or
+    /// coverage would exclude is used anyway. A belt the chip has no recording of is reported
+    /// as absent, not as an error.
+    ///
+    /// # Errors
+    /// A file of the chip's belt recordings that was never added.
+    pub fn belts(
+        &self,
+        chip: &str,
+        max_freq: f64,
+        include_excluded: bool,
+    ) -> Result<BeltsAnalysis, AnalyzeError> {
         for file in self
             .meta
             .segments
             .iter()
-            .filter(|s| s.axis == axis)
+            .filter(|s| s.axis == Direction::BELT_A || s.axis == Direction::BELT_B)
+            .flat_map(|s| &s.files)
+            .filter(|f| self.meta.chips[f.chip as usize].name == chip)
+        {
+            if !self.files.contains_key(&file.sample_file) {
+                return Err(AnalyzeError::MissingFile(file.sample_file.clone()));
+            }
+        }
+        let (point, mut a, mut b) = belt_inputs(&self.meta, chip, |file| {
+            decode_samples(&self.files[&file.sample_file])
+        })?;
+        for input in a.iter_mut().chain(b.iter_mut()) {
+            input.include_override = include_excluded;
+        }
+        Ok(analyze_belts(chip, point, a.as_ref(), b.as_ref(), max_freq))
+    }
+
+    /// The datasets of `axis`, with their samples decoded for the call only.
+    fn inputs(&self, axis: Axis) -> Result<Vec<DatasetInput>, AnalyzeError> {
+        for file in self
+            .meta
+            .segments
+            .iter()
+            .filter(|s| s.axis == axis.into())
             .flat_map(|s| &s.files)
         {
             if !self.files.contains_key(&file.sample_file) {
                 return Err(AnalyzeError::MissingFile(file.sample_file.clone()));
             }
         }
-        let mut inputs = dataset_inputs(&self.meta, axis, |file| {
+        Ok(dataset_inputs(&self.meta, axis, |file| {
             decode_samples(&self.files[&file.sample_file])
-        })?;
-        apply_overrides(&mut inputs, overrides);
-        Ok(analyze(&inputs, params)?)
+        })?)
     }
 
     /// Analyses every chip in an axes-map calibration session. A chip whose files are not all

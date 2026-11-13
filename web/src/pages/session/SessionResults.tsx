@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
+import { Panel } from "@/components/Panel";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/api/queries";
@@ -12,18 +13,22 @@ import { AxesMapResults } from "./AxesMapResults";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
+import { BeltResults } from "./belts/BeltResults";
+import { UnsupportedDirections } from "./belts/UnsupportedDirections";
 import { SaveResultButton } from "./SaveResultDialog";
 import { baselineFor } from "./fit";
 
 type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
 
 function AnalysisView({
+  sessionId,
   query,
   axis,
   meta,
   overrides,
   onOverridesChange,
 }: {
+  sessionId: string;
   query: AnalysisQuery;
   axis: Axis;
   meta: SessionMeta;
@@ -31,7 +36,15 @@ function AnalysisView({
   onOverridesChange: (overrides: string[]) => void;
 }) {
   if (query.isPending) {
-    return <Waiting>Analysing axis {axis}…</Waiting>;
+    const { progress } = query;
+    const message =
+      progress.phase === "queued"
+        ? "Waiting for the previous analysis…"
+        : progress.phase === "downloading"
+          ? `Downloading samples for axis ${axis}…`
+          : `Analysing axis ${axis}…`;
+    const download = progress.phase === "downloading" ? { loaded: progress.loaded, total: progress.total } : undefined;
+    return <Waiting download={download}>{message}</Waiting>;
   }
   if (query.isError) {
     return (
@@ -40,7 +53,15 @@ function AnalysisView({
       </p>
     );
   }
-  return <AxisResults result={query.data} meta={meta} overrides={overrides} onOverridesChange={onOverridesChange} />;
+  return (
+    <AxisResults
+      result={query.data}
+      meta={meta}
+      overrides={overrides}
+      source={{ sessionId, axis }}
+      onOverridesChange={onOverridesChange}
+    />
+  );
 }
 
 export function SessionResults({ id, header = defaultHeader }: { id: string; header?: Header }) {
@@ -63,26 +84,45 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
       </div>
     );
   }
-  const { meta } = session.data;
-  if (meta.kind === "AxesMap") {
-    return (
-      <div className="space-y-4">
-        {header(null)}
-        <AxesMapResults id={id} meta={meta} />
-        <MetaPanel meta={meta} />
-      </div>
-    );
+  const { meta, summary } = session.data;
+  switch (summary.kind) {
+    case "belts":
+      return <BeltResults id={id} meta={meta} header={header} />;
+    case "axesmap":
+      return (
+        <div className="space-y-4">
+          {header(null)}
+          <AxesMapResults id={id} meta={meta} />
+          <MetaPanel meta={meta} />
+        </div>
+      );
+    case "other":
+      return (
+        <div className="space-y-4">
+          {header(null)}
+          <UnsupportedDirections meta={meta} />
+        </div>
+      );
+    case "axes":
+      return <Loaded id={id} meta={meta} header={header} />;
   }
-  return <Loaded id={id} meta={meta} header={header} />;
 }
 
 /**
  * What shows above the analysis. It gets the Save result button, or null while there is nothing
- * to save yet, and places it where the page wants it.
+ * to save yet, and the belt similarity rows, or null when there are none, and places them where
+ * the page wants them.
  */
-export type Header = (save: ReactNode) => ReactNode;
+export type Header = (save: ReactNode, summary?: ReactNode) => ReactNode;
 
-const defaultHeader: Header = (save) => (save ? <div className="flex justify-end">{save}</div> : null);
+const defaultHeader: Header = (save, summary) =>
+  summary ? (
+    <Panel title="Result" action={save}>
+      {summary}
+    </Panel>
+  ) : save ? (
+    <div className="flex justify-end">{save}</div>
+  ) : null;
 
 function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: Header }) {
   const [selected, setSelected] = useState<Axis | null>(null);
@@ -90,7 +130,8 @@ function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: H
   const [applied, setApplied] = useState<FitParams | null>(null);
   const [overrides, setOverrides] = useState<string[]>([]);
 
-  const axes = [...new Set(meta.segments.map((s) => s.axis))];
+  // Only a session of X and Y segments gets here, so no vector is dropped.
+  const axes = [...new Set(meta.segments.map((s) => s.axis).filter((a): a is Axis => typeof a === "string"))];
   const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
   const baseline = baselineFor(meta, axis ?? "X");
   const params = applied ?? baseline.params;
@@ -124,7 +165,14 @@ function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: H
               ))}
             </TabsList>
           </Tabs>
-          <AnalysisView query={query} axis={axis} meta={meta} overrides={overrides} onOverridesChange={setOverrides} />
+          <AnalysisView
+            sessionId={id}
+            query={query}
+            axis={axis}
+            meta={meta}
+            overrides={overrides}
+            onOverridesChange={setOverrides}
+          />
           <FitSettingsForm
             key={applied ? "applied" : axis}
             baseline={baseline}

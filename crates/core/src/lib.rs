@@ -1,17 +1,23 @@
 //! Pure DSP for resonance analysis. No I/O.
 
 pub mod axes_map;
+pub mod belts;
+pub mod belts_run;
 pub mod decimate;
+pub mod direction;
 pub mod eligibility;
 pub mod error;
 pub mod fit;
 pub mod multichip;
 pub mod numeric;
+pub mod peaks;
 pub mod psd;
+pub mod resonance;
 pub mod samples;
 pub mod score;
 pub mod shaper;
 pub mod signal;
+pub mod spectrogram;
 pub mod spectrum;
 
 pub use error::CoreError;

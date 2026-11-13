@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ActivityIcon,
   AudioLinesIcon,
+  ChevronsLeftRightIcon,
   CompassIcon,
   FlaskConicalIcon,
   FolderClockIcon,
@@ -21,15 +22,16 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { useStatus } from "@/lib/api/queries";
+import { offersBelts } from "@/pages/run/kinds";
+import { useSettings, useStatus } from "@/lib/api/queries";
 
-type Path = "/" | "/run/shaper" | "/run/axes-map" | "/stream" | "/sessions" | "/results";
+type Path = "/" | "/run/shaper" | "/run/belts" | "/run/axes-map" | "/stream" | "/sessions" | "/results";
 
 interface Page {
   to: Path;
   label: string;
   icon: LucideIcon;
-  children?: { to: Path; label: string; icon: LucideIcon }[];
+  children?: { to: Path; label: string; icon: LucideIcon; needsBelts?: boolean }[];
 }
 
 const pages: Page[] = [
@@ -40,6 +42,7 @@ const pages: Page[] = [
     icon: FlaskConicalIcon,
     children: [
       { to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon },
+      { to: "/run/belts", label: "Belts", icon: ChevronsLeftRightIcon, needsBelts: true },
       { to: "/run/axes-map", label: "Axes map calibration", icon: CompassIcon },
       { to: "/stream", label: "Live View", icon: AudioLinesIcon },
     ],
@@ -49,6 +52,7 @@ const pages: Page[] = [
 
 export function AppSidebar() {
   const version = useStatus().data?.version;
+  const beltsOffered = offersBelts(useSettings().data?.machine.kinematics);
   const path = useRouterState({ select: (state) => state.location.pathname });
   return (
     <Sidebar
@@ -77,14 +81,16 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                   {children && (
                     <SidebarMenuSub aria-label={`${label} pages`}>
-                      {children.map((child) => (
-                        <SidebarMenuSubItem key={child.to}>
-                          <SidebarMenuSubButton render={<Link to={child.to} activeProps={{ "data-active": true }} />}>
-                            <child.icon />
-                            <span>{child.label}</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
+                      {children
+                        .filter((child) => !child.needsBelts || beltsOffered)
+                        .map((child) => (
+                          <SidebarMenuSubItem key={child.to}>
+                            <SidebarMenuSubButton render={<Link to={child.to} activeProps={{ "data-active": true }} />}>
+                              <child.icon />
+                              <span>{child.label}</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
                     </SidebarMenuSub>
                   )}
                 </SidebarMenuItem>

@@ -141,7 +141,7 @@ function noMotion(chip: string, messages = ["No motion seen by this chip.", NO_Z
 function serve(meta: SessionMeta) {
   stubApiWithStatus(({ url }) =>
     url.pathname.endsWith("/sessions/s1")
-      ? { body: { summary: summary("s1"), meta } }
+      ? { body: { summary: summary("s1", { kind: "axesmap", mode: null }), meta } }
       : { status: 404, body: { error: "not_found", message: "no such session" } },
   );
 }

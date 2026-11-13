@@ -6,17 +6,19 @@ use std::collections::HashMap;
 use common::{real, window_markers_x_short};
 use wobblescope_core::RawSamples;
 use wobblescope_core::axes_map::Mounting;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
 use wobblescope_session::SessionError;
 use wobblescope_session::bridge::{
-    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, dataset_inputs,
+    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, belt_inputs,
+    dataset_inputs,
 };
 use wobblescope_session::codec::{decode_samples, encode_samples};
 use wobblescope_session::meta::{
-    AXES_MAP_FORMAT_VERSION, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
-    SessionKind, SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
+    AXES_MAP_DIRECTIONS, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
+    SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
 };
 
 fn chip(name: &str, health: Health) -> ChipMeta {
@@ -50,12 +52,11 @@ fn meta(chips: Vec<ChipMeta>, segments: Vec<SegmentMeta>) -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::Resonance,
-        axes_map_run: None,
         mode: None,
         settings: None,
         printer: None,
         outcome: Outcome::Complete,
+        axes_map_run: None,
         notes: vec![],
         probe_points: vec![ProbePoint { position: None }],
         chips,
@@ -97,7 +98,7 @@ fn two_chip_x_meta(w: &Win, coverage: Coverage, ebb_health: Health) -> SessionMe
             chip("lis2dw ebb36", ebb_health),
         ],
         vec![SegmentMeta {
-            axis: Axis::X,
+            axis: Axis::X.into(),
             point: 0,
             window: Some(TimeWindow {
                 start: w.window.start,
@@ -154,13 +155,13 @@ parity_test! {
             vec![chip("a", Health::Ok), chip("b", Health::Ok)],
             vec![
                 SegmentMeta {
-                    axis: Axis::X,
+                    axis: Axis::X.into(),
                     point: 0,
                     window: None,
                     files: vec![entry(1, 0, 2, Coverage::Complete), entry(0, 0, 2, Coverage::Complete)],
                 },
                 SegmentMeta {
-                    axis: Axis::Y,
+                    axis: Axis::Y.into(),
                     point: 0,
                     window: None,
                     files: vec![entry(0, 1, 2, Coverage::Complete)],
@@ -242,7 +243,7 @@ parity_test! {
         let m = meta(
             vec![chip("a", Health::Ok)],
             vec![SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window: None,
                 files: vec![entry(0, 0, 1000, Coverage::Complete)],
@@ -301,13 +302,13 @@ fn two_axis_meta(
         vec![chip("adxl345", chip_health)],
         vec![
             SegmentMeta {
-                axis: Axis::X,
+                axis: Axis::X.into(),
                 point: 0,
                 window,
                 files: vec![file(0, x)],
             },
             SegmentMeta {
-                axis: Axis::Y,
+                axis: Axis::Y.into(),
                 point: 0,
                 window,
                 files: vec![file(1, y)],
@@ -386,6 +387,125 @@ parity_test! {
     }
 }
 
+/// Two chips recorded belt A (segment 0) and belt B (segment 1) at point 0. `b_chips` lists the
+/// chips that have a belt B file.
+fn belt_meta(w: &Win, b_chips: &[u32]) -> SessionMeta {
+    let window = Some(TimeWindow {
+        start: w.window.start,
+        end: w.window.end,
+    });
+    let file = |chip: u32, segment| {
+        let count = if chip == 0 { w.adxl.len() } else { w.ebb.len() };
+        entry(chip, segment, count, Coverage::Complete)
+    };
+    let mut m = meta(
+        vec![
+            chip("adxl345", Health::Ok),
+            chip("lis2dw ebb36", Health::Ok),
+        ],
+        vec![
+            SegmentMeta {
+                axis: Direction::BELT_A,
+                point: 0,
+                window,
+                files: vec![file(0, 0), file(1, 0)],
+            },
+            SegmentMeta {
+                axis: Direction::BELT_B,
+                point: 0,
+                window,
+                files: b_chips.iter().map(|&c| file(c, 1)).collect(),
+            },
+        ],
+    );
+    m.format_version = 2;
+    m
+}
+
+fn belt_files(w: &Win) -> Vec<(&'static str, &RawSamples)> {
+    vec![
+        ("c0-s0.zst", &w.adxl),
+        ("c1-s0.zst", &w.ebb),
+        ("c0-s1.zst", &w.adxl),
+        ("c1-s1.zst", &w.ebb),
+    ]
+}
+
+parity_test! {
+    fn belt_inputs_picks_the_chips_two_segments() {
+        let w = win();
+        let m = belt_meta(&w, &[0, 1]);
+        let (point, a, b) = belt_inputs(&m, "lis2dw ebb36", loader(belt_files(&w))).unwrap();
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert_eq!(point, 0);
+        assert_eq!((a.chip.as_str(), b.chip.as_str()), ("lis2dw ebb36", "lis2dw ebb36"));
+        assert_eq!(a.samples, w.ebb);
+        assert_eq!(b.samples, w.ebb);
+        assert_eq!(a.window, Some(w.window.clone()));
+    }
+}
+
+parity_test! {
+    fn the_point_of_a_belt_session_is_the_shared_segment_point_or_0_without_belts() {
+        let w = win();
+        let mut m = belt_meta(&w, &[0, 1]);
+        m.probe_points = vec![ProbePoint { position: None }; 4];
+        for segment in &mut m.segments {
+            segment.point = 3;
+        }
+        let (point, a, b) = belt_inputs(&m, "adxl345", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 3);
+        assert!(a.is_some() && b.is_some());
+        let (point, a, b) = belt_inputs(&m, "no such chip", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 3);
+        assert!(a.is_none() && b.is_none());
+        m.segments.clear();
+        let (point, _, _) = belt_inputs(&m, "adxl345", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 0);
+    }
+}
+
+parity_test! {
+    fn the_belt_point_comes_from_the_segments_even_for_a_chip_without_files() {
+        let w = win();
+        let mut m = belt_meta(&w, &[0, 1]);
+        m.probe_points = vec![ProbePoint { position: None }; 4];
+        for segment in &mut m.segments {
+            segment.point = 3;
+            segment.files.retain(|f| f.chip == 1);
+        }
+        let (point, a, b) = belt_inputs(&m, "adxl345", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 3);
+        assert!(a.is_none() && b.is_none());
+    }
+}
+
+parity_test! {
+    fn the_loader_is_never_called_for_another_chip() {
+        let w = win();
+        let m = belt_meta(&w, &[0, 1]);
+        let mut asked = Vec::new();
+        let mut inner = loader(belt_files(&w));
+        belt_inputs(&m, "adxl345", |f| {
+            asked.push(f.sample_file.clone());
+            inner(f)
+        })
+        .unwrap();
+        assert_eq!(asked, ["c0-s0.zst", "c0-s1.zst"]);
+    }
+}
+
+parity_test! {
+    fn a_chip_missing_from_belt_b_gives_none_for_b() {
+        let w = win();
+        let m = belt_meta(&w, &[0]);
+        let (point, a, b) = belt_inputs(&m, "lis2dw ebb36", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 0);
+        assert!(a.is_some());
+        assert!(b.is_none());
+    }
+}
+
 fn tiny(n: usize, seed: f64) -> RawSamples {
     RawSamples {
         t: (0..n).map(|i| i as f64 * 0.001).collect(),
@@ -399,8 +519,7 @@ fn tiny(n: usize, seed: f64) -> RawSamples {
 /// count and coverage, or `None` for no recording.
 fn axes_map_meta(chips: Vec<ChipMeta>, files: Vec<[Option<(usize, Coverage)>; 3]>) -> SessionMeta {
     let mut m = meta(chips, Vec::new());
-    m.format_version = AXES_MAP_FORMAT_VERSION;
-    m.kind = SessionKind::AxesMap;
+    m.format_version = 2;
     m.axes_map_run = Some(AxesMapRun {
         speed: 80.0,
         accel: 1000.0,
@@ -412,7 +531,7 @@ fn axes_map_meta(chips: Vec<ChipMeta>, files: Vec<[Option<(usize, Coverage)>; 3]
     m.probe_points = (0..3).map(|_| ProbePoint { position: None }).collect();
     m.segments = (0..3)
         .map(|s| SegmentMeta {
-            axis: Axis::X,
+            axis: AXES_MAP_DIRECTIONS[s],
             point: s as u32,
             window: None,
             files: files

@@ -45,6 +45,14 @@ describe("ShaperTable", () => {
     }
   });
 
+  it("marks the row recommended for performance", () => {
+    const rec = { ...recommendation(), for_performance: candidate("zv", 55) };
+    render(<ShaperTable recommendation={rec} />);
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.getAttribute("data-performance"))).toEqual(["true", "false"]);
+    expect(screen.getByText("for performance")).toBeTruthy();
+  });
+
   it("has no copy buttons without snippets", () => {
     render(<ShaperTable recommendation={recommendation()} />);
     expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();

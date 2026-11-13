@@ -3,7 +3,15 @@ import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function Waiting({ children }: { children: ReactNode }) {
+import { DownloadProgress } from "./DownloadProgress";
+
+export function Waiting({
+  children,
+  download,
+}: {
+  children: ReactNode;
+  download?: { loaded: number; total: number | null };
+}) {
   return (
     <Card role="status" aria-busy="true">
       <CardHeader>
@@ -18,6 +26,7 @@ export function Waiting({ children }: { children: ReactNode }) {
         </div>
         <Skeleton className="h-24 w-full" />
         <p className="text-sm text-muted-foreground">{children}</p>
+        {download && <DownloadProgress loaded={download.loaded} total={download.total} />}
       </CardContent>
     </Card>
   );

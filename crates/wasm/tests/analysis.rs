@@ -6,16 +6,21 @@ mod common;
 
 use common::{real, window_markers_x_short};
 use wobblescope_core::RawSamples;
+use wobblescope_core::belts::compare_psds;
+use wobblescope_core::belts_run::{BeltsAnalysis, analyze_belts};
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
+use wobblescope_core::psd::CalibrationData;
+use wobblescope_core::spectrogram::spectrogram_of;
 use wobblescope_session::bridge::AxesMapChip;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::{
-    AXES_MAP_FORMAT_VERSION, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
-    SessionKind, SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
+    AXES_MAP_DIRECTIONS, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
+    SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
 };
-use wobblescope_wasm::{Session, config_snippet};
+use wobblescope_wasm::{AnalyzeError, Session, config_snippet};
 
 struct Win {
     adxl: RawSamples,
@@ -64,7 +69,6 @@ fn two_chip_x_meta(w: &Win, ebb_health: Health) -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::Resonance,
         axes_map_run: None,
         mode: None,
         settings: None,
@@ -77,7 +81,7 @@ fn two_chip_x_meta(w: &Win, ebb_health: Health) -> SessionMeta {
             chip("lis2dw ebb36", ebb_health),
         ],
         segments: vec![SegmentMeta {
-            axis: Axis::X,
+            axis: Axis::X.into(),
             point: 0,
             window: Some(TimeWindow {
                 start: w.window.start,
@@ -244,6 +248,17 @@ mod js {
     }
 
     #[wasm_bindgen_test]
+    fn belts_through_js_equal_the_direct_analysis() {
+        let w = win();
+        let mut s = WasmSession::new(to_js(&belt_meta(&w, true))).unwrap();
+        s.add_file("c0-s0.zst".to_owned(), encode_samples(&w.adxl).unwrap());
+        s.add_file("c0-s1.zst".to_owned(), encode_samples(&w.ebb).unwrap());
+        let out = s.belts("adxl345".to_owned(), 200.0, false).unwrap();
+        let got: BeltsAnalysis = serde_wasm_bindgen::from_value(out).unwrap();
+        assert_eq!(got, belt_direct(&w));
+    }
+
+    #[wasm_bindgen_test]
     fn an_absent_recommendation_reaches_js_as_null() {
         let w = win();
         // Both chips degraded, so nothing is eligible.
@@ -273,6 +288,169 @@ mod js {
             msg.contains("chips") || msg.contains("missing field"),
             "{msg}"
         );
+    }
+}
+
+parity_test! {
+    fn a_spectrogram_through_the_session_equals_direct_computation() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
+        let via = s.spectrogram(Axis::X, "lis2dw ebb36", 0, 200.0).unwrap();
+        assert_eq!(via, spectrogram_of(&direct(&w)[1], 200.0).unwrap());
+        assert!(via.power.len() > 1);
+    }
+}
+
+parity_test! {
+    fn an_unknown_chip_or_point_is_named() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
+        for (chip, point) in [("nope", 0), ("adxl345", 1)] {
+            match s.spectrogram(Axis::X, chip, point, 200.0) {
+                Err(AnalyzeError::NoSuchDataset { chip: c, point: p }) => {
+                    assert_eq!((c.as_str(), p), (chip, point));
+                }
+                other => panic!("expected NoSuchDataset, got {other:?}"),
+            }
+        }
+    }
+}
+
+parity_test! {
+    fn a_missing_file_is_named_for_a_spectrogram() {
+        let w = win();
+        let mut s = Session::new(two_chip_x_meta(&w, Health::Ok)).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+        assert!(matches!(
+            s.spectrogram(Axis::X, "adxl345", 0, 200.0),
+            Err(AnalyzeError::MissingFile(name)) if name == "c1-s0.zst"
+        ));
+    }
+}
+
+parity_test! {
+    fn a_degraded_chip_still_gets_a_map() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Degraded));
+        assert!(s.spectrogram(Axis::X, "lis2dw ebb36", 0, 200.0).is_ok());
+    }
+}
+
+/// One chip, `adxl345`, with the ADXL recording as belt A and the EBB recording as belt B, both
+/// bracketed by the capture's window. The two files differ in rate, which the comparison allows.
+fn belt_meta(w: &Win, with_b: bool) -> SessionMeta {
+    let window = Some(TimeWindow {
+        start: w.window.start,
+        end: w.window.end,
+    });
+    let file = |segment, count| SegmentFile {
+        sample_file: sample_file_name(0, segment),
+        ..entry(0, count)
+    };
+    let mut segments = vec![SegmentMeta {
+        axis: Direction::BELT_A,
+        point: 0,
+        window,
+        files: vec![file(0, w.adxl.len())],
+    }];
+    if with_b {
+        segments.push(SegmentMeta {
+            axis: Direction::BELT_B,
+            point: 0,
+            window,
+            files: vec![file(1, w.ebb.len())],
+        });
+    }
+    SessionMeta {
+        format_version: 2,
+        chips: vec![chip("adxl345", Health::Ok)],
+        segments,
+        ..two_chip_x_meta(w, Health::Ok)
+    }
+}
+
+fn belt_session(w: &Win, with_b: bool) -> Session {
+    let mut s = Session::new(belt_meta(w, with_b)).unwrap();
+    s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+    if with_b {
+        s.add_file("c0-s1.zst", encode_samples(&w.ebb).unwrap());
+    }
+    s
+}
+
+fn belt_direct(w: &Win) -> BeltsAnalysis {
+    let input = |samples: &RawSamples| DatasetInput {
+        samples: samples.clone(),
+        ..direct(w).remove(0)
+    };
+    analyze_belts(
+        "adxl345",
+        0,
+        Some(&input(&w.adxl)),
+        Some(&input(&w.ebb)),
+        200.0,
+    )
+}
+
+parity_test! {
+    fn belts_matches_compare_psds_on_the_same_recordings() {
+        let w = win();
+        let via = belt_session(&w, true).belts("adxl345", 200.0, false).unwrap();
+        assert_eq!(via, belt_direct(&w));
+        let result = via.result.as_ref().expect("both belts usable");
+        let psd = |s: &RawSamples| {
+            let cd = CalibrationData::from_samples("x", &s.slice(s.window(w.window.clone()).unwrap()))
+                .unwrap();
+            (cd.freq_bins, cd.psd_sum)
+        };
+        let ((fa, pa), (fb, pb)) = (psd(&w.adxl), psd(&w.ebb));
+        assert_eq!(result, &compare_psds(&fa, &pa, &fb, &pb, 200.0));
+    }
+}
+
+parity_test! {
+    fn a_belt_the_chip_lacks_is_absent_not_an_error() {
+        let w = win();
+        let got = belt_session(&w, false).belts("adxl345", 200.0, false).unwrap();
+        assert!(got.belt_a.spectrum.is_some());
+        assert!(!got.belt_b.present && got.result.is_none());
+    }
+}
+
+parity_test! {
+    fn a_missing_belt_file_is_named() {
+        let w = win();
+        let mut s = Session::new(belt_meta(&w, true)).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+        assert!(matches!(
+            s.belts("adxl345", 200.0, false),
+            Err(AnalyzeError::MissingFile(name)) if name == "c0-s1.zst"
+        ));
+    }
+}
+
+parity_test! {
+    fn flat_belts_reach_the_caller_with_a_nan_similarity() {
+        let w = win();
+        let flat = |len: usize| {
+            let mut s = RawSamples::default();
+            for k in 0..len {
+                s.t.push(w.window.start + k as f64 * 0.0005);
+                s.x.push(0.0);
+                s.y.push(0.0);
+                s.z.push(0.0);
+            }
+            s
+        };
+        let (a, b) = (flat(8000), flat(8000));
+        let mut meta = belt_meta(&w, true);
+        meta.segments[0].files[0].sample_count = a.len() as u32;
+        meta.segments[1].files[0].sample_count = b.len() as u32;
+        let mut s = Session::new(meta).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&a).unwrap());
+        s.add_file("c0-s1.zst", encode_samples(&b).unwrap());
+        let got = s.belts("adxl345", 200.0, false).unwrap();
+        assert!(got.result.unwrap().similarity.is_nan());
     }
 }
 
@@ -366,25 +544,22 @@ fn axes_map_meta(
 ) -> SessionMeta {
     let n_chips = chips.len();
     SessionMeta {
-        format_version: AXES_MAP_FORMAT_VERSION,
+        format_version: 2,
         id: "am-wasm-test".to_owned(),
         created_at: "2026-11-12T00:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::AxesMap,
         axes_map_run: Some(am_run()),
         mode: None,
         settings: None,
         printer: None,
         outcome: Outcome::Complete,
         notes: vec![],
-        probe_points: (0..segments)
-            .map(|_| ProbePoint { position: None })
-            .collect(),
+        probe_points: (0..3).map(|_| ProbePoint { position: None }).collect(),
         chips,
         segments: (0..segments)
             .map(|s| SegmentMeta {
-                axis: Axis::X,
+                axis: AXES_MAP_DIRECTIONS[s],
                 point: s as u32,
                 window: None,
                 files: (0..n_chips)

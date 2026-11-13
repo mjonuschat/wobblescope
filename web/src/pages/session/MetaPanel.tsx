@@ -10,6 +10,7 @@ import type { Analysis } from "@/lib/generated/Analysis";
 import type { Outcome } from "@/lib/generated/Outcome";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
+import { directionLabel } from "./belts/UnsupportedDirections";
 import { effectiveSettings } from "./fit";
 
 function outcomeText(outcome: Outcome): string {
@@ -81,7 +82,7 @@ function degradedSegments(meta: SessionMeta) {
       .filter((f) => f.health === "Degraded")
       .map((f) => ({
         key: `${index}-${f.chip}`,
-        where: `Segment ${index + 1} (${segment.axis}, ${pointLabel(segment.point, meta.probe_points)})`,
+        where: `Segment ${index + 1} (${directionLabel(segment.axis)}, ${pointLabel(segment.point, meta.probe_points)})`,
         chip: meta.chips[f.chip]?.name ?? `chip ${f.chip}`,
         notes: f.health_notes,
       })),
@@ -98,7 +99,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
         {row("Source", sourceText(meta))}
         {fileName(meta) !== null && row("File Name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
-        {row("Mode", meta.kind === "AxesMap" ? "Axes map calibration" : (meta.mode ?? "Not recorded"))}
+        {row("Mode", meta.axes_map_run ? "Axes map calibration" : (meta.mode ?? "Not recorded"))}
         {row("Printer", meta.printer?.name ?? "Not recorded")}
         {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version)}
         {meta.printer?.square_corner_velocity != null &&

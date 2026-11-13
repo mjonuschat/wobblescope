@@ -1,8 +1,14 @@
 import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { Axis } from "@/lib/generated/Axis";
+import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
-import { fetchResultSample as fetchResultSampleFile, fetchSample as fetchSampleFile } from "@/lib/api/endpoints";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
+import {
+  type OnBytes,
+  fetchResultSample as fetchResultSampleFile,
+  fetchSample as fetchSampleFile,
+} from "@/lib/api/endpoints";
 
 import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 
@@ -25,6 +31,38 @@ export interface AnalysisJob {
   overrides: string[];
 }
 
+export interface SpectrogramJob {
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
+  sessionId: string;
+  resultId?: string;
+  meta: SessionMeta;
+  axis: Axis;
+  chip: string;
+  point: number;
+  /** The map keeps the frequencies up to this, in Hz. */
+  maxFreq: number;
+}
+
+export interface BeltsJob {
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
+  sessionId: string;
+  resultId?: string;
+  meta: SessionMeta;
+  chip: string;
+  /** The comparison keeps the frequencies up to this, in Hz. */
+  maxFreq: number;
+  /** Use a recording that its health or coverage would exclude. */
+  includeExcluded: boolean;
+}
+
+/** A calibration session to analyse; its files are the session's own. */
+export interface AxesMapJob {
+  sessionId: string;
+  /** A calibration is never saved as a result, so its samples always come from the session. */
+  resultId?: undefined;
+  meta: SessionMeta;
+}
+
 /** A queued request that a newer one replaced before it was sent. */
 export class SupersededError extends Error {
   constructor() {
@@ -33,17 +71,30 @@ export class SupersededError extends Error {
   }
 }
 
-/** A calibration session to analyse; its files are the session's own. */
-export interface AxesMapJob {
+export type AnalysisProgress =
+  | { phase: "queued" }
+  | { phase: "downloading"; loaded: number; total: number | null }
+  | { phase: "analysing" };
+
+export interface PrefetchJob {
   sessionId: string;
+  resultId?: string;
   meta: SessionMeta;
+  axis: Axis;
 }
 
 export interface AnalysisClient {
-  analyze(job: AnalysisJob, signal?: AbortSignal): Promise<AnalysisResult>;
+  analyze(job: AnalysisJob, signal?: AbortSignal, onProgress?: (p: AnalysisProgress) => void): Promise<AnalysisResult>;
+  /** The time-frequency map of one chip's recording. It runs after the analysis in the queue. */
+  spectrogram(job: SpectrogramJob, signal?: AbortSignal): Promise<Spectrogram>;
+  /** Starts downloading the axis's files outside the request slot. */
+  prefetch(job: PrefetchJob): void;
+  /** The comparison of one chip's two belts. It runs after the analysis in the queue. */
+  belts(job: BeltsJob, signal?: AbortSignal): Promise<BeltsAnalysis>;
   /**
    * Analyses every chip of a calibration session. Each file is downloaded on its own: one that
-   * fails is left out, and the chip that needs it comes back `Incomplete`.
+   * fails is left out, and the chip that needs it comes back `Incomplete`. It runs after the
+   * belt comparison in the queue.
    */
   analyzeAxesMap(job: AxesMapJob, signal?: AbortSignal): Promise<AxesMapChip[]>;
   /** Drops what is held for a session id that may be written again. */
@@ -56,22 +107,53 @@ interface Options {
   fetchResultSample?: typeof fetchResultSampleFile;
 }
 
-type QueuedJob = ({ kind: "axis" } & AnalysisJob) | ({ kind: "axesMap" } & AxesMapJob);
+type Kind = "analysis" | "spectrogram" | "belts" | "axesMap";
 
-interface Queued {
-  job: QueuedJob;
-  signal?: AbortSignal;
-  resolve: (result: never) => void;
-  reject: (error: unknown) => void;
-}
+type Answer = AnalysisResult | Spectrogram | BeltsAnalysis | AxesMapChip[];
+
+type Queued =
+  | {
+      kind: "analysis";
+      job: AnalysisJob;
+      signal?: AbortSignal;
+      onProgress?: (p: AnalysisProgress) => void;
+      resolve: (result: AnalysisResult) => void;
+      reject: (error: unknown) => void;
+    }
+  | {
+      kind: "spectrogram";
+      job: SpectrogramJob;
+      signal?: AbortSignal;
+      resolve: (result: Spectrogram) => void;
+      reject: (error: unknown) => void;
+    }
+  | {
+      kind: "belts";
+      job: BeltsJob;
+      signal?: AbortSignal;
+      resolve: (result: BeltsAnalysis) => void;
+      reject: (error: unknown) => void;
+    }
+  | {
+      kind: "axesMap";
+      job: AxesMapJob;
+      signal?: AbortSignal;
+      resolve: (result: AxesMapChip[]) => void;
+      reject: (error: unknown) => void;
+    };
 
 function abortError(): DOMException {
   return new DOMException("The analysis was cancelled", "AbortError");
 }
 
+interface JobWithIdentity {
+  sessionId: string;
+  resultId?: string;
+}
+
 /** What the worker and the held-files logic key a job by, so a result never shares files with a session. */
-function identityOf(job: QueuedJob): string {
-  return job.kind === "axis" && job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId;
+function identityOf(job: JobWithIdentity): string {
+  return job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId;
 }
 
 /** The recordings of one axis, as (chip position, segment position, file name). */
@@ -94,10 +176,30 @@ function allFiles(meta: SessionMeta) {
   );
 }
 
+/** A pending background download with progress tracking. */
+interface Download {
+  promise: Promise<ArrayBuffer>;
+  loaded: number;
+  total: number | null;
+  /** Progress listeners that `run` subscribes to. */
+  listeners: Set<OnBytes>;
+}
+
+/** Both belts' recordings of one chip, as (chip position, segment position, file name). */
+function beltFilesFor(meta: SessionMeta, chip: string) {
+  return meta.segments.flatMap((segment, index) =>
+    segment.files
+      .filter((file) => meta.chips[file.chip]?.name === chip)
+      .map((file) => ({ chip: file.chip, segment: index, name: file.sample_file })),
+  );
+}
+
 /**
  * Owns the analysis worker. It fetches the sample files of the requested axis on the main
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
- * request at a time: a newer request replaces one still waiting.
+ * request at a time. A newer request replaces a waiting one of the same kind, and a waiting
+ * analysis goes before a waiting spectrogram, which goes before a waiting belt comparison, which
+ * goes before a waiting calibration analysis.
  */
 export function createAnalysisClient({
   createWorker,
@@ -109,9 +211,23 @@ export function createAnalysisClient({
   let heldCreatedAt: string | null = null;
   let held = new Set<string>();
   let nextId = 1;
-  const pending = new Map<number, { resolve: (r: never) => void; reject: (e: unknown) => void }>();
+  const pending = new Map<number, { resolve: (r: Answer) => void; reject: (e: unknown) => void }>();
   let active: Queued | null = null;
-  let waiting: Queued | null = null;
+  const waiting: Record<Kind, Queued | null> = { analysis: null, spectrogram: null, belts: null, axesMap: null };
+
+  // Background download state, scoped to one identity and created_at.
+  let bgIdentity: string | null = null;
+  let bgCreatedAt: string | null = null;
+  let bgController: AbortController | null = null;
+  const bgDownloads = new Map<string, Download>();
+
+  function clearBackgroundDownloads() {
+    bgController?.abort();
+    bgController = null;
+    bgIdentity = null;
+    bgCreatedAt = null;
+    bgDownloads.clear();
+  }
 
   function ensureWorker(): WorkerLike {
     if (worker) return worker;
@@ -127,9 +243,8 @@ export function createAnalysisClient({
       const entry = pending.get(response.id);
       if (!entry) return;
       pending.delete(response.id);
-      if (response.type === "result") entry.resolve(response.result as never);
-      else if (response.type === "axesMapResult") entry.resolve(response.chips as never);
-      else entry.reject(new Error(response.message));
+      if (response.type === "error") entry.reject(new Error(response.message));
+      else entry.resolve(response.result);
     };
     created.onerror = () => {
       const failure = new Error("The analysis module failed to load");
@@ -139,52 +254,117 @@ export function createAnalysisClient({
       worker = null;
       heldSession = null;
       held = new Set();
+      clearBackgroundDownloads();
     };
     worker = created;
     return created;
   }
 
-  async function run({ job, signal }: Queued): Promise<AnalysisResult | AxesMapChip[]> {
+  async function run(queued: Queued): Promise<Answer> {
+    const { job, signal } = queued;
+    const onProgress = queued.kind === "analysis" ? queued.onProgress : undefined;
     if (signal?.aborted) throw abortError();
     const target = ensureWorker();
     const identity = identityOf(job);
     const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at;
     const alreadyHeld = sameSession ? held : new Set<string>();
-    const wanted = (job.kind === "axis" ? filesFor(job.meta, job.axis) : allFiles(job.meta)).filter(
-      (f) => !alreadyHeld.has(f.name),
-    );
-    let missing = wanted;
-    let buffers: ArrayBuffer[];
-    if (job.kind === "axis") {
-      buffers = await Promise.all(
-        wanted.map((f) =>
-          job.resultId !== undefined
-            ? fetchResultSample(job.resultId, f.chip, f.segment, signal)
-            : fetchSample(job.sessionId, f.chip, f.segment, signal),
-        ),
-      );
+    const missing = (
+      queued.kind === "belts"
+        ? beltFilesFor(job.meta, queued.job.chip)
+        : queued.kind === "axesMap"
+          ? allFiles(job.meta)
+          : filesFor(job.meta, queued.job.axis)
+    ).filter((f) => !alreadyHeld.has(f.name));
+
+    if (missing.length === 0) {
+      onProgress?.({ phase: "analysing" });
     } else {
-      // A file that fails to download is left out so only its chip is reported incomplete.
-      const settled = await Promise.allSettled(
-        wanted.map((f) => fetchSample(job.sessionId, f.chip, f.segment, signal)),
-      );
-      missing = wanted.filter((_, i) => settled[i].status === "fulfilled");
-      buffers = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+      onProgress?.({ phase: "downloading", loaded: 0, total: null });
     }
+
+    const bgMatchesScope = bgIdentity === identity && bgCreatedAt === job.meta.created_at;
+
+    const fileProgress = new Map<string, { loaded: number; total: number | null }>();
+    for (const f of missing) {
+      fileProgress.set(f.name, { loaded: 0, total: null });
+    }
+
+    function reportDownloadProgress() {
+      let loaded = 0;
+      let total: number | null = 0;
+      for (const fp of fileProgress.values()) {
+        loaded += fp.loaded;
+        total = total === null || fp.total === null ? null : total + fp.total;
+      }
+      onProgress?.({ phase: "downloading", loaded, total });
+    }
+
+    const downloads = missing.map(async (f) => {
+      const fileOnBytes: OnBytes = (loaded, total) => {
+        fileProgress.set(f.name, { loaded, total });
+        reportDownloadProgress();
+      };
+
+      const bg = bgMatchesScope ? bgDownloads.get(f.name) : undefined;
+      if (bg) {
+        bg.listeners.add(fileOnBytes);
+        fileProgress.set(f.name, { loaded: bg.loaded, total: bg.total });
+        reportDownloadProgress();
+        try {
+          const buffer = await Promise.race([
+            bg.promise,
+            new Promise<never>((_, reject) => {
+              signal?.addEventListener("abort", () => reject(abortError()), { once: true });
+            }),
+          ]);
+          return buffer;
+        } catch {
+          if (signal?.aborted) throw abortError();
+          // Otherwise the background download failed. Fall through to fetch directly.
+        } finally {
+          bg.listeners.delete(fileOnBytes);
+        }
+      }
+
+      return job.resultId !== undefined
+        ? fetchResultSample(job.resultId, f.chip, f.segment, signal, fileOnBytes)
+        : fetchSample(job.sessionId, f.chip, f.segment, signal, fileOnBytes);
+    });
+
+    let posted = missing;
+    let buffers: ArrayBuffer[];
+    if (queued.kind === "axesMap") {
+      // A file that fails to download is left out so only its chip is reported incomplete.
+      const settled = await Promise.allSettled(downloads);
+      posted = missing.filter((_, i) => settled[i].status === "fulfilled");
+      buffers = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+    } else {
+      buffers = await Promise.all(downloads);
+    }
+
     if (signal?.aborted) throw abortError();
-    // The worker failed to load while the files were downloading, so nothing can answer.
     if (worker !== target) throw new Error("The analysis module failed to load");
     if (!sameSession) {
       heldSession = identity;
       heldCreatedAt = job.meta.created_at;
       held = new Set();
     }
-    for (const f of missing) held.add(f.name);
+    for (const f of posted) {
+      held.add(f.name);
+      if (bgMatchesScope) {
+        bgDownloads.delete(f.name);
+      }
+    }
+
+    // Report analysing only if we had files to download (otherwise already reported above).
+    if (missing.length > 0) {
+      onProgress?.({ phase: "analysing" });
+    }
 
     const id = nextId++;
-    const files = Object.fromEntries(missing.map((f, i) => [f.name, buffers[i]]));
-    return new Promise<AnalysisResult | AxesMapChip[]>((resolve, reject) => {
-      pending.set(id, { resolve: resolve as (r: never) => void, reject });
+    const files = Object.fromEntries(posted.map((f, i) => [f.name, buffers[i]]));
+    return new Promise<Answer>((resolve, reject) => {
+      pending.set(id, { resolve, reject });
       signal?.addEventListener(
         "abort",
         () => {
@@ -197,18 +377,41 @@ export function createAnalysisClient({
         { once: true },
       );
       target.postMessage(
-        job.kind === "axis"
+        queued.kind === "analysis"
           ? {
               type: "analyze",
               id,
               sessionId: identity,
               meta: job.meta,
-              axis: job.axis,
-              params: job.params,
-              overrides: job.overrides,
+              axis: queued.job.axis,
+              params: queued.job.params,
+              overrides: queued.job.overrides,
               files,
             }
-          : { type: "analyzeAxesMap", id, sessionId: identity, meta: job.meta, files },
+          : queued.kind === "axesMap"
+            ? { type: "axesMap", id, sessionId: identity, meta: job.meta, files }
+            : queued.kind === "belts"
+              ? {
+                  type: "belts",
+                  id,
+                  sessionId: identity,
+                  meta: job.meta,
+                  chip: queued.job.chip,
+                  maxFreq: queued.job.maxFreq,
+                  includeExcluded: queued.job.includeExcluded,
+                  files,
+                }
+              : {
+                  type: "spectrogram",
+                  id,
+                  sessionId: identity,
+                  meta: job.meta,
+                  axis: queued.job.axis,
+                  chip: queued.job.chip,
+                  point: queued.job.point,
+                  maxFreq: queued.job.maxFreq,
+                  files,
+                },
         buffers,
       );
     });
@@ -217,50 +420,148 @@ export function createAnalysisClient({
   async function start(entry: Queued) {
     active = entry;
     try {
-      entry.resolve((await run(entry)) as never);
+      (entry.resolve as (result: unknown) => void)(await run(entry));
     } catch (error) {
       entry.reject(error);
     } finally {
       active = null;
-      const next = waiting;
-      waiting = null;
+      const kind: Kind | null = waiting.analysis
+        ? "analysis"
+        : waiting.spectrogram
+          ? "spectrogram"
+          : waiting.belts
+            ? "belts"
+            : waiting.axesMap
+              ? "axesMap"
+              : null;
+      const next = kind && waiting[kind];
+      if (kind) waiting[kind] = null;
       if (next) void start(next);
     }
   }
 
-  function enqueue<T>(job: QueuedJob, signal?: AbortSignal): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      if (signal?.aborted) {
-        reject(abortError());
-        return;
-      }
-      const entry: Queued = { job, signal, resolve: resolve as (r: never) => void, reject };
-      if (!active) {
-        void start(entry);
-        return;
-      }
-      waiting?.reject(new SupersededError());
-      waiting = entry;
-      signal?.addEventListener(
-        "abort",
-        () => {
-          if (waiting === entry) {
-            waiting = null;
-            reject(abortError());
-          }
-        },
-        { once: true },
-      );
-    });
+  /** Starts `entry` now, or queues it behind the active request in the slot of its kind. */
+  function submit(entry: Queued) {
+    const { kind, signal } = entry;
+    if (!active) {
+      void start(entry);
+      return;
+    }
+    waiting[kind]?.reject(new SupersededError());
+    waiting[kind] = entry;
+    if (entry.kind === "analysis") entry.onProgress?.({ phase: "queued" });
+    signal?.addEventListener(
+      "abort",
+      () => {
+        if (waiting[kind] === entry) {
+          waiting[kind] = null;
+          entry.reject(abortError());
+        }
+      },
+      { once: true },
+    );
+  }
+
+  function startPrefetch(job: PrefetchJob) {
+    const identity = identityOf(job);
+
+    if (bgIdentity !== identity || bgCreatedAt !== job.meta.created_at) {
+      clearBackgroundDownloads();
+      bgIdentity = identity;
+      bgCreatedAt = job.meta.created_at;
+    }
+
+    const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at;
+    const alreadyHeld = sameSession ? held : new Set<string>();
+    const filesToFetch = filesFor(job.meta, job.axis).filter(
+      (f) => !alreadyHeld.has(f.name) && !bgDownloads.has(f.name),
+    );
+
+    bgController ??= new AbortController();
+    const signal = bgController.signal;
+    for (const f of filesToFetch) {
+      const download: Download = {
+        promise: null as unknown as Promise<ArrayBuffer>,
+        loaded: 0,
+        total: null,
+        listeners: new Set(),
+      };
+
+      const onBytes: OnBytes = (loaded, total) => {
+        download.loaded = loaded;
+        download.total = total;
+        for (const listener of download.listeners) {
+          listener(loaded, total);
+        }
+      };
+
+      const promise =
+        job.resultId !== undefined
+          ? fetchResultSample(job.resultId, f.chip, f.segment, signal, onBytes)
+          : fetchSample(job.sessionId, f.chip, f.segment, signal, onBytes);
+      // Handle errors. Remove from map so a request fetches it again, but do not rethrow.
+      // Only delete if this is still the same download (a scope change may have replaced it).
+      promise.catch(() => {
+        if (bgDownloads.get(f.name) === download) {
+          bgDownloads.delete(f.name);
+        }
+      });
+      download.promise = promise;
+      bgDownloads.set(f.name, download);
+    }
   }
 
   return {
-    analyze: (job, signal) => enqueue<AnalysisResult>({ kind: "axis", ...job }, signal),
-    analyzeAxesMap: (job, signal) => enqueue<AxesMapChip[]>({ kind: "axesMap", ...job }, signal),
+    analyze(job, signal, onProgress) {
+      return new Promise<AnalysisResult>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        const identity = identityOf(job);
+        if (bgIdentity !== null && (bgIdentity !== identity || bgCreatedAt !== job.meta.created_at)) {
+          clearBackgroundDownloads();
+        }
+        submit({ kind: "analysis", job, signal, onProgress, resolve, reject });
+      });
+    },
+    spectrogram(job, signal) {
+      return new Promise<Spectrogram>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        submit({ kind: "spectrogram", job, signal, resolve, reject });
+      });
+    },
+    prefetch(job) {
+      startPrefetch(job);
+    },
+    belts(job, signal) {
+      return new Promise<BeltsAnalysis>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        submit({ kind: "belts", job, signal, resolve, reject });
+      });
+    },
+    analyzeAxesMap(job, signal) {
+      return new Promise<AxesMapChip[]>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        submit({ kind: "axesMap", job, signal, resolve, reject });
+      });
+    },
     forget(sessionId) {
       if (heldSession === sessionId) {
         heldSession = null;
         held = new Set();
+      }
+      if (bgIdentity === sessionId) {
+        clearBackgroundDownloads();
       }
       worker?.postMessage({ type: "forget", sessionId }, []);
     },

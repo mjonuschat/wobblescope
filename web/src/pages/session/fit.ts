@@ -6,7 +6,7 @@ import { parseNumber } from "@/lib/parse";
 
 export const defaultFitParams: FitParams = {
   scv: 5,
-  damping_ratio: 0.1,
+  damping_ratio: null,
   max_smoothing: null,
   max_vibrations: null,
   test_damping_ratios: null,
@@ -43,7 +43,8 @@ export const defaultDraft: FitDraft = draftFrom(defaultFitParams);
 
 export interface FitBaseline {
   params: FitParams;
-  recorded: { scv: boolean; damping: boolean };
+  /** What the printer recorded. The damping ratio is only named; the fit estimates it unless one is entered. */
+  recorded: { scv: boolean; damping: number | null };
 }
 
 export function baselineFor(meta: SessionMeta, axis: Axis): FitBaseline {
@@ -54,9 +55,8 @@ export function baselineFor(meta: SessionMeta, axis: Axis): FitBaseline {
     params: {
       ...defaultFitParams,
       scv: scv ?? defaultFitParams.scv,
-      damping_ratio: damping ?? defaultFitParams.damping_ratio,
     },
-    recorded: { scv: scv !== null, damping: damping !== null },
+    recorded: { scv: scv !== null, damping },
   };
 }
 

@@ -1,11 +1,12 @@
 use axum::Json;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use serde::Serialize;
 use time::OffsetDateTime;
 
 use super::error::{ApiError, ApiJson, ApiPath};
+use super::samples::sample_response;
 use super::{Store, blocking};
 use crate::results::record::{ResultDetail, ResultSummary, SaveRequest};
 
@@ -39,21 +40,15 @@ pub(super) async fn detail(
     Ok(Json(blocking(move || Ok(storage.result(&rid)?)).await?))
 }
 
-/// `GET /api/results/{rid}/samples/{chip}/{segment}`: the sample file as stored. Not cached,
-/// since a deleted result id can be reused.
+/// `GET /api/results/{rid}/samples/{chip}/{segment}`: the sample file as stored. Cached by
+/// content, revalidated every time, so a reused id never gets stale bytes.
 pub(super) async fn download(
     Store(storage): Store,
     ApiPath((rid, chip, segment)): ApiPath<(String, u32, usize)>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let bytes = blocking(move || Ok(storage.result_sample(&rid, chip, segment)?)).await?;
-    Ok((
-        [
-            (CONTENT_TYPE, "application/octet-stream"),
-            (CACHE_CONTROL, "no-store"),
-        ],
-        bytes,
-    )
-        .into_response())
+    Ok(sample_response(&headers, bytes))
 }
 
 pub(super) async fn delete(

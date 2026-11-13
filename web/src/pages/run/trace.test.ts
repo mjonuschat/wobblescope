@@ -6,7 +6,7 @@ import { NO_TRACES, extend, levelOf, liveSignalOption } from "./trace";
 
 const state = (over: Partial<TestState> = {}): TestState => ({
   id: "t",
-  kind: "resonance",
+  kind: "axes",
   phase: "measuring",
   segment: 1,
   segments: 2,
@@ -29,6 +29,11 @@ describe("levelOf", () => {
     expect(levelOf(chip, "X")).toBe(5);
     expect(levelOf(chip, "Y")).toBe(50);
     expect(levelOf({ ...chip, level: null }, "X")).toBeNull();
+  });
+
+  it("combines X and Y for a diagonal segment", () => {
+    const chip = { chip: "a", level: [3, 4, 500] as [number, number, number], warnings: [] };
+    expect(levelOf(chip, { Vector: [1, -1, 0] })).toBe(5);
   });
 });
 

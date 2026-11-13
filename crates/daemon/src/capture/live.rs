@@ -6,8 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tokio::sync::broadcast;
-use wobblescope_core::fit::Axis;
+use wobblescope_core::direction::Direction;
 
+use super::request::TestKind;
 use crate::lock::lock;
 
 /// How many changes a subscriber may lag behind before it is given a fresh snapshot.
@@ -30,17 +31,6 @@ pub enum Phase {
     Sealing,
 }
 
-/// What a test runs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-pub enum RunKind {
-    /// A resonance test.
-    Resonance,
-    /// An axes-map calibration.
-    AxesMap,
-}
-
 /// What one chip shows during a test.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -59,16 +49,16 @@ pub struct ChipLive {
 pub struct TestState {
     /// The test id, which is also the session id.
     pub id: String,
-    /// What the test runs.
-    pub kind: RunKind,
+    /// What the test measures.
+    pub kind: TestKind,
     /// Where the test is.
     pub phase: Phase,
     /// The current segment, counting from 1.
     pub segment: u32,
     /// How many segments the test has.
     pub segments: u32,
-    /// The axis of the current segment; `None` for an axes-map calibration.
-    pub axis: Option<Axis>,
+    /// The direction of the current segment; `None` for an axes-map calibration.
+    pub axis: Option<Direction>,
     /// The toolhead position of the current segment: `[x, y, z]` in mm.
     pub position: Option<[f64; 3]>,
     /// How long a segment is expected to take, in seconds.
@@ -101,16 +91,29 @@ pub enum FinishedOutcome {
     NoSession,
 }
 
+/// Why a test failed, when the interface can say more than the reason text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum FailureCode {
+    /// Klipper refused a diagonal `AXIS`, so a belt test cannot run on it.
+    DiagonalAxisRefused,
+}
+
 /// A test that has ended.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct FinishedTest {
     /// The test id.
     pub id: String,
+    /// What the test measured.
+    pub kind: TestKind,
     /// How it ended.
     pub outcome: FinishedOutcome,
     /// Why, for anything but a complete test.
     pub reason: Option<String>,
+    /// A machine-readable cause, when there is one.
+    pub code: Option<FailureCode>,
     /// The session, when one exists.
     pub session_id: Option<String>,
     /// Whether the toolhead may still be moving, so an emergency stop is still accepted.

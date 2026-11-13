@@ -1,31 +1,9 @@
-import { LineChart } from "echarts/charts";
-import {
-  GraphicComponent,
-  GridComponent,
-  LegendComponent,
-  MarkAreaComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  TitleComponent,
-  TooltipComponent,
-} from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
 
-echarts.use([
-  LineChart,
-  GraphicComponent,
-  GridComponent,
-  LegendComponent,
-  MarkAreaComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  TitleComponent,
-  TooltipComponent,
-  CanvasRenderer,
-]);
+import { ChartZoomControls } from "./ChartZoomControls";
+import "./register";
 
 interface Props {
   option: EChartsCoreOption;
@@ -34,10 +12,12 @@ interface Props {
   height?: number | string;
   /** Called with the x value (the frequency) of a click on the plot. */
   onClickX?: (x: number) => void;
+  /** Adds zoom buttons at the top right. The option must set up the zoom (see the belt options). */
+  zoom?: boolean;
 }
 
 /** A chart that fills its container's width and follows its size. */
-export function EChart({ option, label, height = 340, onClickX }: Props) {
+export function EChart({ option, label, height = 340, onClickX, zoom }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
@@ -90,5 +70,12 @@ export function EChart({ option, label, height = 340, onClickX }: Props) {
     return () => zr.off("click", handler);
   }, [clickable]);
 
-  return <div ref={element} role="img" aria-label={label} style={{ height }} />;
+  const canvas = <div ref={element} role="img" aria-label={label} style={{ height }} />;
+  if (!zoom) return canvas;
+  return (
+    <div className="relative">
+      {canvas}
+      <ChartZoomControls chart={chart} />
+    </div>
+  );
 }

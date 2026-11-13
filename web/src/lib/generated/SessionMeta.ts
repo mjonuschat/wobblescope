@@ -6,7 +6,6 @@ import type { Outcome } from "./Outcome";
 import type { PrinterInfo } from "./PrinterInfo";
 import type { ProbePoint } from "./ProbePoint";
 import type { SegmentMeta } from "./SegmentMeta";
-import type { SessionKind } from "./SessionKind";
 import type { Source } from "./Source";
 import type { SweepSettings } from "./SweepSettings";
 import type { TimeDomain } from "./TimeDomain";
@@ -52,11 +51,8 @@ printer: PrinterInfo | null,
  */
 outcome: Outcome, 
 /**
- * What the session recorded. Sessions written before this field hold resonance tests.
- */
-kind: SessionKind, 
-/**
- * The moves of an axes-map calibration; present exactly when `kind` is `AxesMap`.
+ * The moves of an axes-map calibration; present exactly when [`SessionMeta::kind`] is
+ * [`SessionKind::AxesMap`].
  */
 axes_map_run: AxesMapRun | null, 
 /**
