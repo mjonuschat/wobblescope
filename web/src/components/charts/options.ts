@@ -3,12 +3,15 @@ import type { EChartsCoreOption } from "echarts/core";
 import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { Peak } from "@/lib/generated/Peak";
+import type { PsdPeaks } from "@/lib/generated/PsdPeaks";
 import type { ProbePoint } from "@/lib/generated/ProbePoint";
 import type { Recommendation } from "@/lib/generated/Recommendation";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
 import type { Spectrum } from "@/lib/generated/Spectrum";
 import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { AXIS_LABEL, type Axis3 } from "@/pages/stream/axes";
 import { chipColor } from "@/pages/stream/colors";
+import { RAMP } from "@/stream/spectrogramScale";
 
 /** Where a probe point is, or its number when its position is not known. */
 export function pointLabel(index: number, probePoints: ProbePoint[]): string {
@@ -337,5 +340,105 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
     legend: { type: "scroll", top: 0, left: 56, textStyle: { color: text } },
     yAxis: { type: "value", name: "PSD", splitLine },
     series,
+  };
+}
+
+/** The labels the heatmap shows on an axis of at most this many marks. */
+const SPECTROGRAM_LABELS = 8;
+const SPECTROGRAM_PEAK_LINE = "#22d3ee";
+
+function nearestIndex(values: number[], target: number): number {
+  let best = 0;
+  values.forEach((value, i) => {
+    if (Math.abs(value - target) < Math.abs(values[best] - target)) best = i;
+  });
+  return best;
+}
+
+/**
+ * The time-frequency map of one recording: frequency across, the earliest time at the bottom,
+ * colour by log10 of the power from the floor to the maximum (a power below the floor takes the
+ * floor's colour), and the PSD's peaks as dotted vertical lines.
+ */
+export function spectrogramOption(
+  spectrogram: Spectrogram,
+  peaks: PsdPeaks | null,
+  maxFreq: number,
+): EChartsCoreOption {
+  const { freq_bins: freqs, times, power, floor, max } = spectrogram;
+  const lowest = Math.log10(floor);
+  const data = power.flatMap((row, i) => row.map((p, j) => [j, i, Math.log10(Math.max(p, floor))]));
+  const interval = (count: number) => Math.max(0, Math.ceil(count / SPECTROGRAM_LABELS) - 1);
+  const oneDecimal = (value: string) => Number(value).toFixed(1);
+  const marked = (peaks?.peaks ?? []).filter((peak) => peak.freq <= maxFreq);
+  return {
+    ...base(null, maxFreq),
+    animation: false,
+    grid: { top: 24, left: 64, right: 96, bottom: 48 },
+    tooltip: {
+      formatter: (params: { data: number[] }) => {
+        const [bin, row] = params.data;
+        return `${times[row].toFixed(2)} s, ${freqs[bin].toFixed(1)} Hz<br/>power ${power[row][bin].toExponential(2)}`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      name: "Hz",
+      data: freqs.map(String),
+      axisLabel: { interval: interval(freqs.length), formatter: oneDecimal },
+      splitArea: { show: false },
+    },
+    yAxis: {
+      type: "category",
+      name: "s",
+      data: times.map(String),
+      axisLabel: { interval: interval(times.length), formatter: oneDecimal },
+      splitArea: { show: false },
+    },
+    visualMap: {
+      type: "continuous",
+      min: lowest,
+      max: Math.log10(max),
+      dimension: 2,
+      calculable: true,
+      orient: "vertical",
+      right: 0,
+      top: "middle",
+      textStyle: { color: text },
+      formatter: (value: number) => (10 ** value).toExponential(0),
+      inRange: { color: RAMP.map(([r, g, b]) => `rgb(${r}, ${g}, ${b})`) },
+    },
+    series: [
+      {
+        type: "heatmap",
+        data,
+        progressive: 0,
+        ...(marked.length > 0
+          ? {
+              markLine: {
+                silent: true,
+                symbol: "none",
+                lineStyle: { color: SPECTROGRAM_PEAK_LINE, type: "dotted", width: 1 },
+                data: marked.map((peak, n) => ({
+                  xAxis: nearestIndex(freqs, peak.freq),
+                  label: {
+                    formatter: `{index|${n + 1}}`,
+                    position: "end",
+                    rich: {
+                      index: {
+                        backgroundColor: SPECTROGRAM_PEAK_LINE,
+                        color: "#171717",
+                        fontWeight: "bold",
+                        padding: [1, 5],
+                        borderRadius: 3,
+                      },
+                    },
+                  },
+                })),
+              },
+            }
+          : {}),
+      },
+    ],
   };
 }

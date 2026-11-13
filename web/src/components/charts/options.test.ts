@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { formatHz } from "@/lib/format";
 import { chipColor } from "@/pages/stream/colors";
-import { analysis, candidate, recommendation } from "@/test/fixtures";
+import { analysis, candidate, recommendation, spectrogram } from "@/test/fixtures";
 
-import { liveSpectrumOption, pointLabel, psdOption, summedOption } from "./options";
+import { liveSpectrumOption, pointLabel, psdOption, spectrogramOption, summedOption } from "./options";
 
 type Series = {
   name: string;
@@ -365,5 +365,73 @@ describe("psdOption peaks, thresholds and scale", () => {
     }
     const cut = leftAxis(psdOption({ chip: one, recommendation: null, maxFreq: 5.2 }));
     expect(cut.max).toBeCloseTo(4.2, 10);
+  });
+});
+
+describe("spectrogramOption", () => {
+  const map = spectrogram();
+  const peaks = {
+    peaks: [
+      { freq: 1.4, level: 5, above_effect: false },
+      { freq: 4.4, level: 9, above_effect: true },
+      { freq: 3, level: 7, above_effect: false },
+    ],
+    detect_threshold: 1,
+    effect_threshold: 3,
+  };
+  type Heat = {
+    series: { data: number[][]; markLine?: { data: { xAxis: number }[] } }[];
+    visualMap: { min: number; max: number };
+    xAxis: { type: string; data: string[]; axisLabel: { formatter: (v: string) => string } };
+    yAxis: { type: string; data: string[]; inverse?: boolean; axisLabel: { formatter: (v: string) => string } };
+    tooltip: { formatter: (p: { data: number[] }) => string };
+  };
+  const option = (p: typeof peaks | null = null) => spectrogramOption(map, p, 200) as unknown as Heat;
+
+  it("draws one heatmap cell per segment and bin", () => {
+    const [heat] = option().series;
+    expect(heat.data).toHaveLength(12);
+    expect(heat.data[0]).toEqual([0, 0, Math.log10(1)]);
+    expect(heat.data[1]).toEqual([1, 0, Math.log10(10)]);
+    expect(heat.data[7]).toEqual([3, 1, Math.log10(500)]);
+  });
+
+  it("colours by log10 power from the floor to the maximum", () => {
+    const { visualMap } = option();
+    expect(visualMap.min).toBe(0);
+    expect(visualMap.max).toBe(3);
+  });
+
+  it("draws a power below the floor in the colour of the floor", () => {
+    const [heat] = option().series;
+    // The row 2 cell of power 0 has the value of the floor, never a logarithm of zero.
+    expect(heat.data[8]).toEqual([0, 2, 0]);
+  });
+
+  it("puts frequency across and the earliest time at the bottom", () => {
+    const { xAxis, yAxis } = option();
+    expect(xAxis.data).toEqual(["0", "1.5", "3", "4.5"]);
+    expect(yAxis.data).toEqual(["0.3", "0.6", "0.9"]);
+    expect(yAxis.inverse).not.toBe(true);
+  });
+
+  it("labels frequency and time to one decimal", () => {
+    const { xAxis, yAxis } = option();
+    expect(xAxis.axisLabel.formatter("4.5")).toBe("4.5");
+    expect(xAxis.axisLabel.formatter("1.5625")).toBe("1.6");
+    expect(yAxis.axisLabel.formatter("0.32")).toBe("0.3");
+  });
+
+  it("draws the peaks as dotted vertical lines at the nearest bin", () => {
+    const lines = option(peaks).series[0].markLine?.data.map((m) => m.xAxis);
+    expect(lines).toEqual([1, 3, 2]);
+    expect(option().series[0].markLine).toBeUndefined();
+  });
+
+  it("shows time, frequency and power when hovered", () => {
+    const text = option().tooltip.formatter({ data: [1, 2, Math.log10(5)] });
+    expect(text).toContain("0.90 s");
+    expect(text).toContain("1.5 Hz");
+    expect(text).toContain("5.00e+0");
   });
 });

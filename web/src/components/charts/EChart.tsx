@@ -1,4 +1,4 @@
-import { LineChart } from "echarts/charts";
+import { HeatmapChart, LineChart } from "echarts/charts";
 import {
   GraphicComponent,
   GridComponent,
@@ -8,6 +8,7 @@ import {
   MarkPointComponent,
   TitleComponent,
   TooltipComponent,
+  VisualMapContinuousComponent,
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
@@ -15,6 +16,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
 
 echarts.use([
+  HeatmapChart,
   LineChart,
   GraphicComponent,
   GridComponent,
@@ -24,6 +26,7 @@ echarts.use([
   MarkPointComponent,
   TitleComponent,
   TooltipComponent,
+  VisualMapContinuousComponent,
   CanvasRenderer,
 ]);
 
