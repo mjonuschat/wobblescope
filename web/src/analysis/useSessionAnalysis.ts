@@ -77,7 +77,8 @@ export function useSessionAnalysis({
     const scope = `${sessionId}:${meta.created_at}`;
     if (prefetchedScopeRef.current === scope) return;
     prefetchedScopeRef.current = scope;
-    const otherAxes = meta.segments.map((s) => s.axis).filter((a) => a !== axis);
+    // A vector direction is a belt segment, which has its own analysis and nothing to prefetch here.
+    const otherAxes = meta.segments.map((s) => s.axis).filter((a): a is Axis => typeof a === "string" && a !== axis);
     const uniqueAxes = [...new Set(otherAxes)];
     for (const otherAxis of uniqueAxes) {
       client.prefetch({ sessionId, resultId, meta, axis: otherAxis });

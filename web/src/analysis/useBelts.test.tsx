@@ -58,7 +58,7 @@ describe("useBelts", () => {
     expect(belts()).toMatchObject([{ chip: "lis2dw ebb36", maxFreq: 120, includeExcluded: true }]);
     // Only that chip's recording (chip 1, X segment 0) is fetched.
     expect(fetchSample).toHaveBeenCalledTimes(1);
-    expect(fetchSample).toHaveBeenCalledWith("s1", 1, 0, expect.anything());
+    expect(fetchSample).toHaveBeenCalledWith("s1", 1, 0, expect.anything(), expect.any(Function));
   });
 
   it("it_waits_until_enabled_and_meta_is_there", async () => {
