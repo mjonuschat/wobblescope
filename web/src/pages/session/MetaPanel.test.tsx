@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { calibrationMeta } from "@/test/calibration";
 import { twoAxisMeta } from "@/test/fixtures";
 
 import { MetaPanel } from "./MetaPanel";
@@ -63,6 +64,12 @@ describe("the session details", () => {
     render(<MetaPanel meta={meta} />);
     expect(screen.getByText("CSV")).toBeTruthy();
     expect(screen.queryByText("File Name")).toBeNull();
+  });
+
+  it("names an axes-map calibration instead of a test mode", () => {
+    render(<MetaPanel meta={calibrationMeta()} />);
+    const mode = [...document.querySelectorAll("dt")].find((dt) => dt.textContent === "Mode");
+    expect(mode?.nextElementSibling?.textContent).toBe("Axes map calibration");
   });
 
   it("shows no firmware row when none was recorded", () => {

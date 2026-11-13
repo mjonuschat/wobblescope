@@ -98,7 +98,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
         {row("Source", sourceText(meta))}
         {fileName(meta) !== null && row("File Name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
-        {row("Mode", meta.mode ?? "Not recorded")}
+        {row("Mode", meta.kind === "AxesMap" ? "Axes map calibration" : (meta.mode ?? "Not recorded"))}
         {row("Printer", meta.printer?.name ?? "Not recorded")}
         {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version)}
         {meta.printer?.square_corner_velocity != null &&

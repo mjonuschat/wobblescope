@@ -8,6 +8,7 @@ import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
+import { AxesMapResults } from "./AxesMapResults";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
@@ -62,7 +63,17 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
       </div>
     );
   }
-  return <Loaded id={id} meta={session.data.meta} header={header} />;
+  const { meta } = session.data;
+  if (meta.kind === "AxesMap") {
+    return (
+      <div className="space-y-4">
+        {header(null)}
+        <AxesMapResults id={id} meta={meta} />
+        <MetaPanel meta={meta} />
+      </div>
+    );
+  }
+  return <Loaded id={id} meta={meta} header={header} />;
 }
 
 /**
