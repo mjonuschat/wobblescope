@@ -22,12 +22,10 @@ vi.mock("@/components/charts/EChart", () => ({
 
 const found = { peaks: [{ freq: 1.5, level: 4, above_effect: true }], detect_threshold: 1, effect_threshold: 3 };
 
-/** The first chip of the test session, named as the metadata names it. */
 function chipOf(over: Partial<ChipAnalysis> = {}): ChipAnalysis {
   return { ...analysis().per_chip[0], chip: "adxl345", peaks: [[0, found]], ...over };
 }
 
-/** The test session with a second probe point on the X axis for the first chip. */
 function twoPointMeta(): SessionMeta {
   const meta = twoAxisMeta();
   meta.probe_points = [{ position: [10, 10, 20] }, { position: [100, 100, 20] }];
@@ -109,7 +107,7 @@ describe("the spectrogram panel", () => {
   });
 
   it("lists a failed recording as a point too, next to a good one", () => {
-    // The chip's analysis only has point 0; the metadata also records point 1.
+    // The chip's analysis only has point 0, but the metadata also records point 1.
     renderPanel(chipOf(), twoPointMeta());
     fireEvent.click(screen.getByRole("button", { name: "Show spectrogram" }));
     expect(within(screen.getByRole("group", { name: "Probe point" })).getAllByRole("button")).toHaveLength(2);

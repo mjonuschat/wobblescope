@@ -34,14 +34,8 @@ pub enum AnalyzeError {
     /// `core` refused the data or the fit parameters.
     #[error(transparent)]
     Core(#[from] CoreError),
-    /// The axis has no recording of that chip at that probe point.
     #[error("no recording of chip {chip} at point {point} on this axis")]
-    NoSuchDataset {
-        /// The chip asked for.
-        chip: String,
-        /// The probe point asked for.
-        point: usize,
-    },
+    NoSuchDataset { chip: String, point: usize },
 }
 
 /// One session's metadata and its compressed sample files, held in wasm memory.

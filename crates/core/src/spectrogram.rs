@@ -3,8 +3,8 @@
 //!
 //! Each segment of the recording gets the same window length as the PSD and 50% overlap. Its
 //! mean is removed, a Kaiser window applied, and the power spectra of the three axes are added.
-//! The result is the raw PSD of each segment: not divided by frequency, and with no low-frequency
-//! suppression, unlike the normalised PSD of the shaper graph.
+//! The result is the raw PSD of each segment. It is not divided by frequency and has no
+//! low-frequency suppression, unlike the normalised PSD of the shaper graph.
 
 use realfft::RealFftPlanner;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,6 @@ use crate::samples::RawSamples;
 /// Percent of the matrix below the colour floor.
 const FLOOR_PERCENT: f64 = 5.0;
 
-/// The power of one recording over time and frequency.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Spectrogram {
@@ -31,7 +30,6 @@ pub struct Spectrogram {
     /// The lower end of the colour scale, from the whole matrix including the frequencies not
     /// returned.
     pub floor: f64,
-    /// The largest value of the whole matrix.
     pub max: f64,
 }
 
@@ -161,7 +159,7 @@ pub fn spectrogram(samples: &RawSamples, max_freq: f64) -> Result<Spectrogram, C
     })
 }
 
-/// The spectrogram of one dataset: its samples cut to its time window, as `analyze` cuts them.
+/// The spectrogram of one dataset. Its samples are cut to its time window, as `analyze` cuts them.
 ///
 /// # Errors
 /// The input's own load error as [`CoreError::InvalidParameter`], a window with no samples, and

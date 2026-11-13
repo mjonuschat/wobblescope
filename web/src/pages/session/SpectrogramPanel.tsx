@@ -10,7 +10,6 @@ import type { Axis } from "@/lib/generated/Axis";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
-/** Where the samples of this view come from. */
 export interface SpectrogramSource {
   sessionId: string;
   /** A saved result to fetch the samples from; `sessionId` is then only the cache key. */

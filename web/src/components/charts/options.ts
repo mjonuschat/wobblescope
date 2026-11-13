@@ -343,7 +343,6 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
   };
 }
 
-/** The labels the heatmap shows on an axis of at most this many marks. */
 const SPECTROGRAM_LABELS = 8;
 const SPECTROGRAM_PEAK_LINE = "#22d3ee";
 
@@ -356,7 +355,7 @@ function nearestIndex(values: number[], target: number): number {
 }
 
 /**
- * The time-frequency map of one recording: frequency across, the earliest time at the bottom,
+ * The time-frequency map of one recording. Frequency runs across and the earliest time is at the bottom,
  * colour by log10 of the power from the floor to the maximum (a power below the floor takes the
  * floor's colour), and the PSD's peaks as dotted vertical lines.
  */

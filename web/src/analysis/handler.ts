@@ -39,7 +39,6 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     current = null;
   }
 
-  /** The wasm module and the session the request is about, opened with the files it brings. */
   async function open(request: Extract<WorkerRequest, { type: "analyze" | "spectrogram" }>) {
     loading ??= loadModule();
     const module = await loading;

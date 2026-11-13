@@ -10,7 +10,6 @@ import { createAnalysisClient, type WorkerLike } from "./client";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 import { useSpectrogram } from "./useSpectrogram";
 
-/** A worker that answers every spectrogram request at once. */
 function setup() {
   const requests: WorkerRequest[] = [];
   const worker: WorkerLike = {

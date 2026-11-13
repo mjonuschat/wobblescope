@@ -102,7 +102,7 @@ function filesFor(meta: SessionMeta, axis: Axis) {
 /**
  * Owns the analysis worker. It fetches the sample files of the requested axis on the main
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
- * request at a time: a newer request replaces a waiting one of the same kind, and a waiting
+ * request at a time. A newer request replaces a waiting one of the same kind, and a waiting
  * analysis goes before a waiting spectrogram.
  */
 export function createAnalysisClient({
