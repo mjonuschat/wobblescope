@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
@@ -175,5 +175,51 @@ describe("the result page", () => {
     fireEvent.mouseDown(tab);
     fireEvent.click(tab);
     expect(await screen.findAllByText(/y snippet/)).toBeTruthy();
+  });
+
+  describe("analysis progress", () => {
+    it("shows the queue, the download and the analysis in turn", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/results/r1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: 4194304 });
+      });
+      expect(await screen.findByText("Downloading the saved samples…")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.getAttribute("aria-valuenow")).toBe("25");
+      expect(screen.getByText("1 MiB of 4 MiB")).toBeTruthy();
+
+      await act(async () => {
+        onProgress?.({ phase: "analysing" });
+      });
+      expect(await screen.findByText("Checking the saved data with a fresh analysis…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("an unknown total shows an indeterminate bar", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/results/r1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: null });
+      });
+      expect(await screen.findByText("Downloading the saved samples…")).toBeTruthy();
+      expect(screen.getByText("1 MiB")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.hasAttribute("aria-valuenow")).toBe(false);
+    });
   });
 });

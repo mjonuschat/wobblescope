@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
@@ -625,6 +625,52 @@ describe("the session view", () => {
       expect(await screen.findByText("disk is full")).toBeTruthy();
       fireEvent.click(saveButton());
       expect(await screen.findByText("Saved as r-1")).toBeTruthy();
+    });
+  });
+
+  describe("analysis progress", () => {
+    it("shows the queue, the download and the analysis in turn", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/sessions/s1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: 4194304 });
+      });
+      expect(await screen.findByText("Downloading samples for axis X…")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.getAttribute("aria-valuenow")).toBe("25");
+      expect(screen.getByText("1 MiB of 4 MiB")).toBeTruthy();
+
+      await act(async () => {
+        onProgress?.({ phase: "analysing" });
+      });
+      expect(await screen.findByText("Analysing axis X…")).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("an unknown total shows an indeterminate bar", async () => {
+      let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
+      fake.analyze.mockImplementation((_job, _signal, progress) => {
+        onProgress = progress;
+        return new Promise(() => {});
+      });
+      serve();
+      renderRoute("/sessions/s1");
+      expect(await screen.findByText("Waiting for the previous analysis…")).toBeTruthy();
+      await act(async () => {
+        onProgress?.({ phase: "downloading", loaded: 1048576, total: null });
+      });
+      expect(await screen.findByText("Downloading samples for axis X…")).toBeTruthy();
+      expect(screen.getByText("1 MiB")).toBeTruthy();
+      const progress = screen.getByRole("progressbar", { name: "Download progress" });
+      expect(progress.hasAttribute("aria-valuenow")).toBe(false);
     });
   });
 });

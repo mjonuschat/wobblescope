@@ -5,6 +5,7 @@ import type { AnalysisResult } from "@/analysis/protocol";
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
 import { ArrowLeftIcon } from "lucide-react";
 
+import { DownloadProgress } from "@/components/DownloadProgress";
 import { Waiting } from "@/components/Waiting";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,7 +35,19 @@ function Comparison({ rid, detail, axis }: { rid: string; detail: ResultDetail; 
     overrides: record.overrides,
   });
   if (fresh.isPending) {
-    return <p className="text-sm text-muted-foreground">Checking the saved data with a fresh analysis…</p>;
+    const { progress } = fresh;
+    const message =
+      progress.phase === "queued"
+        ? "Waiting for the previous analysis…"
+        : progress.phase === "downloading"
+          ? "Downloading the saved samples…"
+          : "Checking the saved data with a fresh analysis…";
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">{message}</p>
+        {progress.phase === "downloading" && <DownloadProgress loaded={progress.loaded} total={progress.total} />}
+      </div>
+    );
   }
   if (fresh.isError) {
     return (

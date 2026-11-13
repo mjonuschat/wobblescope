@@ -32,7 +32,15 @@ function AnalysisView({
   onOverridesChange: (overrides: string[]) => void;
 }) {
   if (query.isPending) {
-    return <Waiting>Analysing axis {axis}…</Waiting>;
+    const { progress } = query;
+    const message =
+      progress.phase === "queued"
+        ? "Waiting for the previous analysis…"
+        : progress.phase === "downloading"
+          ? `Downloading samples for axis ${axis}…`
+          : `Analysing axis ${axis}…`;
+    const download = progress.phase === "downloading" ? { loaded: progress.loaded, total: progress.total } : undefined;
+    return <Waiting download={download}>{message}</Waiting>;
   }
   if (query.isError) {
     return (
