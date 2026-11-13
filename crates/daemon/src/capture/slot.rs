@@ -20,6 +20,9 @@ struct State {
     uncertain: Option<String>,
 }
 
+/// The id the slot carries while the printer homes, so a refusal can say so.
+pub const HOMING_ID: &str = "homing";
+
 /// The slot. Clones share it.
 #[derive(Clone, Default)]
 pub struct TestSlot {
@@ -63,12 +66,22 @@ impl TestSlot {
     /// Takes the slot, or `None` when a test holds it.
     #[must_use]
     pub fn try_acquire(&self) -> Option<SlotPermit> {
+        self.acquire_with(None)
+    }
+
+    /// Takes the slot for `id` from the start, or `None` when it is held.
+    #[must_use]
+    pub fn try_acquire_as(&self, id: &str) -> Option<SlotPermit> {
+        self.acquire_with(Some(id.to_owned()))
+    }
+
+    fn acquire_with(&self, id: Option<String>) -> Option<SlotPermit> {
         let mut s = lock(&self.state);
         if s.held {
             return None;
         }
         s.held = true;
-        s.id = None;
+        s.id = id;
         s.stop = Arc::new(AtomicBool::new(false));
         Some(SlotPermit {
             state: self.state.clone(),
@@ -87,6 +100,12 @@ impl TestSlot {
     pub fn current_id(&self) -> Option<String> {
         let s = lock(&self.state);
         s.id.clone().filter(|_| s.held)
+    }
+
+    /// Whether homing holds the slot.
+    #[must_use]
+    pub fn is_homing(&self) -> bool {
+        self.current_id().as_deref() == Some(HOMING_ID)
     }
 
     /// Asks the running test `id` to stop. Returns whether such a test holds the slot.

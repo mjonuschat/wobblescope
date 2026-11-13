@@ -4,4 +4,8 @@ export type PrinterState = {
 /**
  * The axes Klipper has homed, such as `xy` or `xyz`; empty when none is.
  */
-homed_axes: string | null, };
+homed_axes: string | null, 
+/**
+ * Why the printer cannot take a test right now, or null when it can.
+ */
+busy: string | null, };

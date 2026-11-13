@@ -40,7 +40,7 @@ async fn the_printer_state_reports_the_homed_axes() {
         .set_field("toolhead", "homed_axes", json!("xy"));
     let (status, body) = answer(&rig, common::request("GET", "/api/printer")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body, json!({"homed_axes": "xy"}));
+    assert_eq!(body, json!({"homed_axes": "xy", "busy": null}));
 }
 
 #[tokio::test]
@@ -157,4 +157,51 @@ async fn a_home_moonraker_answers_with_an_error_leaves_motion_unblocked() {
     let (status, _) = answer(&rig, ui_post("/api/printer/home")).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(rig.slot.motion_uncertain().is_none());
+}
+
+async fn busy_reason(rig: &Rig) -> Value {
+    let (status, body) = answer(rig, common::request("GET", "/api/printer")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["busy"].clone()
+}
+
+#[tokio::test]
+async fn the_printer_state_says_the_printer_is_homing_while_homing_holds_the_slot() {
+    let rig = rig().await;
+    let _homing = rig.slot.try_acquire_as("homing").unwrap();
+    assert_eq!(busy_reason(&rig).await, "The printer is homing.");
+}
+
+#[tokio::test]
+async fn the_printer_state_says_a_test_or_a_hold_is_running() {
+    let rig = rig().await;
+    let permit = rig.slot.try_acquire().unwrap();
+    permit.begin("test-1");
+    assert_eq!(busy_reason(&rig).await, "A test is running.");
+    permit.begin("hold-2024");
+    assert_eq!(busy_reason(&rig).await, "A hold is running.");
+}
+
+#[tokio::test]
+async fn the_printer_state_says_the_toolhead_is_moving() {
+    let rig = rig().await;
+    rig.sim
+        .printer
+        .set_field("idle_timeout", "state", json!("Printing"));
+    assert_eq!(busy_reason(&rig).await, "The toolhead is moving.");
+}
+
+#[tokio::test]
+async fn a_test_start_while_homing_says_so() {
+    let rig = rig().await;
+    rig.sim
+        .printer
+        .set_field("idle_timeout", "state", json!("Printing"));
+    let _homing = rig.slot.try_acquire_as("homing").unwrap();
+    let request = json!({"chips": ["adxl345", "lis2dw ebb36"], "axes": ["X"], "mode": "Pulse"});
+    let (status, body) = answer(&rig, post_json("/api/tests", &request)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    let failures = body["failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1, "{body}");
+    assert!(failures[0]["message"].as_str().unwrap().contains("homing"));
 }

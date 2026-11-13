@@ -239,6 +239,10 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
     let mut failures = check_printer(deps.moonraker, quarantine.is_some()).await;
     let permit = deps.slot.try_acquire();
     if permit.is_none() {
+        let homing = deps.slot.is_homing();
+        if homing {
+            failures.retain(|f| f.check != "toolhead_idle");
+        }
         let message = match deps
             .slot
             .current_id()
@@ -246,6 +250,7 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
             .and_then(|id| id.strip_prefix("hold-"))
         {
             Some(since) => format!("a hold started {since} is running"),
+            None if homing => "the printer is homing; wait until it finishes".to_owned(),
             None => "another test is already running".to_owned(),
         };
         failures.push(CheckFailure::new("no_test_running", message));

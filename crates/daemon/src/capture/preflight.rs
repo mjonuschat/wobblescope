@@ -215,6 +215,19 @@ pub fn quarantine_failure(left: Duration) -> CheckFailure {
     )
 }
 
+/// The `no_test_running` failure for a held slot. When homing holds it, homing already explains a
+/// busy toolhead, so the `toolhead_idle` failure is dropped from `failures`.
+pub fn busy_failure(slot: &TestSlot, failures: &mut Vec<CheckFailure>) -> CheckFailure {
+    if slot.is_homing() {
+        failures.retain(|f| f.check != "toolhead_idle");
+        return CheckFailure::new(
+            "no_test_running",
+            "the printer is homing; wait until it finishes",
+        );
+    }
+    CheckFailure::new("no_test_running", "another test is already running")
+}
+
 /// Runs every check for `plan`. `busy` says another test already holds the slot.
 ///
 /// # Errors
@@ -228,10 +241,8 @@ pub async fn run(
     let quarantine = deps.slot.quarantine_remaining();
     let mut failures = check_printer(deps.moonraker, quarantine.is_some()).await;
     if busy {
-        failures.push(CheckFailure::new(
-            "no_test_running",
-            "another test is already running",
-        ));
+        let failure = busy_failure(deps.slot, &mut failures);
+        failures.push(failure);
     }
     if let Some(left) = quarantine {
         failures.push(quarantine_failure(left));

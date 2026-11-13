@@ -153,6 +153,20 @@ async fn a_second_request_while_the_slot_is_held_fails_no_test_running() {
 }
 
 #[tokio::test]
+async fn a_request_while_homing_says_so_and_adds_no_toolhead_failure() {
+    let rig = rig().await;
+    let _homing = rig.slot.try_acquire_as("homing").unwrap();
+    rig.printer
+        .set_field("idle_timeout", "state", json!("Printing"));
+    let Err(Refusal::Checks(failures)) = attempt(&rig, true).await else {
+        panic!("pre-flight must refuse");
+    };
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert_eq!(failures[0].check, "no_test_running");
+    assert!(failures[0].message.contains("homing"), "{failures:?}");
+}
+
+#[tokio::test]
 async fn a_toolhead_that_is_printing_fails_toolhead_idle() {
     let rig = rig().await;
     rig.printer

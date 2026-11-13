@@ -8,7 +8,6 @@ use time::OffsetDateTime;
 
 use super::error::{ApiJson, ApiPath};
 use super::{ApiError, ApiState, settings};
-use crate::capture::CheckFailure;
 use crate::capture::preflight::{Deps, Refusal, run};
 use crate::capture::request::{TestRequest, plan};
 use crate::capture::runner::Job;
@@ -45,9 +44,9 @@ pub(super) async fn start(
             Refusal::Storage(e) => e.into(),
         })?;
     let permit = permit.ok_or_else(|| {
-        ApiError::preflight(vec![CheckFailure::new(
-            "no_test_running",
-            "another test is already running",
+        ApiError::preflight(vec![crate::capture::preflight::busy_failure(
+            &state.capture.slot,
+            &mut Vec::new(),
         )])
     })?;
     let storage = state
