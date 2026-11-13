@@ -320,3 +320,44 @@ async fn until_storage_opens_every_endpoint_answers_503() {
     let (status, _) = json(&app, "GET", "/api/nope").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn a_listing_carries_the_session_kind() {
+    use wobblescope_core::direction::Direction;
+    let dir = TempDir::new().unwrap();
+    three(dir.path());
+    let belts = Spec::new("belts", "2026-10-04T10:00:00Z");
+    let mut meta = belts.meta();
+    meta.format_version = 2;
+    let template = meta.segments[0].clone();
+    meta.segments = [Direction::BELT_A, Direction::BELT_B]
+        .into_iter()
+        .enumerate()
+        .map(|(i, axis)| {
+            let mut segment = template.clone();
+            segment.axis = axis;
+            segment.files[0].sample_file = format!("c0-s{i}.zst");
+            segment
+        })
+        .collect();
+    std::fs::create_dir_all(sessions_dir(dir.path())).unwrap();
+    wobblescope_session::fs::write_session(&sessions_dir(dir.path()), &meta, common::source)
+        .unwrap();
+    let (s, _) = open(dir.path(), BIG);
+    let (_, body) = json(&app(Some(s)), "GET", "/api/sessions").await;
+    let kinds: Vec<(&str, &str)> = body["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| (s["id"].as_str().unwrap(), s["kind"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("belts", "belts"),
+            ("c", "axes"),
+            ("b", "axes"),
+            ("a", "axes")
+        ]
+    );
+}

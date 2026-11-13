@@ -2,6 +2,7 @@
 //! into a list of segments and the G-code that runs each one.
 
 use serde::{Deserialize, Serialize};
+use wobblescope_core::direction::Direction;
 use wobblescope_core::fit::Axis;
 use wobblescope_session::meta::{Mode, SweepSettings};
 
@@ -44,6 +45,18 @@ pub struct Overrides {
     pub move_speed: Option<f64>,
 }
 
+/// What a test measures.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum TestKind {
+    /// The X and Y axes, each on its own.
+    #[default]
+    Axes,
+    /// A CoreXY printer's two belts, one diagonal each, from one point.
+    Belts,
+}
+
 /// `POST /api/tests`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -51,8 +64,12 @@ pub struct Overrides {
 pub struct TestRequest {
     /// Config sections of the chips that record, for every axis.
     pub chips: Vec<String>,
-    /// The axes to test, in order.
-    pub axes: Vec<Axis>,
+    /// Axes or belts.
+    #[serde(default)]
+    pub kind: TestKind,
+    /// The axes to test, in order. Required for an axes test and refused for a belt test.
+    #[serde(default)]
+    pub axes: Option<Vec<Axis>>,
     /// Pulse or sweep.
     pub mode: Mode,
     /// The settings to override for this test.
@@ -102,8 +119,8 @@ pub struct Effective {
 /// One (point, axis) run.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Segment {
-    /// The axis shaken.
-    pub axis: Axis,
+    /// The direction shaken.
+    pub axis: Direction,
     /// Index into the plan's points.
     pub point: usize,
     /// Where the toolhead stands, `[x, y, z]` in mm.
@@ -135,10 +152,7 @@ impl TestPlan {
     /// The G-code that runs `segment`, with its raw CSV named `name`.
     #[must_use]
     pub fn command(&self, segment: &Segment, name: &str) -> String {
-        let axis = match segment.axis {
-            Axis::X => "X",
-            Axis::Y => "Y",
-        };
+        let axis = segment.axis.klipper_arg();
         let [x, y, z] = segment.position;
         let chips = self.chips.join(",");
         let chips = if chips.contains(' ') {
@@ -204,7 +218,7 @@ pub fn plan(
     max_segment_seconds: u32,
 ) -> Result<TestPlan, RequestError> {
     check_chips(&request.chips)?;
-    check_axes(&request.axes)?;
+    let directions = directions(request, printer)?;
     let o = &request.overrides;
     check_overrides(o)?;
     let s = &printer.settings;
@@ -267,6 +281,9 @@ pub fn plan(
     if points.is_empty() {
         return refuse("points", "give at least one test point");
     }
+    if request.kind == TestKind::Belts && points.len() > 1 {
+        return refuse("points", "a belt test runs at one point");
+    }
     check_points(&points, printer)?;
 
     let segment_seconds = (freq_end - freq_start) / hz_per_sec + SEGMENT_OVERHEAD_SECONDS;
@@ -284,7 +301,7 @@ pub fn plan(
         .iter()
         .enumerate()
         .flat_map(|(point, position)| {
-            request.axes.iter().map(move |axis| Segment {
+            directions.iter().map(move |axis| Segment {
                 axis: *axis,
                 point,
                 position: *position,
@@ -339,6 +356,38 @@ fn check_chips(chips: &[String]) -> Result<(), RequestError> {
     Ok(())
 }
 
+/// The directions the request shakes, in order, after checking what its kind needs.
+fn directions(
+    request: &TestRequest,
+    printer: &PrinterSettings,
+) -> Result<Vec<Direction>, RequestError> {
+    match request.kind {
+        TestKind::Axes => {
+            let Some(axes) = &request.axes else {
+                return refuse("axes", "choose at least one axis");
+            };
+            check_axes(axes)?;
+            Ok(axes.iter().map(|a| Direction::from(*a)).collect())
+        }
+        TestKind::Belts => {
+            if request.axes.is_some() {
+                return refuse("axes", "a belt test takes no axes");
+            }
+            match printer.machine.kinematics.as_deref() {
+                Some("corexy" | "limited_corexy") => Ok(vec![Direction::BELT_A, Direction::BELT_B]),
+                Some(other) => refuse(
+                    "kind",
+                    format!("a belt test needs a CoreXY printer, not {other}"),
+                ),
+                None => refuse(
+                    "kind",
+                    "a belt test needs a CoreXY printer and the printer's kinematics cannot be read",
+                ),
+            }
+        }
+    }
+}
+
 fn check_axes(axes: &[Axis]) -> Result<(), RequestError> {
     if axes.is_empty() {
         return refuse("axes", "choose at least one axis");
@@ -347,6 +396,24 @@ fn check_axes(axes: &[Axis]) -> Result<(), RequestError> {
         return refuse("axes", "an axis is listed twice");
     }
     Ok(())
+}
+
+/// What the user is told when Klipper does not accept a diagonal `AXIS=`, or `None` when
+/// `message` is not that refusal. Klipper words it differently across versions.
+#[must_use]
+pub fn diagonal_refusal(message: &str) -> Option<String> {
+    const TEXTS: [&str; 3] = [
+        "Unsupported axis",
+        "Invalid format of axis",
+        "Unable to parse axis direction",
+    ];
+    TEXTS.iter().any(|t| message.contains(t)).then(|| {
+        format!(
+            "This Klipper does not accept a diagonal AXIS for TEST_RESONANCES, which a belt test \
+             needs; update Klipper (mainline 0.12.0 or Kalico 2026.01.00 or newer). Klipper said: \
+             {message}"
+        )
+    })
 }
 
 fn check_overrides(o: &Overrides) -> Result<(), RequestError> {

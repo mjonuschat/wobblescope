@@ -126,6 +126,7 @@ async fn a_subscriber_that_falls_far_behind_gets_a_fresh_snapshot_not_a_closed_s
                 outcome: FinishedOutcome::Complete,
                 reason: None,
                 session_id: None,
+                code: None,
                 motion_uncertain: false,
             });
         });

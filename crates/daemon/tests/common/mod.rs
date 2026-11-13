@@ -247,7 +247,28 @@ pub fn test_plan(
     .unwrap();
     let request = TestRequest {
         chips: chips.iter().map(|c| (*c).to_owned()).collect(),
-        axes: axes.to_vec(),
+        kind: wobblescope::capture::request::TestKind::Axes,
+        axes: Some(axes.to_vec()),
+        mode: wobblescope_session::meta::Mode::Pulse,
+        overrides: Overrides::default(),
+        points: None,
+    };
+    plan(&request, &printer, 600).unwrap()
+}
+
+/// A plan for a pulse belt test of `chips` at the printer's default point.
+pub fn belt_plan(chips: &[&str]) -> wobblescope::capture::request::TestPlan {
+    use wobblescope::capture::request::{Overrides, TestKind, TestRequest, plan};
+    use wobblescope::moonraker::settings::parse_settings;
+    let printer = parse_settings(
+        &fake_printer::fixture("real_settings.json"),
+        &fake_printer::fixture("real_printer_info.json"),
+    )
+    .unwrap();
+    let request = TestRequest {
+        chips: chips.iter().map(|c| (*c).to_owned()).collect(),
+        kind: TestKind::Belts,
+        axes: None,
         mode: wobblescope_session::meta::Mode::Pulse,
         overrides: Overrides::default(),
         points: None,

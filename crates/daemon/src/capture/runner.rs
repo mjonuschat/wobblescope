@@ -11,18 +11,19 @@ use serde_json::{Value, json};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_session::meta::{
     PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
 };
 
 use super::availability::OpenChip;
-use super::live::{ChipLive, FinishedTest, LiveHub, Phase, TestState};
+use super::live::{ChipLive, FailureCode, FinishedTest, LiveHub, Phase, TestState};
 use super::meta::{ChipFacts, initial};
 use super::position::{PositionError, Timeouts, move_to_point, window_end, window_start};
 use super::preflight::{Started, check_printer, quarantine_duration};
 use super::recorder::{Level, Missing, Recorder, Taken};
-use super::request::{Segment, TestPlan};
+use super::request::{Segment, TestPlan, diagonal_refusal};
 use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
 use crate::moonraker::Moonraker;
@@ -124,6 +125,7 @@ struct Failure {
     from_klipper: bool,
     /// Whether the runner stopped waiting for a motion command that had not answered.
     in_flight: bool,
+    code: Option<FailureCode>,
 }
 
 impl Failure {
@@ -133,6 +135,7 @@ impl Failure {
             uncertain: false,
             from_klipper: false,
             in_flight: false,
+            code: None,
         }
     }
 
@@ -142,6 +145,7 @@ impl Failure {
             uncertain: true,
             from_klipper: false,
             in_flight: false,
+            code: None,
         }
     }
 
@@ -546,7 +550,18 @@ impl Run {
                             // Klipper's own message beats the generic error of the call.
                             Err(match recorded {
                                 Some(reason) => Failure::certain(reason),
-                                None => self.klipper_down().unwrap_or_else(|| Failure::certain(message)),
+                                None => self.klipper_down().unwrap_or_else(|| {
+                                    let refusal = matches!(segment.axis, Direction::Vector(_))
+                                        .then(|| diagonal_refusal(&message))
+                                        .flatten();
+                                    match refusal {
+                                        Some(text) => Failure {
+                                            code: Some(FailureCode::DiagonalAxisRefused),
+                                            ..Failure::certain(text)
+                                        },
+                                        None => Failure::certain(message),
+                                    }
+                                }),
                             })
                         }
                         Err(e) => Err(Failure::unknown(format!(
@@ -667,11 +682,14 @@ impl Run {
             return Err(Failure::certain("the capture is not open"));
         };
         stored.meta.segments.push(SegmentMeta {
-            axis: segment.axis.into(),
+            axis: segment.axis,
             point: segment.point as u32,
             window: Some(window),
             files,
         });
+        // Version 2 is written only once a vector segment is in the journal, so a session with
+        // none stays readable by a daemon that predates belt tests.
+        stored.meta.format_version = stored.meta.required_version();
         let journal = stored.meta.clone();
         self.with_capture(move |capture| capture.journal(&journal))
             .await
@@ -793,8 +811,9 @@ impl Run {
         self.recorders.clear();
 
         let reason = failure.as_ref().map(|f| f.reason.clone());
+        let code = failure.as_ref().and_then(|f| f.code);
         let segments = self.segments_stored();
-        let finished = match self.stored.take() {
+        let mut finished = match self.stored.take() {
             Some(Stored { capture, meta }) if segments > 0 => {
                 let sealing = Sealing {
                     id: self.id.clone(),
@@ -810,6 +829,7 @@ impl Run {
                 abandon(&self.r.storage, &self.id, capture, reason).await
             }
         };
+        finished.code = code;
         self.end(finished, failure.is_some_and(|f| f.uncertain));
     }
 

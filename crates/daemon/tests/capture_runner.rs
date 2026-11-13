@@ -3,15 +3,16 @@ mod common;
 use std::time::Duration;
 
 use common::sim_printer::{Move, Rig, Sweep, When, fast_runner, rig, rig_with};
-use common::{open, test_plan};
+use common::{belt_plan, open, test_plan};
 use serde_json::json;
-use wobblescope::capture::live::{FinishedOutcome, FinishedTest, Phase};
+use wobblescope::capture::live::{FailureCode, FinishedOutcome, FinishedTest, Phase};
 use wobblescope::capture::preflight::Refusal;
-use wobblescope::capture::request::{Overrides, TestRequest, plan};
+use wobblescope::capture::request::{Overrides, TestKind, TestRequest, diagonal_refusal, plan};
 use wobblescope::moonraker::settings::parse_settings;
+use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
-use wobblescope_session::meta::{Mode, Outcome};
+use wobblescope_session::meta::{Mode, Outcome, SessionKind};
 
 const CHIPS: [&str; 2] = ["adxl345", "lis2dw ebb36"];
 
@@ -139,7 +140,8 @@ fn plan_with_points(points: &[[f64; 3]], axes: &[Axis]) -> wobblescope::capture:
     .unwrap();
     let request = TestRequest {
         chips: CHIPS.iter().map(|c| (*c).to_owned()).collect(),
-        axes: axes.to_vec(),
+        kind: TestKind::Axes,
+        axes: Some(axes.to_vec()),
         mode: Mode::Pulse,
         overrides: Overrides::default(),
         points: Some(points.to_vec()),
@@ -651,6 +653,110 @@ async fn killing_the_runner_after_segment_one_leaves_a_session_the_next_open_rec
     let (_, meta) = reopened.session(&id).unwrap();
     assert_eq!(meta.segments.len(), 1);
     assert!(matches!(meta.outcome, Outcome::Failed { .. }));
+}
+
+// ---- belt tests ----
+
+#[tokio::test]
+async fn a_belt_run_records_both_segments_in_order_with_vector_axes() {
+    let rig = rig().await;
+    let plan = belt_plan(&CHIPS);
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    let axes: Vec<Direction> = meta.segments.iter().map(|s| s.axis).collect();
+    assert_eq!(axes, [Direction::BELT_A, Direction::BELT_B]);
+    assert_eq!(meta.kind(), SessionKind::Belts);
+    assert_eq!(meta.format_version, 2);
+    let sweeps = rig.sim.sweeps();
+    assert!(sweeps[0].contains("AXIS=1,-1 ") && sweeps[1].contains("AXIS=1,1 "));
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn a_refused_belt_run_leaves_no_session_or_a_version_one_session() {
+    let rig = rig().await;
+    rig.sim
+        .set_behavior(0, Sweep::Error("Timer too close".to_owned()));
+    let plan = belt_plan(&CHIPS);
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::NoSession, "{finished:?}");
+    for id in rig.sessions() {
+        let (_, meta) = rig.storage.session(&id).unwrap();
+        assert!(meta.segments.is_empty());
+        assert_eq!(meta.format_version, 1);
+    }
+    assert_clean(&rig);
+}
+
+/// The session the next open recovers from a runner killed while sweep `nth` is pending, if one
+/// was kept.
+async fn killed_during_sweep(nth: usize) -> Option<wobblescope_session::meta::SessionMeta> {
+    let rig = rig().await;
+    rig.sim.set_behavior(nth, Sweep::Pending);
+    let plan = belt_plan(&CHIPS);
+    let task = start(&rig, &plan).await;
+    let id = running_id(&rig).await;
+    rig.until("the pending sweep", || rig.sim.sweeps().len() == nth + 1)
+        .await;
+    task.abort();
+    let _ = task.await;
+    rig.until("the bridges to close", || rig.bridges_open() == 0)
+        .await;
+    let (reopened, _) = open(rig.dir.path(), u64::MAX / 4);
+    reopened.session(&id).ok().map(|(_, meta)| meta)
+}
+
+#[tokio::test]
+async fn the_journal_is_version_one_until_the_first_vector_segment_is_committed() {
+    if let Some(meta) = killed_during_sweep(0).await {
+        assert!(meta.segments.is_empty());
+        assert_eq!(meta.format_version, 1);
+    }
+    let meta = killed_during_sweep(1).await.expect("belt A was committed");
+    assert_eq!(meta.segments.len(), 1);
+    assert_eq!(meta.format_version, 2);
+}
+
+#[tokio::test]
+async fn a_run_refused_on_the_diagonal_axis_ends_failed_with_no_recording() {
+    let rig = rig().await;
+    rig.sim
+        .set_behavior(0, Sweep::Error("Unsupported axis '1,-1'".to_owned()));
+    let plan = belt_plan(&CHIPS);
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.code, Some(FailureCode::DiagonalAxisRefused));
+    assert_eq!(
+        finished.reason.as_deref(),
+        diagonal_refusal("Unsupported axis '1,-1'").as_deref()
+    );
+    assert!(matches!(
+        finished.outcome,
+        FinishedOutcome::Failed | FinishedOutcome::NoSession
+    ));
+    // The move to the point happened; the diagonal sweep was the only one sent.
+    assert_eq!(rig.sim.g1_count(), 1);
+    assert_eq!(rig.sim.sweeps().len(), 1);
+    for id in rig.sessions() {
+        let (_, meta) = rig.storage.session(&id).unwrap();
+        assert!(meta.segments.is_empty());
+    }
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn a_belt_run_interrupted_after_belt_a_recovers_as_a_one_segment_belt_session() {
+    let meta = killed_during_sweep(1).await.expect("belt A was committed");
+    assert_eq!(meta.segments.len(), 1);
+    assert_eq!(meta.segments[0].axis, Direction::BELT_A);
+    assert_eq!(meta.kind(), SessionKind::Belts);
+    assert_eq!(meta.format_version, 2);
 }
 
 #[test]

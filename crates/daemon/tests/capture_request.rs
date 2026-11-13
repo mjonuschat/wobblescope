@@ -1,8 +1,9 @@
 mod common;
 
 use common::fake_printer::fixture;
-use wobblescope::capture::request::{Overrides, TestRequest, plan};
+use wobblescope::capture::request::{Overrides, TestKind, TestRequest, diagonal_refusal, plan};
 use wobblescope::moonraker::settings::{PrinterSettings, parse_settings};
+use wobblescope_core::direction::Direction;
 use wobblescope_core::fit::Axis;
 use wobblescope_session::meta::Mode;
 
@@ -26,7 +27,8 @@ fn sweeping_printer() -> PrinterSettings {
 fn request() -> TestRequest {
     TestRequest {
         chips: vec!["adxl345".to_owned(), "lis2dw ebb36".to_owned()],
-        axes: vec![Axis::X],
+        kind: TestKind::Axes,
+        axes: Some(vec![Axis::X]),
         mode: Mode::Pulse,
         overrides: Overrides::default(),
         points: None,
@@ -72,13 +74,18 @@ fn an_override_adds_only_its_parameter_and_the_record_uses_it() {
 #[test]
 fn two_points_and_two_axes_give_four_segments_in_order() {
     let mut r = request();
-    r.axes = vec![Axis::X, Axis::Y];
+    r.axes = Some(vec![Axis::X, Axis::Y]);
     r.points = Some(vec![[100.0, 100.0, 20.0], [200.0, 150.0, 20.0]]);
     let plan = plan(&r, &printer(), 600).unwrap();
-    let order: Vec<(usize, Axis)> = plan.segments.iter().map(|s| (s.point, s.axis)).collect();
+    let order: Vec<(usize, Direction)> = plan.segments.iter().map(|s| (s.point, s.axis)).collect();
     assert_eq!(
         order,
-        [(0, Axis::X), (0, Axis::Y), (1, Axis::X), (1, Axis::Y)]
+        [
+            (0, Direction::X),
+            (0, Direction::Y),
+            (1, Direction::X),
+            (1, Direction::Y)
+        ]
     );
     assert!(
         plan.command(&plan.segments[3], "t")
@@ -209,7 +216,7 @@ fn a_request_needs_chips_and_axes_and_points() {
     r.chips.clear();
     assert!(refused(&r, &printer()).starts_with("chips:"));
     let mut r = request();
-    r.axes.clear();
+    r.axes = Some(vec![]);
     assert!(refused(&r, &printer()).starts_with("axes:"));
     let mut r = request();
     r.points = Some(vec![]);
@@ -225,4 +232,126 @@ fn the_request_json_has_only_the_given_overrides() {
     assert_eq!(r.overrides.freq_end, Some(100.0));
     assert_eq!(r.overrides.freq_start, None);
     assert_eq!(r.points, None);
+}
+
+fn belt_request() -> TestRequest {
+    TestRequest {
+        kind: TestKind::Belts,
+        axes: None,
+        ..request()
+    }
+}
+
+fn with_kinematics(kinematics: &str) -> PrinterSettings {
+    let mut query = fixture("real_settings.json");
+    query["status"]["configfile"]["settings"]["resonance_tester"]["sweeping_period"] =
+        serde_json::json!(0.0);
+    query["status"]["configfile"]["settings"]["printer"]["kinematics"] =
+        serde_json::json!(kinematics);
+    parse_settings(&query, &fixture("real_printer_info.json")).unwrap()
+}
+
+#[test]
+fn a_belt_request_plans_belt_a_then_belt_b_at_one_point() {
+    let plan = plan(&belt_request(), &printer(), 600).unwrap();
+    let order: Vec<(usize, Direction)> = plan.segments.iter().map(|s| (s.point, s.axis)).collect();
+    assert_eq!(order, [(0, Direction::BELT_A), (0, Direction::BELT_B)]);
+    assert_eq!(plan.points.len(), 1);
+}
+
+#[test]
+fn a_belt_request_command_is_axis_1_comma_minus_1_then_1_comma_1() {
+    let plan = plan(&belt_request(), &printer(), 600).unwrap();
+    assert_eq!(
+        plan.command(&plan.segments[0], "t1"),
+        "TEST_RESONANCES AXIS=1,-1 POINT=150.5,154,20 OUTPUT=raw_data NAME=t1 \
+         CHIPS=\"adxl345,lis2dw ebb36\""
+    );
+    assert_eq!(
+        plan.command(&plan.segments[1], "t1"),
+        "TEST_RESONANCES AXIS=1,1 POINT=150.5,154,20 OUTPUT=raw_data NAME=t1 \
+         CHIPS=\"adxl345,lis2dw ebb36\""
+    );
+}
+
+#[test]
+fn a_belt_request_with_axes_is_refused() {
+    for axes in [vec![Axis::X], vec![]] {
+        let mut r = belt_request();
+        r.axes = Some(axes);
+        assert!(refused(&r, &printer()).starts_with("axes:"));
+    }
+}
+
+#[test]
+fn a_belt_request_without_axes_is_planned() {
+    plan(&belt_request(), &printer(), 600).unwrap();
+    let r: TestRequest =
+        serde_json::from_str(r#"{"chips":["adxl345"],"kind":"belts","mode":"Pulse"}"#).unwrap();
+    assert_eq!(r.kind, TestKind::Belts);
+    assert_eq!(r.axes, None);
+    let r: TestRequest =
+        serde_json::from_str(r#"{"chips":["adxl345"],"axes":[],"mode":"Pulse"}"#).unwrap();
+    assert_eq!(r.kind, TestKind::Axes);
+    assert_eq!(r.axes, Some(vec![]));
+}
+
+#[test]
+fn an_axes_request_without_axes_is_refused() {
+    let mut r = request();
+    r.axes = None;
+    assert!(refused(&r, &printer()).starts_with("axes:"));
+}
+
+#[test]
+fn a_belt_request_with_two_points_is_refused() {
+    let mut r = belt_request();
+    r.points = Some(vec![[100.0, 100.0, 20.0], [200.0, 150.0, 20.0]]);
+    assert!(refused(&r, &printer()).starts_with("points:"));
+}
+
+#[test]
+fn a_belt_request_on_cartesian_or_unknown_kinematics_is_refused() {
+    for kinematics in ["cartesian", "delta", "corexz"] {
+        let message = refused(&belt_request(), &with_kinematics(kinematics));
+        assert!(message.starts_with("kind:"), "{message}");
+        assert!(message.contains(kinematics), "{message}");
+    }
+    let mut query = fixture("real_settings.json");
+    query["status"]["configfile"]["settings"]["printer"]
+        .as_object_mut()
+        .unwrap()
+        .remove("kinematics");
+    let unknown = parse_settings(&query, &fixture("real_printer_info.json")).unwrap();
+    assert!(refused(&belt_request(), &unknown).starts_with("kind:"));
+}
+
+#[test]
+fn corexy_and_limited_corexy_are_accepted() {
+    for kinematics in ["corexy", "limited_corexy"] {
+        plan(&belt_request(), &with_kinematics(kinematics), 600).unwrap();
+    }
+}
+
+#[test]
+fn an_axes_request_still_plans_x_and_y() {
+    let mut r = request();
+    r.axes = Some(vec![Axis::X, Axis::Y]);
+    let plan = plan(&r, &with_kinematics("cartesian"), 600).unwrap();
+    let order: Vec<Direction> = plan.segments.iter().map(|s| s.axis).collect();
+    assert_eq!(order, [Direction::X, Direction::Y]);
+}
+
+#[test]
+fn diagonal_refusal_recognises_klippers_axis_errors() {
+    for text in [
+        "Unsupported axis '1,-1'",
+        "Invalid format of axis '1,-1'",
+        "Unable to parse axis direction '1,-1'",
+    ] {
+        let message = diagonal_refusal(text).expect(text);
+        assert!(message.contains("Klipper"), "{message}");
+    }
+    assert_eq!(diagonal_refusal("Timer too close"), None);
+    assert_eq!(diagonal_refusal(""), None);
 }

@@ -4,6 +4,7 @@ import type { Machine } from "./Machine";
 import type { Mode } from "./Mode";
 import type { ResonanceSettings } from "./ResonanceSettings";
 import type { Variant } from "./Variant";
+import type { VersionSupport } from "./VersionSupport";
 
 /**
  * What `GET /api/settings` answers.
@@ -12,7 +13,11 @@ export type PrinterSettings = {
 /**
  * The Klipper fork.
  */
-variant: Variant, machine: Machine, 
+variant: Variant, 
+/**
+ * Whether the Klipper version accepts a diagonal `AXIS`, which a belt test needs.
+ */
+version_support: VersionSupport, machine: Machine, 
 /**
  * `Sweep` when the effective `sweeping_period` is above 0, else `Pulse`.
  */

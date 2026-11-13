@@ -28,6 +28,58 @@ pub enum Variant {
     Unknown,
 }
 
+/// Whether the printer's Klipper is new enough for the belt test, which needs a diagonal `AXIS`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum VersionSupport {
+    /// At or above the minimum.
+    Supported,
+    /// Below the minimum.
+    TooOld,
+    /// The fork or the version cannot be told.
+    Unknown,
+}
+
+/// The first mainline Klipper that accepts a diagonal `AXIS`.
+const MAINLINE_MINIMUM: (u64, u64, u64) = (0, 12, 0);
+
+/// The first Kalico release that accepts a diagonal `AXIS`.
+const KALICO_MINIMUM: (u64, u64, u64) = (2026, 1, 0);
+
+/// The leading numeric `MAJOR.MINOR.PATCH` of a version such as `v0.12.0-232-g1f2e3d4-dirty`.
+/// The `-<commits>-g<hash>` suffix is ignored, which a semver comparison would rank below the
+/// release itself.
+fn leading_version(text: &str) -> Option<(u64, u64, u64)> {
+    let text = text.trim();
+    let text = text.strip_prefix('v').unwrap_or(text);
+    let numbers = text.split('-').next()?;
+    let mut parts = numbers.split('.');
+    let mut next = || {
+        let part = parts.next()?;
+        (!part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| part.parse().ok())
+            .flatten()
+    };
+    let version = (next()?, next()?, next()?);
+    parts.next().is_none().then_some(version)
+}
+
+/// Whether `klipper_version` of `variant` supports a belt test.
+#[must_use]
+pub fn version_support(variant: Variant, klipper_version: Option<&str>) -> VersionSupport {
+    let minimum = match variant {
+        Variant::Mainline => MAINLINE_MINIMUM,
+        Variant::Kalico => KALICO_MINIMUM,
+        Variant::Unknown => return VersionSupport::Unknown,
+    };
+    match klipper_version.and_then(leading_version) {
+        Some(version) if version >= minimum => VersionSupport::Supported,
+        Some(_) => VersionSupport::TooOld,
+        None => VersionSupport::Unknown,
+    }
+}
+
 /// One setting: what Klipper will use, and what a test may do with it.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -107,6 +159,8 @@ pub struct Machine {
 pub struct PrinterSettings {
     /// The Klipper fork.
     pub variant: Variant,
+    /// Whether the Klipper version accepts a diagonal `AXIS`, which a belt test needs.
+    pub version_support: VersionSupport,
     pub machine: Machine,
     /// `Sweep` when the effective `sweeping_period` is above 0, else `Pulse`.
     pub default_mode: Mode,
@@ -211,6 +265,7 @@ pub fn parse_settings(query: &Value, info: &Value) -> Result<PrinterSettings, Se
     let machine = parse_machine(all, status.and_then(|s| s.get("toolhead")), info);
     Ok(PrinterSettings {
         variant,
+        version_support: version_support(variant, machine.klipper_version.as_deref()),
         machine,
         default_mode,
         settings,

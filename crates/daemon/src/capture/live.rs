@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tokio::sync::broadcast;
-use wobblescope_core::fit::Axis;
+use wobblescope_core::direction::Direction;
 
 use crate::lock::lock;
 
@@ -54,8 +54,8 @@ pub struct TestState {
     pub segment: u32,
     /// How many segments the test has.
     pub segments: u32,
-    /// The axis of the current segment.
-    pub axis: Option<Axis>,
+    /// The direction of the current segment.
+    pub axis: Option<Direction>,
     /// The toolhead position of the current segment: `[x, y, z]` in mm.
     pub position: Option<[f64; 3]>,
     /// How long a segment is expected to take, in seconds.
@@ -87,6 +87,15 @@ pub enum FinishedOutcome {
     NoSession,
 }
 
+/// Why a test failed, when the interface can say more than the reason text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum FailureCode {
+    /// Klipper refused a diagonal `AXIS`, so a belt test cannot run on it.
+    DiagonalAxisRefused,
+}
+
 /// A test that has ended.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -97,6 +106,8 @@ pub struct FinishedTest {
     pub outcome: FinishedOutcome,
     /// Why, for anything but a complete test.
     pub reason: Option<String>,
+    /// A machine-readable cause, when there is one.
+    pub code: Option<FailureCode>,
     /// The session, when one exists.
     pub session_id: Option<String>,
     /// Whether the toolhead may still be moving, so an emergency stop is still accepted.
