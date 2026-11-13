@@ -16,6 +16,8 @@ import { AXIS_LABEL, type Axis3 } from "@/pages/stream/axes";
 import { chipColor } from "@/pages/stream/colors";
 import { RAMP } from "@/stream/spectrogramScale";
 
+import { formatFrequency, formatPsd } from "./format";
+
 /** Where a probe point is, or its number when its position is not known. */
 export function pointLabel(index: number, probePoints: ProbePoint[]): string {
   const position = probePoints[index]?.position;
@@ -539,6 +541,30 @@ function unpairedPoints(result: BeltsResult, place: (belt: BeltCurve, index: num
   return points;
 }
 
+interface AxisTooltipItem {
+  seriesName?: string;
+  marker?: string;
+  value?: unknown;
+}
+
+/** The frequency as the header, then each series with its colour marker and PSD to four significant digits. */
+function beltAxisTooltip(params: AxisTooltipItem | AxisTooltipItem[]): string {
+  const items = Array.isArray(params) ? params : [params];
+  const header = `${formatFrequency(Number((items[0]?.value as number[] | undefined)?.[0]))} Hz`;
+  const lines = items.map(
+    (item) => `${item.marker ?? ""}${item.seriesName ?? ""}: ${formatPsd(Number((item.value as number[])[1]))}`,
+  );
+  return [header, ...lines].join("<br/>");
+}
+
+/** Only the belt curve is listed: the good zone and the ideal line are drawn aids, not readings. */
+function beltScatterTooltip(params: AxisTooltipItem | AxisTooltipItem[]): string {
+  const items = Array.isArray(params) ? params : [params];
+  const point = items.find((item) => item.seriesName === "Belts")?.value as number[] | undefined;
+  if (!point) return "";
+  return `Belt A: ${formatPsd(point[0])}<br/>Belt B: ${formatPsd(point[1])}`;
+}
+
 /**
  * Box-select and wheel zoom, driven from the page's own buttons (see ChartZoomControls). The
  * toolbox is what registers the box-select brush, and `show: false` would skip it, so it stays
@@ -625,6 +651,7 @@ export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
   return {
     ...base(null, result.max_freq),
     animation: false,
+    tooltip: { trigger: "axis", formatter: beltAxisTooltip },
     grid: BELT_GRID,
     legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: text } },
     ...zoomControls(false),
@@ -646,6 +673,7 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string): ECharts
   return {
     ...base(null, spectrum.freqs.at(-1) ?? 0),
     animation: false,
+    tooltip: { trigger: "axis", formatter: beltAxisTooltip },
     grid: BELT_GRID,
     legend: { data: [label], top: 0, left: 56, textStyle: { color: text } },
     ...zoomControls(false),
@@ -721,7 +749,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
   return {
     ...base(null, end),
     animation: false,
-    tooltip: { trigger: "item" },
+    tooltip: { trigger: "axis", formatter: beltScatterTooltip },
     grid: { top: 40, left: 72, right: 24, bottom: 56 },
     legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: text } },
     ...zoomControls(true),
@@ -761,6 +789,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         symbol: "none",
         silent: true,
         lineStyle: { opacity: 0 },
+        tooltip: { show: false },
         areaStyle: { color: GOOD_ZONE },
         itemStyle: { color: GOOD_ZONE },
         data: xs.map((x, i) => [x, goodZoneBoundary(x, max) - lower[i]]),
@@ -771,6 +800,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         showSymbol: false,
         symbol: "none",
         silent: true,
+        tooltip: { show: false },
         color: IDEAL_LINE,
         lineStyle: { color: IDEAL_LINE, type: "dashed", width: 2 },
         data: [

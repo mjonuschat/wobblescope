@@ -749,3 +749,43 @@ describe("the belt chart curves", () => {
     expect([option.yAxis.name, option.yAxis.nameLocation]).toEqual(["Belt B", "middle"]);
   });
 });
+
+describe("the belt chart tooltips", () => {
+  type Item = { seriesName: string; marker: string; value: number[] };
+  type Tip = { trigger: string; formatter: (params: Item[]) => string };
+  const tip = (option: unknown) => (option as { tooltip: Tip }).tooltip;
+
+  it.each([
+    ["overlay", beltOverlayOption(beltsResult())],
+    ["single", beltSingleOption(beltSpectrum(), "A (axis 1,-1)")],
+  ])("the_%s_tooltip_heads_with_the_frequency_and_names_each_series", (_, option) => {
+    const text = tip(option).formatter([
+      { seriesName: "Belt A", marker: "<i>a</i>", value: [12.5, 787.9369679595126] },
+      { seriesName: "Belt B", marker: "<i>b</i>", value: [12.5, 4.555e6] },
+    ]);
+    expect(text).toBe("12.5 Hz<br/><i>a</i>Belt A: 7.879e+2<br/><i>b</i>Belt B: 4.555e+6");
+  });
+
+  it("the_overlay_tooltip_trims_the_frequency_to_two_decimals", () => {
+    const text = tip(beltOverlayOption(beltsResult())).formatter([
+      { seriesName: "Belt A", marker: "", value: [0.4, 1] },
+    ]);
+    expect(text.startsWith("0.4 Hz<br/>")).toBe(true);
+  });
+
+  it("the_scatter_tooltip_reads_belt_a_and_belt_b_from_the_belt_curve_only", () => {
+    const option = beltScatterOption(beltsResult());
+    expect(tip(option).formatter([{ seriesName: "Belts", marker: "", value: [787.9369679595126, 0.4] }])).toBe(
+      "Belt A: 7.879e+2<br/>Belt B: 4.000e-1",
+    );
+    expect(tip(option).formatter([{ seriesName: "Ideal line", marker: "", value: [1, 1] }])).toBe("");
+  });
+
+  it("hides_the_good_zone_and_the_ideal_line_from_the_scatter_tooltip", () => {
+    const list = (beltScatterOption(beltsResult()) as unknown as { series: { name: string; tooltip?: object }[] })
+      .series;
+    for (const name of ["Good zone floor", "Good zone", "Ideal line"]) {
+      expect(list.find((s) => s.name === name)?.tooltip).toEqual({ show: false });
+    }
+  });
+});
