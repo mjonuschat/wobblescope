@@ -5,6 +5,7 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import type { Header } from "../SessionResults";
 import { BeltView } from "./BeltView";
+import { healthGrade } from "./healthGrade";
 import { DEFAULT_MAX_FREQ, parseMaxFreq } from "./maxFreq";
 
 /** The similarity and health rows, styled like the progress panel's labelled rows. */
@@ -14,7 +15,7 @@ function BeltSummary({ similarity, health }: { similarity: number; health: strin
       <dt className="text-muted-foreground">Estimated similarity</dt>
       <dd>{Number.isFinite(similarity) ? `${similarity.toFixed(1)}%` : "\u2013"}</dd>
       <dt className="text-muted-foreground">Mechanical health</dt>
-      <dd>{health} (experimental)</dd>
+      <dd>{healthGrade(health)} (experimental)</dd>
     </dl>
   );
 }
