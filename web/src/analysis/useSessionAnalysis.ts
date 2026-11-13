@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiClientError } from "@/lib/api/client";
 import { queryKeys, shouldRetry } from "@/lib/api/queries";
@@ -6,7 +7,7 @@ import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
-import { getAnalysisClient, type AnalysisClient } from "./client";
+import { type AnalysisProgress, getAnalysisClient, type AnalysisClient } from "./client";
 
 const NO_OVERRIDES: string[] = [];
 
@@ -43,10 +44,22 @@ export function useSessionAnalysis({
   overrides = NO_OVERRIDES,
   client = getAnalysisClient(),
 }: Args) {
-  return useQuery({
-    queryKey: queryKeys.analysis(sessionId, axis ?? "X", params, overrides, meta?.created_at, resultId),
-    queryFn: ({ signal }) =>
-      client.analyze({ sessionId, resultId, meta: meta!, axis: axis!, params, overrides }, signal),
+  const key = queryKeys.analysis(sessionId, axis ?? "X", params, overrides, meta?.created_at, resultId);
+  const currentKeyRef = useRef<string>(JSON.stringify(key));
+  currentKeyRef.current = JSON.stringify(key);
+
+  const [progressState, setProgressState] = useState<{ key: string; progress: AnalysisProgress } | null>(null);
+
+  const query = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) => {
+      const onProgress = (p: AnalysisProgress) => {
+        const reportKey = JSON.stringify(key);
+        if (reportKey !== currentKeyRef.current) return;
+        setProgressState({ key: reportKey, progress: p });
+      };
+      return client.analyze({ sessionId, resultId, meta: meta!, axis: axis!, params, overrides }, signal, onProgress);
+    },
     enabled: meta !== undefined && axis !== null,
     gcTime: CACHE_MS,
     // The answer depends only on the key, so a cached result never goes stale.
@@ -54,4 +67,19 @@ export function useSessionAnalysis({
     // A failed analysis is deterministic, so only a download that may have hit a blip is retried.
     retry: (count, error) => error instanceof ApiClientError && shouldRetry(count, error),
   });
+
+  const serializedKey = JSON.stringify(key);
+  const progress: AnalysisProgress =
+    progressState?.key === serializedKey ? progressState.progress : { phase: "queued" };
+
+  useEffect(() => {
+    if (!query.isSuccess || !meta || !axis || resultId !== undefined) return;
+    const otherAxes = meta.segments.map((s) => s.axis).filter((a) => a !== axis);
+    const uniqueAxes = [...new Set(otherAxes)];
+    for (const otherAxis of uniqueAxes) {
+      client.prefetch({ sessionId, resultId, meta, axis: otherAxis });
+    }
+  }, [query.isSuccess, sessionId, resultId, meta, axis, client]);
+
+  return { ...query, progress };
 }

@@ -33,6 +33,7 @@ function setup() {
   };
   const fetchSample = vi.fn(async () => new ArrayBuffer(1));
   const client = createAnalysisClient({ createWorker: () => worker, fetchSample });
+  client.prefetch = vi.fn();
   const queryClient = createQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -112,5 +113,191 @@ describe("useSessionAnalysis", () => {
     await waitFor(() => expect(analyses()).toBe(2));
     const last = requests.filter((r) => r.type === "analyze").at(-1);
     expect(last).toMatchObject({ overrides: ["b"] });
+  });
+
+  it("starts as queued and follows the client\u2019s reports", async () => {
+    let capturedOnProgress: ((p: import("./client").AnalysisProgress) => void) | undefined;
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage() {},
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.analyze = vi.fn((_job, _signal, onProgress) => {
+      capturedOnProgress = onProgress;
+      return new Promise<import("./protocol").AnalysisResult>(() => {});
+    });
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () => useSessionAnalysis({ sessionId: "s1", meta: twoAxisMeta(), axis: "X", params: defaultParams, client }),
+      { wrapper },
+    );
+    expect(result.current.progress).toEqual({ phase: "queued" });
+    await waitFor(() => expect(capturedOnProgress).toBeDefined());
+    capturedOnProgress!({ phase: "downloading", loaded: 10, total: 100 });
+    await waitFor(() => expect(result.current.progress).toEqual({ phase: "downloading", loaded: 10, total: 100 }));
+    capturedOnProgress!({ phase: "analysing" });
+    await waitFor(() => expect(result.current.progress).toEqual({ phase: "analysing" }));
+  });
+
+  it("does not show progress of the previous parameters", async () => {
+    let capturedOnProgress: ((p: import("./client").AnalysisProgress) => void) | undefined;
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage() {},
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.analyze = vi.fn((_job, _signal, onProgress) => {
+      capturedOnProgress = onProgress;
+      return new Promise<import("./protocol").AnalysisResult>(() => {});
+    });
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, rerender } = renderHook(
+      ({ p }) => useSessionAnalysis({ sessionId: "s1", meta: twoAxisMeta(), axis: "X", params: p, client }),
+      { wrapper, initialProps: { p: defaultParams } },
+    );
+    await waitFor(() => expect(capturedOnProgress).toBeDefined());
+    const firstOnProgress = capturedOnProgress!;
+    firstOnProgress({ phase: "downloading", loaded: 10, total: 100 });
+    await waitFor(() => expect(result.current.progress).toEqual({ phase: "downloading", loaded: 10, total: 100 }));
+    rerender({ p: { ...defaultParams, scv: 7 } });
+    expect(result.current.progress).toEqual({ phase: "queued" });
+    await waitFor(() => expect(capturedOnProgress).not.toBe(firstOnProgress));
+    firstOnProgress({ phase: "analysing" });
+    await waitFor(() => expect(result.current.progress).toEqual({ phase: "queued" }));
+  });
+
+  it("a late report of the previous parameters does not erase the current one", async () => {
+    let capturedOnProgress: ((p: import("./client").AnalysisProgress) => void) | undefined;
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage() {},
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.analyze = vi.fn((_job, _signal, onProgress) => {
+      capturedOnProgress = onProgress;
+      return new Promise<import("./protocol").AnalysisResult>(() => {});
+    });
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, rerender } = renderHook(
+      ({ p }) => useSessionAnalysis({ sessionId: "s1", meta: twoAxisMeta(), axis: "X", params: p, client }),
+      { wrapper, initialProps: { p: defaultParams } },
+    );
+    await waitFor(() => expect(capturedOnProgress).toBeDefined());
+    const firstOnProgress = capturedOnProgress!;
+    rerender({ p: { ...defaultParams, scv: 7 } });
+    await waitFor(() => expect(capturedOnProgress).not.toBe(firstOnProgress));
+    const secondOnProgress = capturedOnProgress!;
+    secondOnProgress({ phase: "downloading", loaded: 5, total: 50 });
+    await waitFor(() => expect(result.current.progress).toEqual({ phase: "downloading", loaded: 5, total: 50 }));
+    firstOnProgress({ phase: "analysing" });
+    await waitFor(() => expect(result.current.progress).toEqual({ phase: "downloading", loaded: 5, total: 50 }));
+  });
+
+  it("never prefetches for a saved result", async () => {
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage(message) {
+        if (message.type !== "analyze") return;
+        const response: WorkerResponse = {
+          type: "result",
+          id: message.id,
+          result: {
+            analysis: analysis(),
+            snippets: { worstCase: "s", worstCasePerformance: null, perChip: [["s"], null] },
+          },
+        };
+        queueMicrotask(() => this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>));
+      },
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+      fetchResultSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    const prefetch = vi.fn();
+    client.prefetch = prefetch;
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () =>
+        useSessionAnalysis({
+          sessionId: "s1",
+          resultId: "r1",
+          meta: twoAxisMeta(),
+          axis: "X",
+          params: defaultParams,
+          client,
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).not.toHaveBeenCalled();
+  });
+
+  it("downloads the other axes once the shown axis is analysed", async () => {
+    const prefetch = vi.fn();
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage(message) {
+        if (message.type !== "analyze") return;
+        const response: WorkerResponse = {
+          type: "result",
+          id: message.id,
+          result: {
+            analysis: analysis(),
+            snippets: { worstCase: "s", worstCasePerformance: null, perChip: [["s"], null] },
+          },
+        };
+        queueMicrotask(() => this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>));
+      },
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.prefetch = prefetch;
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const meta = twoAxisMeta();
+    const { result } = renderHook(
+      () => useSessionAnalysis({ sessionId: "s1", meta, axis: "X", params: defaultParams, client }),
+      { wrapper },
+    );
+    expect(prefetch).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).toHaveBeenCalledTimes(1);
+    expect(prefetch).toHaveBeenCalledWith({ sessionId: "s1", resultId: undefined, meta, axis: "Y" });
   });
 });
