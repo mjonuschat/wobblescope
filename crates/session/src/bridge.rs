@@ -49,8 +49,8 @@ where
     inputs_where(meta, direction.into(), Some(chip), load)
 }
 
-/// The probe point and the recordings of `chip` for belt A and belt B. The point is that of the
-/// segments found, or 0 when the chip has no recording of either belt. Only the chip's files are
+/// The probe point and the recordings of `chip` for belt A and belt B. The point is the one the
+/// session's belt segments share, or 0 when it has none, whatever the chip recorded. Only the chip's files are
 /// loaded.
 ///
 /// # Errors
@@ -69,7 +69,11 @@ where
     let b = dataset_inputs_for_chip(meta, Direction::BELT_B, chip, &mut load)?
         .into_iter()
         .next();
-    let point = a.as_ref().or(b.as_ref()).map_or(0, |i| i.point);
+    let point = meta
+        .segments
+        .iter()
+        .find(|s| s.axis == Direction::BELT_A || s.axis == Direction::BELT_B)
+        .map_or(0, |s| s.point as usize);
     Ok((point, a, b))
 }
 

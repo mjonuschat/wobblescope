@@ -452,7 +452,25 @@ parity_test! {
         assert_eq!(point, 3);
         assert!(a.is_some() && b.is_some());
         let (point, a, b) = belt_inputs(&m, "no such chip", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 3);
+        assert!(a.is_none() && b.is_none());
+        m.segments.clear();
+        let (point, _, _) = belt_inputs(&m, "adxl345", loader(belt_files(&w))).unwrap();
         assert_eq!(point, 0);
+    }
+}
+
+parity_test! {
+    fn the_belt_point_comes_from_the_segments_even_for_a_chip_without_files() {
+        let w = win();
+        let mut m = belt_meta(&w, &[0, 1]);
+        m.probe_points = vec![ProbePoint { position: None }; 4];
+        for segment in &mut m.segments {
+            segment.point = 3;
+            segment.files.retain(|f| f.chip == 1);
+        }
+        let (point, a, b) = belt_inputs(&m, "adxl345", loader(belt_files(&w))).unwrap();
+        assert_eq!(point, 3);
         assert!(a.is_none() && b.is_none());
     }
 }
