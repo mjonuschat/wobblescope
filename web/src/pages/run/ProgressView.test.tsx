@@ -25,6 +25,7 @@ vi.mock("@/components/charts/EChart", () => ({
 
 const running: TestState = {
   id: "test-1",
+  kind: "axes",
   phase: "measuring",
   segment: 3,
   segments: 4,
@@ -42,6 +43,7 @@ const running: TestState = {
 
 const done: FinishedTest = {
   id: "test-1",
+  kind: "axes",
   outcome: "complete",
   reason: null,
   code: null,

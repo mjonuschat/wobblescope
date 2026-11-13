@@ -6,6 +6,7 @@ import { NO_TRACES, extend, levelOf, liveSignalOption } from "./trace";
 
 const state = (over: Partial<TestState> = {}): TestState => ({
   id: "t",
+  kind: "axes",
   phase: "measuring",
   segment: 1,
   segments: 2,

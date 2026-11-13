@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { FinishedTest } from "@/lib/generated/FinishedTest";
+import type { TestKind } from "@/lib/generated/TestKind";
+import type { TestState } from "@/lib/generated/TestState";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import { queryKeys } from "@/lib/api/queries";
@@ -8,7 +11,11 @@ import { chip, chipsSnapshot, printerSettings } from "@/test/capture";
 import type { ApiCall, Reply } from "@/test/http";
 import { renderRoute } from "@/test/render";
 import { apiPath, healthyStatus, stubApiWithStatus } from "@/test/status";
-import { stubWebSocket } from "@/test/websocket";
+import { FakeSocket, stubWebSocket } from "@/test/websocket";
+
+vi.mock("@/components/charts/EChart", () => ({
+  EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
+}));
 
 interface Options {
   settings?: PrinterSettings;
@@ -555,5 +562,79 @@ describe("the run parameters card", () => {
     expect((document.getElementById("point-0-x") as HTMLInputElement).value).toBe("99");
     expect(screen.getAllByRole("switch").map((s) => s.getAttribute("aria-checked"))).toEqual(chipsBefore);
     expect(reset().disabled).toBe(true);
+  });
+});
+
+describe("a test of the other kind", () => {
+  beforeEach(() => stubWebSocket());
+
+  const running = (kind: TestKind): TestState => ({
+    id: "test-9",
+    kind,
+    phase: "measuring",
+    segment: 1,
+    segments: 2,
+    axis: null,
+    position: [150, 150, 20],
+    expected_segment_seconds: 100,
+    elapsed_seconds: 5,
+    frequency_hz: 20,
+    frequency_range: [10, 135],
+    chips: [{ chip: "lis2dw ebb36", level: null, warnings: [] }],
+  });
+  const ended = (kind: TestKind): FinishedTest => ({
+    id: "test-9",
+    kind,
+    outcome: "failed",
+    reason: "boom",
+    code: null,
+    session_id: null,
+    motion_uncertain: false,
+  });
+  async function openWith(path: string, snapshot: { test: TestState | null; last: FinishedTest | null }) {
+    api({ settings: { ...printerSettings(), machine: { ...printerSettings().machine, kinematics: "corexy" } } });
+    renderRoute(path);
+    await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
+    FakeSocket.latest.open();
+    FakeSocket.latest.send(snapshot);
+  }
+
+  it.each([
+    ["/run/shaper", "belts", "A Belts test is running.", "/run/belts"],
+    ["/run/belts", "axes", "A Input Shaper test is running.", "/run/shaper"],
+  ] as const)("on %s a running %s test is a notice with a link and the form", async (path, other, text, to) => {
+    await openWith(path, { test: running(other), last: null });
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
+    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(screen.queryByLabelText("Segment progress")).toBeNull();
+  });
+
+  it.each([
+    ["/run/shaper", "belts"],
+    ["/run/belts", "axes"],
+  ] as const)("on %s a finished %s test shows the form, not the result", async (path, other) => {
+    await openWith(path, { test: null, last: ended(other) });
+    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(screen.queryByText("Result")).toBeNull();
+    expect(screen.queryByText("boom")).toBeNull();
+  });
+
+  it.each([
+    ["/run/shaper", "axes"],
+    ["/run/belts", "belts"],
+  ] as const)("on %s a finished %s test shows its result", async (path, own) => {
+    await openWith(path, { test: null, last: ended(own) });
+    expect(await screen.findByText("Result")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+  });
+
+  it.each([
+    ["/run/shaper", "axes"],
+    ["/run/belts", "belts"],
+  ] as const)("on %s a running %s test shows progress, no notice", async (path, own) => {
+    await openWith(path, { test: running(own), last: null });
+    expect(await screen.findByLabelText("Segment progress")).toBeTruthy();
+    expect(screen.queryByText(/test is running\./)).toBeNull();
   });
 });
