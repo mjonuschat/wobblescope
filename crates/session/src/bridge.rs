@@ -218,7 +218,7 @@ pub fn axes_map_params(meta: &SessionMeta) -> Result<AxesMapParams, SessionError
         }
     };
     Ok(AxesMapParams {
-        speed: run.speed,
+        speed: run.max_velocity.map_or(run.speed, |v| run.speed.min(v)),
         accel: run.accel,
         max_z_velocity: run.max_z_velocity,
         max_z_accel: run.max_z_accel,

@@ -66,6 +66,10 @@ pub enum Mode {
 pub struct AxesMapRun {
     /// Speed of the measured moves in mm/s.
     pub speed: f64,
+    /// Observed toolhead velocity limit in mm/s. Older sessions lack it and may be misclassified.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
+    pub max_velocity: Option<f64>,
     /// Acceleration of the measured moves in mm/s².
     pub accel: f64,
     /// Z height the moves ran at in mm.
@@ -520,8 +524,14 @@ impl SessionMeta {
 
     /// The rules of an axes-map session.
     fn validate_axes_map(&self) -> Result<(), SessionError> {
-        if self.axes_map_run.is_none() {
+        let Some(run) = &self.axes_map_run else {
             return Ok(());
+        };
+        if run.max_velocity.is_some_and(|v| !v.is_finite() || v <= 0.0) {
+            return Err(invalid(
+                "axes_map_run.max_velocity",
+                "must be finite and positive",
+            ));
         }
         if self.segments.is_empty()
             || self.segments.len() > AXES_MAP_DIRECTIONS.len()

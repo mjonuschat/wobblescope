@@ -521,6 +521,7 @@ fn axes_map_meta(chips: Vec<ChipMeta>, files: Vec<[Option<(usize, Coverage)>; 3]
     let mut m = meta(chips, Vec::new());
     m.format_version = 2;
     m.axes_map_run = Some(AxesMapRun {
+        max_velocity: None,
         speed: 80.0,
         accel: 1000.0,
         z_height: 30.0,
@@ -700,4 +701,14 @@ parity_test! {
         assert_eq!(v["state"], "Failed");
         assert_eq!(v["message"], "boom");
     }
+}
+
+#[test]
+fn axes_map_params_use_recorded_velocity_limit_and_keep_legacy_speed() {
+    let mut m = axes_map_meta(vec![chip("a", Health::Ok)], vec![full(6)]);
+    assert_eq!(axes_map_params(&m).unwrap().speed, 80.0);
+    m.axes_map_run.as_mut().unwrap().max_velocity = Some(10.0);
+    assert_eq!(axes_map_params(&m).unwrap().speed, 10.0);
+    m.axes_map_run.as_mut().unwrap().max_velocity = Some(0.0);
+    assert!(axes_map_params(&m).is_err());
 }

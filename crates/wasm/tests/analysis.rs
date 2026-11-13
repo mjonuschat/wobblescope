@@ -526,6 +526,7 @@ fn am_file(chip: u32, segment: usize, count: usize) -> SegmentFile {
 /// Axes-map run settings that match the AXES_MAP_ABOVE peak (speed 80 mm/s, accel 3000 mm/s²).
 fn am_run() -> AxesMapRun {
     AxesMapRun {
+        max_velocity: None,
         speed: 80.0,
         accel: 3000.0,
         z_height: 30.0,
@@ -723,5 +724,20 @@ parity_test! {
             matches!(&chips[1], AxesMapChip::Failed { chip, .. } if chip == "lis2dw"),
             "chip 1 should be Failed, got {chips:?}",
         );
+    }
+}
+
+parity_test! {
+    fn low_actual_velocity_uses_recorded_toolhead_limit() {
+        let n = am_n();
+        let mut meta = axes_map_meta(vec![am_chip("adxl345", Health::Ok, vec![])], vec![[Some(n); 3]], 3);
+        meta.axes_map_run.as_mut().unwrap().max_velocity = Some(10.0);
+        let mut session = Session::new(meta).unwrap();
+        for seg in 0..3 {
+            let bytes = encode_samples(&axes_map_trapezoid(Some(seg), 10.0)).unwrap();
+            session.add_file(&sample_file_name(0, seg), bytes);
+        }
+        let chips = session.analyze_axes_map().unwrap();
+        assert!(matches!(&chips[0], AxesMapChip::Analysed { result, .. } if result.map.as_deref() == Some("x, y, z")), "{chips:?}");
     }
 }

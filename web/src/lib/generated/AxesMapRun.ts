@@ -9,6 +9,10 @@ export type AxesMapRun = {
  */
 speed: number, 
 /**
+ * Observed toolhead velocity limit in mm/s. Older sessions lack it and may be misclassified.
+ */
+max_velocity?: number | null, 
+/**
  * Acceleration of the measured moves in mm/s².
  */
 accel: number, 

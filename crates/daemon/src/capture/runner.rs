@@ -411,6 +411,14 @@ impl Run {
                 Some((saved, axes_map.run.accel))
             }
         };
+        if let (Some(axes_map), Some((saved, _))) = (&mut self.plan.axes_map, &calibration) {
+            if !saved.max_velocity.is_finite() || saved.max_velocity <= 0.0 {
+                return Err(Failure::certain(
+                    "the toolhead max_velocity must be finite and positive",
+                ));
+            }
+            axes_map.run.max_velocity = Some(saved.max_velocity);
+        }
         let mut mcus: Vec<String> = facts.iter().filter_map(|f| f.mcu.clone()).collect();
         let printer = printer_info(&control, &mut mcus).await;
         let meta = initial(&self.plan, &self.id, &self.created_at, &facts, printer);

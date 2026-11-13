@@ -439,6 +439,7 @@ fn axes_map_meta() -> SessionMeta {
     let mut m = capture_meta();
     m.format_version = 2;
     m.axes_map_run = Some(AxesMapRun {
+        max_velocity: None,
         speed: 80.0,
         accel: 1000.0,
         z_height: 30.0,

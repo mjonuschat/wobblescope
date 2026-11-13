@@ -157,6 +157,7 @@ pub fn plan_axes_map(
         .collect();
     let run = AxesMapRun {
         speed,
+        max_velocity: None,
         accel,
         z_height,
         travel_speed,
