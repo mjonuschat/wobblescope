@@ -1,13 +1,15 @@
 #[macro_use]
 mod common;
 
+use wobblescope_core::axes_map::Mounting;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::codec::MAX_SAMPLES;
 use wobblescope_session::meta::{
-    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionMeta,
-    Source, SweepSettings, TimeDomain, TimeWindow, sample_file_name, validate_session_id,
+    AXES_MAP_FORMAT_VERSION, AxesMapRun, ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint,
+    SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source, SweepSettings, TimeDomain,
+    TimeWindow, sample_file_name, validate_session_id,
 };
 
 fn chip(name: &str, chip_type: Option<&str>, rate: Option<f64>) -> ChipMeta {
@@ -42,6 +44,8 @@ fn capture_meta() -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
+        kind: SessionKind::Resonance,
+        axes_map_run: None,
         mode: Some(Mode::Sweep),
         settings: Some(SweepSettings {
             freq_start: 5.0,
@@ -144,8 +148,8 @@ parity_test! {
 
 parity_test! {
     fn a_newer_format_version_is_reported_even_when_the_shape_changed() {
-        let err = SessionMeta::from_json(r#"{"format_version": 2, "renamed": true}"#).unwrap_err();
-        assert!(matches!(err, SessionError::UnsupportedFormatVersion { found: 2 }));
+        let err = SessionMeta::from_json(r#"{"format_version": 3, "renamed": true}"#).unwrap_err();
+        assert!(matches!(err, SessionError::UnsupportedFormatVersion { found: 3 }));
     }
 }
 
@@ -310,5 +314,121 @@ parity_test! {
         };
         assert_eq!(original_file_name.as_deref(), Some("a.csv"));
         assert!(original_file_names.is_empty());
+    }
+}
+
+fn axes_map_meta() -> SessionMeta {
+    let mut m = capture_meta();
+    m.format_version = AXES_MAP_FORMAT_VERSION;
+    m.kind = SessionKind::AxesMap;
+    m.axes_map_run = Some(AxesMapRun {
+        speed: 80.0,
+        accel: 1000.0,
+        z_height: 30.0,
+        travel_speed: 150.0,
+        max_z_velocity: Some(10.0),
+        max_z_accel: None,
+    });
+    m.mode = None;
+    m.settings = None;
+    m.probe_points = (0..3)
+        .map(|i| ProbePoint {
+            position: Some([100.0 + f64::from(i), 100.0, 30.0]),
+        })
+        .collect();
+    m.segments = (0..3)
+        .map(|i| SegmentMeta {
+            axis: Axis::X,
+            point: i as u32,
+            window: None,
+            files: vec![file(0, i, 10)],
+        })
+        .collect();
+    m
+}
+
+parity_test! {
+    fn a_resonance_session_still_reads_as_version_1() {
+        let m = capture_meta();
+        assert_eq!(m.kind, SessionKind::Resonance);
+        assert_eq!(m.required_version(), 1);
+        let json = m.to_json().unwrap();
+        assert!(json.contains("\"format_version\": 1"));
+        let back = SessionMeta::from_json(&json).unwrap();
+        assert_eq!(back, m);
+
+        // A file written before `kind` existed has neither new key.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("kind");
+        object.remove("axes_map_run");
+        assert_eq!(SessionMeta::from_json(&value.to_string()).unwrap(), m);
+    }
+}
+
+parity_test! {
+    fn an_axes_map_session_round_trips_as_version_2() {
+        let m = axes_map_meta();
+        assert_eq!(m.required_version(), 2);
+        let json = m.to_json().unwrap();
+        assert!(json.contains("\"format_version\": 2"));
+        assert_eq!(SessionMeta::from_json(&json).unwrap(), m);
+
+        let mut wrong = m.clone();
+        wrong.format_version = 1;
+        assert!(matches!(
+            wrong.validate(),
+            Err(SessionError::UnsupportedFormatVersion { found: 1 })
+        ));
+    }
+}
+
+parity_test! {
+    fn an_axes_map_session_without_run_settings_is_refused() {
+        let mut m = axes_map_meta();
+        m.axes_map_run = None;
+        assert!(matches!(m.validate(), Err(SessionError::Invalid { field, .. }) if field == "axes_map_run"));
+
+        let mut r = capture_meta();
+        r.axes_map_run = axes_map_meta().axes_map_run;
+        assert!(matches!(r.validate(), Err(SessionError::Invalid { field, .. }) if field == "axes_map_run"));
+
+        let mut four = axes_map_meta();
+        four.probe_points.push(ProbePoint { position: None });
+        four.segments.push(SegmentMeta { axis: Axis::X, point: 3, window: None, files: vec![] });
+        assert!(matches!(four.validate(), Err(SessionError::Invalid { field, .. }) if field == "segments"));
+
+        let mut swapped = axes_map_meta();
+        swapped.segments[1].point = 2;
+        swapped.segments[2].point = 1;
+        assert!(matches!(swapped.validate(), Err(SessionError::Invalid { field, .. }) if field == "segments[1].point"));
+    }
+}
+
+parity_test! {
+    fn version_3_is_refused_with_the_version_found() {
+        let mut m = axes_map_meta();
+        m.format_version = 3;
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(matches!(
+            SessionMeta::from_json(&json),
+            Err(SessionError::UnsupportedFormatVersion { found: 3 })
+        ));
+    }
+}
+
+parity_test! {
+    fn mounting_reads_toolhead_and_bed_and_null() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&capture_meta().to_json().unwrap()).unwrap();
+        for (text, expected) in [
+            (serde_json::json!("toolhead"), Some(Mounting::Toolhead)),
+            (serde_json::json!("bed"), Some(Mounting::Bed)),
+            (serde_json::Value::Null, None),
+        ] {
+            value["chips"][0]["mounting"] = text;
+            let m = SessionMeta::from_json(&value.to_string()).unwrap();
+            assert_eq!(m.chips[0].mounting, expected);
+        }
     }
 }

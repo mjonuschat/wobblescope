@@ -16,8 +16,8 @@ use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::fs::write_session;
 use wobblescope_session::meta::{
-    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionMeta,
-    Source, TimeDomain, sample_file_name,
+    ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile, SegmentMeta, SessionKind,
+    SessionMeta, Source, TimeDomain, sample_file_name,
 };
 
 /// What a test session looks like. Defaults: a complete capture with one chip.
@@ -93,6 +93,8 @@ impl Spec {
             created_at: self.created_at.clone(),
             source: self.source.clone(),
             time_domain: TimeDomain::KlipperPrintTime,
+            kind: SessionKind::Resonance,
+            axes_map_run: None,
             mode: self.mode,
             settings: None,
             printer: self.printer.as_ref().map(|n| PrinterInfo {

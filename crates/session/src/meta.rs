@@ -1,6 +1,7 @@
 //! Session metadata: the `meta.json` shape and the rules a valid session obeys.
 
 use serde::{Deserialize, Serialize};
+use wobblescope_core::axes_map::Mounting;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
 
@@ -9,6 +10,13 @@ use crate::codec::MAX_SAMPLES;
 
 /// Version of the metadata shape this crate writes and reads.
 pub const FORMAT_VERSION: u32 = 1;
+
+/// Version of sessions that hold an axes-map calibration capture. Resonance sessions stay at
+/// [`FORMAT_VERSION`].
+pub const AXES_MAP_FORMAT_VERSION: u32 = 2;
+
+/// Segments of an axes-map session: X, Y, Z.
+pub const AXES_MAP_SEGMENTS: usize = 3;
 
 const MAX_ID_LEN: usize = 64;
 
@@ -46,6 +54,37 @@ pub enum Mode {
     Pulse,
     /// `SWEEPING_PERIOD` above 0: the toolhead also moves back and forth.
     Sweep,
+}
+
+/// What a session recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum SessionKind {
+    /// A resonance test.
+    #[default]
+    Resonance,
+    /// An axes-map calibration: three segments in the order X, Y, Z.
+    AxesMap,
+}
+
+/// The moves an axes-map calibration ran with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct AxesMapRun {
+    /// Speed of the measured moves in mm/s.
+    pub speed: f64,
+    /// Acceleration of the measured moves in mm/s².
+    pub accel: f64,
+    /// Z height the moves ran at in mm.
+    pub z_height: f64,
+    /// Speed of the positioning moves between measured moves in mm/s.
+    pub travel_speed: f64,
+    /// Z velocity limit applied for a bed-mounted chip in mm/s.
+    #[serde(default)]
+    pub max_z_velocity: Option<f64>,
+    /// Z acceleration limit applied for a bed-mounted chip in mm/s².
+    #[serde(default)]
+    pub max_z_accel: Option<f64>,
 }
 
 /// The sweep settings a test actually ran with.
@@ -138,7 +177,7 @@ pub struct ChipMeta {
     pub axes_map: Option<String>,
     /// Where the chip is mounted.
     #[serde(default)]
-    pub mounting: Option<String>,
+    pub mounting: Option<Mounting>,
     /// Capture health of this chip for the test.
     pub health: Health,
     /// Human-readable notes behind the health value.
@@ -217,6 +256,12 @@ pub struct SessionMeta {
     pub printer: Option<PrinterInfo>,
     /// How the session ended.
     pub outcome: Outcome,
+    /// What the session recorded. Sessions written before this field hold resonance tests.
+    #[serde(default)]
+    pub kind: SessionKind,
+    /// The moves of an axes-map calibration; present exactly when `kind` is `AxesMap`.
+    #[serde(default)]
+    pub axes_map_run: Option<AxesMapRun>,
     /// Free-text notes.
     #[serde(default)]
     pub notes: Vec<String>,
@@ -294,7 +339,10 @@ impl SessionMeta {
     /// A [`SessionError`] for bad JSON, a newer version or a rule violation.
     pub fn from_json(json: &str) -> Result<Self, SessionError> {
         let probe: VersionProbe = serde_json::from_str(json)?;
-        if probe.format_version != FORMAT_VERSION {
+        if !matches!(
+            probe.format_version,
+            FORMAT_VERSION | AXES_MAP_FORMAT_VERSION
+        ) {
             return Err(SessionError::UnsupportedFormatVersion {
                 found: probe.format_version,
             });
@@ -313,6 +361,15 @@ impl SessionMeta {
         Ok(serde_json::to_string_pretty(self)?)
     }
 
+    /// The format version this session is written as: [`AXES_MAP_FORMAT_VERSION`] for an
+    /// axes-map calibration, [`FORMAT_VERSION`] otherwise.
+    pub fn required_version(&self) -> u32 {
+        match self.kind {
+            SessionKind::AxesMap => AXES_MAP_FORMAT_VERSION,
+            SessionKind::Resonance => FORMAT_VERSION,
+        }
+    }
+
     /// The recording `chip` made in `segment` (positions in the metadata lists), if any.
     pub fn find_file(&self, chip: u32, segment: usize) -> Option<&SegmentFile> {
         self.segments
@@ -327,12 +384,41 @@ impl SessionMeta {
     /// # Errors
     /// [`SessionError::UnsupportedFormatVersion`] or [`SessionError::Invalid`] naming the field.
     pub fn validate(&self) -> Result<(), SessionError> {
-        if self.format_version != FORMAT_VERSION {
+        if self.format_version != self.required_version() {
             return Err(SessionError::UnsupportedFormatVersion {
                 found: self.format_version,
             });
         }
         validate_session_id(&self.id)?;
+        match self.kind {
+            SessionKind::Resonance => {
+                if self.axes_map_run.is_some() {
+                    return Err(invalid(
+                        "axes_map_run",
+                        "only an axes-map session has run settings",
+                    ));
+                }
+            }
+            SessionKind::AxesMap => {
+                if self.axes_map_run.is_none() {
+                    return Err(invalid("axes_map_run", "an axes-map session needs it"));
+                }
+                if self.segments.len() > AXES_MAP_SEGMENTS {
+                    return Err(invalid("segments", "an axes-map session has at most three"));
+                }
+                if let Some(s) = self
+                    .segments
+                    .iter()
+                    .enumerate()
+                    .position(|(i, seg)| seg.point as usize != i)
+                {
+                    return Err(invalid(
+                        format!("segments[{s}].point"),
+                        "must equal the segment's position",
+                    ));
+                }
+            }
+        }
         for (i, chip) in self.chips.iter().enumerate() {
             if self.chips[..i].iter().any(|c| c.name == chip.name) {
                 return Err(invalid(format!("chips[{i}].name"), "duplicate chip name"));

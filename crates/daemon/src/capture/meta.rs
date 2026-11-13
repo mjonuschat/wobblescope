@@ -2,8 +2,8 @@
 
 use wobblescope_core::eligibility::Health;
 use wobblescope_session::meta::{
-    ChipMeta, FORMAT_VERSION, Outcome, PrinterInfo, ProbePoint, SessionMeta, Source, TimeDomain,
-    undersampled_note,
+    ChipMeta, FORMAT_VERSION, Outcome, PrinterInfo, ProbePoint, SessionKind, SessionMeta, Source,
+    TimeDomain, undersampled_note,
 };
 
 use super::recorder::ChipSummary;
@@ -66,6 +66,8 @@ pub fn initial(
         created_at: created_at.to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
+        kind: SessionKind::Resonance,
+        axes_map_run: None,
         mode: Some(plan.mode),
         settings: Some(plan.sweep_settings()),
         printer,

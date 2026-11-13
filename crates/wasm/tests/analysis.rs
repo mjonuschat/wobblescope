@@ -11,8 +11,8 @@ use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::{
-    ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
-    TimeWindow, sample_file_name,
+    ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source,
+    TimeDomain, TimeWindow, sample_file_name,
 };
 use wobblescope_wasm::{Session, config_snippet};
 
@@ -63,6 +63,8 @@ fn two_chip_x_meta(w: &Win, ebb_health: Health) -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
+        kind: SessionKind::Resonance,
+        axes_map_run: None,
         mode: None,
         settings: None,
         printer: None,

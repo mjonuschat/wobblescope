@@ -5,15 +5,18 @@ use std::collections::HashMap;
 
 use common::{real, window_markers_x_short};
 use wobblescope_core::RawSamples;
+use wobblescope_core::axes_map::Mounting;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
 use wobblescope_session::SessionError;
-use wobblescope_session::bridge::{apply_overrides, dataset_inputs};
+use wobblescope_session::bridge::{
+    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, dataset_inputs,
+};
 use wobblescope_session::codec::{decode_samples, encode_samples};
 use wobblescope_session::meta::{
-    ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
-    TimeWindow, sample_file_name,
+    AXES_MAP_FORMAT_VERSION, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
+    SessionKind, SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
 };
 
 fn chip(name: &str, health: Health) -> ChipMeta {
@@ -47,6 +50,8 @@ fn meta(chips: Vec<ChipMeta>, segments: Vec<SegmentMeta>) -> SessionMeta {
         created_at: "2026-10-31T19:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
+        kind: SessionKind::Resonance,
+        axes_map_run: None,
         mode: None,
         settings: None,
         printer: None,
@@ -378,5 +383,202 @@ parity_test! {
         let m = two_chip_x_meta(&w, Coverage::Complete, Health::Ok);
         let inputs = dataset_inputs(&m, Axis::Y, |_| panic!("no file should be loaded")).unwrap();
         assert!(inputs.is_empty());
+    }
+}
+
+fn tiny(n: usize, seed: f64) -> RawSamples {
+    RawSamples {
+        t: (0..n).map(|i| i as f64 * 0.001).collect(),
+        x: (0..n).map(|i| seed + i as f64).collect(),
+        y: vec![0.0; n],
+        z: vec![0.0; n],
+    }
+}
+
+/// An axes-map session of the named chips. `files[chip][segment]` is that recording's sample
+/// count and coverage, or `None` for no recording.
+fn axes_map_meta(chips: Vec<ChipMeta>, files: Vec<[Option<(usize, Coverage)>; 3]>) -> SessionMeta {
+    let mut m = meta(chips, Vec::new());
+    m.format_version = AXES_MAP_FORMAT_VERSION;
+    m.kind = SessionKind::AxesMap;
+    m.axes_map_run = Some(AxesMapRun {
+        speed: 80.0,
+        accel: 1000.0,
+        z_height: 30.0,
+        travel_speed: 150.0,
+        max_z_velocity: Some(10.0),
+        max_z_accel: Some(100.0),
+    });
+    m.probe_points = (0..3).map(|_| ProbePoint { position: None }).collect();
+    m.segments = (0..3)
+        .map(|s| SegmentMeta {
+            axis: Axis::X,
+            point: s as u32,
+            window: None,
+            files: files
+                .iter()
+                .enumerate()
+                .filter_map(|(c, per)| {
+                    per[s]
+                        .clone()
+                        .map(|(count, coverage)| entry(c as u32, s, count, coverage))
+                })
+                .collect(),
+        })
+        .collect();
+    m
+}
+
+fn full(n: usize) -> [Option<(usize, Coverage)>; 3] {
+    [
+        Some((n, Coverage::Complete)),
+        Some((n, Coverage::Complete)),
+        Some((n, Coverage::Complete)),
+    ]
+}
+
+/// Serves `tiny` recordings of the recorded length, except for the files named in `unreadable`.
+fn axes_map_loader(
+    m: &SessionMeta,
+    unreadable: Vec<String>,
+) -> impl FnMut(&SegmentFile) -> Result<RawSamples, SessionError> {
+    let counts: HashMap<String, usize> = m
+        .segments
+        .iter()
+        .flat_map(|s| &s.files)
+        .map(|f| (f.sample_file.clone(), f.sample_count as usize))
+        .collect();
+    move |f| {
+        if unreadable.contains(&f.sample_file) {
+            Err(SessionError::BadMagic)
+        } else {
+            Ok(tiny(counts[&f.sample_file], 1.0))
+        }
+    }
+}
+
+fn missing_of(c: &ChipCapture) -> &str {
+    match c {
+        ChipCapture::Incomplete { missing, .. } => missing,
+        ChipCapture::Ready { .. } => panic!("expected Incomplete"),
+    }
+}
+
+parity_test! {
+    fn three_complete_segments_make_a_ready_input() {
+        let mut chips = vec![chip("adxl345", Health::Ok)];
+        chips[0].axes_map = Some("x,y,z".to_owned());
+        chips[0].mounting = Some(Mounting::Bed);
+        let m = axes_map_meta(chips, vec![full(6)]);
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
+        assert_eq!(out.len(), 1);
+        let ChipCapture::Ready { input, health, health_notes } = &out[0] else {
+            panic!("expected Ready");
+        };
+        assert_eq!(input.chip, "adxl345");
+        assert_eq!(input.configured_map.as_deref(), Some("x,y,z"));
+        assert_eq!(input.mounting, Mounting::Bed);
+        assert!(input.segments.iter().all(|s| s.len() == 6));
+        assert_eq!(*health, Health::Ok);
+        assert!(health_notes.is_empty());
+
+        let params = axes_map_params(&m).unwrap();
+        assert_eq!(params.speed, 80.0);
+        assert_eq!(params.accel, 1000.0);
+        assert_eq!(params.max_z_velocity, Some(10.0));
+        assert_eq!(params.max_z_accel, Some(100.0));
+    }
+}
+
+parity_test! {
+    fn a_run_stopped_after_two_segments_is_incomplete_for_every_chip() {
+        let two = || [Some((6, Coverage::Complete)), Some((6, Coverage::Complete)), None];
+        let m = axes_map_meta(
+            vec![chip("a", Health::Ok), chip("b", Health::Ok)],
+            vec![two(), two()],
+        );
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
+        assert_eq!(out.len(), 2);
+        for c in &out {
+            assert_eq!(missing_of(c), "segment Z has no recording");
+        }
+    }
+}
+
+parity_test! {
+    fn one_chip_missing_a_segment_is_incomplete_while_the_other_is_ready() {
+        let m = axes_map_meta(
+            vec![chip("a", Health::Ok), chip("b", Health::Ok)],
+            vec![
+                full(6),
+                [Some((6, Coverage::Complete)), None, Some((6, Coverage::Complete))],
+            ],
+        );
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
+        assert!(matches!(&out[0], ChipCapture::Ready { input, .. } if input.chip == "a"));
+        assert!(matches!(&out[1], ChipCapture::Incomplete { chip, .. } if chip == "b"));
+        assert_eq!(missing_of(&out[1]), "segment Y has no recording");
+    }
+}
+
+parity_test! {
+    fn incomplete_coverage_names_what_is_missing() {
+        let m = axes_map_meta(
+            vec![chip("a", Health::Ok)],
+            vec![[
+                Some((6, Coverage::Complete)),
+                Some((6, Coverage::Incomplete { missing: "the last 2 s".to_owned() })),
+                Some((6, Coverage::Complete)),
+            ]],
+        );
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
+        assert_eq!(missing_of(&out[0]), "the last 2 s");
+    }
+}
+
+parity_test! {
+    fn an_unreadable_file_makes_only_its_chip_incomplete() {
+        let m = axes_map_meta(
+            vec![chip("a", Health::Ok), chip("b", Health::Ok)],
+            vec![full(6), full(6)],
+        );
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec!["c1-s1.zst".to_owned()])).unwrap();
+        assert!(matches!(&out[0], ChipCapture::Ready { .. }));
+        let missing = missing_of(&out[1]);
+        assert!(missing.contains("segment Y") && missing.contains("magic"), "{missing}");
+
+        // A file with the wrong sample count is treated alike.
+        let mut wrong = m.clone();
+        wrong.segments[2].files[0].sample_count = 7;
+        let out = axes_map_inputs(&wrong, axes_map_loader(&m, vec![])).unwrap();
+        let missing = missing_of(&out[0]);
+        assert!(missing.contains("segment Z") && missing.contains("7"), "{missing}");
+        assert!(matches!(&out[1], ChipCapture::Ready { .. }));
+    }
+}
+
+parity_test! {
+    fn health_is_the_worst_of_chip_and_files_with_joined_notes() {
+        let mut chips = vec![chip("a", Health::Ok)];
+        chips[0].health_notes = vec!["chip note".to_owned(), "shared".to_owned()];
+        let mut m = axes_map_meta(chips, vec![full(6)]);
+        m.segments[0].files[0].health_notes = vec!["shared".to_owned(), "x note".to_owned()];
+        m.segments[1].files[0].health = Some(Health::Degraded);
+        m.segments[1].files[0].health_notes = vec!["y note".to_owned()];
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
+        let ChipCapture::Ready { health, health_notes, .. } = &out[0] else {
+            panic!("expected Ready");
+        };
+        assert_eq!(*health, Health::Degraded);
+        assert_eq!(health_notes, &["chip note", "shared", "x note", "y note"]);
+    }
+}
+
+parity_test! {
+    fn the_chip_result_serialises_with_its_state() {
+        let failed = AxesMapChip::Failed { chip: "a".to_owned(), message: "boom".to_owned() };
+        let v = serde_json::to_value(&failed).unwrap();
+        assert_eq!(v["state"], "Failed");
+        assert_eq!(v["message"], "boom");
     }
 }

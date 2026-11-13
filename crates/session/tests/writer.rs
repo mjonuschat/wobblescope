@@ -10,7 +10,7 @@ use wobblescope_core::fit::Axis;
 use wobblescope_session::SessionError;
 use wobblescope_session::fs::{list_sealed, open_session, sweep_leftovers};
 use wobblescope_session::meta::{
-    ChipMeta, Outcome, ProbePoint, SegmentMeta, SessionMeta, Source, TimeDomain,
+    ChipMeta, Outcome, ProbePoint, SegmentMeta, SessionKind, SessionMeta, Source, TimeDomain,
 };
 use wobblescope_session::writer::{
     INTERRUPTED_REASON, JOURNAL_FILE, Recovery, SessionWriter, recover_unsealed,
@@ -44,6 +44,8 @@ fn base(id: &str) -> SessionMeta {
         created_at: "2026-11-01T12:00:00Z".to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
+        kind: SessionKind::Resonance,
+        axes_map_run: None,
         mode: None,
         settings: None,
         printer: None,
