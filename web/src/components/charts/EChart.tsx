@@ -1,34 +1,8 @@
-import { HeatmapChart, LineChart } from "echarts/charts";
-import {
-  GraphicComponent,
-  GridComponent,
-  LegendComponent,
-  MarkAreaComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  TitleComponent,
-  TooltipComponent,
-  VisualMapContinuousComponent,
-} from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
 
-echarts.use([
-  HeatmapChart,
-  LineChart,
-  GraphicComponent,
-  GridComponent,
-  LegendComponent,
-  MarkAreaComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  TitleComponent,
-  TooltipComponent,
-  VisualMapContinuousComponent,
-  CanvasRenderer,
-]);
+import "./register";
 
 interface Props {
   option: EChartsCoreOption;
