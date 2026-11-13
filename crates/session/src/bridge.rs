@@ -318,7 +318,11 @@ where
                 chip: chip.name.clone(),
                 segments,
                 configured_map: chip.axes_map.clone(),
-                mounting: chip.mounting.unwrap_or(Mounting::Toolhead),
+                mounting: if chip.mounting.as_deref() == Some("bed") {
+                    Mounting::Bed
+                } else {
+                    Mounting::Toolhead
+                },
             },
             health,
             health_notes,

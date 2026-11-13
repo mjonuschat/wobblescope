@@ -588,7 +588,7 @@ parity_test! {
     fn three_complete_segments_make_a_ready_input() {
         let mut chips = vec![chip("adxl345", Health::Ok)];
         chips[0].axes_map = Some("x,y,z".to_owned());
-        chips[0].mounting = Some(Mounting::Bed);
+        chips[0].mounting = Some("bed".to_owned());
         let m = axes_map_meta(chips, vec![full(6)]);
         let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
         assert_eq!(out.len(), 1);

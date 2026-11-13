@@ -1,7 +1,6 @@
 #[macro_use]
 mod common;
 
-use wobblescope_core::axes_map::Mounting;
 use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
@@ -615,8 +614,8 @@ parity_test! {
         let mut value: serde_json::Value =
             serde_json::from_str(&capture_meta().to_json().unwrap()).unwrap();
         for (text, expected) in [
-            (serde_json::json!("toolhead"), Some(Mounting::Toolhead)),
-            (serde_json::json!("bed"), Some(Mounting::Bed)),
+            (serde_json::json!("toolhead"), Some("toolhead".to_owned())),
+            (serde_json::json!("bed"), Some("bed".to_owned())),
             (serde_json::Value::Null, None),
         ] {
             value["chips"][0]["mounting"] = text;
@@ -624,4 +623,14 @@ parity_test! {
             assert_eq!(m.chips[0].mounting, expected);
         }
     }
+}
+
+#[test]
+fn legacy_mounting_strings_are_accepted_only_outside_calibration() {
+    let mut ordinary = serde_json::to_value(capture_meta()).unwrap();
+    ordinary["chips"][0]["mounting"] = serde_json::json!("frame");
+    assert!(SessionMeta::from_json(&ordinary.to_string()).is_ok());
+    let mut calibration = serde_json::to_value(axes_map_meta()).unwrap();
+    calibration["chips"][0]["mounting"] = serde_json::json!("frame");
+    assert!(SessionMeta::from_json(&calibration.to_string()).is_err());
 }

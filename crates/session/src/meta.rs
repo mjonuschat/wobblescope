@@ -1,7 +1,6 @@
 //! Session metadata: the `meta.json` shape and the rules a valid session obeys.
 
 use serde::{Deserialize, Serialize};
-use wobblescope_core::axes_map::Mounting;
 use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 
@@ -174,7 +173,7 @@ pub struct ChipMeta {
     pub axes_map: Option<String>,
     /// Where the chip is mounted.
     #[serde(default)]
-    pub mounting: Option<Mounting>,
+    pub mounting: Option<String>,
     /// Capture health of this chip for the test.
     pub health: Health,
     /// Human-readable notes behind the health value.
@@ -545,6 +544,18 @@ impl SessionMeta {
                 "axes_map_run",
                 "an axes-map session needs one to three ordered +X, +Y, +Z segments",
             ));
+        }
+        for (i, chip) in self.chips.iter().enumerate() {
+            if chip
+                .mounting
+                .as_deref()
+                .is_some_and(|m| m != "toolhead" && m != "bed")
+            {
+                return Err(invalid(
+                    format!("chips[{i}].mounting"),
+                    "must be toolhead or bed",
+                ));
+            }
         }
         if self.mode.is_some() {
             return Err(invalid("mode", "an axes-map session has no test mode"));

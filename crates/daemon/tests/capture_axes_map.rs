@@ -177,6 +177,6 @@ fn meta_for_a_calibration_has_mounting_and_three_points_and_no_mode() {
     assert!(meta.mode.is_none() && meta.settings.is_none());
     assert_eq!(meta.probe_points.len(), 3);
     assert_eq!(meta.probe_points[1].position, Some([165.5, 139.0, 20.0]));
-    assert_eq!(meta.chips[0].mounting, Some(Mounting::Toolhead));
-    assert_eq!(meta.chips[1].mounting, Some(Mounting::Bed));
+    assert_eq!(meta.chips[0].mounting.as_deref(), Some("toolhead"));
+    assert_eq!(meta.chips[1].mounting.as_deref(), Some("bed"));
 }

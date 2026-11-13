@@ -91,7 +91,10 @@ pub fn initial(
                     a.mountings
                         .iter()
                         .find(|(name, _)| *name == c.section)
-                        .map(|(_, mounting)| *mounting)
+                        .map(|(_, mounting)| match mounting {
+                            wobblescope_core::axes_map::Mounting::Toolhead => "toolhead".to_owned(),
+                            wobblescope_core::axes_map::Mounting::Bed => "bed".to_owned(),
+                        })
                 }),
                 health: Health::Ok,
                 health_notes: Vec::new(),
