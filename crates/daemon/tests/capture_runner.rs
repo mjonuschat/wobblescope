@@ -1269,3 +1269,26 @@ async fn a_confirmed_shutdown_does_not_need_restart() {
     task.await.unwrap();
     assert!(!finished.needs_restart);
 }
+
+#[tokio::test]
+async fn calibration_records_observed_velocity_cap_without_changing_requested_speed() {
+    let rig = calibration_rig(Some(8.0)).await;
+    rig.sim
+        .printer
+        .set_field("toolhead", "max_velocity", json!(10.0));
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    let run = meta.axes_map_run.as_ref().unwrap();
+    assert_eq!(run.speed, 80.0);
+    assert_eq!(run.max_velocity, Some(10.0));
+    assert_eq!(
+        wobblescope_session::bridge::axes_map_params(&meta)
+            .unwrap()
+            .speed,
+        10.0
+    );
+    assert_clean(&rig);
+}
