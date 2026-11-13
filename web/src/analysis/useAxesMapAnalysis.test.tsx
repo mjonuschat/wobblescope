@@ -72,5 +72,4 @@ describe("useAxesMapAnalysis", () => {
     await first.result.current.refetch();
     await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Analysed"));
   });
-
 });

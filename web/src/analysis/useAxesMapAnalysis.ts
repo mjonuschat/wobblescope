@@ -26,8 +26,7 @@ export function useAxesMapAnalysis(id: string, client: AnalysisClient = getAnaly
     enabled: meta !== undefined,
     gcTime: CACHE_MS,
     // Incomplete results can include transient download failures and must be retried.
-    staleTime: (query) =>
-      query.state.data?.some((chip) => chip.state === "Incomplete") ? 0 : Infinity,
+    staleTime: (query) => (query.state.data?.some((chip) => chip.state === "Incomplete") ? 0 : Infinity),
     retry: (count, error) => error instanceof ApiClientError && shouldRetry(count, error),
   });
 }
