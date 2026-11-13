@@ -188,6 +188,22 @@ async fn a_quarantine_refuses_a_hold() {
 }
 
 #[tokio::test]
+async fn a_hold_is_refused_while_a_restart_is_owed() {
+    let sim = HoldSim::start().await;
+    sim.slot.set_restart_owed();
+    let refusal = begin(
+        &deps(&sim, HoldTimings::default()),
+        request(60.0, Some(2.0)),
+    )
+    .await
+    .err()
+    .unwrap();
+    assert_eq!(checks(refusal), ["restart_owed"]);
+    assert!(sim.scripts().is_empty());
+    assert!(!sim.slot.is_held());
+}
+
+#[tokio::test]
 async fn a_failed_piece_ends_the_hold_and_restores() {
     let sim = HoldSim::start().await;
     sim.fail_when(

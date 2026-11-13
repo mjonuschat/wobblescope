@@ -32,7 +32,7 @@ use crate::hold::settings::{Saved, calibration_setup};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
 use crate::moonraker::settings::{Shaping, parse_shaping};
-use crate::moonraker::status::{KlippyState, Status};
+use crate::moonraker::status::{KlippyState, MoonrakerState, Status};
 use crate::storage::Reservation;
 use crate::storage::capture::Capture;
 use crate::storage::{Storage, StorageError, run_blocking};
@@ -912,6 +912,9 @@ impl Run {
                 finished.id.clone(),
             );
         }
+        if finished.needs_restart && self.r.slot.set_restart_owed() {
+            watch_restart(self.r.moonraker.clone(), self.r.slot.clone());
+        }
         self.r.hub.update(|s| {
             s.test = None;
             s.last = Some(finished);
@@ -953,6 +956,47 @@ pub fn watch_idle(
                 last.motion_uncertain = false;
             }
         });
+    });
+}
+
+/// Clears the restart-owed marker once Klipper is seen to leave `Ready` and come back, which a
+/// `RESTART` or `FIRMWARE_RESTART` does. Ends then, when the marker is cleared elsewhere, or when
+/// Moonraker's status stops changing because the daemon shuts down.
+///
+/// Only states seen on a Moonraker connection that was followed from a known point count. After
+/// a reconnect the first state may be Moonraker's own startup rather than Klipper's, so a
+/// not-ready state counts only once `Ready` was seen on that connection, or when the connection
+/// was already up when the marker was set. A restart the daemon did not see leaves the marker set.
+pub fn watch_restart(moonraker: Moonraker, slot: TestSlot) {
+    tokio::spawn(async move {
+        let mut status = moonraker.watch_status();
+        let first = status.borrow_and_update().clone();
+        let mut followed = first.moonraker.state == MoonrakerState::Connected;
+        let mut left_ready = false;
+        let mut current = first;
+        loop {
+            if !slot.restart_owed() {
+                return;
+            }
+            if current.moonraker.state == MoonrakerState::Connected {
+                match current.klippy.state {
+                    KlippyState::Ready if left_ready => {
+                        slot.clear_restart_owed();
+                        return;
+                    }
+                    KlippyState::Ready => followed = true,
+                    KlippyState::Unknown => {}
+                    _ => left_ready |= followed,
+                }
+            } else {
+                followed = false;
+                left_ready = false;
+            }
+            if status.changed().await.is_err() {
+                return;
+            }
+            current = status.borrow_and_update().clone();
+        }
     });
 }
 

@@ -215,6 +215,16 @@ pub fn quarantine_failure(left: Duration) -> CheckFailure {
     )
 }
 
+/// The failed check while a calibration's restore is owed. See [`TestSlot::restart_owed`].
+#[must_use]
+pub fn restart_owed_failure() -> CheckFailure {
+    CheckFailure::new(
+        "restart_owed",
+        "a previous calibration may have left changed acceleration limits or input shaping; \
+         send RESTART from the Klipper console first",
+    )
+}
+
 /// Runs every check for `plan`. `busy` says another test already holds the slot.
 ///
 /// # Errors
@@ -235,6 +245,9 @@ pub async fn run(
     }
     if let Some(left) = quarantine {
         failures.push(quarantine_failure(left));
+    }
+    if deps.slot.restart_owed() {
+        failures.push(restart_owed_failure());
     }
     let Some(storage) = deps.storage.get() else {
         failures.push(CheckFailure::new(

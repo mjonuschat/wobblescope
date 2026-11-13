@@ -1,4 +1,5 @@
-//! The one-test-at-a-time slot, the quarantine clock and the motion-uncertain marker.
+//! The one-test-at-a-time slot, the quarantine clock, the motion-uncertain marker and the
+//! restart-owed marker.
 //!
 //! The slot is a permit like [`crate::api::ImportGate`]. Emergency stop does not go through the
 //! runner: it reads the current test from here, sets the stop flag and calls Moonraker itself.
@@ -18,6 +19,9 @@ struct State {
     quarantine_until: Option<Instant>,
     /// A finished test whose last command may still be moving the toolhead.
     uncertain: Option<String>,
+    /// A calibration could not restore Klipper's settings, so Klipper may still run with its
+    /// changed limits and input shaper until it restarts.
+    restart_owed: bool,
 }
 
 /// The slot. Clones share it.
@@ -149,5 +153,21 @@ impl TestSlot {
     #[must_use]
     pub fn motion_uncertain(&self) -> Option<String> {
         lock(&self.state).uncertain.clone()
+    }
+
+    /// Marks Klipper as owing a restart. Returns whether the marker was clear before.
+    pub fn set_restart_owed(&self) -> bool {
+        !std::mem::replace(&mut lock(&self.state).restart_owed, true)
+    }
+
+    /// Clears the restart-owed marker.
+    pub fn clear_restart_owed(&self) {
+        lock(&self.state).restart_owed = false;
+    }
+
+    /// Whether Klipper owes a restart before a test may move the toolhead.
+    #[must_use]
+    pub fn restart_owed(&self) -> bool {
+        lock(&self.state).restart_owed
     }
 }
