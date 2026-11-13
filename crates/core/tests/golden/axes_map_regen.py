@@ -257,7 +257,31 @@ def _build_case(AxesMapComputation, segments, accel: float, configured_map=None)
 
     # Per-segment raw results (before any extrapolation; matches what compute() calls
     # internally before modifying direction_vectors for virtual axes).
-    per_seg = [_per_seg_dict(comp._process_single_axis(seg)) for seg in segments]
+    #
+    # Calling-convention note (pinned commit 354ee4be): at this commit compute() feeds
+    # each segment to _process_single_axis via _parse_measurements(), which does
+    # `np.array(measurement['samples'])` – producing the same (N, 4) ndarray shape we
+    # pass here directly.  If you update the pin, re-verify that _process_single_axis
+    # still receives an (N, 4) ndarray before re-running this generator.
+    raw_per_seg = [comp._process_single_axis(seg) for seg in segments]
+
+    # Generation-time equivalence check: our direct per-segment calls must agree with
+    # what compute() produced internally for every *measured* (non-extrapolated) axis.
+    # For a virtual axis compute() replaces the direction_vector with a cross-product,
+    # so that entry legitimately differs and is excluded from the comparison.
+    for i, (raw, computed_dv) in enumerate(zip(raw_per_seg, result.direction_vectors)):
+        if i == result.extrapolated_axis:
+            # Virtual axis: compute() overwrites this entry with a cross-product.
+            continue
+        if not np.array_equal(raw["direction_vector"], computed_dv):
+            raise RuntimeError(
+                f"Axis {i}: direction_vector from direct _process_single_axis call "
+                f"{raw['direction_vector']} != result.direction_vectors[{i}] {computed_dv}. "
+                "The calling convention may have changed at the new pin; "
+                "re-verify before regenerating the golden."
+            )
+
+    per_seg = [_per_seg_dict(r) for r in raw_per_seg]
 
     expected = {
         "per_segment": per_seg,
