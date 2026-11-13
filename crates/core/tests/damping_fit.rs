@@ -95,3 +95,25 @@ fn an_old_analysis_json_still_deserialises() {
     assert_eq!(rec.settings.damping_source, DampingSource::Fixed);
     assert_eq!(rec.settings.resonance_freq, None);
 }
+
+fn snippet_with(damping_ratio: f64) -> String {
+    let params = FitParams {
+        damping_ratio: Some(damping_ratio),
+        ..FitParams::default()
+    };
+    find_best_shaper(&[normalized("chip_a")], &params)
+        .unwrap()
+        .config_snippet(wobblescope_core::fit::Axis::X)
+}
+
+#[test]
+fn the_snippet_rounds_the_damping_ratio_to_four_decimals() {
+    assert!(snippet_with(0.06770524000499983).ends_with("damping_ratio_x: 0.0677\n"));
+    assert!(snippet_with(0.1).ends_with("damping_ratio_x: 0.1\n"));
+    assert!(snippet_with(0.05).ends_with("damping_ratio_x: 0.05\n"));
+}
+
+#[test]
+fn a_ratio_too_small_for_four_decimals_is_not_written_as_zero() {
+    assert!(snippet_with(0.00001).ends_with("damping_ratio_x: 0.00001\n"));
+}

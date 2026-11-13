@@ -201,8 +201,8 @@ pub enum Axis {
 }
 
 impl Recommendation {
-    /// Klipper `[input_shaper]` lines for `axis`. The fitted damping ratio is exported too, so
-    /// applying the snippet reproduces the impulses that were fitted.
+    /// Klipper `[input_shaper]` lines for `axis`. The fitted damping ratio is exported too, to four
+    /// decimals, so applying the snippet gives the impulses that were fitted to within that rounding.
     pub fn config_snippet(&self, axis: Axis) -> String {
         let a = match axis {
             Axis::X => "x",
@@ -210,8 +210,22 @@ impl Recommendation {
         };
         format!(
             "[input_shaper]\nshaper_type_{a}: {}\nshaper_freq_{a}: {:.1}\ndamping_ratio_{a}: {}\n",
-            self.best.name, self.best.freq, self.settings.damping_ratio
+            self.best.name,
+            self.best.freq,
+            ratio_text(self.settings.damping_ratio)
         )
+    }
+}
+
+/// A damping ratio to four decimals without trailing zeros. A ratio too small for that is
+/// written in full, since 0 is not a damping ratio.
+fn ratio_text(ratio: f64) -> String {
+    let text = format!("{ratio:.4}");
+    let trimmed = text.trim_end_matches('0').trim_end_matches('.');
+    if trimmed.parse::<f64>().is_ok_and(|v| v > 0.0) {
+        trimmed.to_owned()
+    } else {
+        ratio.to_string()
     }
 }
 
