@@ -22,7 +22,7 @@ import { SessionResults } from "@/pages/session/SessionResults";
 
 import { LiveChart } from "./LiveChart";
 import { useWarningToasts } from "./useWarningToasts";
-import { formatDuration, formatPoint } from "./planning";
+import { directionName, formatDuration, formatPoint } from "./planning";
 
 const PHASE_WORDS: Record<Phase, string> = {
   positioning: "Moving to the test point",
@@ -42,6 +42,9 @@ const OUTCOME_WORDS: Record<FinishedOutcome, string> = {
 /** What the user is told after an emergency stop. */
 export const SHUTDOWN_NOTICE =
   "Emergency stop sent. Klipper is in shutdown and needs a FIRMWARE_RESTART before it moves again.";
+
+/** What to try when the printer's Klipper refuses a diagonal axis. */
+export const BELT_MINIMUMS = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
 
 export const AUTO_CONTINUE_SECONDS = 5;
 
@@ -76,7 +79,7 @@ function useCountdown(active: boolean, onDone: () => void): number | null {
 export function ProgressView({ test, connected, ended, onNext }: ProgressProps) {
   useWarningToasts(test.id, test.chips);
   const left = useCountdown(ended !== null, onNext);
-  const where = test.axis && test.position ? ` (${test.axis} at ${formatPoint(test.position)})` : "";
+  const where = test.axis && test.position ? ` (${directionName(test.axis)} at ${formatPoint(test.position)})` : "";
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
   return (
@@ -188,6 +191,7 @@ export function ResultView({ last, onNewTest }: ResultProps) {
         <div className="space-y-1">
           <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
           {last.reason && <p className="text-sm">{last.reason}</p>}
+          {last.code === "diagonal_axis_refused" && <p className="text-sm text-muted-foreground">{BELT_MINIMUMS}</p>}
           {last.reason === "emergency stop" && (
             <p role="status" className="text-sm text-muted-foreground">
               {SHUTDOWN_NOTICE}

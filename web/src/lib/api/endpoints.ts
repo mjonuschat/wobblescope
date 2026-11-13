@@ -1,4 +1,5 @@
 import type { Axis } from "@/lib/generated/Axis";
+import type { TestKind } from "@/lib/generated/TestKind";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Homed } from "@/lib/generated/Homed";
 import type { Mode } from "@/lib/generated/Mode";
@@ -210,7 +211,9 @@ export function checkChips() {
 /** What the run form sends. Only the settings the user changed are in `overrides`. */
 export interface StartTestRequest {
   chips: string[];
-  axes: Axis[];
+  kind: TestKind;
+  /** Present for an axes test only: the daemon refuses it on a belt test. */
+  axes?: Axis[];
   mode: Mode;
   overrides: Partial<Overrides>;
   points: [number, number, number][];

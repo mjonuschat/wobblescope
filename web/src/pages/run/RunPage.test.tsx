@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
@@ -106,6 +106,7 @@ describe("the run screen", () => {
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
     expect(JSON.parse(String(posted(calls)[0].body))).toEqual({
       chips: ["lis2dw ebb36"],
+      kind: "axes",
       axes: ["X"],
       mode: "Sweep",
       overrides: { freq_end: 100 },
@@ -328,5 +329,87 @@ describe("the run test routes", () => {
     const { router } = renderRoute("/run");
     await screen.findByRole("heading", { name: "Input Shaper" });
     expect(router.state.location.pathname).toBe("/run/shaper");
+  });
+});
+
+describe("the belts form", () => {
+  beforeEach(() => stubWebSocket({ idle: true }));
+
+  const MINIMUMS = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
+  const OLD_WARNING =
+    "This printer runs software older than Klipper v0.12.0 or Kalico v2026.01.00. A belt test may be refused after the toolhead moves to the test point.";
+
+  const withMachine = (
+    kinematics: string | null,
+    version_support: PrinterSettings["version_support"] = "supported",
+  ): PrinterSettings => {
+    const base = printerSettings();
+    return { ...base, version_support, machine: { ...base.machine, kinematics } };
+  };
+  const beltsTab = () => screen.queryByRole("tab", { name: "Belts" });
+  async function openBelts(settings: PrinterSettings = withMachine("corexy")) {
+    const calls = await open({ settings });
+    fireEvent.click(screen.getByRole("tab", { name: "Belts" }));
+    return calls;
+  }
+
+  it("the_belts_type_is_offered_only_on_corexy_and_limited_corexy", async () => {
+    for (const [kinematics, offered] of [
+      ["corexy", true],
+      ["limited_corexy", true],
+      ["cartesian", false],
+      ["corexz", false],
+      [null, false],
+    ] as const) {
+      await open({ settings: withMachine(kinematics) });
+      expect(beltsTab() !== null).toBe(offered);
+      expect(screen.queryByRole("tab", { name: "Axes" }) !== null).toBe(offered);
+      cleanup();
+    }
+  });
+
+  it("the_belts_form_has_no_axis_choice_and_one_point", async () => {
+    await openBelts();
+    expect(screen.queryByRole("switch", { name: "X" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Y" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add a point after/ })).toBeNull();
+    expect(document.querySelectorAll('input[id^="point-"][id$="-x"]')).toHaveLength(1);
+    expect(screen.getByRole("combobox", { name: "Mode" })).toBeTruthy();
+    expect(field(/End frequency/).value).toBe("135");
+  });
+
+  it("the_belts_form_states_the_supported_minimums", async () => {
+    await openBelts();
+    expect(screen.getByText(MINIMUMS)).toBeTruthy();
+  });
+
+  it("the_belts_form_warns_when_version_support_is_too_old_and_still_allows_starting", async () => {
+    await openBelts(withMachine("corexy", "too_old"));
+    expect(screen.getByText(OLD_WARNING)).toBeTruthy();
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("the_belts_form_shows_no_warning_when_version_support_is_supported_or_unknown", async () => {
+    for (const support of ["supported", "unknown"] as const) {
+      await openBelts(withMachine("corexy", support));
+      expect(screen.queryByText(OLD_WARNING)).toBeNull();
+      expect(screen.getByText(MINIMUMS)).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("starting_a_belt_test_posts_kind_belts_without_axes", async () => {
+    const calls = await openBelts();
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    const body = JSON.parse(String(posted(calls)[0].body));
+    expect(body).toEqual({
+      chips: ["lis2dw ebb36"],
+      kind: "belts",
+      mode: "Sweep",
+      overrides: {},
+      points: [[150.5, 154, 20]],
+    });
+    expect("axes" in body).toBe(false);
   });
 });

@@ -44,6 +44,7 @@ const done: FinishedTest = {
   id: "test-1",
   outcome: "complete",
   reason: null,
+  code: null,
   session_id: "test-1",
   motion_uncertain: false,
 };
@@ -333,5 +334,44 @@ describe("starting a test", () => {
     send({ test: running, last: null });
     expect(await screen.findByText("Progress")).toBeTruthy();
     expect(screen.queryByText("Starting…")).toBeNull();
+  });
+});
+
+describe("belt tests", () => {
+  const HINT = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
+
+  it("the_progress_view_names_the_segment_belt_A_or_B", async () => {
+    await mount({ test: { ...running, segment: 1, segments: 2, axis: { Vector: [1, -1, 0] } }, last: null });
+    expect(await screen.findByText("Segment 1 of 2 (belt A at 150.5, 154, 20)")).toBeTruthy();
+    send({ test: { ...running, segment: 2, segments: 2, axis: { Vector: [1, 1, 0] } }, last: null });
+    expect(screen.getByText("Segment 2 of 2 (belt B at 150.5, 154, 20)")).toBeTruthy();
+    send({ test: { ...running, axis: { Vector: [1, 2, 0] } }, last: null });
+    expect(screen.getByText(/\(1,2,0 at 150.5, 154, 20\)/)).toBeTruthy();
+  });
+
+  it.each(["failed", "no_session"] as const)(
+    "a_diagonal_axis_refusal_shows_its_reason_and_the_newer_Klipper_hint (%s)",
+    async (outcome) => {
+      await mount({ test: null, last: null });
+      send({
+        test: null,
+        last: {
+          ...done,
+          outcome,
+          code: "diagonal_axis_refused",
+          reason: "this Klipper does not accept diagonal axes (AXIS=1,-1)",
+          session_id: outcome === "failed" ? "test-1" : null,
+        },
+      });
+      expect(await screen.findByText("this Klipper does not accept diagonal axes (AXIS=1,-1)")).toBeTruthy();
+      expect(screen.getByText(HINT)).toBeTruthy();
+    },
+  );
+
+  it("shows no hint for another failure", async () => {
+    await mount({ test: null, last: null });
+    send({ test: null, last: { ...done, outcome: "failed", reason: "boom" } });
+    expect(await screen.findByText("boom")).toBeTruthy();
+    expect(screen.queryByText(HINT)).toBeNull();
   });
 });

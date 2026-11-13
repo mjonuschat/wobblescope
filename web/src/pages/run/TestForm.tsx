@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
@@ -23,9 +24,11 @@ import type { CheckFailure } from "@/lib/generated/CheckFailure";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
+import type { TestKind } from "@/lib/generated/TestKind";
 import { parseNumber } from "@/lib/parse";
 import { homedTone } from "@/components/PrinterControls";
 
+import { BELT_MINIMUMS } from "./ProgressView";
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
@@ -39,6 +42,12 @@ const FIELD_STEPS: Partial<Record<OverrideKey, number>> = { hz_per_sec: 0.1, swe
 const FREQ_KEYS = ["freq_start", "freq_end"] as const;
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
+
+/** The kinematics whose belts a belt test can tell apart. */
+const BELT_KINEMATICS = ["corexy", "limited_corexy"];
+
+const OLD_SOFTWARE_WARNING =
+  "This printer runs software older than Klipper v0.12.0 or Kalico v2026.01.00. A belt test may be refused after the toolhead moves to the test point.";
 
 interface PointRow {
   x: string;
@@ -102,6 +111,10 @@ function ChoiceRow({ label, error, children }: { label: string; error: ReactNode
 export function TestForm({ settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
   const printer = usePrinterState(true);
+  const [chosenKind, setChosenKind] = useState<TestKind>("axes");
+  const beltsOffered = BELT_KINEMATICS.includes(settings.machine.kinematics ?? "");
+  const kind: TestKind = beltsOffered ? chosenKind : "axes";
+  const belts = kind === "belts";
   const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
   const [texts, setTexts] = useState<Partial<Record<OverrideKey, string>>>({});
@@ -139,8 +152,9 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     problem = `Home the printer first. Not homed: ${notHomed.join(", ")}.`;
   }
   if (!problem && chips.length === 0) problem = "Choose at least one chip.";
-  if (!problem && axes.length === 0) problem = "Choose at least one axis.";
+  if (!problem && !belts && axes.length === 0) problem = "Choose at least one axis.";
   if (!problem && !pointsValid) problem = "Give every test point an X, Y and Z.";
+  if (!problem && belts && points.length !== 1) problem = "A belt test uses one test point.";
   if (!problem && missing.length > 0) {
     problem = `Set ${missing.map((m) => m.label.toLowerCase()).join(", ")}: the printer does not report it.`;
   }
@@ -164,7 +178,8 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     start.mutate(
       {
         chips,
-        axes,
+        kind,
+        ...(belts ? {} : { axes }),
         mode,
         overrides: Object.fromEntries(
           Object.entries(overrides).filter(
@@ -181,21 +196,22 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
   const rangeStart = clampFreq(overrides.freq_start ?? settings.settings.freq_start.value ?? FREQ_MIN);
   const rangeEnd = clampFreq(overrides.freq_end ?? settings.settings.freq_end.value ?? FREQ_MAX);
 
-  const patternMenu = limits ? (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
-        Pattern
-        <ChevronDownIcon />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        {POINT_PATTERNS.map(({ value, label }) => (
-          <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
-            {label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  ) : null;
+  const patternMenu =
+    limits && !belts ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
+          Pattern
+          <ChevronDownIcon />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          {POINT_PATTERNS.map(({ value, label }) => (
+            <DropdownMenuItem key={value} onClick={() => choosePattern(value)}>
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
 
   const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];
@@ -238,6 +254,24 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
     <form onSubmit={submit} className="space-y-4" noValidate>
       <FormCard title="Setup">
         <div className="space-y-5">
+          {beltsOffered && (
+            <Tabs value={kind} onValueChange={(value) => setChosenKind(value as TestKind)}>
+              <TabsList variant="line">
+                <TabsTrigger value="axes" className="after:bg-primary">
+                  Axes
+                </TabsTrigger>
+                <TabsTrigger value="belts" className="after:bg-primary">
+                  Belts
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+          {belts && (
+            <div className="space-y-1 text-sm">
+              <p className="text-muted-foreground">{BELT_MINIMUMS}</p>
+              {settings.version_support === "too_old" && <p className="text-amber-400">{OLD_SOFTWARE_WARNING}</p>}
+            </div>
+          )}
           <ChoiceRow label="Chips" error={<FieldError name="chips" text={errorFor("chips")} />}>
             {chipList.chips.length === 0 ? (
               <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
@@ -274,24 +308,26 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
               </div>
             )}
           </ChoiceRow>
-          <ChoiceRow label="Axes" error={<FieldError name="axes" text={errorFor("axes")} />}>
-            <div className="flex gap-6">
-              {AXIS_ORDER.map((axis) => (
-                <div key={axis} className="flex items-center gap-2">
-                  <Switch
-                    id={`axis-${axis}`}
-                    checked={axes.includes(axis)}
-                    onCheckedChange={(on) =>
-                      setAxes((old) =>
-                        on ? AXIS_ORDER.filter((a) => a === axis || old.includes(a)) : old.filter((a) => a !== axis),
-                      )
-                    }
-                  />
-                  <Label htmlFor={`axis-${axis}`}>{axis}</Label>
-                </div>
-              ))}
-            </div>
-          </ChoiceRow>
+          {!belts && (
+            <ChoiceRow label="Axes" error={<FieldError name="axes" text={errorFor("axes")} />}>
+              <div className="flex gap-6">
+                {AXIS_ORDER.map((axis) => (
+                  <div key={axis} className="flex items-center gap-2">
+                    <Switch
+                      id={`axis-${axis}`}
+                      checked={axes.includes(axis)}
+                      onCheckedChange={(on) =>
+                        setAxes((old) =>
+                          on ? AXIS_ORDER.filter((a) => a === axis || old.includes(a)) : old.filter((a) => a !== axis),
+                        )
+                      }
+                    />
+                    <Label htmlFor={`axis-${axis}`}>{axis}</Label>
+                  </div>
+                ))}
+              </div>
+            </ChoiceRow>
+          )}
           <div className="grid grid-cols-3 items-start gap-4">
             <div className="space-y-2">
               <Label htmlFor="mode">Mode</Label>
@@ -368,33 +404,35 @@ export function TestForm({ settings, chipList, chips, onChipsChange, blocked, on
                     />
                   </div>
                 ))}
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label={`Remove point ${i + 1}`}
-                    className={points.length === 1 ? "invisible" : undefined}
-                    onClick={() => editPoints((old) => old.filter((_, j) => j !== i))}
-                  >
-                    <MinusIcon />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label={`Add a point after point ${i + 1}`}
-                    onClick={() =>
-                      editPoints((old) => [
-                        ...old.slice(0, i + 1),
-                        rowFrom(settings.default_point),
-                        ...old.slice(i + 1),
-                      ])
-                    }
-                  >
-                    <PlusIcon />
-                  </Button>
-                </div>
+                {!belts && (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Remove point ${i + 1}`}
+                      className={points.length === 1 ? "invisible" : undefined}
+                      onClick={() => editPoints((old) => old.filter((_, j) => j !== i))}
+                    >
+                      <MinusIcon />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Add a point after point ${i + 1}`}
+                      onClick={() =>
+                        editPoints((old) => [
+                          ...old.slice(0, i + 1),
+                          rowFrom(settings.default_point),
+                          ...old.slice(i + 1),
+                        ])
+                      }
+                    >
+                      <PlusIcon />
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}

@@ -13,6 +13,7 @@ const setting = (value: number | null, needed = false): Setting => ({
 export function printerSettings(overrides: Partial<PrinterSettings["settings"]> = {}): PrinterSettings {
   return {
     variant: "mainline",
+    version_support: "supported",
     machine: {
       name: "buster",
       klipper_version: "v0.13.0",

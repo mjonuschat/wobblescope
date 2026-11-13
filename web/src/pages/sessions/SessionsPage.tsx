@@ -166,7 +166,14 @@ export function SessionsPage() {
                   )}
                 </TableCell>
                 <TableCell>{s.source === "CsvImport" ? "CSV" : "Wobblescope"}</TableCell>
-                <TableCell>{s.mode ?? "–"}</TableCell>
+                <TableCell>
+                  {s.mode ?? "–"}
+                  {s.kind === "belts" && (
+                    <Badge variant="outline" className="ml-2">
+                      Belts
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>
                 <TableCell>{s.printer ?? "–"}</TableCell>
                 <TableCell>

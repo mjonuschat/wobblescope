@@ -79,6 +79,7 @@ describe("endpoints", () => {
     const http = stubFetch({ status: 202, body: { id: "test-1" } });
     await startTest({
       chips: ["adxl345"],
+      kind: "axes",
       axes: ["X"],
       mode: "Pulse",
       overrides: { freq_end: 100 },
@@ -88,6 +89,7 @@ describe("endpoints", () => {
     expect(http.header(0, "Content-Type")).toBe("application/json");
     expect(JSON.parse(String(http.init().body))).toEqual({
       chips: ["adxl345"],
+      kind: "axes",
       axes: ["X"],
       mode: "Pulse",
       overrides: { freq_end: 100 },
@@ -109,6 +111,7 @@ describe("endpoints", () => {
     });
     const error = await startTest({
       chips: ["adxl345"],
+      kind: "axes",
       axes: ["X"],
       mode: "Pulse",
       overrides: {},

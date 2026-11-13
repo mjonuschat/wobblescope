@@ -46,6 +46,15 @@ describe("the sessions page", () => {
     expect(text[2]).toContain("CSV");
   });
 
+  it("a_belt_session_is_tagged_belts", async () => {
+    api([summary("belt", { kind: "belts" }), summary("axes"), summary("odd", { kind: "other" })]);
+    renderRoute("/sessions");
+    const rows = (await screen.findAllByRole("row")).slice(1);
+    expect(within(rows[0]).getByText("Belts")).toBeTruthy();
+    expect(within(rows[1]).queryByText("Belts")).toBeNull();
+    expect(within(rows[2]).queryByText("Belts")).toBeNull();
+  });
+
   it("links each row to the session's zip download", async () => {
     api([summary("s1")]);
     renderRoute("/sessions");

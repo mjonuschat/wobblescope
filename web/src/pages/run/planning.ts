@@ -1,4 +1,5 @@
 import type { AxisLimits } from "@/lib/generated/AxisLimits";
+import type { Direction } from "@/lib/generated/Direction";
 import type { Overrides } from "@/lib/generated/Overrides";
 
 /** The seven settings a test may override, in the order the form shows them. */
@@ -71,4 +72,13 @@ export function patternPoints(pattern: PointPattern, limits: AxisLimits, z: numb
         at(x2, y2),
       ];
   }
+}
+
+/** The belt a diagonal direction tests, or the vector's own text for any other direction. */
+export function directionName(axis: Direction): string {
+  if (typeof axis === "string") return axis;
+  const [x, y, z] = axis.Vector;
+  if (z === 0 && x === 1 && y === -1) return "belt A";
+  if (z === 0 && x === 1 && y === 1) return "belt B";
+  return axis.Vector.join(",");
 }

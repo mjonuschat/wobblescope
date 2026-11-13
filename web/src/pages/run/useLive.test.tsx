@@ -29,6 +29,7 @@ const finished: FinishedTest = {
   id: "test-1",
   outcome: "complete",
   reason: null,
+  code: null,
   session_id: "test-1",
   motion_uncertain: false,
 };
