@@ -1,6 +1,7 @@
 //! Axes-map calibration: types and analysis.
 
 pub(crate) mod map;
+pub(crate) mod segment;
 
 use serde::{Deserialize, Serialize};
 
@@ -186,4 +187,72 @@ pub struct AxesMapResult {
     pub curves: [SegmentCurves; 3],
     /// Version of the analysis core that produced this result.
     pub core_version: String,
+}
+
+/// The axes-map golden file, decoded for unit tests of crate-private functions. The schema
+/// duplicates the integration helper in `tests/common/mod.rs`, which unit tests cannot use.
+#[cfg(test)]
+pub(crate) mod golden {
+    use std::collections::BTreeMap;
+    use std::io::Read;
+
+    use serde::Deserialize;
+
+    use crate::samples::RawSamples;
+
+    #[derive(Deserialize)]
+    pub(crate) struct Golden {
+        pub cases: BTreeMap<String, Case>,
+    }
+
+    #[derive(Deserialize)]
+    pub(crate) struct Case {
+        pub configured_map: Option<String>,
+        pub segments: Vec<Segment>,
+        pub expected: Expected,
+    }
+
+    #[derive(Deserialize)]
+    pub(crate) struct Segment {
+        pub t: Vec<f64>,
+        pub x: Vec<f64>,
+        pub y: Vec<f64>,
+        pub z: Vec<f64>,
+    }
+
+    impl Segment {
+        pub(crate) fn samples(&self) -> RawSamples {
+            RawSamples {
+                t: self.t.clone(),
+                x: self.x.clone(),
+                y: self.y.clone(),
+                z: self.z.clone(),
+            }
+        }
+    }
+
+    #[derive(Deserialize)]
+    pub(crate) struct Expected {
+        pub per_segment: Vec<PerSegment>,
+    }
+
+    #[derive(Deserialize)]
+    pub(crate) struct PerSegment {
+        pub direction_vector: [f64; 3],
+        pub actual_direction: [f64; 3],
+        pub angle_error: f64,
+        pub confidence: f64,
+        pub noise_level: f64,
+        pub peak_velocities: [f64; 3],
+        pub gravity: f64,
+    }
+
+    /// Decode the embedded golden file.
+    pub(crate) fn load() -> Golden {
+        let bytes: &[u8] = include_bytes!("../../tests/golden/axes_map.json.zst");
+        let mut decoder = structured_zstd::decoding::StreamingDecoder::new(bytes);
+        let mut text = String::new();
+        decoder.read_to_string(&mut text).unwrap();
+        serde_json::from_str(&text).unwrap()
+    }
 }

@@ -7,8 +7,11 @@ use super::{ChipAxis, ConfigCheck};
 
 /// Return the inverse of the signed-permutation matrix encoded by `map`.
 ///
+/// Klipper's rule is `out_i = sign_i * raw[idx_i]` for entry `i` of the map, so the forward
+/// matrix has `forward[i][idx_i] = sign_i` and its inverse is the transpose.
+///
 /// Returns `None` for `None` input, the identity map `"x,y,z"`, or any text
-/// that is not a valid signed permutation of the three printer axes.
+/// that is not a valid signed permutation of the three axes.
 pub(crate) fn inverse_matrix(map: Option<&str>) -> Option<[[f64; 3]; 3]> {
     let raw = map?;
     let norm = raw.replace(' ', "").to_lowercase();
@@ -20,26 +23,25 @@ pub(crate) fn inverse_matrix(map: Option<&str>) -> Option<[[f64; 3]; 3]> {
         return None;
     }
 
-    // Parse each entry into (printer_axis_index, sign).
-    let mut forward = [[0.0f64; 3]; 3]; // forward[printer_axis][chip_axis]
+    let mut forward = [[0.0f64; 3]; 3];
     let mut used = [false; 3];
-    for (chip_idx, part) in parts.iter().enumerate() {
+    for (i, part) in parts.iter().enumerate() {
         let (sign, axis_str) = if let Some(a) = part.strip_prefix('-') {
             (-1.0, a)
         } else {
             (1.0, *part)
         };
-        let printer_idx = match axis_str {
+        let idx = match axis_str {
             "x" => 0,
             "y" => 1,
             "z" => 2,
             _ => return None,
         };
-        if used[printer_idx] {
-            return None; // repeated printer axis
+        if used[idx] {
+            return None; // repeated axis
         }
-        used[printer_idx] = true;
-        forward[printer_idx][chip_idx] = sign;
+        used[idx] = true;
+        forward[i][idx] = sign;
     }
 
     // Inverse of a signed permutation = its transpose.
@@ -118,34 +120,43 @@ mod tests {
     use super::*;
     use ChipAxis::{X, Y, Z};
 
-    #[test]
-    fn inverse_of_negz_y_x_undoes_the_forward_map() {
-        // Forward map "-z, y, x":
-        //   chip X → printer -Z  (printer_Z = -chip_X)
-        //   chip Y → printer  Y  (printer_Y =  chip_Y)
-        //   chip Z → printer  X  (printer_X =  chip_Z)
-        let chip = [3.0_f64, 5.0, 7.0]; // arbitrary chip vector
+    /// Apply Klipper's rule `out_i = sign_i * raw[idx_i]` for a map given as (index, sign) pairs.
+    fn apply_map(entries: [(usize, f64); 3], raw: [f64; 3]) -> [f64; 3] {
+        entries.map(|(idx, sign)| sign * raw[idx])
+    }
 
-        // Apply forward transform: printer = M * chip
-        // printer_X = chip_Z = 7
-        // printer_Y = chip_Y = 5
-        // printer_Z = -chip_X = -3
-        let printer = [chip[2], chip[1], -chip[0]];
-
-        // Apply inverse matrix to recover chip vector.
-        let inv = inverse_matrix(Some("-z, y, x")).expect("valid map");
-        let recovered: Vec<f64> = (0..3)
-            .map(|r| (0..3).map(|c| inv[r][c] * printer[c]).sum())
-            .collect();
-
-        for i in 0..3 {
+    fn assert_inverse_undoes(map: &str, entries: [(usize, f64); 3]) {
+        let raw = [3.0_f64, 5.0, 7.0];
+        let out = apply_map(entries, raw);
+        let inv = inverse_matrix(Some(map)).expect("valid map");
+        for r in 0..3 {
+            let recovered: f64 = (0..3).map(|c| inv[r][c] * out[c]).sum();
             assert!(
-                (recovered[i] - chip[i]).abs() < 1e-12,
-                "axis {i}: got {}, expected {}",
-                recovered[i],
-                chip[i]
+                (recovered - raw[r]).abs() < 1e-12,
+                "{map} axis {r}: got {recovered}, expected {}",
+                raw[r]
             );
         }
+    }
+
+    #[test]
+    fn inverse_undoes_the_forward_map() {
+        // out_x = -raw_z, out_y = raw_y, out_z = raw_x
+        assert_inverse_undoes("-z, y, x", [(2, -1.0), (1, 1.0), (0, 1.0)]);
+        // Pure sign flip.
+        assert_inverse_undoes("-x, y, z", [(0, -1.0), (1, 1.0), (2, 1.0)]);
+        // Pure swap.
+        assert_inverse_undoes("y, x, z", [(1, 1.0), (0, 1.0), (2, 1.0)]);
+        // A cyclic permutation is not its own inverse, so a transposition error shows.
+        assert_inverse_undoes("y, z, -x", [(1, 1.0), (2, 1.0), (0, -1.0)]);
+    }
+
+    #[test]
+    fn inverse_matches_the_reference_matrix() {
+        assert_eq!(
+            inverse_matrix(Some("-z, y, x")),
+            Some([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]])
+        );
     }
 
     #[test]
