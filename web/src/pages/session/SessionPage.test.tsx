@@ -9,7 +9,7 @@ import { stubApiWithStatus as stubApi } from "@/test/status";
 import { renderRoute } from "@/test/render";
 import { summary } from "@/test/summaries";
 
-const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn() }));
+const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn(), prefetch: vi.fn() }));
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
