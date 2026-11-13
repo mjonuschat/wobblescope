@@ -64,7 +64,6 @@ pub enum TestKind {
 pub struct TestRequest {
     /// Config sections of the chips that record, for every axis.
     pub chips: Vec<String>,
-    /// Axes or belts.
     #[serde(default)]
     pub kind: TestKind,
     /// The axes to test, in order. Required for an axes test and refused for a belt test.
@@ -119,7 +118,6 @@ pub struct Effective {
 /// One (point, axis) run.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Segment {
-    /// The direction shaken.
     pub axis: Direction,
     /// Index into the plan's points.
     pub point: usize,

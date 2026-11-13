@@ -33,9 +33,7 @@ pub enum Variant {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum VersionSupport {
-    /// At or above the minimum.
     Supported,
-    /// Below the minimum.
     TooOld,
     /// The fork or the version cannot be told.
     Unknown,

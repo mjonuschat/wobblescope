@@ -5,11 +5,7 @@ import type { DatasetDecision } from "./DatasetDecision";
 /**
  * What became of one belt's recording.
  */
-export type BeltSide = { 
-/**
- * Whether the session has a recording for this belt and chip.
- */
-present: boolean, 
+export type BeltSide = { present: boolean, 
 /**
  * Why the recording was or was not used; `None` when it is absent.
  */

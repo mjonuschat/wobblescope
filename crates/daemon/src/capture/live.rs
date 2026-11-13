@@ -54,7 +54,6 @@ pub struct TestState {
     pub segment: u32,
     /// How many segments the test has.
     pub segments: u32,
-    /// The direction of the current segment.
     pub axis: Option<Direction>,
     /// The toolhead position of the current segment: `[x, y, z]` in mm.
     pub position: Option<[f64; 3]>,

@@ -5,15 +5,7 @@ import type { BeltsResult } from "./BeltsResult";
 /**
  * Comparison of the two belts of one chip at one probe point.
  */
-export type BeltsAnalysis = { 
-/**
- * Chip name.
- */
-chip: string, 
-/**
- * Probe point index.
- */
-point: number, belt_a: BeltSide, belt_b: BeltSide, 
+export type BeltsAnalysis = { chip: string, point: number, belt_a: BeltSide, belt_b: BeltSide, 
 /**
  * The comparison; `None` unless both belts have a usable spectrum.
  */

@@ -22,11 +22,7 @@ segment: number,
 /**
  * How many segments the test has.
  */
-segments: number, 
-/**
- * The direction of the current segment.
- */
-axis: Direction | null, 
+segments: number, axis: Direction | null, 
 /**
  * The toolhead position of the current segment: `[x, y, z]` in mm.
  */

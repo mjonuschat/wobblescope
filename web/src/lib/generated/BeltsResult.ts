@@ -11,11 +11,7 @@ freqs: Array<number>, a: BeltCurve, b: BeltCurve,
 /**
  * Peaks matched across the belts, in the order the greedy match found them (D16).
  */
-pairs: Array<BeltPair>, 
-/**
- * One row per pair, in the same order.
- */
-offsets: Array<PeakOffset>, 
+pairs: Array<BeltPair>, offsets: Array<PeakOffset>, 
 /**
  * Pearson correlation of the two curves times 100, clipped to 0..100. NaN when a curve is
  * flat (D11), as in Shake&Tune. serde_json writes NaN as `null`, which it cannot read back

@@ -8,9 +8,7 @@ use crate::fit::Axis;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Direction {
-    /// X axis.
     X,
-    /// Y axis.
     Y,
     /// Direction vector passed to `TEST_RESONANCES AXIS=`.
     Vector([i32; 3]),

@@ -11,11 +11,7 @@ export type TestRequest = {
 /**
  * Config sections of the chips that record, for every axis.
  */
-chips: Array<string>, 
-/**
- * Axes or belts.
- */
-kind: TestKind, 
+chips: Array<string>, kind: TestKind, 
 /**
  * The axes to test, in order. Required for an axes test and refused for a belt test.
  */

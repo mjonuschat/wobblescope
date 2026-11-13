@@ -23,7 +23,6 @@ pub struct BeltSpectrum {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BeltSide {
-    /// Whether the session has a recording for this belt and chip.
     pub present: bool,
     /// Why the recording was or was not used; `None` when it is absent.
     pub decision: Option<DatasetDecision>,
@@ -38,9 +37,7 @@ pub struct BeltSide {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BeltsAnalysis {
-    /// Chip name.
     pub chip: String,
-    /// Probe point index.
     pub point: usize,
     pub belt_a: BeltSide,
     pub belt_b: BeltSide,
