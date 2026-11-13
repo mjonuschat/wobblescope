@@ -123,6 +123,68 @@ describe("the run screen", () => {
     expect(JSON.parse(String(posted(calls)[0].body)).overrides).toEqual({});
   });
 
+  describe("the sweeping period", () => {
+    const withPeriod = (value: number | null) => ({
+      settings: {
+        ...printerSettings({ sweeping_period: { value, overridable: true, needed: false } }),
+        default_mode: "Pulse" as const,
+      },
+    });
+    const sentBody = async (calls: ApiCall[]) => {
+      fireEvent.click(startButton());
+      await waitFor(() => expect(posted(calls)).toHaveLength(1));
+      return JSON.parse(String(posted(calls)[0].body));
+    };
+
+    it("falls back to 1.2 and sends it when the printer reports 0", async () => {
+      const calls = await open(withPeriod(0));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("1.2"));
+      expect(field(/Sweeping period/).placeholder).toBe("1.2");
+      const body = await sentBody(calls);
+      expect(body.mode).toBe("Sweep");
+      expect(body.overrides.sweeping_period).toBe(1.2);
+    });
+
+    it("falls back to 1.2 when the printer reports nothing", async () => {
+      const calls = await open(withPeriod(null));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("1.2"));
+      expect((await sentBody(calls)).overrides.sweeping_period).toBe(1.2);
+    });
+
+    it("keeps the printer's value above 0 and sends no override", async () => {
+      const calls = await open(withPeriod(0.8));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("0.8"));
+      expect((await sentBody(calls)).overrides).toEqual({});
+    });
+
+    it("lets a typed value win and returns to the default when cleared", async () => {
+      const calls = await open(withPeriod(0));
+      await chooseMode("Sweep");
+      await waitFor(() => expect(field(/Sweeping period/).value).toBe("1.2"));
+      fireEvent.change(field(/Sweeping period/), { target: { value: "2" } });
+      fireEvent.change(field(/Sweeping period/), { target: { value: "" } });
+      expect(field(/Sweeping period/).placeholder).toBe("1.2");
+      fireEvent.change(field(/Sweeping period/), { target: { value: "2" } });
+      expect((await sentBody(calls)).overrides.sweeping_period).toBe(2);
+    });
+
+    it("sends the default when the typed value was cleared", async () => {
+      const calls = await open(withPeriod(0));
+      await chooseMode("Sweep");
+      fireEvent.change(await waitFor(() => field(/Sweeping period/)), { target: { value: "" } });
+      expect((await sentBody(calls)).overrides.sweeping_period).toBe(1.2);
+    });
+
+    it("leaves pulse mode alone", async () => {
+      const calls = await open(withPeriod(0));
+      expect(screen.queryByLabelText(/Sweeping period/)).toBeNull();
+      expect((await sentBody(calls)).overrides).toEqual({});
+    });
+  });
+
   it("shows a daemon message beside the field it names", async () => {
     await open({
       start: {

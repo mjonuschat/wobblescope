@@ -37,6 +37,9 @@ const FREQ_MAX = 300;
 
 const FIELD_STEPS: Partial<Record<OverrideKey, number>> = { hz_per_sec: 0.1, sweeping_period: 0.1 };
 
+/** Klipper reads a sweeping period of 0 as pulse mode; 1.2 s is its default sweeping period when sweep mode is on. */
+const SWEEP_PERIOD_FALLBACK = 1.2;
+
 const FREQ_KEYS = ["freq_start", "freq_end"] as const;
 
 const AXIS_ORDER: Axis[] = ["X", "Y"];
@@ -155,6 +158,14 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
   }
   const mode = chosenMode ?? settings.default_mode;
 
+  /** The value a field starts from: the printer's, except that a sweep needs a period above 0. */
+  const defaultOf = (key: OverrideKey): number | null => {
+    const value = settings.settings[key].value;
+    return key === "sweeping_period" && mode === "Sweep" && !(value !== null && value > 0)
+      ? SWEEP_PERIOD_FALLBACK
+      : value;
+  };
+
   const overrides: Partial<Record<OverrideKey, number>> = {};
   const typos: Partial<Record<OverrideKey, string>> = {};
   for (const { key } of OVERRIDE_FIELDS) {
@@ -169,7 +180,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
   const pointsValid =
     parsedPoints.length > 0 && parsedPoints.every((p) => p.every((v) => v !== undefined && !Number.isNaN(v)));
   const missing = OVERRIDE_FIELDS.filter(
-    ({ key }) => settings.settings[key].needed && settings.settings[key].value === null && overrides[key] === undefined,
+    ({ key }) => settings.settings[key].needed && defaultOf(key) === null && overrides[key] === undefined,
   );
 
   let problem = blocked;
@@ -210,7 +221,12 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
         ...(belts ? {} : { axes }),
         mode,
         overrides: Object.fromEntries(
-          Object.entries(overrides).filter(
+          Object.entries({
+            ...(mode === "Sweep" && defaultOf("sweeping_period") !== settings.settings.sweeping_period.value
+              ? { sweeping_period: SWEEP_PERIOD_FALLBACK }
+              : {}),
+            ...overrides,
+          }).filter(
             ([key, value]) => !sweepOnly(key as OverrideKey) && value !== settings.settings[key as OverrideKey].value,
           ),
         ),
@@ -264,8 +280,9 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
 
   const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];
-    const required = setting.needed && setting.value === null;
-    const placeholder = setting.value !== null ? String(setting.value) : required ? "required" : "printer default";
+    const initial = defaultOf(key);
+    const required = setting.needed && initial === null;
+    const placeholder = initial !== null ? String(initial) : required ? "required" : "printer default";
     return (
       <UnitInput
         id={`override-${key}`}
@@ -274,7 +291,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
         aria-label={extra.label}
         className={extra.className}
         placeholder={placeholder}
-        value={texts[key] ?? (setting.value !== null ? String(setting.value) : "")}
+        value={texts[key] ?? (initial !== null ? String(initial) : "")}
         disabled={!setting.overridable}
         aria-required={required}
         aria-invalid={Boolean(typos[key] ?? errorFor(key))}
@@ -286,7 +303,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
 
   const overrideField = ({ key, label, unit }: (typeof OVERRIDE_FIELDS)[number]) => {
     const setting = settings.settings[key];
-    const required = setting.needed && setting.value === null;
+    const required = setting.needed && defaultOf(key) === null;
     return (
       <div key={key} className="space-y-1">
         <Label htmlFor={`override-${key}`}>
@@ -365,7 +382,13 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
           <div className="grid grid-cols-3 items-start gap-4">
             <div className="space-y-2">
               <Label htmlFor="mode">Mode</Label>
-              <Select value={mode} onValueChange={(value) => setChosenMode(value as Mode)}>
+              <Select
+                value={mode}
+                onValueChange={(value) => {
+                  setChosenMode(value as Mode);
+                  setTexts(({ sweeping_period: _stale, ...rest }) => rest);
+                }}
+              >
                 <SelectTrigger id="mode" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
