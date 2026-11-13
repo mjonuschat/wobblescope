@@ -1,3 +1,4 @@
+import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
@@ -23,7 +24,20 @@ export interface ForgetRequest {
   sessionId: string;
 }
 
-export type WorkerRequest = AnalyzeRequest | ForgetRequest;
+/**
+ * Analyse every chip of a calibration session. `files` holds the sample files the worker lacks
+ * that could be downloaded; a chip whose files are absent comes back `Incomplete`.
+ */
+export interface AnalyzeAxesMapRequest {
+  type: "analyzeAxesMap";
+  id: number;
+  sessionId: string;
+  meta: SessionMeta;
+  /** Stored, compressed sample files by `sample_file` name. */
+  files: Record<string, ArrayBuffer>;
+}
+
+export type WorkerRequest = AnalyzeRequest | AnalyzeAxesMapRequest | ForgetRequest;
 
 export interface AnalysisResult {
   analysis: Analysis;
@@ -39,4 +53,5 @@ export interface AnalysisResult {
 
 export type WorkerResponse =
   | { type: "result"; id: number; result: AnalysisResult }
+  | { type: "axesMapResult"; id: number; chips: AxesMapChip[] }
   | { type: "error"; id: number; message: string };

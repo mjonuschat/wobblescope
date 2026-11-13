@@ -1,3 +1,4 @@
+import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
@@ -32,8 +33,19 @@ export class SupersededError extends Error {
   }
 }
 
+/** A calibration session to analyse; its files are the session's own. */
+export interface AxesMapJob {
+  sessionId: string;
+  meta: SessionMeta;
+}
+
 export interface AnalysisClient {
   analyze(job: AnalysisJob, signal?: AbortSignal): Promise<AnalysisResult>;
+  /**
+   * Analyses every chip of a calibration session. Each file is downloaded on its own: one that
+   * fails is left out, and the chip that needs it comes back `Incomplete`.
+   */
+  analyzeAxesMap(job: AxesMapJob, signal?: AbortSignal): Promise<AxesMapChip[]>;
   /** Drops what is held for a session id that may be written again. */
   forget(sessionId: string): void;
 }
@@ -44,10 +56,12 @@ interface Options {
   fetchResultSample?: typeof fetchResultSampleFile;
 }
 
+type QueuedJob = ({ kind: "axis" } & AnalysisJob) | ({ kind: "axesMap" } & AxesMapJob);
+
 interface Queued {
-  job: AnalysisJob;
+  job: QueuedJob;
   signal?: AbortSignal;
-  resolve: (result: AnalysisResult) => void;
+  resolve: (result: never) => void;
   reject: (error: unknown) => void;
 }
 
@@ -56,8 +70,8 @@ function abortError(): DOMException {
 }
 
 /** What the worker and the held-files logic key a job by, so a result never shares files with a session. */
-function identityOf(job: AnalysisJob): string {
-  return job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId;
+function identityOf(job: QueuedJob): string {
+  return job.kind === "axis" && job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId;
 }
 
 /** The recordings of one axis, as (chip position, segment position, file name). */
@@ -70,6 +84,13 @@ function filesFor(meta: SessionMeta, axis: Axis) {
           name: file.sample_file,
         }))
       : [],
+  );
+}
+
+/** Every recording of a calibration session, as (chip position, segment position, file name). */
+function allFiles(meta: SessionMeta) {
+  return meta.segments.flatMap((segment, index) =>
+    segment.files.map((file) => ({ chip: file.chip, segment: index, name: file.sample_file })),
   );
 }
 
@@ -88,7 +109,7 @@ export function createAnalysisClient({
   let heldCreatedAt: string | null = null;
   let held = new Set<string>();
   let nextId = 1;
-  const pending = new Map<number, { resolve: (r: AnalysisResult) => void; reject: (e: unknown) => void }>();
+  const pending = new Map<number, { resolve: (r: never) => void; reject: (e: unknown) => void }>();
   let active: Queued | null = null;
   let waiting: Queued | null = null;
 
@@ -106,7 +127,8 @@ export function createAnalysisClient({
       const entry = pending.get(response.id);
       if (!entry) return;
       pending.delete(response.id);
-      if (response.type === "result") entry.resolve(response.result);
+      if (response.type === "result") entry.resolve(response.result as never);
+      else if (response.type === "axesMapResult") entry.resolve(response.chips as never);
       else entry.reject(new Error(response.message));
     };
     created.onerror = () => {
@@ -122,20 +144,33 @@ export function createAnalysisClient({
     return created;
   }
 
-  async function run({ job, signal }: Queued): Promise<AnalysisResult> {
+  async function run({ job, signal }: Queued): Promise<AnalysisResult | AxesMapChip[]> {
     if (signal?.aborted) throw abortError();
     const target = ensureWorker();
     const identity = identityOf(job);
     const sameSession = heldSession === identity && heldCreatedAt === job.meta.created_at;
     const alreadyHeld = sameSession ? held : new Set<string>();
-    const missing = filesFor(job.meta, job.axis).filter((f) => !alreadyHeld.has(f.name));
-    const buffers = await Promise.all(
-      missing.map((f) =>
-        job.resultId !== undefined
-          ? fetchResultSample(job.resultId, f.chip, f.segment, signal)
-          : fetchSample(job.sessionId, f.chip, f.segment, signal),
-      ),
+    const wanted = (job.kind === "axis" ? filesFor(job.meta, job.axis) : allFiles(job.meta)).filter(
+      (f) => !alreadyHeld.has(f.name),
     );
+    let missing = wanted;
+    let buffers: ArrayBuffer[];
+    if (job.kind === "axis") {
+      buffers = await Promise.all(
+        wanted.map((f) =>
+          job.resultId !== undefined
+            ? fetchResultSample(job.resultId, f.chip, f.segment, signal)
+            : fetchSample(job.sessionId, f.chip, f.segment, signal),
+        ),
+      );
+    } else {
+      // A file that fails to download is left out so only its chip is reported incomplete.
+      const settled = await Promise.allSettled(
+        wanted.map((f) => fetchSample(job.sessionId, f.chip, f.segment, signal)),
+      );
+      missing = wanted.filter((_, i) => settled[i].status === "fulfilled");
+      buffers = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+    }
     if (signal?.aborted) throw abortError();
     // The worker failed to load while the files were downloading, so nothing can answer.
     if (worker !== target) throw new Error("The analysis module failed to load");
@@ -148,8 +183,8 @@ export function createAnalysisClient({
 
     const id = nextId++;
     const files = Object.fromEntries(missing.map((f, i) => [f.name, buffers[i]]));
-    return new Promise<AnalysisResult>((resolve, reject) => {
-      pending.set(id, { resolve, reject });
+    return new Promise<AnalysisResult | AxesMapChip[]>((resolve, reject) => {
+      pending.set(id, { resolve: resolve as (r: never) => void, reject });
       signal?.addEventListener(
         "abort",
         () => {
@@ -162,16 +197,18 @@ export function createAnalysisClient({
         { once: true },
       );
       target.postMessage(
-        {
-          type: "analyze",
-          id,
-          sessionId: identity,
-          meta: job.meta,
-          axis: job.axis,
-          params: job.params,
-          overrides: job.overrides,
-          files,
-        },
+        job.kind === "axis"
+          ? {
+              type: "analyze",
+              id,
+              sessionId: identity,
+              meta: job.meta,
+              axis: job.axis,
+              params: job.params,
+              overrides: job.overrides,
+              files,
+            }
+          : { type: "analyzeAxesMap", id, sessionId: identity, meta: job.meta, files },
         buffers,
       );
     });
@@ -180,7 +217,7 @@ export function createAnalysisClient({
   async function start(entry: Queued) {
     active = entry;
     try {
-      entry.resolve(await run(entry));
+      entry.resolve((await run(entry)) as never);
     } catch (error) {
       entry.reject(error);
     } finally {
@@ -191,32 +228,35 @@ export function createAnalysisClient({
     }
   }
 
+  function enqueue<T>(job: QueuedJob, signal?: AbortSignal): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+      const entry: Queued = { job, signal, resolve: resolve as (r: never) => void, reject };
+      if (!active) {
+        void start(entry);
+        return;
+      }
+      waiting?.reject(new SupersededError());
+      waiting = entry;
+      signal?.addEventListener(
+        "abort",
+        () => {
+          if (waiting === entry) {
+            waiting = null;
+            reject(abortError());
+          }
+        },
+        { once: true },
+      );
+    });
+  }
+
   return {
-    analyze(job, signal) {
-      return new Promise<AnalysisResult>((resolve, reject) => {
-        if (signal?.aborted) {
-          reject(abortError());
-          return;
-        }
-        const entry: Queued = { job, signal, resolve, reject };
-        if (!active) {
-          void start(entry);
-          return;
-        }
-        waiting?.reject(new SupersededError());
-        waiting = entry;
-        signal?.addEventListener(
-          "abort",
-          () => {
-            if (waiting === entry) {
-              waiting = null;
-              reject(abortError());
-            }
-          },
-          { once: true },
-        );
-      });
-    },
+    analyze: (job, signal) => enqueue<AnalysisResult>({ kind: "axis", ...job }, signal),
+    analyzeAxesMap: (job, signal) => enqueue<AxesMapChip[]>({ kind: "axesMap", ...job }, signal),
     forget(sessionId) {
       if (heldSession === sessionId) {
         heldSession = null;

@@ -16,6 +16,7 @@ import {
   listSessions,
   pinSession,
   saveResult,
+  startAxesMap,
   startTest,
 } from "./endpoints";
 
@@ -93,6 +94,22 @@ describe("endpoints", () => {
       overrides: { freq_end: 100 },
       points: [[100, 100, 20]],
     });
+  });
+
+  it("start_axes_map_posts_the_request", async () => {
+    const http = stubFetch({ status: 202, body: { id: "test-2" } });
+    const request = {
+      chips: [{ chip: "adxl345", mounting: "toolhead" as const }],
+      z_height: null,
+      speed: 80,
+      accel: null,
+      travel_speed: null,
+    };
+    expect(await startAxesMap(request)).toEqual({ id: "test-2" });
+    expect(http.url()).toMatch(/\/api\/axes-map$/);
+    expect(http.init().method).toBe("POST");
+    expect(http.header(0, "Content-Type")).toBe("application/json");
+    expect(JSON.parse(String(http.init().body))).toEqual(request);
   });
 
   it("surfaces a preflight_failed answer as an error that carries every failed check", async () => {

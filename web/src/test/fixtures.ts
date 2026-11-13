@@ -47,6 +47,8 @@ export function twoAxisMeta(id = "s1"): SessionMeta {
     settings: null,
     printer: null,
     outcome: "Complete",
+    kind: "Resonance",
+    axes_map_run: null,
     notes: [],
     probe_points: [{ position: null }],
     chips: [chip("adxl345"), chip("lis2dw ebb36")],

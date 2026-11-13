@@ -1,3 +1,4 @@
+import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
@@ -10,6 +11,7 @@ import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 export interface SessionHandle {
   add_file(name: string, bytes: Uint8Array): void;
   analyze(axis: Axis, params: FitParams, overrides: string[]): Analysis;
+  analyze_axes_map(): AxesMapChip[];
   free(): void;
 }
 
@@ -37,7 +39,8 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     current = null;
   }
 
-  async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
+  /** The worker's session for the request, opened if the id or creation time differs. */
+  async function open(request: { sessionId: string; meta: SessionMeta; files: Record<string, ArrayBuffer> }) {
     loading ??= loadModule();
     const module = await loading;
     // A session written again under the same id has a new creation time and other files.
@@ -49,10 +52,16 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
         handle: new module.WasmSession(request.meta),
       };
     }
+    const { handle } = current;
     for (const [name, buffer] of Object.entries(request.files)) {
-      current!.handle.add_file(name, new Uint8Array(buffer));
+      handle.add_file(name, new Uint8Array(buffer));
     }
-    const analysis = current!.handle.analyze(request.axis, request.params, request.overrides);
+    return { module, handle };
+  }
+
+  async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
+    const { module, handle } = await open(request);
+    const analysis = handle.analyze(request.axis, request.params, request.overrides);
     const snippet = (r: Recommendation | null) => (r ? module.config_snippet(r, request.axis) : null);
     const candidates = (r: Recommendation | null) =>
       r ? r.all.map((candidate) => module.config_snippet({ ...r, best: candidate }, request.axis)) : null;
@@ -72,6 +81,10 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
       return null;
     }
     try {
+      if (request.type === "analyzeAxesMap") {
+        const { handle } = await open(request);
+        return { type: "axesMapResult", id: request.id, chips: handle.analyze_axes_map() };
+      }
       return { type: "result", id: request.id, result: await analyze(request) };
     } catch (error) {
       return { type: "error", id: request.id, message: describe(error) };

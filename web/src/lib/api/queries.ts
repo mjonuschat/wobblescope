@@ -54,6 +54,8 @@ export const queryKeys = {
   printer: ["printer"] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
   /** `createdAt` tells a session written again under the same id from the one analysed before. */
+  /** Per-chip outcomes of a calibration session; under `analysesOf` so deleting the session drops them. */
+  axesMapAnalysis: (id: string, createdAt = "") => ["analysis", id, "axes-map", createdAt] as const,
   analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = [], createdAt = "", resultId = "") =>
     ["analysis", id, axis, params, overrides, createdAt, resultId] as const,
 };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { calibrationFile, calibrationMeta, realWasm } from "@/test/calibration";
 import { analysis, defaultParams, twoAxisMeta } from "@/test/fixtures";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
@@ -11,6 +12,9 @@ class FakeSession implements SessionHandle {
   files = new Map<string, Uint8Array>();
   freed = false;
   analyzeCalls: unknown[][] = [];
+  analyze_axes_map(): never[] {
+    return [];
+  }
   meta: SessionMeta;
   run: () => Analysis;
   constructor(meta: SessionMeta, run: () => Analysis) {
@@ -144,5 +148,19 @@ describe("the worker handler", () => {
     expect(sessions[0].freed).toBe(true);
     expect(sessions[1].files.get("c0-s0.zst")).toEqual(new Uint8Array([9]));
     expect(sessions[1].meta.chips[0].name).toBe("other chip");
+  });
+
+  it("analyzes_a_calibration_session_in_the_worker", async () => {
+    const handle = createHandler(async () => realWasm());
+    const files: Record<string, ArrayBuffer> = {};
+    for (const chip of [0, 1])
+      for (const segment of [0, 1, 2]) files[`c${chip}-s${segment}.zst`] = calibrationFile(chip, segment);
+    const response = await handle({ type: "analyzeAxesMap", id: 3, sessionId: "cal1", meta: calibrationMeta(), files });
+    expect(response).toMatchObject({ type: "axesMapResult", id: 3 });
+    const chips = (response as { chips: { state: string; chip: string; result?: { map: string } }[] }).chips;
+    expect(chips.map((c) => [c.chip, c.state, c.result?.map])).toEqual([
+      ["a", "Analysed", "x, y, z"],
+      ["b", "Analysed", "y, x, z"],
+    ]);
   });
 });

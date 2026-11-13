@@ -1,4 +1,5 @@
 import type { Axis } from "@/lib/generated/Axis";
+import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Homed } from "@/lib/generated/Homed";
 import type { Mode } from "@/lib/generated/Mode";
@@ -178,6 +179,14 @@ export interface StartTestRequest {
 
 export function startTest(request: StartTestRequest) {
   return apiJson<StartedTest>("tests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+}
+
+export function startAxesMap(request: AxesMapRequest) {
+  return apiJson<StartedTest>("axes-map", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
