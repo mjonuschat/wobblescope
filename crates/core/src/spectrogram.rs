@@ -53,7 +53,8 @@ pub fn percentile(values: &[f64], percent: f64) -> Option<f64> {
 ///
 /// # Errors
 /// The checks of [`crate::CalibrationData::from_samples`] (mismatched columns, bad timestamps,
-/// non-finite samples), and [`CoreError::TooFewSamples`] for a recording shorter than one segment.
+/// non-finite samples), [`CoreError::TooFewSamples`] for a recording shorter than one segment and
+/// [`CoreError::FlatSignal`] for one with no power at all.
 pub fn spectrogram(samples: &RawSamples, max_freq: f64) -> Result<Spectrogram, CoreError> {
     let n = samples.t.len();
     if [&samples.x, &samples.y, &samples.z]
@@ -123,8 +124,19 @@ pub fn spectrogram(samples: &RawSamples, max_freq: f64) -> Result<Spectrogram, C
     }
 
     let all: Vec<f64> = matrix.iter().flatten().copied().collect();
-    let floor = percentile(&all, FLOOR_PERCENT).expect("a matrix has values");
     let max = all.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if max.is_nan() || max <= 0.0 {
+        return Err(CoreError::FlatSignal);
+    }
+    let mut floor = percentile(&all, FLOOR_PERCENT).expect("a matrix has values");
+    if floor <= 0.0 {
+        // D7: Shake&Tune's log colour scale fails for a floor of zero, so it has none to match.
+        floor = all
+            .iter()
+            .copied()
+            .filter(|v| *v > 0.0)
+            .fold(f64::INFINITY, f64::min);
+    }
     let width = 1.0 / (nperseg as f64 * (1.0 / fs));
     let freq_bins: Vec<f64> = (0..bins)
         .map(|k| k as f64 * width)

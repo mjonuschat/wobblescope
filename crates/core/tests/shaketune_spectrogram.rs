@@ -113,3 +113,43 @@ fn a_recording_that_failed_to_load_returns_its_error() {
         other => panic!("expected InvalidParameter, got {other:?}"),
     }
 }
+
+fn constant_after_the_start(constant_samples: usize) -> RawSamples {
+    let mut samples = chip_a();
+    for column in [&mut samples.x, &mut samples.y, &mut samples.z] {
+        for v in &mut column[..constant_samples] {
+            *v = 0.0;
+        }
+    }
+    samples
+}
+
+#[test]
+fn an_all_zero_recording_is_a_flat_signal() {
+    let flat = constant_after_the_start(chip_a().len());
+    assert_eq!(spectrogram(&flat, 200.0), Err(CoreError::FlatSignal));
+}
+
+#[test]
+fn a_floor_at_zero_is_the_smallest_positive_value() {
+    // 26 of the 30 segments lie in the constant part, so the 5th percentile is exactly zero.
+    let samples = constant_after_the_start(28_000);
+    let map = spectrogram(&samples, 1e9).unwrap();
+    let smallest = map
+        .power
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|v| *v > 0.0)
+        .fold(f64::INFINITY, f64::min);
+    assert!(map.floor > 0.0);
+    assert_eq!(map.floor, smallest);
+}
+
+#[test]
+fn a_positive_percentile_is_left_alone() {
+    let map = spectrogram(&chip_a(), 1e9).unwrap();
+    let all: Vec<f64> = map.power.iter().flatten().copied().collect();
+    assert!(map.floor > 0.0);
+    assert_eq!(Some(map.floor), percentile(&all, 5.0));
+}
