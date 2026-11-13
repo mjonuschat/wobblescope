@@ -1,6 +1,9 @@
 import type { EChartsCoreOption } from "echarts/core";
 
 import { formatHz } from "@/lib/format";
+import type { BeltCurve } from "@/lib/generated/BeltCurve";
+import type { BeltSpectrum } from "@/lib/generated/BeltSpectrum";
+import type { BeltsResult } from "@/lib/generated/BeltsResult";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { Peak } from "@/lib/generated/Peak";
 import type { PsdPeaks } from "@/lib/generated/PsdPeaks";
@@ -481,6 +484,226 @@ export function spectrogramOption(
               },
             }
           : {}),
+      },
+    ],
+  };
+}
+
+/** Shake&Tune's names for paired peaks, in pair order. */
+export const PAIR_LETTERS = "αβγδεζηθικλμνξοπρστυφχψω";
+
+const BELT_A_COLOR = "#ff7a33";
+const BELT_B_COLOR = "#c792ea";
+const GOOD_ZONE = "rgba(126, 224, 129, 0.15)";
+const IDEAL_LINE = "#ef5b7b";
+
+/** The letter of the pair at `order`; past the alphabet it is the number. */
+export const pairLetter = (order: number) => PAIR_LETTERS[order] ?? String(order + 1);
+
+const peakLabel = (formatter: string, color = text, bold = false) => ({
+  formatter,
+  position: "top",
+  color,
+  fontSize: 13,
+  fontWeight: bold ? "bold" : "normal",
+});
+
+/** The label of every unpaired peak is its place in the list of belt A's followed by belt B's. */
+function unpairedPoints(result: BeltsResult, place: (belt: BeltCurve, index: number) => number[]) {
+  const points: { belt: "a" | "b"; coord: number[]; number: number }[] = [];
+  for (const belt of ["a", "b"] as const) {
+    for (const index of result[belt].unpaired) {
+      points.push({ belt, coord: place(result[belt], index), number: points.length + 1 });
+    }
+  }
+  return points;
+}
+
+const highest = (result: BeltsResult) => Math.max(...result.a.psd, ...result.b.psd);
+
+/**
+ * Both belts' PSDs. Paired peaks carry a Greek letter and number 1 (belt A) or 2 (belt B) and are
+ * joined by a dotted line; unpaired peaks carry a red number. The y axis ends at `maxScale`, or
+ * at 1.1 times the highest value, as Shake&Tune.
+ */
+export function beltOverlayOption(result: BeltsResult, maxScale: number | null): EChartsCoreOption {
+  const marks = (belt: "a" | "b") => {
+    const side = belt === "a" ? 1 : 2;
+    return [
+      ...result.pairs.map((pair, order) => ({
+        coord: [pair[belt].freq, pair[belt].level],
+        label: peakLabel(`${pairLetter(order)}${side}`),
+      })),
+      ...unpairedPoints(result, (curve, index) => [result.freqs[index], curve.psd[index]])
+        .filter((point) => point.belt === belt)
+        .map((point) => ({ coord: point.coord, label: peakLabel(String(point.number), PEAK_ALERT, true) })),
+    ];
+  };
+  const curve = (name: string, belt: "a" | "b", color: string) => ({
+    name,
+    type: "line",
+    showSymbol: false,
+    color,
+    lineStyle: { color },
+    data: zip(result.freqs, result[belt].psd),
+    markPoint: { silent: true, symbol: "circle", symbolSize: 6, itemStyle: { color: text }, data: marks(belt) },
+    ...(belt === "a"
+      ? {
+          markLine: {
+            silent: true,
+            symbol: "none",
+            lineStyle: { color: MUTED, type: "dotted", width: 1 },
+            label: { show: false },
+            data: result.pairs.map((pair) => [
+              { coord: [pair.a.freq, pair.a.level] },
+              { coord: [pair.b.freq, pair.b.level] },
+            ]),
+          },
+        }
+      : {}),
+  });
+  return {
+    ...base(null, result.max_freq),
+    animation: false,
+    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: text } },
+    yAxis: {
+      type: "value",
+      name: "Power spectral density",
+      splitLine,
+      min: 0,
+      max: maxScale && maxScale > 0 ? maxScale : highest(result) * 1.1,
+      axisLabel: { formatter: (value: number) => value.toExponential(1) },
+    },
+    series: [curve("Belt A", "a", BELT_A_COLOR), curve("Belt B", "b", BELT_B_COLOR)],
+  };
+}
+
+/** One belt's PSD alone, for a session where the other belt has no usable recording. */
+export function beltSingleOption(spectrum: BeltSpectrum, label: string, maxScale: number | null): EChartsCoreOption {
+  const top = Math.max(...spectrum.psd);
+  return {
+    ...base(null, spectrum.freqs.at(-1) ?? 0),
+    animation: false,
+    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    legend: { data: [label], top: 0, left: 56, textStyle: { color: text } },
+    yAxis: {
+      type: "value",
+      name: "Power spectral density",
+      splitLine,
+      min: 0,
+      max: maxScale && maxScale > 0 ? maxScale : top * 1.1,
+      axisLabel: { formatter: (value: number) => value.toExponential(1) },
+    },
+    series: [
+      {
+        name: label,
+        type: "line",
+        showSymbol: false,
+        color: label.startsWith("A") ? BELT_A_COLOR : BELT_B_COLOR,
+        data: zip(spectrum.freqs, spectrum.psd),
+      },
+    ],
+  };
+}
+
+/** Where the good zone ends above `x`, as Shake&Tune draws it. */
+export const goodZoneBoundary = (x: number, max: number) => x + 0.35 * max * Math.exp(-x / (0.6 * max));
+
+/** The y at which the boundary reaches `x`: the mirror of the zone's upper edge, never below 0. */
+function goodZoneLowerEdge(x: number, max: number): number {
+  let low = 0;
+  let high = x;
+  for (let i = 0; i < 40; i += 1) {
+    const mid = (low + high) / 2;
+    if (goodZoneBoundary(mid, max) < x) low = mid;
+    else high = mid;
+  }
+  return goodZoneBoundary(0, max) > x ? 0 : low;
+}
+
+const ZONE_STEPS = 100;
+
+/**
+ * Belt A's PSD against belt B's, with the ideal line, the good zone and the paired peaks. Where
+ * the two peaks of a pair are within 1 Hz they are one point labelled letter1/letter2.
+ */
+export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
+  const max = highest(result);
+  const end = max * 1.1;
+  const xs = Array.from({ length: ZONE_STEPS + 1 }, (_, i) => (end * i) / ZONE_STEPS);
+  const lower = xs.map((x) => goodZoneLowerEdge(x, max));
+  const { a, b } = result;
+  const dot = (coord: number[], label: string, color: string, bold = false) => ({
+    coord,
+    itemStyle: { color },
+    label: peakLabel(label, bold ? PEAK_ALERT : text, bold),
+  });
+  const points = [
+    ...result.pairs.flatMap((pair, order) => {
+      const letter = pairLetter(order);
+      if (Math.abs(pair.a.freq - pair.b.freq) < 1) {
+        return [dot([a.psd[pair.a.index], b.psd[pair.b.index]], `${letter}1/${letter}2`, text)];
+      }
+      return [
+        dot([a.psd[pair.b.index], b.psd[pair.b.index]], `${letter}2`, BELT_B_COLOR),
+        dot([a.psd[pair.a.index], b.psd[pair.a.index]], `${letter}1`, BELT_A_COLOR),
+      ];
+    }),
+    ...unpairedPoints(result, (_, index) => [a.psd[index], b.psd[index]]).map((point) =>
+      dot(point.coord, String(point.number), point.belt === "a" ? BELT_A_COLOR : BELT_B_COLOR, true),
+    ),
+  ];
+  return {
+    ...base(null, end),
+    animation: false,
+    tooltip: { trigger: "item" },
+    grid: { top: 40, left: 64, right: 24, bottom: 40 },
+    legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: text } },
+    xAxis: { type: "value", name: "Belt A", min: 0, max: end, splitLine },
+    yAxis: { type: "value", name: "Belt B", min: 0, max: end, splitLine },
+    series: [
+      {
+        name: "Good zone floor",
+        type: "line",
+        stack: "zone",
+        showSymbol: false,
+        silent: true,
+        lineStyle: { opacity: 0 },
+        tooltip: { show: false },
+        data: xs.map((x, i) => [x, lower[i]]),
+      },
+      {
+        name: "Good zone",
+        type: "line",
+        stack: "zone",
+        showSymbol: false,
+        silent: true,
+        lineStyle: { opacity: 0 },
+        areaStyle: { color: GOOD_ZONE },
+        itemStyle: { color: GOOD_ZONE },
+        data: xs.map((x, i) => [x, goodZoneBoundary(x, max) - lower[i]]),
+      },
+      {
+        name: "Ideal line",
+        type: "line",
+        showSymbol: false,
+        silent: true,
+        color: IDEAL_LINE,
+        lineStyle: { color: IDEAL_LINE, type: "dashed", width: 2 },
+        data: [
+          [0, 0],
+          [end, end],
+        ],
+      },
+      {
+        name: "Belts",
+        type: "line",
+        symbolSize: 3,
+        color: "#8a8a8a",
+        lineStyle: { color: "#8a8a8a", width: 1 },
+        data: a.psd.map((x, i) => [x, b.psd[i]]),
+        markPoint: { silent: true, symbol: "circle", symbolSize: 8, data: points },
       },
     ],
   };

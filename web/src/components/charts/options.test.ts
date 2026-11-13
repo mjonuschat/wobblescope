@@ -2,9 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { formatHz } from "@/lib/format";
 import { chipColor } from "@/pages/stream/colors";
-import { analysis, candidate, recommendation, spectrogram } from "@/test/fixtures";
+import { analysis, beltSpectrum, beltsResult, candidate, recommendation, spectrogram } from "@/test/fixtures";
 
-import { liveSpectrumOption, pointLabel, psdOption, spectrogramOption, summedOption } from "./options";
+import {
+  beltOverlayOption,
+  beltScatterOption,
+  beltSingleOption,
+  goodZoneBoundary,
+  liveSpectrumOption,
+  pointLabel,
+  psdOption,
+  spectrogramOption,
+  summedOption,
+} from "./options";
 
 type Series = {
   name: string;
@@ -526,5 +536,93 @@ describe("spectrogramOption", () => {
     expect(text).toContain("0.90 s");
     expect(text).toContain("1.5 Hz");
     expect(text).toContain("5.00e+0");
+  });
+});
+
+type Mark = { coord: number[]; label: { formatter: string; color: string; fontWeight: string } };
+type BeltSeries = {
+  name: string;
+  stack?: string;
+  data: number[][];
+  markPoint?: { data: Mark[] };
+  markLine?: { data: { coord: number[] }[][] };
+};
+
+describe("beltOverlayOption", () => {
+  it("the_overlay_has_two_curves_and_marks_pairs_with_greek_letters_and_unpaired_with_numbers", () => {
+    const option = beltOverlayOption(beltsResult(), null);
+    const [a, b] = (option as { series: BeltSeries[] }).series;
+    expect([a.name, b.name]).toEqual(["Belt A", "Belt B"]);
+    expect(a.data).toEqual([
+      [0, 0],
+      [50, 4],
+      [100, 1],
+      [150, 6],
+      [200, 0],
+    ]);
+    expect(a.markPoint?.data.map((m) => m.label.formatter)).toEqual(["α1", "β1"]);
+    expect(b.markPoint?.data.map((m) => m.label.formatter)).toEqual(["α2", "β2", "1"]);
+    const unpaired = b.markPoint?.data[2];
+    expect(unpaired?.coord).toEqual([150, 5.5]);
+    expect(unpaired?.label.color).toBe("#ff6b6b");
+    expect(unpaired?.label.fontWeight).toBe("bold");
+    expect(a.markLine?.data).toEqual([
+      [{ coord: [50, 4] }, { coord: [50, 3] }],
+      [{ coord: [150, 6] }, { coord: [100, 5] }],
+    ]);
+    expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200);
+  });
+
+  it("a_fixed_max_scale_ends_the_y_axis", () => {
+    const y = (max: number | null) => (beltOverlayOption(beltsResult(), max) as { yAxis: { max: number } }).yAxis.max;
+    expect(y(40)).toBe(40);
+    expect(y(null)).toBeCloseTo(6.6);
+  });
+});
+
+describe("beltSingleOption", () => {
+  it("draws one curve without peak marks", () => {
+    const option = beltSingleOption(beltSpectrum(), "A (axis 1,-1)", null);
+    const list = (option as { series: BeltSeries[] }).series;
+    expect(list).toHaveLength(1);
+    expect(list[0].markPoint).toBeUndefined();
+    expect(list[0].data).toHaveLength(5);
+    expect((option as { yAxis: { max: number } }).yAxis.max).toBeCloseTo(6.6);
+    expect((beltSingleOption(beltSpectrum(), "B (axis 1, 1)", 9) as { yAxis: { max: number } }).yAxis.max).toBe(9);
+  });
+});
+
+describe("beltScatterOption", () => {
+  const option = beltScatterOption(beltsResult());
+  const list = (option as { series: BeltSeries[] }).series;
+  const named = (name: string) => list.find((s) => s.name === name)!;
+
+  it("the_scatter_has_the_ideal_line_and_the_good_zone", () => {
+    const end = 6 * 1.1;
+    expect(named("Ideal line").data).toEqual([
+      [0, 0],
+      [end, end],
+    ]);
+    const floor = named("Good zone floor");
+    const zone = named("Good zone");
+    expect(zone.stack).toBe(floor.stack);
+    zone.data.forEach(([x, height], i) => {
+      expect(floor.data[i][0]).toBe(x);
+      expect(floor.data[i][1] + height).toBeCloseTo(x + 0.35 * 6 * Math.exp(-x / (0.6 * 6)));
+      expect(floor.data[i][1] + height).toBeCloseTo(goodZoneBoundary(x, 6));
+    });
+  });
+
+  it("plots belt A against belt B and marks the pairs", () => {
+    expect(named("Belts").data).toEqual([
+      [0, 0],
+      [4, 3],
+      [1, 5],
+      [6, 5.5],
+      [0, 0],
+    ]);
+    const marks = named("Belts").markPoint?.data ?? [];
+    expect(marks.map((m) => m.label.formatter)).toEqual(["α1/α2", "β2", "β1", "1"]);
+    expect(marks[0].coord).toEqual([4, 3]);
   });
 });

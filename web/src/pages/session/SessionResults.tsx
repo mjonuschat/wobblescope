@@ -11,6 +11,8 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
+import { BeltView } from "./belts/BeltView";
+import { UnsupportedDirections } from "./belts/UnsupportedDirections";
 import { SaveResultButton } from "./SaveResultDialog";
 import { baselineFor } from "./fit";
 
@@ -80,7 +82,25 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
       </div>
     );
   }
-  return <Loaded id={id} meta={session.data.meta} header={header} />;
+  const { meta, summary } = session.data;
+  switch (summary.kind) {
+    case "belts":
+      return (
+        <div className="space-y-4">
+          {header(null)}
+          <BeltView id={id} meta={meta} />
+        </div>
+      );
+    case "other":
+      return (
+        <div className="space-y-4">
+          {header(null)}
+          <UnsupportedDirections meta={meta} />
+        </div>
+      );
+    case "axes":
+      return <Loaded id={id} meta={meta} header={header} />;
+  }
 }
 
 /**
@@ -97,7 +117,8 @@ function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: H
   const [applied, setApplied] = useState<FitParams | null>(null);
   const [overrides, setOverrides] = useState<string[]>([]);
 
-  const axes = [...new Set(meta.segments.map((s) => s.axis))];
+  // Only a session of X and Y segments gets here, so no vector is dropped.
+  const axes = [...new Set(meta.segments.map((s) => s.axis).filter((a): a is Axis => typeof a === "string"))];
   const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
   const baseline = baselineFor(meta, axis ?? "X");
   const params = applied ?? baseline.params;

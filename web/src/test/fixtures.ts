@@ -1,4 +1,6 @@
 import type { BeltSide } from "@/lib/generated/BeltSide";
+import type { BeltSpectrum } from "@/lib/generated/BeltSpectrum";
+import type { BeltsResult } from "@/lib/generated/BeltsResult";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
@@ -158,6 +160,53 @@ export function beltsAnalysis(chip = "adxl345"): BeltsAnalysis {
     belt_a: side(true),
     belt_b: side(false),
     result: null,
+    core_version: "0.0.0",
+  };
+}
+
+/**
+ * A comparison on a 5-point grid: pair α shares a frequency (50 Hz), pair β does not (150 and 100
+ * Hz), and belt B has one unpaired peak.
+ */
+export function beltsResult(over: Partial<BeltsResult> = {}): BeltsResult {
+  return {
+    freqs: [0, 50, 100, 150, 200],
+    a: { psd: [0, 4, 1, 6, 0], peaks: [1, 3], unpaired: [] },
+    b: { psd: [0, 3, 5, 5.5, 0], peaks: [1, 2, 3], unpaired: [3] },
+    pairs: [
+      { a: { index: 1, freq: 50, level: 4 }, b: { index: 1, freq: 50, level: 3 } },
+      { a: { index: 3, freq: 150, level: 6 }, b: { index: 2, freq: 100, level: 5 } },
+    ],
+    offsets: [
+      { freq_delta: 0, amplitude_delta_percent: 0 },
+      { freq_delta: 50, amplitude_delta_percent: 12.345 },
+    ],
+    similarity: 87.65,
+    health: "Mechanical health: good",
+    max_freq: 200,
+    ...over,
+  };
+}
+
+/** A belt's spectrum, as the one-belt view draws it. */
+export function beltSpectrum(): BeltSpectrum {
+  return { freqs: [0, 50, 100, 150, 200], psd: [0, 4, 1, 6, 0] };
+}
+
+/** Both belts usable and compared. */
+export function beltsComparison(chip = "adxl345", result: BeltsResult = beltsResult()): BeltsAnalysis {
+  const side = (psd: number[]): BeltSide => ({
+    present: true,
+    decision: null,
+    failure: null,
+    spectrum: { freqs: result.freqs, psd },
+  });
+  return {
+    chip,
+    point: 0,
+    belt_a: side(result.a.psd),
+    belt_b: side(result.b.psd),
+    result,
     core_version: "0.0.0",
   };
 }
