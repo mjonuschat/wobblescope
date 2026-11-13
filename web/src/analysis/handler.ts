@@ -3,6 +3,7 @@ import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { Recommendation } from "@/lib/generated/Recommendation";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
 
 import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 
@@ -10,6 +11,7 @@ import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
 export interface SessionHandle {
   add_file(name: string, bytes: Uint8Array): void;
   analyze(axis: Axis, params: FitParams, overrides: string[]): Analysis;
+  spectrogram(axis: Axis, chip: string, point: number, maxFreq: number): Spectrogram;
   free(): void;
 }
 
@@ -37,7 +39,8 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     current = null;
   }
 
-  async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
+  /** The wasm module and the session the request is about, opened with the files it brings. */
+  async function open(request: Extract<WorkerRequest, { type: "analyze" | "spectrogram" }>) {
     loading ??= loadModule();
     const module = await loading;
     // A session written again under the same id has a new creation time and other files.
@@ -52,7 +55,12 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
     for (const [name, buffer] of Object.entries(request.files)) {
       current!.handle.add_file(name, new Uint8Array(buffer));
     }
-    const analysis = current!.handle.analyze(request.axis, request.params, request.overrides);
+    return { module, handle: current!.handle };
+  }
+
+  async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
+    const { module, handle } = await open(request);
+    const analysis = handle.analyze(request.axis, request.params, request.overrides);
     const snippet = (r: Recommendation | null) => (r ? module.config_snippet(r, request.axis) : null);
     const candidates = (r: Recommendation | null) =>
       r ? r.all.map((candidate) => module.config_snippet({ ...r, best: candidate }, request.axis)) : null;
@@ -75,6 +83,14 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
       return null;
     }
     try {
+      if (request.type === "spectrogram") {
+        const { handle: session } = await open(request);
+        return {
+          type: "spectrogram",
+          id: request.id,
+          result: session.spectrogram(request.axis, request.chip, request.point, request.maxFreq),
+        };
+      }
       return { type: "result", id: request.id, result: await analyze(request) };
     } catch (error) {
       return { type: "error", id: request.id, message: describe(error) };

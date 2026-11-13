@@ -1,6 +1,7 @@
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
 import { fetchResultSample as fetchResultSampleFile, fetchSample as fetchSampleFile } from "@/lib/api/endpoints";
 
 import type { AnalysisResult, WorkerRequest, WorkerResponse } from "./protocol";
@@ -24,6 +25,18 @@ export interface AnalysisJob {
   overrides: string[];
 }
 
+export interface SpectrogramJob {
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
+  sessionId: string;
+  resultId?: string;
+  meta: SessionMeta;
+  axis: Axis;
+  chip: string;
+  point: number;
+  /** The map keeps the frequencies up to this, in Hz. */
+  maxFreq: number;
+}
+
 /** A queued request that a newer one replaced before it was sent. */
 export class SupersededError extends Error {
   constructor() {
@@ -34,6 +47,8 @@ export class SupersededError extends Error {
 
 export interface AnalysisClient {
   analyze(job: AnalysisJob, signal?: AbortSignal): Promise<AnalysisResult>;
+  /** The time-frequency map of one chip's recording. It runs after the analysis in the queue. */
+  spectrogram(job: SpectrogramJob, signal?: AbortSignal): Promise<Spectrogram>;
   /** Drops what is held for a session id that may be written again. */
   forget(sessionId: string): void;
 }
@@ -44,19 +59,30 @@ interface Options {
   fetchResultSample?: typeof fetchResultSampleFile;
 }
 
-interface Queued {
-  job: AnalysisJob;
-  signal?: AbortSignal;
-  resolve: (result: AnalysisResult) => void;
-  reject: (error: unknown) => void;
-}
+type Kind = "analysis" | "spectrogram";
+
+type Queued =
+  | {
+      kind: "analysis";
+      job: AnalysisJob;
+      signal?: AbortSignal;
+      resolve: (result: AnalysisResult) => void;
+      reject: (error: unknown) => void;
+    }
+  | {
+      kind: "spectrogram";
+      job: SpectrogramJob;
+      signal?: AbortSignal;
+      resolve: (result: Spectrogram) => void;
+      reject: (error: unknown) => void;
+    };
 
 function abortError(): DOMException {
   return new DOMException("The analysis was cancelled", "AbortError");
 }
 
 /** What the worker and the held-files logic key a job by, so a result never shares files with a session. */
-function identityOf(job: AnalysisJob): string {
+function identityOf(job: AnalysisJob | SpectrogramJob): string {
   return job.resultId !== undefined ? `result:${job.resultId}` : job.sessionId;
 }
 
@@ -76,7 +102,8 @@ function filesFor(meta: SessionMeta, axis: Axis) {
 /**
  * Owns the analysis worker. It fetches the sample files of the requested axis on the main
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
- * request at a time: a newer request replaces one still waiting.
+ * request at a time: a newer request replaces a waiting one of the same kind, and a waiting
+ * analysis goes before a waiting spectrogram.
  */
 export function createAnalysisClient({
   createWorker,
@@ -88,9 +115,12 @@ export function createAnalysisClient({
   let heldCreatedAt: string | null = null;
   let held = new Set<string>();
   let nextId = 1;
-  const pending = new Map<number, { resolve: (r: AnalysisResult) => void; reject: (e: unknown) => void }>();
+  const pending = new Map<
+    number,
+    { resolve: (r: AnalysisResult | Spectrogram) => void; reject: (e: unknown) => void }
+  >();
   let active: Queued | null = null;
-  let waiting: Queued | null = null;
+  const waiting: Record<Kind, Queued | null> = { analysis: null, spectrogram: null };
 
   function ensureWorker(): WorkerLike {
     if (worker) return worker;
@@ -106,8 +136,8 @@ export function createAnalysisClient({
       const entry = pending.get(response.id);
       if (!entry) return;
       pending.delete(response.id);
-      if (response.type === "result") entry.resolve(response.result);
-      else entry.reject(new Error(response.message));
+      if (response.type === "error") entry.reject(new Error(response.message));
+      else entry.resolve(response.result);
     };
     created.onerror = () => {
       const failure = new Error("The analysis module failed to load");
@@ -122,7 +152,8 @@ export function createAnalysisClient({
     return created;
   }
 
-  async function run({ job, signal }: Queued): Promise<AnalysisResult> {
+  async function run(queued: Queued): Promise<AnalysisResult | Spectrogram> {
+    const { job, signal } = queued;
     if (signal?.aborted) throw abortError();
     const target = ensureWorker();
     const identity = identityOf(job);
@@ -148,7 +179,7 @@ export function createAnalysisClient({
 
     const id = nextId++;
     const files = Object.fromEntries(missing.map((f, i) => [f.name, buffers[i]]));
-    return new Promise<AnalysisResult>((resolve, reject) => {
+    return new Promise<AnalysisResult | Spectrogram>((resolve, reject) => {
       pending.set(id, { resolve, reject });
       signal?.addEventListener(
         "abort",
@@ -162,16 +193,28 @@ export function createAnalysisClient({
         { once: true },
       );
       target.postMessage(
-        {
-          type: "analyze",
-          id,
-          sessionId: identity,
-          meta: job.meta,
-          axis: job.axis,
-          params: job.params,
-          overrides: job.overrides,
-          files,
-        },
+        queued.kind === "analysis"
+          ? {
+              type: "analyze",
+              id,
+              sessionId: identity,
+              meta: job.meta,
+              axis: job.axis,
+              params: queued.job.params,
+              overrides: queued.job.overrides,
+              files,
+            }
+          : {
+              type: "spectrogram",
+              id,
+              sessionId: identity,
+              meta: job.meta,
+              axis: job.axis,
+              chip: queued.job.chip,
+              point: queued.job.point,
+              maxFreq: queued.job.maxFreq,
+              files,
+            },
         buffers,
       );
     });
@@ -180,15 +223,37 @@ export function createAnalysisClient({
   async function start(entry: Queued) {
     active = entry;
     try {
-      entry.resolve(await run(entry));
+      (entry.resolve as (result: unknown) => void)(await run(entry));
     } catch (error) {
       entry.reject(error);
     } finally {
       active = null;
-      const next = waiting;
-      waiting = null;
+      const kind: Kind | null = waiting.analysis ? "analysis" : waiting.spectrogram ? "spectrogram" : null;
+      const next = kind && waiting[kind];
+      if (kind) waiting[kind] = null;
       if (next) void start(next);
     }
+  }
+
+  /** Starts `entry` now, or queues it behind the active request in the slot of its kind. */
+  function submit(entry: Queued) {
+    const { kind, signal } = entry;
+    if (!active) {
+      void start(entry);
+      return;
+    }
+    waiting[kind]?.reject(new SupersededError());
+    waiting[kind] = entry;
+    signal?.addEventListener(
+      "abort",
+      () => {
+        if (waiting[kind] === entry) {
+          waiting[kind] = null;
+          entry.reject(abortError());
+        }
+      },
+      { once: true },
+    );
   }
 
   return {
@@ -198,23 +263,16 @@ export function createAnalysisClient({
           reject(abortError());
           return;
         }
-        const entry: Queued = { job, signal, resolve, reject };
-        if (!active) {
-          void start(entry);
+        submit({ kind: "analysis", job, signal, resolve, reject });
+      });
+    },
+    spectrogram(job, signal) {
+      return new Promise<Spectrogram>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
           return;
         }
-        waiting?.reject(new SupersededError());
-        waiting = entry;
-        signal?.addEventListener(
-          "abort",
-          () => {
-            if (waiting === entry) {
-              waiting = null;
-              reject(abortError());
-            }
-          },
-          { once: true },
-        );
+        submit({ kind: "spectrogram", job, signal, resolve, reject });
       });
     },
     forget(sessionId) {

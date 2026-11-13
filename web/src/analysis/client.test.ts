@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiClientError } from "@/lib/api/client";
-import { analysis, defaultParams, twoAxisMeta } from "@/test/fixtures";
+import { analysis, defaultParams, spectrogram, twoAxisMeta } from "@/test/fixtures";
 
 import { SupersededError, createAnalysisClient, type WorkerLike } from "./client";
-import type { AnalyzeRequest, WorkerRequest, WorkerResponse } from "./protocol";
+import type { AnalyzeRequest, SpectrogramRequest, WorkerRequest, WorkerResponse } from "./protocol";
 
 class FakeWorker implements WorkerLike {
   posted: { message: WorkerRequest; transfer: Transferable[] }[] = [];
@@ -19,6 +19,13 @@ class FakeWorker implements WorkerLike {
   }
   analyses() {
     return this.posted.map((p) => p.message).filter((m): m is AnalyzeRequest => m.type === "analyze");
+  }
+  spectrograms() {
+    return this.posted.map((p) => p.message).filter((m): m is SpectrogramRequest => m.type === "spectrogram");
+  }
+  answerSpectrogram(id: number) {
+    const response: WorkerResponse = { type: "spectrogram", id, result: spectrogram() };
+    this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>);
   }
   answer(id: number) {
     const response: WorkerResponse = {
@@ -48,7 +55,16 @@ function setup() {
     overrides: [] as string[],
     ...over,
   });
-  return { worker, fetchSample, createWorker, client, job };
+  const spectrogramJob = (over: Partial<Parameters<typeof client.spectrogram>[0]> = {}) => ({
+    sessionId: "s1",
+    meta: twoAxisMeta("s1"),
+    axis: "X" as const,
+    chip: "a",
+    point: 0,
+    maxFreq: 200,
+    ...over,
+  });
+  return { worker, fetchSample, createWorker, client, job, spectrogramJob };
 }
 
 /** Lets the client's pending fetches and posts run. */
@@ -149,6 +165,66 @@ describe("the analysis client", () => {
     worker.answer(worker.analyses()[1].id);
     await b;
     expect(fetchSample).toHaveBeenCalledTimes(4);
+  });
+
+  it("fetches the axis files for a spectrogram once and reuses the held session", async () => {
+    const { worker, fetchSample, client, job, spectrogramJob } = setup();
+    const first = client.analyze(job());
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await first;
+    const fetched = fetchSample.mock.calls.length;
+    const map = client.spectrogram(spectrogramJob({ chip: "b", point: 1, maxFreq: 120 }));
+    await flush();
+    const [request] = worker.spectrograms();
+    expect(request).toMatchObject({ axis: "X", chip: "b", point: 1, maxFreq: 120, sessionId: "s1", files: {} });
+    expect(fetchSample).toHaveBeenCalledTimes(fetched);
+    worker.answerSpectrogram(request.id);
+    expect(await map).toEqual(spectrogram());
+  });
+
+  it("keeps a waiting analysis when a spectrogram is requested, and runs the analysis first", async () => {
+    const { worker, client, job, spectrogramJob } = setup();
+    const first = client.analyze(job());
+    const waiting = client.analyze(job({ axis: "Y" }));
+    const map = client.spectrogram(spectrogramJob());
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await first;
+    await flush();
+    expect(worker.analyses().map((m) => m.axis)).toEqual(["X", "Y"]);
+    expect(worker.spectrograms()).toHaveLength(0);
+    worker.answer(worker.analyses()[1].id);
+    await waiting;
+    await flush();
+    worker.answerSpectrogram(worker.spectrograms()[0].id);
+    await map;
+  });
+
+  it("replaces a waiting spectrogram with a newer one, never posting it", async () => {
+    const { worker, client, job, spectrogramJob } = setup();
+    const first = client.analyze(job());
+    const older = client.spectrogram(spectrogramJob({ chip: "a" }));
+    const newer = client.spectrogram(spectrogramJob({ chip: "b" }));
+    await expect(older).rejects.toBeInstanceOf(SupersededError);
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await first;
+    await flush();
+    worker.answerSpectrogram(worker.spectrograms()[0].id);
+    await newer;
+    expect(worker.spectrograms().map((m) => m.chip)).toEqual(["b"]);
+  });
+
+  it("rejects an aborted spectrogram request and ignores its late result", async () => {
+    const { worker, client, spectrogramJob } = setup();
+    const controller = new AbortController();
+    const map = client.spectrogram(spectrogramJob(), controller.signal);
+    await flush();
+    const id = worker.spectrograms()[0].id;
+    controller.abort();
+    await expect(map).rejects.toMatchObject({ name: "AbortError" });
+    expect(() => worker.answerSpectrogram(id)).not.toThrow();
   });
 
   it("drops a queued request that a newer one replaces, never posting it", async () => {

@@ -56,11 +56,13 @@ describe("query hooks", () => {
     stubFetch({ status: 204 });
     client.setQueryData(queryKeys.result("r1"), {});
     client.setQueryData(queryKeys.analysis("result:r1", "X", defaultParams, [], "c", "r1"), {});
+    client.setQueryData(queryKeys.spectrogram("result:r1", "X", "a", 0, 200, "c", "r1"), {});
     const forget = vi.spyOn(getAnalysisClient(), "forget");
     const { result } = renderHook(() => useDeleteResult(), { wrapper });
     await act(() => result.current.mutateAsync("r1"));
     expect(client.getQueryData(queryKeys.result("r1"))).toBeUndefined();
     expect(client.getQueryData(queryKeys.analysis("result:r1", "X", defaultParams, [], "c", "r1"))).toBeUndefined();
+    expect(client.getQueryData(queryKeys.spectrogram("result:r1", "X", "a", 0, 200, "c", "r1"))).toBeUndefined();
     expect(forget).toHaveBeenCalledWith("result:r1");
   });
 
@@ -69,6 +71,7 @@ describe("query hooks", () => {
     stubFetch({ status: 204 });
     client.setQueryData(queryKeys.session("s1"), { summary: {}, meta: {} });
     client.setQueryData(queryKeys.analysis("s1", "X", defaultParams), { analysis: {} });
+    client.setQueryData(queryKeys.spectrogram("s1", "X", "a", 0, 200), {});
     const forget = vi.spyOn(getAnalysisClient(), "forget");
     client.setQueryData(queryKeys.sessionList({ pinned: true }), { sessions: [] });
     client.setQueryData(queryKeys.storage, {});
@@ -76,6 +79,7 @@ describe("query hooks", () => {
     await act(() => result.current.mutateAsync("s1"));
     expect(client.getQueryData(queryKeys.session("s1"))).toBeUndefined();
     expect(client.getQueryData(queryKeys.analysis("s1", "X", defaultParams))).toBeUndefined();
+    expect(client.getQueryData(queryKeys.spectrogram("s1", "X", "a", 0, 200))).toBeUndefined();
     expect(forget).toHaveBeenCalledWith("s1");
     expect(client.getQueryState(queryKeys.sessionList({ pinned: true }))?.isInvalidated).toBe(true);
     expect(client.getQueryState(queryKeys.storage)?.isInvalidated).toBe(true);

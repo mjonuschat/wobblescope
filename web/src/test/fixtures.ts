@@ -5,6 +5,7 @@ import type { CalibrationResult } from "@/lib/generated/CalibrationResult";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { FitSettings } from "@/lib/generated/FitSettings";
 import type { Recommendation } from "@/lib/generated/Recommendation";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 export const defaultParams: FitParams = {
@@ -128,5 +129,20 @@ export function analysis(): Analysis {
     failures: [],
     eligibility: { decisions: [] },
     core_version: "0.1.0",
+  };
+}
+
+/** Three segments by four bins, from a floor of 1 to a maximum of 1000, with one cell of 0. */
+export function spectrogram(): Spectrogram {
+  return {
+    freq_bins: [0, 1.5, 3, 4.5],
+    times: [0.3, 0.6, 0.9],
+    power: [
+      [1, 10, 100, 1000],
+      [2, 20, 200, 500],
+      [0, 5, 50, 100],
+    ],
+    floor: 1,
+    max: 1000,
   };
 }

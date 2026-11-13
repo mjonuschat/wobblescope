@@ -53,6 +53,10 @@ export const queryKeys = {
   status: ["status"] as const,
   printer: ["printer"] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
+  spectrogramsOf: (id: string) => ["spectrogram", id] as const,
+  /** One chip's map at one probe point. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
+  spectrogram: (id: string, axis: Axis, chip: string, point: number, maxFreq: number, createdAt = "", resultId = "") =>
+    ["spectrogram", id, axis, chip, point, maxFreq, createdAt, resultId] as const,
   /** `createdAt` tells a session written again under the same id from the one analysed before. */
   analysis: (id: string, axis: Axis, params: FitParams, overrides: string[] = [], createdAt = "", resultId = "") =>
     ["analysis", id, axis, params, overrides, createdAt, resultId] as const,
@@ -188,6 +192,7 @@ export function useDeleteSession() {
       queryClient.removeQueries({ queryKey: queryKeys.session(id) });
       // The id can be written again with other data, so nothing of the old session may stay.
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(id) });
+      queryClient.removeQueries({ queryKey: queryKeys.spectrogramsOf(id) });
       getAnalysisClient().forget(id);
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
@@ -319,6 +324,7 @@ export function useDeleteResult() {
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: queryKeys.result(id) });
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(`result:${id}`) });
+      queryClient.removeQueries({ queryKey: queryKeys.spectrogramsOf(`result:${id}`) });
       getAnalysisClient().forget(`result:${id}`);
       void queryClient.invalidateQueries({ queryKey: queryKeys.results });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });

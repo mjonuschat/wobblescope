@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { analysis, candidate, defaultParams, twoAxisMeta } from "@/test/fixtures";
+import { analysis, candidate, defaultParams, spectrogram, twoAxisMeta } from "@/test/fixtures";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
+import type { Spectrogram } from "@/lib/generated/Spectrogram";
 
 import { createHandler, type SessionHandle, type WasmModule } from "./handler";
-import type { AnalyzeRequest } from "./protocol";
+import type { AnalyzeRequest, SpectrogramRequest } from "./protocol";
 
 class FakeSession implements SessionHandle {
   files = new Map<string, Uint8Array>();
   freed = false;
   analyzeCalls: unknown[][] = [];
+  spectrogramCalls: unknown[][] = [];
   meta: SessionMeta;
   run: () => Analysis;
-  constructor(meta: SessionMeta, run: () => Analysis) {
+  runSpectrogram: () => Spectrogram;
+  constructor(meta: SessionMeta, run: () => Analysis, runSpectrogram: () => Spectrogram = spectrogram) {
     this.meta = meta;
     this.run = run;
+    this.runSpectrogram = runSpectrogram;
   }
   add_file(name: string, bytes: Uint8Array) {
     this.files.set(name, bytes);
@@ -24,23 +28,42 @@ class FakeSession implements SessionHandle {
     this.analyzeCalls.push([axis, params, overrides]);
     return this.run();
   }
+  spectrogram(axis: unknown, chip: unknown, point: unknown, maxFreq: unknown) {
+    this.spectrogramCalls.push([axis, chip, point, maxFreq]);
+    return this.runSpectrogram();
+  }
   free() {
     this.freed = true;
   }
 }
 
-function fakeModule(run: () => Analysis = analysis) {
+function fakeModule(run: () => Analysis = analysis, runSpectrogram: () => Spectrogram = spectrogram) {
   const sessions: FakeSession[] = [];
   const module = {
     WasmSession: class extends FakeSession {
       constructor(meta: SessionMeta) {
-        super(meta, run);
+        super(meta, run, runSpectrogram);
         sessions.push(this);
       }
     },
     config_snippet: (rec, axis) => `snippet ${rec.best.name} ${axis}`,
   } as WasmModule;
   return { module, sessions };
+}
+
+function spectrogramRequest(over: Partial<SpectrogramRequest> = {}): SpectrogramRequest {
+  return {
+    type: "spectrogram",
+    id: 1,
+    sessionId: "s1",
+    meta: twoAxisMeta("s1"),
+    axis: "X",
+    chip: "a",
+    point: 0,
+    maxFreq: 200,
+    files: {},
+    ...over,
+  };
 }
 
 function request(over: Partial<AnalyzeRequest> = {}): AnalyzeRequest {
@@ -105,6 +128,36 @@ describe("the worker handler", () => {
     const response = await handle(request({ files: { "c0-s0.zst": bytes(1) } }));
     const result = (response as { result: { snippets: { worstCasePerformance: string | null } } }).result;
     expect(result.snippets.worstCasePerformance).toBe("snippet zv X");
+  });
+
+  it("answers a spectrogram request with the wasm result and the same id", async () => {
+    const { module, sessions } = fakeModule();
+    const handle = createHandler(async () => module);
+    const response = await handle(spectrogramRequest({ id: 5, chip: "b", point: 1, maxFreq: 120 }));
+    expect(response).toEqual({ type: "spectrogram", id: 5, result: spectrogram() });
+    expect(sessions[0].spectrogramCalls).toEqual([["X", "b", 1, 120]]);
+  });
+
+  it("opens the session and adds the files for a spectrogram, and reuses it for an analysis", async () => {
+    const { module, sessions } = fakeModule();
+    const handle = createHandler(async () => module);
+    await handle(spectrogramRequest({ files: { "c0-s0.zst": bytes(1) } }));
+    await handle(request({ id: 2 }));
+    expect(sessions).toHaveLength(1);
+    expect([...sessions[0].files.keys()]).toEqual(["c0-s0.zst"]);
+    expect(sessions[0].analyzeCalls).toHaveLength(1);
+  });
+
+  it("answers a spectrogram failure with its message and the same id", async () => {
+    const { module } = fakeModule(analysis, () => {
+      throw new Error("no recording of chip x at point 0 on this axis");
+    });
+    const handle = createHandler(async () => module);
+    expect(await handle(spectrogramRequest({ id: 9 }))).toEqual({
+      type: "error",
+      id: 9,
+      message: "no recording of chip x at point 0 on this axis",
+    });
   });
 
   it("reuses the handle for a second request on the same session", async () => {
