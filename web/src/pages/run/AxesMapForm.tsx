@@ -13,6 +13,7 @@ import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
 import { usePrinterState, useStartAxesMap } from "@/lib/api/queries";
 import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
+import type { ChipChoice } from "@/lib/generated/ChipChoice";
 import type { CheckFailure } from "@/lib/generated/CheckFailure";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Mounting } from "@/lib/generated/Mounting";
@@ -78,14 +79,16 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (problem || start.isPending) return;
-    // The daemon takes an unset setting as absent, which the generated type spells as `null`.
-    const request = {
+    const draft: { chips: ChipChoice[] } & Partial<Omit<AxesMapRequest, "chips">> = {
       chips: ordered.map((chip) => ({ chip, mounting: mounting[chip] ?? "toolhead" })),
-    } as AxesMapRequest;
+    };
     for (const { key, fallback } of PARAMETERS) {
       const value = values[key];
-      if (value !== undefined && value !== fallback) request[key] = value;
+      if (value !== undefined && value !== fallback) draft[key] = value;
     }
+    // The daemon takes an unset setting as absent, which the generated type spells as `null`,
+    // and JSON.stringify drops the undefined fields.
+    const request = draft as AxesMapRequest;
     start.mutate(request, { onSuccess: (started) => onStarted(started.id) });
   }
 

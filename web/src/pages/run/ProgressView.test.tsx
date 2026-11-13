@@ -168,6 +168,13 @@ describe("a running test", () => {
     expect(await screen.findByText("Failure recorded, waiting for the sweep to end")).toBeTruthy();
   });
 
+  it("shows each chip's signal level as text during an axes-map run", async () => {
+    await mount({ test: { ...running, kind: "axes_map" }, last: null });
+    expect(await screen.findByText("adxl345: 120 / 40 / 8 mm/s²")).toBeTruthy();
+    expect(screen.queryByText(/lis2dw ebb36:/)).toBeNull();
+    expect(screen.queryByRole("img", { name: /Signal against frequency/ })).toBeNull();
+  });
+
   describe("chip warnings", () => {
     const warned = (segment = 3): TestState => ({
       ...running,

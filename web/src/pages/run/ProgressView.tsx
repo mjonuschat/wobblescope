@@ -104,6 +104,17 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
         <p className="text-sm text-muted-foreground">
           {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}
         </p>
+        {axesMap && (
+          <ul aria-label="Signal level" className="space-y-0.5 text-sm text-muted-foreground">
+            {test.chips.map(({ chip, level }) =>
+              level ? (
+                <li key={chip}>
+                  {chip}: {level.map((rms) => Math.round(rms)).join(" / ")} mm/s²
+                </li>
+              ) : null,
+            )}
+          </ul>
+        )}
       </Panel>
       {!axesMap && (
         <Panel title="Signal">
