@@ -275,6 +275,7 @@ pub fn mount_configured(
         .route("/chips/check", post(status::check_chips))
         .route("/settings", get(settings::settings))
         .route("/tests", post(tests::start))
+        .route("/axes-map", post(tests::start_axes_map))
         .route("/tests/{id}/emergency-stop", post(tests::emergency_stop))
         .route("/printer", get(printer::printer))
         .route("/printer/emergency-stop", post(printer::emergency_stop))

@@ -241,3 +241,113 @@ async fn a_stop_that_moonraker_has_not_confirmed_leaves_the_motion_uncertain_and
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(rig.slot.motion_uncertain().is_none());
 }
+
+fn calibration_request() -> Value {
+    json!({
+        "chips": [
+            {"chip": "adxl345", "mounting": "toolhead"},
+            {"chip": "lis2dw ebb36", "mounting": "toolhead"},
+        ],
+    })
+}
+
+/// Gives the simulated toolhead the limits a calibration saves and restores.
+fn set_calibration_limits(rig: &Rig) {
+    let printer = &rig.sim.printer;
+    printer.set_field("toolhead", "max_velocity", json!(500.0));
+    printer.set_field("toolhead", "max_accel", json!(3000.0));
+    printer.set_field("toolhead", "minimum_cruise_ratio", json!(0.5));
+    printer.set_field("toolhead", "square_corner_velocity", json!(8.0));
+}
+
+#[tokio::test]
+async fn posting_a_calibration_starts_it_and_returns_202() {
+    let rig = rig().await;
+    set_calibration_limits(&rig);
+    rig.sim.feed_until_motion();
+    let (status, body) = answer(&rig, post("/api/axes-map", &calibration_request())).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let id = body["id"].as_str().unwrap().to_owned();
+    let finished = rig.finished().await;
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    assert_eq!(finished.session_id.as_deref(), Some(id.as_str()));
+}
+
+#[tokio::test]
+async fn a_second_start_while_one_runs_is_refused() {
+    let rig = rig().await;
+    set_calibration_limits(&rig);
+    rig.sim.set_behavior(0, Sweep::Pending);
+    rig.sim.feed_until_motion();
+    let _id = start_test(&rig).await;
+    rig.until("the sweep", || rig.sim.sweeps().len() == 1).await;
+    let (status, body) = answer(&rig, post("/api/axes-map", &calibration_request())).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "preflight_failed");
+    assert!(
+        body["failures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["check"] == "no_test_running")
+    );
+    rig.sim.release_pending(true);
+    rig.finished().await;
+}
+
+#[tokio::test]
+async fn a_bad_request_names_the_field() {
+    let rig = rig().await;
+    let mut r = calibration_request();
+    r["speed"] = json!(10);
+    let (status, body) = answer(&rig, post("/api/axes-map", &r)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "invalid_request");
+    assert!(
+        body["message"].as_str().unwrap().contains("speed"),
+        "{body}"
+    );
+    assert!(rig.sim.scripts().is_empty());
+}
+
+#[tokio::test]
+async fn the_sealed_calibration_appears_in_the_session_list_detail_and_download() {
+    let rig = rig().await;
+    set_calibration_limits(&rig);
+    rig.sim.feed_until_motion();
+    let (status, body) = answer(&rig, post("/api/axes-map", &calibration_request())).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let id = body["id"].as_str().unwrap().to_owned();
+    let finished = rig.finished().await;
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+
+    let (status, body) = answer(&rig, common::request("GET", "/api/sessions")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let listed = body["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == id.as_str())
+        .unwrap_or_else(|| panic!("{id} is not listed: {body}"));
+    assert_eq!(listed["mode"], Value::Null);
+    assert_eq!(listed["outcome"], "Complete");
+
+    let (status, body) = answer(&rig, common::request("GET", &format!("/api/sessions/{id}"))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["meta"]["kind"], "AxesMap");
+    assert_eq!(body["meta"]["segments"].as_array().unwrap().len(), 3);
+
+    let (status, headers, bytes) = send(
+        &rig.app(),
+        common::request("GET", &format!("/api/sessions/{id}/download")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["content-type"], "application/zip");
+    let archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    assert!(
+        archive
+            .file_names()
+            .any(|n| n.is_ok_and(|n| n == "meta.json"))
+    );
+}

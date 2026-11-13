@@ -1,4 +1,4 @@
-//! `POST /api/tests` and `POST /api/tests/{id}/emergency-stop`.
+//! `POST /api/tests`, `POST /api/axes-map` and `POST /api/tests/{id}/emergency-stop`.
 
 use axum::Json;
 use axum::extract::State;
@@ -9,8 +9,9 @@ use time::OffsetDateTime;
 use super::error::{ApiJson, ApiPath};
 use super::{ApiError, ApiState, settings};
 use crate::capture::CheckFailure;
+use crate::capture::axes_map::{AxesMapRequest, plan_axes_map};
 use crate::capture::preflight::{Deps, Refusal, run};
-use crate::capture::request::{TestRequest, plan};
+use crate::capture::request::{TestPlan, TestRequest, plan};
 use crate::capture::runner::Job;
 
 /// The answer to a started test.
@@ -36,6 +37,24 @@ pub(super) async fn start(
     let printer = settings::read(&state).await?;
     let plan = plan(&request, &printer, state.capture.max_segment_seconds)
         .map_err(|e| ApiError::invalid(e.to_string()))?;
+    start_plan(state, plan).await
+}
+
+pub(super) async fn start_axes_map(
+    State(state): State<ApiState>,
+    ApiJson(request): ApiJson<AxesMapRequest>,
+) -> Result<(StatusCode, Json<StartedTest>), ApiError> {
+    let printer = settings::read(&state).await?;
+    let plan = plan_axes_map(&request, &printer, state.capture.max_segment_seconds)
+        .map_err(|e| ApiError::invalid(e.to_string()))?;
+    start_plan(state, plan).await
+}
+
+/// Takes the slot, runs pre-flight and spawns the runner for a plan either start handler built.
+async fn start_plan(
+    state: ApiState,
+    plan: TestPlan,
+) -> Result<(StatusCode, Json<StartedTest>), ApiError> {
     let permit = state.capture.slot.try_acquire();
     let deps = Deps::new(&state.moonraker, &state.storage, &state.capture.slot);
     let started = run(&deps, &plan, permit.is_none(), OffsetDateTime::now_utc())
