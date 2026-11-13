@@ -386,6 +386,10 @@ describe("the belts form", () => {
     expect(screen.queryByRole("switch", { name: "Y" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Add a point after/ })).toBeNull();
     expect(document.querySelectorAll('input[id^="point-"][id$="-x"]')).toHaveLength(1);
+    expect(screen.queryByText("Points")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pattern" })).toBeNull();
+    expect(screen.getByText("Test point")).toBeTruthy();
+    expect(field("Point 1 X").value).toBe("150.5");
     expect(screen.getByRole("combobox", { name: "Mode" })).toBeTruthy();
     expect(field(/End frequency/).value).toBe("135");
   });

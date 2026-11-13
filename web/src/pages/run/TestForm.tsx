@@ -95,6 +95,40 @@ function FormCard({ title, action, children }: { title: string; action?: ReactNo
   );
 }
 
+/** The X, Y and Z inputs of one test point; ids and labels are what the tests and error links rely on. */
+function PointInputs({
+  row,
+  index,
+  labelled,
+  onChange,
+}: {
+  row: PointRow;
+  index: number;
+  labelled: boolean;
+  onChange: (axis: "x" | "y" | "z", value: string) => void;
+}) {
+  return (
+    <>
+      {(["x", "y", "z"] as const).map((axis) => (
+        <div key={axis} className="space-y-1">
+          <Label htmlFor={`point-${index}-${axis}`} className={labelled ? undefined : "sr-only"}>
+            {axis.toUpperCase()}
+          </Label>
+          <UnitInput
+            id={`point-${index}-${axis}`}
+            aria-label={`Point ${index + 1} ${axis.toUpperCase()}`}
+            unit="mm"
+            step={1}
+            className="w-32"
+            value={row[axis]}
+            onChange={(e) => onChange(axis, e.target.value)}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ChoiceRow({ label, error, children }: { label: string; error: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-2">
@@ -344,6 +378,18 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
             </div>
             {OVERRIDE_FIELDS.filter(({ key }) => isModeField(key) && !sweepOnly(key)).map(overrideField)}
           </div>
+          {belts && (
+            <ChoiceRow label="Test point" error={<FieldError name="points" text={errorFor("points")} />}>
+              <div className="flex items-end gap-2">
+                <PointInputs
+                  row={points[0]}
+                  index={0}
+                  labelled
+                  onChange={(axis, value) => setPoints([{ ...points[0], [axis]: value }])}
+                />
+              </div>
+            </ChoiceRow>
+          )}
         </div>
       </FormCard>
 
@@ -376,31 +422,21 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
         </div>
       </FormCard>
 
-      <FormCard title="Points" action={patternMenu}>
-        <div className="space-y-2">
-          {points.map((row, i) => {
-            return (
-              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
-              <div key={i} className="flex items-end gap-2">
-                {(["x", "y", "z"] as const).map((axis) => (
-                  <div key={axis} className="space-y-1">
-                    <Label htmlFor={`point-${i}-${axis}`} className={i === 0 ? undefined : "sr-only"}>
-                      {axis.toUpperCase()}
-                    </Label>
-                    <UnitInput
-                      id={`point-${i}-${axis}`}
-                      aria-label={`Point ${i + 1} ${axis.toUpperCase()}`}
-                      unit="mm"
-                      step={1}
-                      className="w-32"
-                      value={row[axis]}
-                      onChange={(e) =>
-                        editPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: e.target.value } : r)))
-                      }
-                    />
-                  </div>
-                ))}
-                {!belts && (
+      {!belts && (
+        <FormCard title="Points" action={patternMenu}>
+          <div className="space-y-2">
+            {points.map((row, i) => {
+              return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: rows have no id and are edited by position
+                <div key={i} className="flex items-end gap-2">
+                  <PointInputs
+                    row={row}
+                    index={i}
+                    labelled={i === 0}
+                    onChange={(axis, value) =>
+                      editPoints((old) => old.map((r, j) => (j === i ? { ...r, [axis]: value } : r)))
+                    }
+                  />
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -428,13 +464,13 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
                       <PlusIcon />
                     </Button>
                   </div>
-                )}
-              </div>
-            );
-          })}
-          <FieldError name="points" text={errorFor("points")} />
-        </div>
-      </FormCard>
+                </div>
+              );
+            })}
+            <FieldError name="points" text={errorFor("points")} />
+          </div>
+        </FormCard>
+      )}
 
       <Separator />
 
