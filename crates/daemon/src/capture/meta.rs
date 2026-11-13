@@ -7,7 +7,7 @@ use wobblescope_session::meta::{
 };
 
 use super::recorder::ChipSummary;
-use super::request::TestPlan;
+use super::request::{PlanKind, TestPlan};
 use crate::moonraker::chips::{Chip, ChipType};
 
 /// What a chip contributes to the metadata before the test runs.
@@ -60,16 +60,24 @@ pub fn initial(
     chips: &[ChipFacts],
     printer: Option<PrinterInfo>,
 ) -> SessionMeta {
-    SessionMeta {
+    let axes_map = match &plan.kind {
+        PlanKind::AxesMap(axes_map) => Some(axes_map),
+        PlanKind::Resonance => None,
+    };
+    let mut meta = SessionMeta {
         format_version: FORMAT_VERSION,
         id: id.to_owned(),
         created_at: created_at.to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
-        kind: SessionKind::Resonance,
-        axes_map_run: None,
-        mode: Some(plan.mode),
-        settings: Some(plan.sweep_settings()),
+        kind: if axes_map.is_some() {
+            SessionKind::AxesMap
+        } else {
+            SessionKind::Resonance
+        },
+        axes_map_run: axes_map.map(|a| a.run.clone()),
+        mode: axes_map.is_none().then_some(plan.mode),
+        settings: axes_map.is_none().then(|| plan.sweep_settings()),
         printer,
         outcome: Outcome::Complete,
         notes: Vec::new(),
@@ -86,13 +94,20 @@ pub fn initial(
                 nominal_rate_hz: c.nominal_rate_hz,
                 observed_rate_hz: Some(c.observed_rate_hz),
                 axes_map: c.axes_map.clone(),
-                mounting: None,
+                mounting: axes_map.and_then(|a| {
+                    a.mountings
+                        .iter()
+                        .find(|(name, _)| *name == c.section)
+                        .map(|(_, mounting)| *mounting)
+                }),
                 health: Health::Ok,
                 health_notes: Vec::new(),
             })
             .collect(),
         segments: Vec::new(),
-    }
+    };
+    meta.format_version = meta.required_version();
+    meta
 }
 
 /// Writes each chip's health, notes and observed rate into `meta`. `summaries` follow the order

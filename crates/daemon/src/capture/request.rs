@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use wobblescope_core::fit::Axis;
 use wobblescope_session::meta::{Mode, SweepSettings};
 
+use super::axes_map::AxesMapPlan;
 use crate::moonraker::settings::PrinterSettings;
 
 /// Seconds a segment needs besides the sweep itself: the move, the pause and the tail.
@@ -73,7 +74,7 @@ pub struct RequestError {
     pub message: String,
 }
 
-fn refuse<T>(field: &str, message: impl Into<String>) -> Result<T, RequestError> {
+pub(super) fn refuse<T>(field: &str, message: impl Into<String>) -> Result<T, RequestError> {
     Err(RequestError {
         field: field.to_owned(),
         message: message.into(),
@@ -108,6 +109,17 @@ pub struct Segment {
     pub point: usize,
     /// Where the toolhead stands, `[x, y, z]` in mm.
     pub position: [f64; 3],
+    /// Where an axes-map move ends; `None` for a resonance segment.
+    pub target: Option<[f64; 3]>,
+}
+
+/// What a plan runs.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlanKind {
+    /// A resonance test.
+    Resonance,
+    /// An axes-map calibration.
+    AxesMap(AxesMapPlan),
 }
 
 /// A validated request: everything the runner needs to move and send commands.
@@ -128,7 +140,9 @@ pub struct TestPlan {
     /// How long one segment is expected to take, in seconds.
     pub segment_seconds: f64,
     /// Whether the printer's own period must be switched off for a pulse test.
-    pulse_zeroes_period: bool,
+    pub(super) pulse_zeroes_period: bool,
+    /// What the plan runs.
+    pub kind: PlanKind,
 }
 
 impl TestPlan {
@@ -288,6 +302,7 @@ pub fn plan(
                 axis: *axis,
                 point,
                 position: *position,
+                target: None,
             })
         })
         .collect();
@@ -314,10 +329,11 @@ pub fn plan(
         // Klipper's own period would make a pulse test sweep, so it is switched off unless the
         // effective period is known to be 0 already.
         pulse_zeroes_period: pulse && sweeping_period != Some(0.0),
+        kind: PlanKind::Resonance,
     })
 }
 
-fn check_chips(chips: &[String]) -> Result<(), RequestError> {
+pub(super) fn check_chips(chips: &[String]) -> Result<(), RequestError> {
     if chips.is_empty() {
         return refuse("chips", "choose at least one chip");
     }

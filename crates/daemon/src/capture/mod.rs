@@ -1,6 +1,7 @@
 //! Capture: running a resonance test and recording what the accelerometers see.
 
 pub mod availability;
+pub mod axes_map;
 pub mod live;
 pub mod meta;
 pub mod position;
