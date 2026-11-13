@@ -15,6 +15,7 @@ import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { AXIS_LABEL, type Axis3 } from "@/pages/stream/axes";
 import { chipColor } from "@/pages/stream/colors";
 import { RAMP } from "@/stream/spectrogramScale";
+import { RESET_ZOOM_ICON, ZOOM_IN_ICON } from "./lucidePath";
 
 /** Where a probe point is, or its number when its position is not known. */
 export function pointLabel(index: number, probePoints: ProbePoint[]): string {
@@ -531,10 +532,15 @@ function zoomControls(both: boolean): EChartsCoreOption {
     toolbox: {
       top: 0,
       right: 16,
+      // Stroke-only icons to match the 16px lucide buttons elsewhere in the app.
+      iconStyle: { color: "none", borderColor: MUTED, borderWidth: 2 },
+      emphasis: { iconStyle: { color: "none", borderColor: PALETTE[0], borderWidth: 2 } },
+      itemSize: 16,
       feature: {
         dataZoom: {
           ...(both ? {} : { yAxisIndex: "none" }),
           title: { zoom: "Zoom in", back: "Reset zoom" },
+          icon: { zoom: ZOOM_IN_ICON, back: RESET_ZOOM_ICON },
         },
       },
     },

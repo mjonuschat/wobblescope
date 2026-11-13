@@ -31,8 +31,15 @@ describe("the registered chart parts", () => {
     ]) {
       const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 600, height: 400 });
       chart.setOption(option);
-      const applied = chart.getOption() as { toolbox?: unknown[]; dataZoom?: unknown[] };
+      const applied = chart.getOption() as {
+        toolbox?: { feature: { dataZoom: { icon: { zoom: string; back: string }; title: object } } }[];
+        dataZoom?: unknown[];
+      };
       expect(applied.toolbox?.length).toBeGreaterThan(0);
+      const { icon, title } = applied.toolbox![0].feature.dataZoom;
+      expect(icon.zoom).toMatch(/^path:\/\//);
+      expect(icon.back).toMatch(/^path:\/\//);
+      expect(title).toEqual({ zoom: "Zoom in", back: "Reset zoom" });
       expect(applied.dataZoom?.length).toBeGreaterThan(0);
       chart.dispose();
     }
