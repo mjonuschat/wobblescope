@@ -15,16 +15,24 @@ interface Options {
   chips?: ChipsSnapshot;
   checked?: ChipsSnapshot;
   homed?: string | null;
+  busy?: string | null;
   start?: Reply | ((call: ApiCall) => Reply);
 }
 
-function api({ settings = printerSettings(), chips = chipsSnapshot(), checked, start, homed = "xyz" }: Options = {}) {
+function api({
+  settings = printerSettings(),
+  chips = chipsSnapshot(),
+  checked,
+  start,
+  homed = "xyz",
+  busy = null,
+}: Options = {}) {
   return stubApiWithStatus((call) => {
     const path = apiPath(call);
     if (path === "settings") return { body: settings };
     if (path === "chips") return { body: chips };
     if (path === "chips/check") return { body: checked ?? chips };
-    if (path === "printer") return { body: { homed_axes: homed } };
+    if (path === "printer") return { body: { homed_axes: homed, busy } };
     if (path === "tests" && call.method === "POST") {
       const reply = typeof start === "function" ? start(call) : start;
       return reply ?? { status: 202, body: { id: "test-1" } };
@@ -63,6 +71,19 @@ describe("the run screen", () => {
     renderRoute("/run/shaper");
     expect(await screen.findByText("Home the printer first. Not homed: Z.")).toBeTruthy();
     expect(startButton().disabled).toBe(true);
+  });
+
+  it("disables Start and says why while the printer is busy", async () => {
+    api({ busy: "The printer is homing." });
+    renderRoute("/run/shaper");
+    expect(await screen.findByText("The printer is homing.")).toBeTruthy();
+    expect(startButton().disabled).toBe(true);
+  });
+
+  it("enables Start when the printer is not busy", async () => {
+    api({ busy: null });
+    renderRoute("/run/shaper");
+    await waitFor(() => expect(startButton().disabled).toBe(false));
   });
 
   it("names every axis when none is homed", async () => {
@@ -237,7 +258,7 @@ describe("the run screen", () => {
             : path === "settings"
               ? printerSettings()
               : path === "printer"
-                ? { homed_axes: "xyz" }
+                ? { homed_axes: "xyz", busy: null }
                 : chipsSnapshot();
         return new Response(JSON.stringify(body), { status: 200 });
       }),

@@ -60,7 +60,7 @@ function api(start: Reply = { status: 202, body: { id: "test-1" } }) {
     const path = apiPath(call);
     if (path === "settings") return { body: printerSettings() };
     if (path === "chips") return { body: chipsSnapshot() };
-    if (path === "printer") return { body: { homed_axes: "xyz" } };
+    if (path === "printer") return { body: { homed_axes: "xyz", busy: null } };
     if (path === "tests") return start;
     return { status: 404, body: { error: "not_found", message: "no" } };
   });

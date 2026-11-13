@@ -13,7 +13,7 @@ function api(homed = "xyz", extra: (path: string) => Reply | null = () => null) 
     const path = apiPath(call);
     const custom = extra(path);
     if (custom) return custom;
-    if (path === "printer") return { body: { homed_axes: homed } };
+    if (path === "printer") return { body: { homed_axes: homed, busy: null } };
     if (path === "printer/emergency-stop") return { body: { dispatched: true } };
     if (path === "printer/home") return { body: { homed: true } };
     if (path === "settings") return { body: printerSettings() };

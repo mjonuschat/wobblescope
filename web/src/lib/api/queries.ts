@@ -281,11 +281,14 @@ export function useStartTest() {
   return useMutation({ mutationFn: (request: StartTestRequest) => startTest(request) });
 }
 
+const BUSY_POLL_MS = 1000;
+
 export function usePrinterState(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.printer,
     queryFn: ({ signal }) => getPrinter(signal),
-    refetchInterval: STATUS_POLL_MS,
+    // A busy printer is watched closely so the Run button frees up soon after it settles.
+    refetchInterval: (query) => (query.state.data?.busy ? BUSY_POLL_MS : STATUS_POLL_MS),
     retry: false,
     enabled,
   });
@@ -303,10 +306,15 @@ export function useStopPrinter() {
   });
 }
 
+/** The key that lets other components see that homing is in flight in this browser. */
+export const homeMutationKey = ["printer", "home"] as const;
+
 export function useHomePrinter() {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: homeMutationKey,
     mutationFn: () => homePrinter(),
+    onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });
 }

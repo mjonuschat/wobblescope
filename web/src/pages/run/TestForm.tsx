@@ -1,4 +1,5 @@
 import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
+import { useIsMutating } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
-import { usePrinterState, useStartTest } from "@/lib/api/queries";
+import { homeMutationKey, usePrinterState, useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
 import type { CheckFailure } from "@/lib/generated/CheckFailure";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
@@ -183,8 +184,12 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
     ({ key }) => settings.settings[key].needed && defaultOf(key) === null && overrides[key] === undefined,
   );
 
+  // The poll may lag behind a Home pressed here, so the pending mutation counts at once.
+  const homing = useIsMutating({ mutationKey: homeMutationKey }) > 0;
   let problem = blocked;
   if (!problem && printer.isPending) problem = "Checking whether the printer is homed…";
+  if (!problem && homing) problem = "The printer is homing.";
+  if (!problem && printer.data?.busy) problem = printer.data.busy;
   if (!problem && printer.data && homedTone(printer.data.homed_axes) !== "full") {
     const axes = printer.data.homed_axes ?? "";
     const notHomed = ["X", "Y", "Z"].filter((a) => !axes.toLowerCase().includes(a.toLowerCase()));
