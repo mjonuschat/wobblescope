@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
+import { chipLabel } from "@/lib/format";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import { analysis, decision, recommendation, spectrogram, twoAxisMeta } from "@/test/fixtures";
@@ -47,7 +48,7 @@ function serve(meta = twoAxisMeta()) {
 }
 
 async function chipCard(name: string) {
-  fireEvent.click(await screen.findByRole("tab", { name }));
+  fireEvent.click(await screen.findByRole("tab", { name: chipLabel(name) }));
   return screen.findByRole("region", { name: `Chip ${name}` });
 }
 
@@ -138,7 +139,7 @@ describe("the session view", () => {
     expect(chip.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(await within(panel).findByRole("img", { name: "Spectrogram of adxl345" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
     const other = await screen.findByRole("region", { name: "Spectrogram" });
     expect(await within(other).findByRole("img", { name: "Spectrogram of lis2dw ebb36" })).toBeTruthy();
     expect(fake.spectrogram.mock.calls.map((c) => c[0].chip)).toEqual(["adxl345", "lis2dw ebb36"]);
@@ -345,7 +346,7 @@ describe("the session view", () => {
     const first = await screen.findByRole("region", { name: "Chip a" });
     expect(first).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Chip b" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "b" }));
+    fireEvent.click(screen.getByRole("tab", { name: "B" }));
     expect(await screen.findByRole("region", { name: "Chip b" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
   });
@@ -358,7 +359,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Chip adxl345" });
-    expect(screen.getByRole("tab", { name: "adxl345" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "ADXL345" })).toBeTruthy();
   });
 
   it("expands the chart and table in a dialog and closes it again", async () => {
@@ -380,14 +381,14 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
     serve();
     renderRoute("/sessions/s1");
-    const tabs = await screen.findAllByRole("tab", { name: /^(a|b|All Chips)$/ });
-    expect(tabs.map((t) => t.textContent)).toEqual(["a", "b", "All Chips"]);
+    const tabs = await screen.findAllByRole("tab", { name: /^(A|B|All Chips)$/ });
+    expect(tabs.map((t) => t.textContent)).toEqual(["A", "B", "All Chips"]);
     fireEvent.click(tabs[2]);
     const all = await screen.findByRole("region", { name: "All chips" });
     expect(all.textContent).toContain("adds the chips together");
     expect(all.textContent).toContain("only for looking");
     expect(screen.queryByRole("region", { name: "Chip a" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "a" }));
+    fireEvent.click(screen.getByRole("tab", { name: "A" }));
     expect(await screen.findByRole("region", { name: "Chip a" })).toBeTruthy();
   });
 

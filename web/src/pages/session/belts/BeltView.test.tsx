@@ -114,7 +114,7 @@ describe("the belt view", () => {
     );
     renderView();
     await screen.findByRole("img", { name: "Belt overlay of adxl345" });
-    fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
     expect(await screen.findByText("Belt B was not recorded.")).toBeTruthy();
     expect(screen.getByRole("img", { name: "Belt A (axis 1,-1) of lis2dw ebb36" })).toBeTruthy();
   });
@@ -151,7 +151,7 @@ describe("the belt view", () => {
     renderView();
     fireEvent.click(await screen.findByRole("button", { name: "Include belt A anyway" }));
     expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
     await waitFor(() => expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ chip: "lis2dw ebb36" }));
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ includeExcluded: false });
   });
@@ -162,7 +162,7 @@ describe("the belt view", () => {
     );
     renderView();
     expect(await screen.findByText(/health of adxl345/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("tab", { name: "LIS2DW EBB36" }));
     expect(await screen.findByText(/health of lis2dw ebb36/)).toBeTruthy();
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ chip: "lis2dw ebb36" });
   });

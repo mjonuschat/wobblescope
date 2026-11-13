@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { Panel } from "@/components/Panel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { chipLabel } from "@/lib/format";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { AnalysisResult } from "@/analysis/protocol";
 
@@ -46,7 +47,7 @@ export function AxisResults({ result, meta, overrides, source, onOverridesChange
       <TabsList variant="line">
         {analysis.per_chip.map((c) => (
           <TabsTrigger key={c.chip} value={c.chip} className="after:bg-primary">
-            {c.chip}
+            {chipLabel(c.chip)}
           </TabsTrigger>
         ))}
         {showAllTab && (

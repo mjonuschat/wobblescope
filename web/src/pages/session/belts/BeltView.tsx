@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BeltSide } from "@/lib/generated/BeltSide";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
+import { chipLabel } from "@/lib/format";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { parseNumber } from "@/lib/parse";
 
@@ -156,7 +157,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
         <TabsList variant="line">
           {chips.map((name) => (
             <TabsTrigger key={name} value={name} className="after:bg-primary">
-              {name}
+              {chipLabel(name)}
             </TabsTrigger>
           ))}
         </TabsList>
