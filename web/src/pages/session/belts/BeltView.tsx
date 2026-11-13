@@ -130,7 +130,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
   const chip = selected && chips.includes(selected) ? selected : chips[0];
   const [maxFreqText, setMaxFreqText] = useState(String(DEFAULT_MAX_FREQ));
   const [maxFreq, setMaxFreq] = useState(DEFAULT_MAX_FREQ);
-  const [includeExcluded, setIncludeExcluded] = useState(false);
+  const [includedChip, setIncludedChip] = useState<string | null>(null);
   // Where the overlay's y axis ends; `null` fits it to the data.
   const [maxScale, setMaxScale] = useState<number | null>(null);
   const query = useBelts({
@@ -138,7 +138,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
     meta,
     chip: chip ?? "",
     maxFreq,
-    includeExcluded,
+    includeExcluded: includedChip === chip,
     enabled: chip !== undefined,
   });
   const parsed = parseMaxFreq(maxFreqText);
@@ -187,7 +187,7 @@ export function BeltView({ id, meta }: { id: string; meta: SessionMeta }) {
           The belt comparison failed: {query.error.message}
         </p>
       ) : (
-        <Outcome analysis={query.data} maxScale={maxScale} onInclude={() => setIncludeExcluded(true)} />
+        <Outcome analysis={query.data} maxScale={maxScale} onInclude={() => setIncludedChip(chip)} />
       )}
     </Panel>
   );

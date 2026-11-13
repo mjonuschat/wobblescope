@@ -140,6 +140,22 @@ describe("the belt view", () => {
     expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ includeExcluded: true });
   });
 
+  it("including_an_excluded_recording_applies_to_that_chip_only", async () => {
+    const excluded = side({
+      spectrum: null,
+      decision: { chip: "adxl345", point: 0, decision: "Excluded", reasons: ["clipped"], dropped: null },
+    });
+    fake.belts.mockImplementation(async ({ chip, includeExcluded }: { chip: string; includeExcluded: boolean }) =>
+      includeExcluded ? beltsComparison(chip) : { ...oneBelt("b", chip), belt_a: excluded },
+    );
+    renderView();
+    fireEvent.click(await screen.findByRole("button", { name: "Include belt A anyway" }));
+    expect(await screen.findByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "lis2dw ebb36" }));
+    await waitFor(() => expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ chip: "lis2dw ebb36" }));
+    expect(fake.belts.mock.calls.at(-1)?.[0]).toMatchObject({ includeExcluded: false });
+  });
+
   it("the_chip_selector_changes_the_result", async () => {
     fake.belts.mockImplementation(async ({ chip }: { chip: string }) =>
       beltsComparison(chip, beltsResult({ health: `health of ${chip}` })),
