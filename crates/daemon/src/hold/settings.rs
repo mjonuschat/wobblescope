@@ -8,6 +8,13 @@ use crate::hold::pieces::Drive;
 /// The name the hold saves Klipper's G-code state under.
 pub const STATE_NAME: &str = "wobblescope_hold";
 
+/// The name an axes-map calibration saves Klipper's G-code state under.
+pub const CALIBRATION_STATE_NAME: &str = "wobblescope_calibration";
+
+/// The square corner velocity of an axes-map calibration's moves, in mm/s, as the reference
+/// macro sets it.
+const CALIBRATION_CORNER_VELOCITY: f64 = 5.0;
+
 /// The input shaper's settings on both axes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Shaper {
@@ -25,7 +32,7 @@ pub struct Shaper {
     pub damping_y: f64,
 }
 
-/// What the printer was set to before the hold changed it.
+/// What the printer was set to before the hold or a calibration changed it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Saved {
     /// The velocity limit, in mm/s.
@@ -36,6 +43,9 @@ pub struct Saved {
     pub minimum_cruise_ratio: Option<f64>,
     /// The input shaper, when the printer has one.
     pub shaper: Option<Shaper>,
+    /// The square corner velocity, in mm/s, when Klipper reports it. Only a calibration
+    /// changes it.
+    pub square_corner_velocity: Option<f64>,
 }
 
 /// A number as G-code text, without a trailing `.0`.
@@ -78,6 +88,7 @@ impl Saved {
             max_accel: need("max_accel")?,
             minimum_cruise_ratio: number(toolhead, "minimum_cruise_ratio"),
             shaper,
+            square_corner_velocity: number(toolhead, "square_corner_velocity"),
         })
     }
 }
@@ -86,7 +97,27 @@ impl Saved {
 /// Klipper reports one and turns input shaping off where the printer has it.
 #[must_use]
 pub fn setup_script(saved: &Saved, drive: &Drive) -> String {
-    let mut limit = accel_line(drive);
+    setup_from(saved, accel_line(drive))
+}
+
+/// The script that sets an axes-map calibration's acceleration `accel` and square corner
+/// velocity, sets the cruise ratio to 0 where Klipper reports one and turns input shaping off
+/// where the printer has it.
+#[must_use]
+pub fn calibration_setup(saved: &Saved, accel: f64) -> String {
+    setup_from(
+        saved,
+        format!(
+            "SET_VELOCITY_LIMIT ACCEL={} SQUARE_CORNER_VELOCITY={}",
+            num(accel),
+            num(CALIBRATION_CORNER_VELOCITY)
+        ),
+    )
+}
+
+/// `limit`, with the cruise ratio set to 0 where Klipper reports one, and the line that turns
+/// input shaping off where the printer has it.
+fn setup_from(saved: &Saved, mut limit: String) -> String {
     if saved.minimum_cruise_ratio.is_some() {
         limit.push_str(" MINIMUM_CRUISE_RATIO=0");
     }
@@ -103,9 +134,21 @@ pub fn accel_line(drive: &Drive) -> String {
     format!("SET_VELOCITY_LIMIT ACCEL={}", num(drive.acceleration()))
 }
 
-/// The script that puts the saved limits, input shaping and G-code state back.
+/// The hold's script that puts the saved limits, input shaping and G-code state back.
 #[must_use]
 pub fn restore_script(saved: &Saved) -> String {
+    restore_script_named(saved, STATE_NAME, false)
+}
+
+/// The script that puts the saved limits, input shaping and the G-code state saved as
+/// `state_name` back. `restore_corner_velocity` adds the saved square corner velocity, when it
+/// is known, to the limits.
+#[must_use]
+pub fn restore_script_named(
+    saved: &Saved,
+    state_name: &str,
+    restore_corner_velocity: bool,
+) -> String {
     let mut limit = format!(
         "SET_VELOCITY_LIMIT VELOCITY={} ACCEL={}",
         num(saved.max_velocity),
@@ -113,6 +156,12 @@ pub fn restore_script(saved: &Saved) -> String {
     );
     if let Some(ratio) = saved.minimum_cruise_ratio {
         limit.push_str(&format!(" MINIMUM_CRUISE_RATIO={}", num(ratio)));
+    }
+    if let Some(velocity) = saved
+        .square_corner_velocity
+        .filter(|_| restore_corner_velocity)
+    {
+        limit.push_str(&format!(" SQUARE_CORNER_VELOCITY={}", num(velocity)));
     }
     let mut lines = vec![limit];
     if let Some(s) = &saved.shaper {
@@ -128,7 +177,7 @@ pub fn restore_script(saved: &Saved) -> String {
         ));
     }
     lines.push("G90".to_owned());
-    lines.push(format!("RESTORE_GCODE_STATE NAME={STATE_NAME}"));
+    lines.push(format!("RESTORE_GCODE_STATE NAME={state_name}"));
     lines.join("\n")
 }
 
@@ -199,6 +248,7 @@ mod tests {
             max_accel: 3000.0,
             minimum_cruise_ratio: Some(0.5),
             shaper: Some(shaper()),
+            square_corner_velocity: None,
         }
     }
 
@@ -254,6 +304,54 @@ mod tests {
     }
 
     #[test]
+    fn calibration_setup_sets_the_corner_velocity_to_5() {
+        assert_eq!(
+            calibration_setup(&saved(), 1500.0)
+                .lines()
+                .collect::<Vec<_>>(),
+            [
+                "SET_VELOCITY_LIMIT ACCEL=1500 SQUARE_CORNER_VELOCITY=5 MINIMUM_CRUISE_RATIO=0",
+                "SET_INPUT_SHAPER SHAPER_FREQ_X=0 SHAPER_FREQ_Y=0"
+            ]
+        );
+        let bare = Saved {
+            minimum_cruise_ratio: None,
+            shaper: None,
+            ..saved()
+        };
+        assert_eq!(
+            calibration_setup(&bare, 1500.0),
+            "SET_VELOCITY_LIMIT ACCEL=1500 SQUARE_CORNER_VELOCITY=5"
+        );
+    }
+
+    #[test]
+    fn only_the_calibration_restore_puts_the_corner_velocity_back() {
+        let with_corner = Saved {
+            square_corner_velocity: Some(8.0),
+            ..saved()
+        };
+        assert_eq!(restore_script(&with_corner), restore_script(&saved()));
+        assert_eq!(
+            restore_script_named(&with_corner, CALIBRATION_STATE_NAME, true)
+                .lines()
+                .collect::<Vec<_>>(),
+            [
+                "SET_VELOCITY_LIMIT VELOCITY=500 ACCEL=3000 MINIMUM_CRUISE_RATIO=0.5 \
+                 SQUARE_CORNER_VELOCITY=8",
+                "SET_INPUT_SHAPER SHAPER_TYPE_X=mzv SHAPER_FREQ_X=51.2 DAMPING_RATIO_X=0.1 \
+                 SHAPER_TYPE_Y=mzv SHAPER_FREQ_Y=44 DAMPING_RATIO_Y=0.1",
+                "G90",
+                "RESTORE_GCODE_STATE NAME=wobblescope_calibration"
+            ]
+        );
+        assert!(
+            !restore_script_named(&saved(), CALIBRATION_STATE_NAME, true)
+                .contains("SQUARE_CORNER_VELOCITY")
+        );
+    }
+
+    #[test]
     fn from_status_reads_the_printers_objects() {
         let status = json!({
             "toolhead": {"max_velocity": 500.0, "max_accel": 3000.0, "minimum_cruise_ratio": 0.5},
@@ -267,6 +365,16 @@ mod tests {
         let got = Saved::from_status(&without).unwrap();
         assert_eq!(got.shaper, None);
         assert_eq!(got.minimum_cruise_ratio, None);
+        assert_eq!(got.square_corner_velocity, None);
+        let with_corner = json!({"toolhead": {
+            "max_velocity": 500.0, "max_accel": 3000.0, "square_corner_velocity": 8.0
+        }});
+        assert_eq!(
+            Saved::from_status(&with_corner)
+                .unwrap()
+                .square_corner_velocity,
+            Some(8.0)
+        );
         let empty_shaper = json!({
             "toolhead": {"max_velocity": 500.0, "max_accel": 3000.0},
             "input_shaper": {}

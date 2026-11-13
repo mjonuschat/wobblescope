@@ -204,6 +204,16 @@ pub async fn window_start(control: &Rpc, timeout: Duration) -> Result<f64, Posit
     Ok(print_time.max(estimated) + SWEEP_LEAD_IN_SECONDS)
 }
 
+/// The window start of a move the daemon sends itself, which has no sweep lead-in: the larger of
+/// `print_time` and `estimated_print_time`.
+///
+/// # Errors
+/// [`PositionError::Unknown`] when the answer fails or lacks the times.
+pub async fn window_start_plain(control: &Rpc, timeout: Duration) -> Result<f64, PositionError> {
+    let (print_time, estimated) = print_times(control, timeout).await?;
+    Ok(print_time.max(estimated))
+}
+
 /// The window end: `print_time`, read after the sweep's `M400`.
 ///
 /// # Errors

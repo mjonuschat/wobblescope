@@ -17,14 +17,18 @@ use wobblescope_session::meta::{
 };
 
 use super::availability::OpenChip;
-use super::live::{ChipLive, FinishedTest, LiveHub, Phase, TestState};
+use super::calibration;
+use super::live::{ChipLive, FinishedTest, LiveHub, Phase, RunKind, TestState};
 use super::meta::{ChipFacts, initial};
-use super::position::{PositionError, Timeouts, move_to_point, window_end, window_start};
+use super::position::{
+    PositionError, Timeouts, move_to_point, window_end, window_start, window_start_plain,
+};
 use super::preflight::{Started, check_printer, quarantine_duration};
 use super::recorder::{Level, Missing, Recorder, Taken};
-use super::request::{Segment, TestPlan};
+use super::request::{PlanKind, Segment, TestPlan};
 use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
+use crate::hold::settings::{Saved, calibration_setup};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
 use crate::moonraker::settings::{Shaping, parse_shaping};
@@ -269,6 +273,8 @@ struct Run {
     current: Option<Current>,
     incomplete: Vec<String>,
     status: watch::Receiver<Status>,
+    /// What an axes-map calibration must put back, once it may have changed Klipper's state.
+    restore: Option<Saved>,
 }
 
 impl Run {
@@ -307,6 +313,7 @@ impl Run {
             current: None,
             incomplete: Vec::new(),
             status,
+            restore: None,
         };
         let setup = Setup {
             reservation: started.reservation,
@@ -328,17 +335,26 @@ impl Run {
             .current
             .as_ref()
             .map(|c| (c, self.plan.segments[c.index]));
+        let (kind, axis, frequency_range) = match self.plan.kind {
+            PlanKind::Resonance => (
+                RunKind::Resonance,
+                segment.map(|(_, s)| s.axis),
+                [self.plan.effective.freq_start, self.plan.effective.freq_end],
+            ),
+            PlanKind::AxesMap(_) => (RunKind::AxesMap, None, [0.0, 0.0]),
+        };
         let state = TestState {
             id: self.id.clone(),
+            kind,
             phase,
             segment: segment.map_or(0, |(c, _)| c.index as u32 + 1),
             segments: self.plan.segments.len() as u32,
-            axis: segment.map(|(_, s)| s.axis),
+            axis,
             position: segment.map(|(_, s)| s.position),
             expected_segment_seconds: self.plan.segment_seconds,
             elapsed_seconds: segment.map_or(0.0, |(c, _)| c.began.elapsed().as_secs_f64()),
             frequency_hz: self.progress.frequency(),
-            frequency_range: [self.plan.effective.freq_start, self.plan.effective.freq_end],
+            frequency_range,
             chips: self.progress.snapshot(),
         };
         self.r.hub.update(|s| s.test = Some(state));
@@ -367,6 +383,17 @@ impl Run {
             }
         }
         let control = self.control()?;
+        // A calibration reads what it changes before it changes anything, and refuses to run
+        // when it could not put that back.
+        let calibration = match &self.plan.kind {
+            PlanKind::Resonance => None,
+            PlanKind::AxesMap(axes_map) => {
+                let saved = calibration::read_saved(&control, self.r.timings.positioning.query)
+                    .await
+                    .map_err(Failure::certain)?;
+                Some((saved, axes_map.run.accel))
+            }
+        };
         let mut mcus: Vec<String> = facts.iter().filter_map(|f| f.mcu.clone()).collect();
         let printer = printer_info(&control, &mut mcus).await;
         let meta = initial(&self.plan, &self.id, &self.created_at, &facts, printer);
@@ -404,9 +431,22 @@ impl Run {
             for rec in &self.recorders {
                 rec.begin_segment();
             }
-            self.position(&segment).await?;
-            let control = self.control()?;
-            let start = window_start(&control, self.r.timings.positioning.query).await?;
+            let query = self.r.timings.positioning.query;
+            let start = match &calibration {
+                None => {
+                    self.position(&segment).await?;
+                    window_start(&self.control()?, query).await?
+                }
+                Some((saved, accel)) => {
+                    // The measured moves follow on from each other, so only the first is
+                    // preceded by the setup and the travel to the start.
+                    if index == 0 {
+                        self.change_settings(saved, *accel).await?;
+                        self.position(&segment).await?;
+                    }
+                    window_start_plain(&self.control()?, query).await?
+                }
+            };
             if let Some(c) = &mut self.current {
                 c.start = Some(start);
             }
@@ -420,6 +460,44 @@ impl Run {
             self.current = None;
         }
         Ok(())
+    }
+
+    /// Saves Klipper's G-code state and sends the calibration's setup. The restore is armed once
+    /// the save may have run.
+    async fn change_settings(&mut self, saved: &Saved, accel: f64) -> Result<(), Failure> {
+        let control = self.control()?;
+        let timeout = self.r.timings.positioning.script;
+        // Neither script moves the toolhead, so a lost answer leaves no motion uncertain.
+        let refused = |e: RpcError| match e {
+            RpcError::Moonraker { message, .. } => Failure::certain(message),
+            e => Failure::certain(format!("cannot send the calibration setup: {e}")),
+        };
+        let saving = calibration::send(&control, &calibration::save_script(), timeout).await;
+        if !matches!(saving, Err(RpcError::Moonraker { .. })) {
+            self.restore = Some(saved.clone());
+        }
+        saving.map_err(refused)?;
+        calibration::send(&control, &calibration_setup(saved, accel), timeout)
+            .await
+            .map_err(refused)
+    }
+
+    /// Puts back what the calibration changed, unless Klipper is down. Returns whether the
+    /// restore could not run, so Klipper needs a `RESTART`.
+    async fn restore_settings(&mut self, confirmed_down: bool) -> bool {
+        let Some(saved) = self.restore.take() else {
+            return false;
+        };
+        // A shutdown or error state ends with a restart, which brings the configured values back.
+        if confirmed_down {
+            return false;
+        }
+        let Some(control) = self.r.moonraker.control() else {
+            return true;
+        };
+        calibration::restore(&control, &saved, self.r.timings.positioning.script)
+            .await
+            .is_err()
     }
 
     fn control(&self) -> Result<Rpc, Failure> {
@@ -522,7 +600,10 @@ impl Run {
     /// a stop, and recording a lost chip without leaving the slot while the toolhead may move.
     async fn sweep(&mut self, segment: &Segment) -> Result<(), Failure> {
         let control = self.control()?;
-        let command = self.plan.command(segment, &self.id);
+        let script = match self.plan.kind {
+            PlanKind::Resonance => format!("{}\nM400", self.plan.command(segment, &self.id)),
+            PlanKind::AxesMap(_) => self.plan.segment_script(segment),
+        };
         let timeout = self.r.timings.sweep_timeout.unwrap_or_else(|| {
             Duration::from_secs(
                 u64::from(self.r.max_segment_seconds) + SWEEP_TIMEOUT_MARGIN_SECONDS,
@@ -530,7 +611,7 @@ impl Run {
         });
         let call = control.call(
             "printer.gcode.script",
-            Some(json!({"script": format!("{command}\nM400")})),
+            Some(json!({"script": script})),
             timeout,
         );
         tokio::pin!(call);
@@ -784,6 +865,7 @@ impl Run {
             f.uncertain = (f.uncertain || f.in_flight) && !confirmed_down;
             f
         });
+        let needs_restart = self.restore_settings(confirmed_down).await;
         self.publish(Phase::Sealing);
         if failure.is_some() {
             self.add_interrupted_segment().await;
@@ -794,7 +876,7 @@ impl Run {
 
         let reason = failure.as_ref().map(|f| f.reason.clone());
         let segments = self.segments_stored();
-        let finished = match self.stored.take() {
+        let mut finished = match self.stored.take() {
             Some(Stored { capture, meta }) if segments > 0 => {
                 let sealing = Sealing {
                     id: self.id.clone(),
@@ -810,6 +892,7 @@ impl Run {
                 abandon(&self.r.storage, &self.id, capture, reason).await
             }
         };
+        finished.needs_restart = needs_restart;
         self.end(finished, failure.is_some_and(|f| f.uncertain));
     }
 

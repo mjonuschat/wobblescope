@@ -2,6 +2,7 @@
 
 pub mod availability;
 pub mod axes_map;
+mod calibration;
 pub mod live;
 pub mod meta;
 pub mod position;

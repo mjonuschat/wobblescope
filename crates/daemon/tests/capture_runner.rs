@@ -1,17 +1,21 @@
 mod common;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use common::fake_moonraker::{Gate, Script};
 use common::sim_printer::{Move, Rig, Sweep, When, fast_runner, rig, rig_with};
 use common::{open, test_plan};
 use serde_json::json;
-use wobblescope::capture::live::{FinishedOutcome, FinishedTest, Phase};
+use wobblescope::capture::axes_map::{AxesMapRequest, ChipChoice, plan_axes_map};
+use wobblescope::capture::live::{FinishedOutcome, FinishedTest, Phase, RunKind};
 use wobblescope::capture::preflight::Refusal;
-use wobblescope::capture::request::{Overrides, TestRequest, plan};
+use wobblescope::capture::request::{Overrides, TestPlan, TestRequest, plan};
 use wobblescope::moonraker::settings::parse_settings;
+use wobblescope_core::axes_map::Mounting;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_core::fit::Axis;
-use wobblescope_session::meta::{Mode, Outcome};
+use wobblescope_session::meta::{Mode, Outcome, SessionKind};
 
 const CHIPS: [&str; 2] = ["adxl345", "lis2dw ebb36"];
 
@@ -693,4 +697,340 @@ async fn each_segment_file_records_the_health_of_that_segment_alone() {
     // The chip's overall health is still the worst of its segments.
     assert_eq!(meta.chips[1].health, Health::Degraded);
     assert_eq!(meta.chips[0].health, Health::Ok);
+}
+
+// ---- axes-map calibration ----
+
+/// The setup the calibration sends on the printer of [`calibration_rig`].
+const CALIBRATION_SETUP: &str = "SET_VELOCITY_LIMIT ACCEL=1500 SQUARE_CORNER_VELOCITY=5 \
+                                 MINIMUM_CRUISE_RATIO=0\n\
+                                 SET_INPUT_SHAPER SHAPER_FREQ_X=0 SHAPER_FREQ_Y=0";
+
+/// The restore the calibration sends on the printer of [`calibration_rig`].
+const CALIBRATION_RESTORE: &str = "SET_VELOCITY_LIMIT VELOCITY=500 ACCEL=3000 \
+                                   MINIMUM_CRUISE_RATIO=0.5 SQUARE_CORNER_VELOCITY=8\n\
+                                   SET_INPUT_SHAPER SHAPER_TYPE_X=mzv SHAPER_FREQ_X=51.2 \
+                                   DAMPING_RATIO_X=0.1 SHAPER_TYPE_Y=mzv SHAPER_FREQ_Y=44 \
+                                   DAMPING_RATIO_Y=0.1\n\
+                                   G90\n\
+                                   RESTORE_GCODE_STATE NAME=wobblescope_calibration";
+
+fn calibration_plan() -> TestPlan {
+    let printer = parse_settings(
+        &common::fake_printer::fixture("real_settings.json"),
+        &common::fake_printer::fixture("real_printer_info.json"),
+    )
+    .unwrap();
+    let request = AxesMapRequest {
+        chips: CHIPS
+            .iter()
+            .map(|c| ChipChoice {
+                chip: (*c).to_owned(),
+                mounting: Mounting::Toolhead,
+            })
+            .collect(),
+        z_height: None,
+        speed: None,
+        accel: None,
+        travel_speed: None,
+    };
+    plan_axes_map(&request, &printer, 600).unwrap()
+}
+
+/// A rig whose toolhead reports the limits the calibration saves, with `corner_velocity` as its
+/// square corner velocity, and whose printer has an input shaper.
+async fn calibration_rig(corner_velocity: Option<f64>) -> Rig {
+    let rig = rig().await;
+    let printer = &rig.sim.printer;
+    printer.set_field("toolhead", "max_velocity", json!(500.0));
+    printer.set_field("toolhead", "max_accel", json!(3000.0));
+    printer.set_field("toolhead", "minimum_cruise_ratio", json!(0.5));
+    if let Some(v) = corner_velocity {
+        printer.set_field("toolhead", "square_corner_velocity", json!(v));
+    }
+    for (field, value) in [
+        ("shaper_type_x", json!("mzv")),
+        ("shaper_freq_x", json!(51.2)),
+        ("damping_ratio_x", json!(0.1)),
+        ("shaper_type_y", json!("mzv")),
+        ("shaper_freq_y", json!(44.0)),
+        ("damping_ratio_y", json!(0.1)),
+    ] {
+        printer.set_field("input_shaper", field, value);
+    }
+    rig
+}
+
+/// A measured move of the calibration, as opposed to its positioning move.
+fn is_segment_script(script: &str) -> bool {
+    script.contains("G4 P500")
+}
+
+fn is_calibration_restore(script: &str) -> bool {
+    script.contains("RESTORE_GCODE_STATE NAME=wobblescope_calibration")
+}
+
+/// Answers the nth measured move (from 0) with what `answer` returns, and lets every other script
+/// run.
+fn on_segment_script(
+    rig: &Rig,
+    nth: usize,
+    answer: impl Fn() -> Option<Script> + Send + Sync + 'static,
+) {
+    let seen = AtomicUsize::new(0);
+    rig.sim.intercept(move |script| {
+        if !is_segment_script(script) {
+            return None;
+        }
+        (seen.fetch_add(1, Ordering::SeqCst) == nth)
+            .then(&answer)
+            .flatten()
+    });
+}
+
+/// The `NAME=` of the line of `script` that starts with `command`.
+fn state_name<'a>(script: &'a str, command: &str) -> Option<&'a str> {
+    script
+        .lines()
+        .find_map(|l| l.strip_prefix(command)?.strip_prefix(" NAME="))
+}
+
+#[tokio::test]
+async fn a_calibration_records_three_segments_and_restores_the_printer() {
+    let rig = calibration_rig(Some(8.0)).await;
+    let plan = calibration_plan();
+    let (_, mut changes) = rig.hub.subscribe();
+    let task = start(&rig, &plan).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    assert!(!finished.needs_restart);
+    assert!(!finished.motion_uncertain);
+
+    let scripts = rig.sim.scripts();
+    assert_eq!(scripts.len(), 7, "{scripts:#?}");
+    assert_eq!(scripts[0], "SAVE_GCODE_STATE NAME=wobblescope_calibration");
+    assert_eq!(scripts[1], CALIBRATION_SETUP);
+    // The travel to the start: the middle of the travel minus 15 mm, at 120 mm/s.
+    assert!(
+        scripts[2].contains("G1 X135.5 Y139 Z20 F7200") && !is_segment_script(&scripts[2]),
+        "{}",
+        scripts[2]
+    );
+    for (i, segment) in plan.segments.iter().enumerate() {
+        assert_eq!(scripts[3 + i], plan.segment_script(segment));
+    }
+    assert_eq!(scripts[6], CALIBRATION_RESTORE);
+    assert!(rig.sim.sweeps().is_empty());
+
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    assert_eq!(meta.kind, SessionKind::AxesMap);
+    assert!(meta.axes_map_run.is_some());
+    assert_eq!(meta.segments.len(), 3);
+    let points: Vec<u32> = meta.segments.iter().map(|s| s.point).collect();
+    assert_eq!(points, [0, 1, 2]);
+    assert!(meta.segments.iter().all(|s| s.axis == Axis::X));
+    assert!(
+        meta.segments
+            .iter()
+            .all(|s| s.window.is_some() && s.files.len() == 2)
+    );
+
+    // The live state names the run's kind and no sweep axis or frequency range.
+    let mut states = 0;
+    while let Ok(snapshot) = changes.try_recv() {
+        if let Some(test) = snapshot.test {
+            states += 1;
+            assert_eq!(test.kind, RunKind::AxesMap);
+            assert_eq!(test.axis, None);
+            assert_eq!(test.frequency_range, [0.0, 0.0]);
+            assert_eq!(test.segments, 3);
+        }
+    }
+    assert!(states > 0);
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn the_restore_uses_the_state_name_that_was_saved() {
+    let rig = calibration_rig(Some(8.0)).await;
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let scripts = rig.sim.scripts();
+    let saved = state_name(scripts.first().unwrap(), "SAVE_GCODE_STATE").unwrap();
+    let restored = state_name(scripts.last().unwrap(), "RESTORE_GCODE_STATE").unwrap();
+    assert_eq!(saved, restored);
+    assert_ne!(saved, wobblescope::hold::settings::STATE_NAME);
+    // No other script saves or restores under that name.
+    let users = scripts
+        .iter()
+        .filter(|s| s.contains(&format!("NAME={saved}\n")) || s.ends_with(&format!("NAME={saved}")))
+        .count();
+    assert_eq!(users, 2, "{scripts:#?}");
+}
+
+#[tokio::test]
+async fn setup_sets_the_corner_velocity_to_5_and_the_restore_puts_the_saved_value_back() {
+    let rig = calibration_rig(Some(12.5)).await;
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let scripts = rig.sim.scripts();
+    let corner = |script: &str| {
+        script
+            .lines()
+            .find(|l| l.starts_with("SET_VELOCITY_LIMIT"))
+            .and_then(|l| {
+                l.split_whitespace()
+                    .find_map(|w| w.strip_prefix("SQUARE_CORNER_VELOCITY="))
+            })
+            .map(str::to_owned)
+    };
+    let first_move = scripts.iter().position(|s| s.contains("G1 ")).unwrap();
+    let setup = scripts.iter().position(|s| corner(s).is_some()).unwrap();
+    assert!(setup < first_move, "{scripts:#?}");
+    assert_eq!(corner(&scripts[setup]).as_deref(), Some("5"));
+    let restore = scripts.last().unwrap();
+    assert!(is_calibration_restore(restore), "{restore}");
+    assert_eq!(corner(restore).as_deref(), Some("12.5"));
+}
+
+#[tokio::test]
+async fn a_missing_corner_velocity_refuses_the_run_before_any_change() {
+    let rig = calibration_rig(None).await;
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::NoSession);
+    assert!(
+        reason(&finished).contains("the toolhead's square_corner_velocity is not reported"),
+        "{}",
+        reason(&finished)
+    );
+    assert!(!finished.needs_restart);
+    // Nothing was saved, changed or moved, so nothing is restored either.
+    assert!(rig.sim.scripts().is_empty(), "{:#?}", rig.sim.scripts());
+    assert!(rig.sessions().is_empty());
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn a_stop_after_the_first_segment_seals_one_segment_and_still_restores() {
+    let rig = calibration_rig(Some(8.0)).await;
+    let slot = rig.slot.clone();
+    on_segment_script(&rig, 0, move || {
+        assert!(slot.request_stop_current().is_some());
+        None
+    });
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Failed);
+    assert_eq!(reason(&finished), "emergency stop");
+    assert!(!finished.needs_restart);
+    let scripts = rig.sim.scripts();
+    assert_eq!(
+        scripts.iter().filter(|s| is_segment_script(s)).count(),
+        1,
+        "{scripts:#?}"
+    );
+    assert_eq!(scripts.last().unwrap(), CALIBRATION_RESTORE);
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    assert_eq!(meta.kind, SessionKind::AxesMap);
+    assert_eq!(meta.segments.len(), 1);
+    assert_eq!(meta.segments[0].point, 0);
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn a_lost_connection_during_restore_sets_needs_restart() {
+    let rig = calibration_rig(Some(8.0)).await;
+    rig.sim
+        .intercept(|script| is_calibration_restore(script).then_some(Script::Close));
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert!(is_calibration_restore(rig.sim.scripts().last().unwrap()));
+    assert!(finished.needs_restart, "{finished:?}");
+    // The data is still sealed: every segment finished before the restore.
+    assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    assert_eq!(meta.segments.len(), 3);
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn a_klipper_shutdown_sends_no_restore_and_does_not_set_needs_restart() {
+    let rig = calibration_rig(Some(8.0)).await;
+    let gate = Gate::new();
+    let held = gate.clone();
+    on_segment_script(&rig, 1, move || Some(Script::Gated(held.clone())));
+    let task = start(&rig, &calibration_plan()).await;
+    rig.until("the second segment", || {
+        rig.sim
+            .scripts()
+            .iter()
+            .filter(|s| is_segment_script(s))
+            .count()
+            == 2
+    })
+    .await;
+    rig.sim.printer.set_state("shutdown");
+    rig.sim
+        .printer
+        .set_message("MCU 'mcu' shutdown: Timer too close");
+    rig.sim.fake.push("notify_klippy_shutdown", json!([]));
+    rig.until("Klipper down", || {
+        rig.moonraker.status().klippy.state != wobblescope::moonraker::status::KlippyState::Ready
+    })
+    .await;
+    gate.release(Script::error(400, "Klipper state: Shutdown"));
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Failed);
+    assert!(
+        reason(&finished).contains("Timer too close"),
+        "{}",
+        reason(&finished)
+    );
+    assert!(!finished.needs_restart);
+    let scripts = rig.sim.scripts();
+    assert!(
+        !scripts.iter().any(|s| is_calibration_restore(s)),
+        "{scripts:#?}"
+    );
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    assert_eq!(meta.segments[0].point, 0);
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn a_refused_segment_script_restores_the_saved_state() {
+    let rig = calibration_rig(Some(8.0)).await;
+    on_segment_script(&rig, 1, || {
+        Some(Script::error(
+            400,
+            "Move out of range: 165.500 169.000 20.000 [0.000]",
+        ))
+    });
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Failed);
+    assert!(
+        reason(&finished).contains("Move out of range"),
+        "{}",
+        reason(&finished)
+    );
+    assert!(!finished.needs_restart);
+    assert!(!finished.motion_uncertain);
+    let scripts = rig.sim.scripts();
+    assert_eq!(scripts.last().unwrap(), CALIBRATION_RESTORE, "{scripts:#?}");
+    let (_, meta) = rig.storage.session(&finished.session_id.unwrap()).unwrap();
+    assert_eq!(meta.segments.len(), 1);
+    assert_eq!(meta.segments[0].point, 0);
+    assert_clean(&rig);
 }

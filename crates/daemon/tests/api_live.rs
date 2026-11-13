@@ -127,6 +127,7 @@ async fn a_subscriber_that_falls_far_behind_gets_a_fresh_snapshot_not_a_closed_s
                 reason: None,
                 session_id: None,
                 motion_uncertain: false,
+                needs_restart: false,
             });
         });
         if n % 50 == 0 {

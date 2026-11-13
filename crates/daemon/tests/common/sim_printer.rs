@@ -91,7 +91,11 @@ struct State {
     pending_move: Option<Gate>,
     rules: Vec<(Option<String>, When)>,
     hooks: HashMap<usize, Arc<dyn Fn() + Send + Sync>>,
+    intercept: Option<Intercept>,
 }
+
+/// Sees every script before the simulation and may answer it instead.
+type Intercept = Arc<dyn Fn(&str) -> Option<Script> + Send + Sync>;
 
 /// The simulated printer. Clones share it.
 #[derive(Clone)]
@@ -155,6 +159,7 @@ impl Sim {
             pending_move: None,
             rules: vec![],
             hooks: HashMap::new(),
+            intercept: None,
         }));
         let sim = Self {
             state,
@@ -211,6 +216,12 @@ impl Sim {
     /// Runs `hook` when the nth sweep (from 0) has delivered its samples, before it answers.
     pub fn on_sweep_done(&self, nth: usize, hook: impl Fn() + Send + Sync + 'static) {
         self.state.lock().unwrap().hooks.insert(nth, Arc::new(hook));
+    }
+
+    /// Calls `intercept` with every script, after it is recorded and before it is simulated. A
+    /// `Some` answer is sent instead of running the script.
+    pub fn intercept(&self, intercept: impl Fn(&str) -> Option<Script> + Send + Sync + 'static) {
+        self.state.lock().unwrap().intercept = Some(Arc::new(intercept));
     }
 
     /// Answers the pending move as a move that did not happen.
@@ -348,8 +359,15 @@ impl Sim {
 
     fn script(&self, script: &str) -> Script {
         *self.feeding.lock().unwrap() = false;
+        let intercept = {
+            let mut s = self.state.lock().unwrap();
+            s.scripts.push(script.to_owned());
+            s.intercept.clone()
+        };
+        if let Some(answer) = intercept.and_then(|f| f(script)) {
+            return answer;
+        }
         let mut s = self.state.lock().unwrap();
-        s.scripts.push(script.to_owned());
         if script.starts_with("TEST_RESONANCES") {
             let n = s.sweeps.len();
             s.sweeps
@@ -426,8 +444,15 @@ impl Sim {
             let to = s.t + 0.5;
             s.t = to;
             self.advance(&mut s, to + 0.3);
+            let delivered = s.next_sample_at.values().copied().fold(to, f64::max);
             drop(s);
             self.sync_clock();
+            if script.contains("G4 P") {
+                // A measured move of an axes-map calibration. The next window starts at the
+                // estimated print time, which is never behind a sample already delivered.
+                self.printer
+                    .set_field("toolhead", "estimated_print_time", json!(delivered));
+            }
         }
         Script::Result(json!("ok"))
     }

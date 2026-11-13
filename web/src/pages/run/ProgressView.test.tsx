@@ -25,6 +25,7 @@ vi.mock("@/components/charts/EChart", () => ({
 
 const running: TestState = {
   id: "test-1",
+  kind: "resonance",
   phase: "measuring",
   segment: 3,
   segments: 4,
@@ -46,6 +47,7 @@ const done: FinishedTest = {
   reason: null,
   session_id: "test-1",
   motion_uncertain: false,
+  needs_restart: false,
 };
 
 async function enabledRun() {

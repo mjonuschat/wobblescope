@@ -30,6 +30,17 @@ pub enum Phase {
     Sealing,
 }
 
+/// What a test runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum RunKind {
+    /// A resonance test.
+    Resonance,
+    /// An axes-map calibration.
+    AxesMap,
+}
+
 /// What one chip shows during a test.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -48,13 +59,15 @@ pub struct ChipLive {
 pub struct TestState {
     /// The test id, which is also the session id.
     pub id: String,
+    /// What the test runs.
+    pub kind: RunKind,
     /// Where the test is.
     pub phase: Phase,
     /// The current segment, counting from 1.
     pub segment: u32,
     /// How many segments the test has.
     pub segments: u32,
-    /// The axis of the current segment.
+    /// The axis of the current segment; `None` for an axes-map calibration.
     pub axis: Option<Axis>,
     /// The toolhead position of the current segment: `[x, y, z]` in mm.
     pub position: Option<[f64; 3]>,
@@ -67,6 +80,7 @@ pub struct TestState {
     /// because Klipper reports it when it queues the move.
     pub frequency_hz: Option<f64>,
     /// The lowest and highest frequency of every segment, in Hz, so a chart can fix its axis.
+    /// `[0, 0]` for an axes-map calibration, which sweeps no frequency.
     pub frequency_range: [f64; 2],
     /// Per-chip level and warnings.
     pub chips: Vec<ChipLive>,
@@ -101,6 +115,9 @@ pub struct FinishedTest {
     pub session_id: Option<String>,
     /// Whether the toolhead may still be moving, so an emergency stop is still accepted.
     pub motion_uncertain: bool,
+    /// Whether an axes-map calibration could not put the printer's limits, input shaping and
+    /// G-code state back, so Klipper needs a `RESTART`.
+    pub needs_restart: bool,
 }
 
 /// The live socket's first message, and every change after it.

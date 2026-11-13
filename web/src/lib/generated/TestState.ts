@@ -2,6 +2,7 @@
 import type { Axis } from "./Axis";
 import type { ChipLive } from "./ChipLive";
 import type { Phase } from "./Phase";
+import type { RunKind } from "./RunKind";
 
 /**
  * A running test.
@@ -11,6 +12,10 @@ export type TestState = {
  * The test id, which is also the session id.
  */
 id: string, 
+/**
+ * What the test runs.
+ */
+kind: RunKind, 
 /**
  * Where the test is.
  */
@@ -24,7 +29,7 @@ segment: number,
  */
 segments: number, 
 /**
- * The axis of the current segment.
+ * The axis of the current segment; `None` for an axes-map calibration.
  */
 axis: Axis | null, 
 /**
@@ -47,6 +52,7 @@ elapsed_seconds: number,
 frequency_hz: number | null, 
 /**
  * The lowest and highest frequency of every segment, in Hz, so a chart can fix its axis.
+ * `[0, 0]` for an axes-map calibration, which sweeps no frequency.
  */
 frequency_range: [number, number], 
 /**

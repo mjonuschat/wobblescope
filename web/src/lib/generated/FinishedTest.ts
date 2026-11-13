@@ -24,4 +24,9 @@ session_id: string | null,
 /**
  * Whether the toolhead may still be moving, so an emergency stop is still accepted.
  */
-motion_uncertain: boolean, };
+motion_uncertain: boolean, 
+/**
+ * Whether an axes-map calibration could not put the printer's limits, input shaping and
+ * G-code state back, so Klipper needs a `RESTART`.
+ */
+needs_restart: boolean, };

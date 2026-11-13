@@ -26,6 +26,7 @@ pub(super) async fn abandon(
         reason: Some(reason.unwrap_or_else(|| "no segment finished".to_owned())),
         session_id: None,
         motion_uncertain: false,
+        needs_restart: false,
     }
 }
 
@@ -76,6 +77,7 @@ pub(super) async fn seal(
         reason,
         session_id: session,
         motion_uncertain: false,
+        needs_restart: false,
     };
     let Some(capture) = capture else {
         return finished(
