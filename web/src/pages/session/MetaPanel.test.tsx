@@ -79,6 +79,20 @@ describe("the session details", () => {
     expect(screen.getByText(/Segment 2 \(Y, .*\): adxl345, the chip's errors counter rose by 3/)).toBeTruthy();
   });
 
+  it("shows the direction of a belt segment instead of an object", () => {
+    const meta = twoAxisMeta();
+    meta.segments[0].axis = { Vector: [1, -1, 0] };
+    meta.segments[0].files[0].health = "Degraded";
+    meta.segments[0].files[0].health_notes = ["noisy"];
+    meta.segments[1].files[0].health = "Degraded";
+    meta.segments[1].files[0].health_notes = ["noisy"];
+    meta.segments[1].axis = "X";
+    render(<MetaPanel meta={meta} />);
+    expect(screen.getByText(/Segment 1 \(1,-1, .*\)/)).toBeTruthy();
+    expect(screen.getByText(/Segment 2 \(X, .*\)/)).toBeTruthy();
+    expect(screen.queryByText(/object Object/)).toBeNull();
+  });
+
   it("lists no degraded segment when every recording was fine", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
     expect(screen.queryByText("Degraded segments")).toBeNull();
