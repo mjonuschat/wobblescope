@@ -49,6 +49,7 @@ export function useSessionAnalysis({
   currentKeyRef.current = JSON.stringify(key);
 
   const [progressState, setProgressState] = useState<{ key: string; progress: AnalysisProgress } | null>(null);
+  const prefetchedRef = useRef<Set<string>>(new Set());
 
   const query = useQuery({
     queryKey: key,
@@ -77,6 +78,9 @@ export function useSessionAnalysis({
     const otherAxes = meta.segments.map((s) => s.axis).filter((a) => a !== axis);
     const uniqueAxes = [...new Set(otherAxes)];
     for (const otherAxis of uniqueAxes) {
+      const prefetchKey = `${sessionId}:${resultId ?? "session"}:${otherAxis}`;
+      if (prefetchedRef.current.has(prefetchKey)) continue;
+      prefetchedRef.current.add(prefetchKey);
       client.prefetch({ sessionId, resultId, meta, axis: otherAxis });
     }
   }, [query.isSuccess, sessionId, resultId, meta, axis, client]);

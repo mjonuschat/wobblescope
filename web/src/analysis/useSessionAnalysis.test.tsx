@@ -300,4 +300,88 @@ describe("useSessionAnalysis", () => {
     expect(prefetch).toHaveBeenCalledTimes(1);
     expect(prefetch).toHaveBeenCalledWith({ sessionId: "s1", resultId: undefined, meta, axis: "Y" });
   });
+
+  it("prefetches each axis only once even when fit params change", async () => {
+    const prefetch = vi.fn();
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage(message) {
+        if (message.type !== "analyze") return;
+        const response: WorkerResponse = {
+          type: "result",
+          id: message.id,
+          result: {
+            analysis: analysis(),
+            snippets: { worstCase: "s", worstCasePerformance: null, perChip: [["s"], null] },
+          },
+        };
+        queueMicrotask(() => this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>));
+      },
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.prefetch = prefetch;
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const meta = twoAxisMeta();
+    const { result, rerender } = renderHook(
+      ({ p }) => useSessionAnalysis({ sessionId: "s1", meta, axis: "X", params: p, client }),
+      { wrapper, initialProps: { p: defaultParams } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).toHaveBeenCalledTimes(1);
+    // Change fit params - this triggers a new analysis
+    rerender({ p: { ...defaultParams, scv: 7 } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Should still only have called prefetch once
+    expect(prefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefetches each axis only once even when meta object identity changes", async () => {
+    const prefetch = vi.fn();
+    const worker: WorkerLike = {
+      onmessage: null,
+      onerror: null,
+      terminate() {},
+      postMessage(message) {
+        if (message.type !== "analyze") return;
+        const response: WorkerResponse = {
+          type: "result",
+          id: message.id,
+          result: {
+            analysis: analysis(),
+            snippets: { worstCase: "s", worstCasePerformance: null, perChip: [["s"], null] },
+          },
+        };
+        queueMicrotask(() => this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>));
+      },
+    };
+    const client = createAnalysisClient({
+      createWorker: () => worker,
+      fetchSample: vi.fn(async () => new ArrayBuffer(1)),
+    });
+    client.prefetch = prefetch;
+    const queryClient = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const meta = twoAxisMeta();
+    const { result, rerender } = renderHook(
+      ({ m }) => useSessionAnalysis({ sessionId: "s1", meta: m, axis: "X", params: defaultParams, client }),
+      { wrapper, initialProps: { m: meta } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(prefetch).toHaveBeenCalledTimes(1);
+    // Parent re-renders with new meta object (same content, same created_at)
+    rerender({ m: { ...meta } });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    // Should still only have called prefetch once
+    expect(prefetch).toHaveBeenCalledTimes(1);
+  });
 });
