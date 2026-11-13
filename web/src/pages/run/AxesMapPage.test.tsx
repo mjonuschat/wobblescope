@@ -138,19 +138,6 @@ describe("the axes-map run page", () => {
     expect(startButton().disabled).toBe(true);
   });
 
-  it("lists a refused start, including a restart owed", async () => {
-    await open({
-      status: 409,
-      body: {
-        error: "preflight_failed",
-        message: "1 check failed",
-        failures: [{ check: "restart_owed", message: "a calibration left Klipper changed; send RESTART first" }],
-      },
-    });
-    fireEvent.click(startButton());
-    expect(await screen.findByText("a calibration left Klipper changed; send RESTART first")).toBeTruthy();
-  });
-
   it("shows_the_restart_instruction_only_when_needs_restart", async () => {
     await openWithFinished(finished());
     expect(await screen.findByText("The test finished.")).toBeTruthy();
@@ -160,6 +147,7 @@ describe("the axes-map run page", () => {
   it("shows the restart instruction when the run needs a restart", async () => {
     await openWithFinished(finished({ outcome: "failed", reason: "restore failed", needs_restart: true }));
     expect(await screen.findByText(RESTART_INSTRUCTION)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "New calibration" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("links_to_the_session_when_done", async () => {

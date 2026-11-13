@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use crate::capture::CheckFailure;
 use crate::capture::iso_utc;
 use crate::capture::position::{TOLERANCE_MM, Timeouts, position};
-use crate::capture::preflight::{check_printer, quarantine_failure, restart_owed_failure};
+use crate::capture::preflight::{check_printer, quarantine_failure};
 use crate::capture::slot::{SlotPermit, TestSlot};
 use crate::hold::pacer::Pacer;
 use crate::hold::pieces::{
@@ -257,9 +257,6 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
     }
     if let Some(left) = quarantine {
         failures.push(quarantine_failure(left));
-    }
-    if deps.slot.restart_owed() {
-        failures.push(restart_owed_failure());
     }
     let permit = match permit {
         Some(permit) if failures.is_empty() => permit,

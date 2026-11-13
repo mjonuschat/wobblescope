@@ -1197,14 +1197,6 @@ async fn a_refused_segment_script_restores_the_saved_state() {
 // ---- a restart owed after a failed restore ----
 
 /// The failed checks of a refused start.
-fn refused_checks(started: Result<tokio::task::JoinHandle<()>, Refusal>) -> Vec<String> {
-    match started {
-        Err(Refusal::Checks(failures)) => failures.into_iter().map(|f| f.check).collect(),
-        Err(Refusal::Storage(e)) => panic!("expected checks, got storage: {e}"),
-        Ok(_) => panic!("expected a refusal"),
-    }
-}
-
 /// Runs a calibration whose restore loses the connection, then waits until the daemon is back
 /// on a ready Klipper with current chips.
 async fn calibration_with_a_failed_restore() -> Rig {
@@ -1230,90 +1222,33 @@ async fn wait_ready(rig: &Rig) {
 }
 
 #[tokio::test]
-async fn a_second_calibration_is_refused_while_a_restart_is_owed() {
+async fn a_failed_restore_warns_but_does_not_block_a_second_calibration() {
     let rig = calibration_with_a_failed_restore().await;
-    assert!(rig.slot.restart_owed());
-    let sent = rig.sim.scripts().len();
-    let checks = refused_checks(rig.start(&calibration_plan()).await);
-    assert_eq!(checks, ["restart_owed"]);
-    assert_eq!(rig.sim.scripts().len(), sent, "{:#?}", rig.sim.scripts());
-    assert_clean(&rig);
-}
-
-#[tokio::test]
-async fn a_resonance_test_is_refused_while_a_restart_is_owed() {
-    let rig = rig().await;
-    rig.slot.set_restart_owed();
-    let checks = refused_checks(rig.start(&test_plan(&CHIPS, &[Axis::X])).await);
-    assert_eq!(checks, ["restart_owed"]);
-    assert!(rig.sim.scripts().is_empty());
-    assert!(rig.sim.sweeps().is_empty());
-    assert_clean(&rig);
-}
-
-#[tokio::test]
-async fn the_restart_owed_flag_clears_after_klipper_restarts() {
-    let rig = calibration_with_a_failed_restore().await;
-    // The reconnect alone is not a restart: Klipper kept the changed values.
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    assert!(rig.slot.restart_owed());
-
-    rig.sim.printer.set_state("disconnected");
-    rig.sim.fake.push("notify_klippy_disconnected", json!([]));
-    rig.until("Klipper not ready", || {
-        rig.moonraker.status().klippy.state
-            == wobblescope::moonraker::status::KlippyState::Disconnected
-    })
-    .await;
-    assert!(rig.slot.restart_owed());
-    rig.sim.printer.set_state("ready");
-    rig.sim.fake.push("notify_klippy_ready", json!([]));
-    rig.until("the flag to clear", || !rig.slot.restart_owed())
-        .await;
-    wait_ready(&rig).await;
-
     let task = start(&rig, &calibration_plan()).await;
-    let finished = rig.finished().await;
     task.await.unwrap();
-    assert!(
-        finished.needs_restart,
-        "the restore still closes the socket"
-    );
+    assert!(rig.finished().await.needs_restart);
 }
 
 #[tokio::test]
-async fn a_moonraker_reconnect_does_not_clear_the_restart_owed_flag() {
+async fn a_failed_restore_does_not_block_a_resonance_test() {
     let rig = calibration_with_a_failed_restore().await;
-    // A restarting Moonraker reports Klipper as starting before it reaches Klipper, which kept
-    // running with the changed values.
-    let before = rig.sim.fake.connections();
-    rig.sim.printer.set_state("startup");
-    rig.sim.fake.close_connections();
-    rig.until("a reconnect that sees Klipper starting", || {
-        rig.sim.fake.connections() > before
-            && rig.moonraker.status().klippy.state
-                == wobblescope::moonraker::status::KlippyState::Startup
-    })
-    .await;
-    rig.sim.printer.set_state("ready");
-    rig.sim.fake.push("notify_klippy_ready", json!([]));
-    wait_ready(&rig).await;
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    assert!(rig.slot.restart_owed());
+    let task = start(&rig, &test_plan(&CHIPS, &[Axis::X])).await;
+    task.await.unwrap();
+    assert!(!rig.sim.sweeps().is_empty());
 }
 
 #[tokio::test]
-async fn a_normal_calibration_leaves_no_restart_owed() {
+async fn a_normal_calibration_does_not_need_restart() {
     let rig = calibration_rig(Some(8.0)).await;
     let task = start(&rig, &calibration_plan()).await;
     let finished = rig.finished().await;
     task.await.unwrap();
     assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
-    assert!(!rig.slot.restart_owed());
+    assert!(!finished.needs_restart);
 }
 
 #[tokio::test]
-async fn a_confirmed_shutdown_leaves_no_restart_owed() {
+async fn a_confirmed_shutdown_does_not_need_restart() {
     let rig = calibration_rig(Some(8.0)).await;
     let gate = Gate::new();
     let held = gate.clone();
@@ -1333,5 +1268,4 @@ async fn a_confirmed_shutdown_leaves_no_restart_owed() {
     let finished = rig.finished().await;
     task.await.unwrap();
     assert!(!finished.needs_restart);
-    assert!(!rig.slot.restart_owed());
 }
