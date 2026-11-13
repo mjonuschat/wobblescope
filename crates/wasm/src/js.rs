@@ -55,6 +55,23 @@ impl WasmSession {
             .map_err(|e| JsError::new(&e.to_string()))?;
         to_js(&analysis)
     }
+
+    /// The time-frequency map of one chip's recording at one probe point of `axis`, up to
+    /// `max_freq` Hz.
+    pub fn spectrogram(
+        &self,
+        axis: JsValue,
+        chip: String,
+        point: usize,
+        max_freq: f64,
+    ) -> Result<JsValue, JsError> {
+        let axis: Axis = from_js("axis", axis)?;
+        let map = self
+            .inner
+            .spectrogram(axis, &chip, point, max_freq)
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        to_js(&map)
+    }
 }
 
 /// A live spectrum over the latest seconds of a streamed accelerometer.

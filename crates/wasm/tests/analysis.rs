@@ -9,12 +9,13 @@ use wobblescope_core::RawSamples;
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Decision, Health};
 use wobblescope_core::fit::{Axis, FitParams};
 use wobblescope_core::multichip::analyze;
+use wobblescope_core::spectrogram::spectrogram_of;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::{
     ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, TimeDomain,
     TimeWindow, sample_file_name,
 };
-use wobblescope_wasm::{Session, config_snippet};
+use wobblescope_wasm::{AnalyzeError, Session, config_snippet};
 
 struct Win {
     adxl: RawSamples,
@@ -270,5 +271,50 @@ mod js {
             msg.contains("chips") || msg.contains("missing field"),
             "{msg}"
         );
+    }
+}
+
+parity_test! {
+    fn a_spectrogram_through_the_session_equals_direct_computation() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
+        let via = s.spectrogram(Axis::X, "lis2dw ebb36", 0, 200.0).unwrap();
+        assert_eq!(via, spectrogram_of(&direct(&w)[1], 200.0).unwrap());
+        assert!(via.power.len() > 1);
+    }
+}
+
+parity_test! {
+    fn an_unknown_chip_or_point_is_named() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
+        for (chip, point) in [("nope", 0), ("adxl345", 1)] {
+            match s.spectrogram(Axis::X, chip, point, 200.0) {
+                Err(AnalyzeError::NoSuchDataset { chip: c, point: p }) => {
+                    assert_eq!((c.as_str(), p), (chip, point));
+                }
+                other => panic!("expected NoSuchDataset, got {other:?}"),
+            }
+        }
+    }
+}
+
+parity_test! {
+    fn a_missing_file_is_named_for_a_spectrogram() {
+        let w = win();
+        let mut s = Session::new(two_chip_x_meta(&w, Health::Ok)).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+        assert!(matches!(
+            s.spectrogram(Axis::X, "adxl345", 0, 200.0),
+            Err(AnalyzeError::MissingFile(name)) if name == "c1-s0.zst"
+        ));
+    }
+}
+
+parity_test! {
+    fn a_degraded_chip_still_gets_a_map() {
+        let w = win();
+        let s = loaded(&w, two_chip_x_meta(&w, Health::Degraded));
+        assert!(s.spectrogram(Axis::X, "lis2dw ebb36", 0, 200.0).is_ok());
     }
 }
