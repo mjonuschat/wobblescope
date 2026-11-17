@@ -910,6 +910,36 @@ mod vibrations {
     }
 
     parity_test! {
+        fn a_recorded_run_analyses_end_to_end() {
+            let (meta, files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 2.0)]);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            assert_eq!(out.per_chip.len(), 2);
+            for chip in &out.per_chip {
+                assert!(chip.excluded.is_none() && chip.failure.is_none(), "{chip:?}");
+                assert!(chip.result.is_some(), "{chip:?}");
+            }
+            let worst = out.worst_case.expect("a worst case over both chips");
+            // The grid has six points per measured speed, from the lowest to the highest.
+            let points = 6 * SPEEDS.len();
+            assert_eq!(worst.speeds.len(), points);
+            assert_eq!((worst.speeds[0], worst.speeds[points - 1]), (20.0, 50.0));
+            assert_eq!(worst.angles.len(), worst.angle_energy.len());
+            assert_eq!(worst.grid.len(), worst.angles.len());
+            assert!(worst.grid.iter().all(|row| row.len() == points));
+            for curve in [&worst.speed_min, &worst.speed_max, &worst.speed_variance, &worst.vibration_metric] {
+                assert_eq!(curve.len(), points);
+            }
+            for chip in &out.per_chip {
+                let result = chip.result.as_ref().unwrap();
+                assert_eq!(result.steps.len(), 2 * SPEEDS.len());
+                // The motor profile belongs to a chip's own result; the worst case has none.
+                assert!(result.motor.is_some(), "{chip:?}");
+            }
+            assert!(worst.motor.is_none());
+        }
+    }
+
+    parity_test! {
         fn a_chip_missing_one_angle_is_excluded_with_a_reason() {
             let (mut meta, files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 1.0)]);
             meta.segments[1].files.retain(|f| f.chip != 1);
