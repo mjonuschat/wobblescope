@@ -94,6 +94,7 @@ impl Spec {
             source: self.source.clone(),
             time_domain: TimeDomain::KlipperPrintTime,
             axes_map_run: None,
+            vibrations_run: None,
             mode: self.mode,
             settings: None,
             printer: self.printer.as_ref().map(|n| PrinterInfo {
@@ -113,6 +114,7 @@ impl Spec {
                 point: 0,
                 window: None,
                 files,
+                steps: vec![],
             }],
         }
     }

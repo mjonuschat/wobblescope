@@ -36,6 +36,7 @@ fn segment(c: &mut wobblescope::storage::capture::Capture, meta: &mut SessionMet
         point: 0,
         window: None,
         files,
+        steps: vec![],
     });
 }
 

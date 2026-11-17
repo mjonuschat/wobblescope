@@ -45,6 +45,7 @@ fn base(id: &str) -> SessionMeta {
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
+        vibrations_run: None,
         mode: None,
         settings: None,
         printer: None,
@@ -80,6 +81,7 @@ fn add_segment(writer: &mut SessionWriter, meta: &mut SessionMeta, index: usize,
         point: 0,
         window: None,
         files,
+        steps: vec![],
     });
 }
 

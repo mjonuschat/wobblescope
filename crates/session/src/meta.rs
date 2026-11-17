@@ -83,6 +83,44 @@ pub struct AxesMapRun {
     pub max_z_accel: Option<f64>,
 }
 
+/// The moves a vibrations-profile run was made with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct VibrationsRun {
+    /// Side of the square the toolhead moves over, in mm.
+    pub size: f64,
+    /// Z height the moves ran at in mm.
+    pub z_height: f64,
+    /// Highest speed of the run in mm/s.
+    pub max_speed: f64,
+    /// Speed increase between steps in mm/s.
+    pub speed_increment: f64,
+    /// Acceleration of the moves in mm/s².
+    pub accel: f64,
+    /// Speed of the positioning moves between measured moves in mm/s.
+    pub travel_speed: f64,
+    /// Lowest speed of the run in mm/s.
+    pub min_speed: f64,
+    /// Printer kinematics as Klipper reports it, such as `corexy` or `cartesian`.
+    pub kinematics: String,
+    /// Observed toolhead velocity limit in mm/s.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
+    pub max_velocity: Option<f64>,
+}
+
+impl VibrationsRun {
+    /// The angles of the two measured directions in degrees: 0 and 90 for Cartesian-style
+    /// kinematics, 45 and 135 for CoreXY-style, `None` for any other kinematics.
+    pub fn angles(&self) -> Option<[f64; 2]> {
+        match self.kinematics.as_str() {
+            "cartesian" | "limited_cartesian" | "corexz" | "limited_corexz" => Some([0.0, 90.0]),
+            "corexy" | "limited_corexy" => Some([45.0, 135.0]),
+            _ => None,
+        }
+    }
+}
+
 /// The sweep settings a test actually ran with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -212,6 +250,16 @@ pub struct SegmentFile {
     pub health_notes: Vec<String>,
 }
 
+/// One constant-speed step inside a vibrations segment.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct StepMeta {
+    /// Speed of the step in mm/s.
+    pub speed: f64,
+    /// Sample timestamps that belong to the step.
+    pub window: TimeWindow,
+}
+
 /// One (axis, probe point) measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -225,6 +273,9 @@ pub struct SegmentMeta {
     pub window: Option<TimeWindow>,
     /// One entry per chip that recorded this segment.
     pub files: Vec<SegmentFile>,
+    /// The speed steps of a vibrations segment, in time order; empty for other sessions.
+    #[serde(default)]
+    pub steps: Vec<StepMeta>,
 }
 
 /// What kind of analysis a session allows, derived from its metadata and never stored.
@@ -238,6 +289,8 @@ pub enum SessionKind {
     Belts,
     /// An axes-map calibration: one to three segments moving along +X, +Y and +Z, in that order.
     AxesMap,
+    /// A vibrations-profile run: one or two segments with speed steps.
+    Vibrations,
     /// Any other vector session.
     Other,
 }
@@ -271,6 +324,10 @@ pub struct SessionMeta {
     /// [`SessionKind::AxesMap`].
     #[serde(default)]
     pub axes_map_run: Option<AxesMapRun>,
+    /// The moves of a vibrations run; present exactly when [`SessionMeta::kind`] is
+    /// [`SessionKind::Vibrations`].
+    #[serde(default)]
+    pub vibrations_run: Option<VibrationsRun>,
     /// Free-text notes.
     #[serde(default)]
     pub notes: Vec<String>,
@@ -394,9 +451,12 @@ impl SessionMeta {
         }
     }
 
-    /// The session's kind. Run settings identify `AxesMap`; `Belts` needs at least one
-    /// segment, every segment a belt direction, no belt twice and all at one point.
+    /// The session's kind. Run settings identify `Vibrations` and `AxesMap`; `Belts` needs at
+    /// least one segment, every segment a belt direction, no belt twice and all at one point.
     pub fn kind(&self) -> SessionKind {
+        if self.vibrations_run.is_some() {
+            return SessionKind::Vibrations;
+        }
         if self.axes_map_run.is_some() {
             return SessionKind::AxesMap;
         }
@@ -447,6 +507,7 @@ impl SessionMeta {
             ));
         }
         self.validate_axes_map()?;
+        self.validate_vibrations()?;
         for (i, chip) in self.chips.iter().enumerate() {
             if self.chips[..i].iter().any(|c| c.name == chip.name) {
                 return Err(invalid(format!("chips[{i}].name"), "duplicate chip name"));
@@ -516,6 +577,72 @@ impl SessionMeta {
                         "exceeds the sample limit",
                     ));
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// The rules of a vibrations session and of speed steps.
+    fn validate_vibrations(&self) -> Result<(), SessionError> {
+        if let Some(run) = &self.vibrations_run {
+            for (field, value) in [
+                ("size", run.size),
+                ("z_height", run.z_height),
+                ("max_speed", run.max_speed),
+                ("speed_increment", run.speed_increment),
+                ("accel", run.accel),
+                ("travel_speed", run.travel_speed),
+                ("min_speed", run.min_speed),
+            ] {
+                if !positive_finite(value) {
+                    return Err(invalid(
+                        format!("vibrations_run.{field}"),
+                        "must be finite and positive",
+                    ));
+                }
+            }
+            if run.max_velocity.is_some_and(|v| !positive_finite(v)) {
+                return Err(invalid(
+                    "vibrations_run.max_velocity",
+                    "must be finite and positive",
+                ));
+            }
+            if self.segments.len() > 2 {
+                return Err(invalid(
+                    "vibrations_run",
+                    "a vibrations session has at most two segments",
+                ));
+            }
+        }
+        for (s, segment) in self.segments.iter().enumerate() {
+            let at = format!("segments[{s}].steps");
+            if !segment.steps.is_empty() && self.vibrations_run.is_none() {
+                return Err(invalid(at, "steps need vibrations_run"));
+            }
+            let mut previous_end = f64::NEG_INFINITY;
+            for step in &segment.steps {
+                let w = step.window;
+                if !positive_finite(step.speed) {
+                    return Err(invalid(at, "step speeds must be finite and positive"));
+                }
+                if !(w.start.is_finite() && w.end.is_finite() && w.start < w.end) {
+                    return Err(invalid(
+                        at,
+                        "step windows must be finite with start before end",
+                    ));
+                }
+                if w.start < previous_end {
+                    return Err(invalid(at, "step windows must be in order and not overlap"));
+                }
+                if let Some(outer) = segment.window
+                    && (w.start < outer.start || w.end > outer.end)
+                {
+                    return Err(invalid(
+                        at,
+                        "step windows must sit inside the segment window",
+                    ));
+                }
+                previous_end = w.end;
             }
         }
         Ok(())

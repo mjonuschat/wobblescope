@@ -69,6 +69,7 @@ pub fn initial(
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
+        vibrations_run: None,
         mode: axes_map.is_none().then_some(plan.mode),
         settings: axes_map.is_none().then(|| plan.sweep_settings()),
         printer,

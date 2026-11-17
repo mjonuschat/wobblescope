@@ -121,6 +121,7 @@ export function calibrationMeta(id = "cal1"): SessionMeta {
     printer: null,
     outcome: "Complete",
     axes_map_run: { speed: 80, accel: 3000, z_height: 30, travel_speed: 150, max_z_velocity: 100, max_z_accel: 3000 },
+    vibrations_run: null,
     notes: [],
     probe_points: [{ position: null }, { position: null }, { position: null }],
     chips: CALIBRATION_CHIPS.map((name) => ({
@@ -145,6 +146,7 @@ export function calibrationMeta(id = "cal1"): SessionMeta {
         health: null,
         health_notes: [],
       })),
+      steps: [],
     })),
   };
 }

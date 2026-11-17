@@ -779,6 +779,7 @@ impl Run {
             point: segment.point as u32,
             window: Some(window),
             files,
+            steps: vec![],
         });
         // Version 2 is written only once a vector segment is in the journal, so a session with
         // none stays readable by a daemon that predates belt tests.

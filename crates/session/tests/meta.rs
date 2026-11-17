@@ -8,8 +8,8 @@ use wobblescope_session::SessionError;
 use wobblescope_session::codec::MAX_SAMPLES;
 use wobblescope_session::meta::{
     AXES_MAP_DIRECTIONS, AxesMapRun, ChipMeta, Mode, Outcome, PrinterInfo, ProbePoint, SegmentFile,
-    SegmentMeta, SessionKind, SessionMeta, Source, SweepSettings, TimeDomain, TimeWindow,
-    sample_file_name, validate_session_id,
+    SegmentMeta, SessionKind, SessionMeta, Source, StepMeta, SweepSettings, TimeDomain, TimeWindow,
+    VibrationsRun, sample_file_name, validate_session_id,
 };
 
 fn chip(name: &str, chip_type: Option<&str>, rate: Option<f64>) -> ChipMeta {
@@ -63,6 +63,7 @@ fn capture_meta() -> SessionMeta {
         }),
         outcome: Outcome::Complete,
         axes_map_run: None,
+        vibrations_run: None,
         notes: vec![],
         probe_points: vec![ProbePoint {
             position: Some([150.0, 150.0, 50.0]),
@@ -80,12 +81,14 @@ fn capture_meta() -> SessionMeta {
                     end: 41262.104211,
                 }),
                 files: vec![file(0, 0, 100_000), file(1, 0, 12_000)],
+                steps: vec![],
             },
             SegmentMeta {
                 axis: Axis::Y.into(),
                 point: 0,
                 window: None,
                 files: vec![file(0, 1, 100_000), file(1, 1, 12_000)],
+                steps: vec![],
             },
         ],
     }
@@ -329,6 +332,7 @@ fn vector_meta(segments: &[(Direction, u32)]) -> SessionMeta {
             point,
             window: None,
             files: vec![file(0, i, 100)],
+            steps: vec![],
         })
         .collect();
     meta
@@ -461,6 +465,7 @@ fn axes_map_meta() -> SessionMeta {
             point: i as u32,
             window: None,
             files: vec![file(0, i, 10)],
+            steps: vec![],
         })
         .collect();
     m
@@ -558,7 +563,8 @@ parity_test! {
             point: 3,
             window: None,
             files: vec![],
-        });
+ steps: vec![],
+ });
         assert_eq!(four.kind(), SessionKind::AxesMap);
         assert_eq!(invalid_field(four.validate().unwrap_err()), "axes_map_run");
     }
@@ -633,4 +639,115 @@ fn legacy_mounting_strings_are_accepted_only_outside_calibration() {
     let mut calibration = serde_json::to_value(axes_map_meta()).unwrap();
     calibration["chips"][0]["mounting"] = serde_json::json!("frame");
     assert!(SessionMeta::from_json(&calibration.to_string()).is_err());
+}
+
+fn vibrations_run(kinematics: &str) -> VibrationsRun {
+    VibrationsRun {
+        size: 100.0,
+        z_height: 20.0,
+        max_speed: 200.0,
+        speed_increment: 2.0,
+        accel: 3000.0,
+        travel_speed: 120.0,
+        min_speed: 20.0,
+        kinematics: kinematics.to_owned(),
+        max_velocity: None,
+    }
+}
+
+/// A vibrations session over the given directions, each segment holding two speed steps.
+fn vibrations_meta(kinematics: &str, axes: [Direction; 2]) -> SessionMeta {
+    let mut meta = vector_meta(&[(axes[0], 0), (axes[1], 0)]);
+    meta.mode = None;
+    meta.settings = None;
+    meta.vibrations_run = Some(vibrations_run(kinematics));
+    for (i, segment) in meta.segments.iter_mut().enumerate() {
+        let base = 100.0 * i as f64;
+        segment.window = Some(TimeWindow {
+            start: base,
+            end: base + 10.0,
+        });
+        segment.steps = vec![
+            StepMeta {
+                speed: 20.0,
+                window: TimeWindow {
+                    start: base + 1.0,
+                    end: base + 4.0,
+                },
+            },
+            StepMeta {
+                speed: 22.0,
+                window: TimeWindow {
+                    start: base + 4.0,
+                    end: base + 8.0,
+                },
+            },
+        ];
+    }
+    meta
+}
+
+parity_test! {
+    fn corexy_vibrations_session_is_vibrations_not_belts() {
+        let meta = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        assert_eq!(meta.kind(), SessionKind::Vibrations);
+        meta.to_json().unwrap();
+        assert_eq!(vibrations_run("corexy").angles(), Some([45.0, 135.0]));
+    }
+}
+
+parity_test! {
+    fn cartesian_vibrations_session_is_vibrations_not_axes() {
+        let mut meta = vibrations_meta("cartesian", [Direction::X, Direction::Y]);
+        meta.format_version = 1;
+        assert_eq!(meta.kind(), SessionKind::Vibrations);
+        meta.to_json().unwrap();
+        assert_eq!(vibrations_run("cartesian").angles(), Some([0.0, 90.0]));
+        for kinematics in ["limited_cartesian", "corexz", "limited_corexz"] {
+            assert_eq!(vibrations_run(kinematics).angles(), Some([0.0, 90.0]), "{kinematics}");
+        }
+        assert_eq!(vibrations_run("limited_corexy").angles(), Some([45.0, 135.0]));
+        assert_eq!(vibrations_run("delta").angles(), None);
+    }
+}
+
+parity_test! {
+    fn old_session_without_new_fields_reads() {
+        let m = capture_meta();
+        let mut value: serde_json::Value = serde_json::from_str(&m.to_json().unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("vibrations_run");
+        for segment in value["segments"].as_array_mut().unwrap() {
+            segment.as_object_mut().unwrap().remove("steps");
+        }
+        let old = SessionMeta::from_json(&value.to_string()).unwrap();
+        assert_eq!(old.vibrations_run, None);
+        assert!(old.segments.iter().all(|s| s.steps.is_empty()));
+    }
+}
+
+parity_test! {
+    fn steps_must_sit_inside_the_segment_window_and_not_overlap() {
+        let mut outside = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        outside.segments[0].steps[1].window.end = 11.0;
+        let err = outside.validate().unwrap_err();
+        assert!(err.to_string().contains("segments[0].steps"), "{err}");
+
+        let mut overlap = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        overlap.segments[0].steps[1].window.start = 3.0;
+        let err = overlap.validate().unwrap_err();
+        assert!(err.to_string().contains("segments[0].steps"), "{err}");
+
+        let mut bad_speed = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        bad_speed.segments[0].steps[0].speed = 0.0;
+        assert!(bad_speed.validate().is_err());
+
+        let mut no_run = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        no_run.vibrations_run = None;
+        assert!(no_run.validate().is_err());
+
+        let mut three = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        three.segments.push(three.segments[0].clone());
+        three.segments[2].point = 1;
+        assert!(three.validate().is_err());
+    }
 }

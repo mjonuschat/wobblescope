@@ -53,12 +53,13 @@ export function twoAxisMeta(id = "s1"): SessionMeta {
     printer: null,
     outcome: "Complete",
     axes_map_run: null,
+    vibrations_run: null,
     notes: [],
     probe_points: [{ position: null }],
     chips: [chip("adxl345"), chip("lis2dw ebb36")],
     segments: [
-      { axis: "X", point: 0, window: null, files: [file(0, 0), file(1, 0)] },
-      { axis: "Y", point: 0, window: null, files: [file(0, 1)] },
+      { axis: "X", point: 0, window: null, files: [file(0, 0), file(1, 0)], steps: [] },
+      { axis: "Y", point: 0, window: null, files: [file(0, 1)], steps: [] },
     ],
   } as SessionMeta;
 }

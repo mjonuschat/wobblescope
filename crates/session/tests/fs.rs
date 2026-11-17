@@ -54,6 +54,7 @@ fn meta(id: &str) -> SessionMeta {
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
+        vibrations_run: None,
         mode: None,
         settings: None,
         printer: None,
@@ -67,12 +68,14 @@ fn meta(id: &str) -> SessionMeta {
                 point: 0,
                 window: None,
                 files: vec![file(0, 0, 800), file(1, 0, 500)],
+                steps: vec![],
             },
             SegmentMeta {
                 axis: Axis::Y.into(),
                 point: 0,
                 window: None,
                 files: vec![file(0, 1, 800)],
+                steps: vec![],
             },
         ],
     }

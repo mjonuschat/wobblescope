@@ -9,6 +9,7 @@ import type { SegmentMeta } from "./SegmentMeta";
 import type { Source } from "./Source";
 import type { SweepSettings } from "./SweepSettings";
 import type { TimeDomain } from "./TimeDomain";
+import type { VibrationsRun } from "./VibrationsRun";
 
 /**
  * The contents of `meta.json`.
@@ -55,6 +56,11 @@ outcome: Outcome,
  * [`SessionKind::AxesMap`].
  */
 axes_map_run: AxesMapRun | null, 
+/**
+ * The moves of a vibrations run; present exactly when [`SessionMeta::kind`] is
+ * [`SessionKind::Vibrations`].
+ */
+vibrations_run: VibrationsRun | null, 
 /**
  * Free-text notes.
  */

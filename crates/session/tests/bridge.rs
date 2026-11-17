@@ -57,6 +57,7 @@ fn meta(chips: Vec<ChipMeta>, segments: Vec<SegmentMeta>) -> SessionMeta {
         printer: None,
         outcome: Outcome::Complete,
         axes_map_run: None,
+        vibrations_run: None,
         notes: vec![],
         probe_points: vec![ProbePoint { position: None }],
         chips,
@@ -108,6 +109,7 @@ fn two_chip_x_meta(w: &Win, coverage: Coverage, ebb_health: Health) -> SessionMe
                 entry(0, 0, w.adxl.len(), Coverage::Complete),
                 entry(1, 0, w.ebb.len(), coverage),
             ],
+            steps: vec![],
         }],
     )
 }
@@ -159,13 +161,15 @@ parity_test! {
                     point: 0,
                     window: None,
                     files: vec![entry(1, 0, 2, Coverage::Complete), entry(0, 0, 2, Coverage::Complete)],
-                },
+ steps: vec![],
+ },
                 SegmentMeta {
                     axis: Axis::Y.into(),
                     point: 0,
                     window: None,
                     files: vec![entry(0, 1, 2, Coverage::Complete)],
-                },
+ steps: vec![],
+ },
             ],
         );
         let samples = s(2);
@@ -247,7 +251,8 @@ parity_test! {
                 point: 0,
                 window: None,
                 files: vec![entry(0, 0, 1000, Coverage::Complete)],
-            }],
+ steps: vec![],
+ }],
         );
         let short = RawSamples { t: vec![0.0; 999], x: vec![0.0; 999], y: vec![0.0; 999], z: vec![0.0; 999] };
         let inputs = dataset_inputs(&m, Axis::X, |_| Ok(short.clone())).unwrap();
@@ -306,12 +311,14 @@ fn two_axis_meta(
                 point: 0,
                 window,
                 files: vec![file(0, x)],
+                steps: vec![],
             },
             SegmentMeta {
                 axis: Axis::Y.into(),
                 point: 0,
                 window,
                 files: vec![file(1, y)],
+                steps: vec![],
             },
         ],
     )
@@ -409,12 +416,14 @@ fn belt_meta(w: &Win, b_chips: &[u32]) -> SessionMeta {
                 point: 0,
                 window,
                 files: vec![file(0, 0), file(1, 0)],
+                steps: vec![],
             },
             SegmentMeta {
                 axis: Direction::BELT_B,
                 point: 0,
                 window,
                 files: b_chips.iter().map(|&c| file(c, 1)).collect(),
+                steps: vec![],
             },
         ],
     );
@@ -544,6 +553,7 @@ fn axes_map_meta(chips: Vec<ChipMeta>, files: Vec<[Option<(usize, Coverage)>; 3]
                         .map(|(count, coverage)| entry(c as u32, s, count, coverage))
                 })
                 .collect(),
+            steps: vec![],
         })
         .collect();
     m

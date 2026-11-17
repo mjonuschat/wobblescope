@@ -199,6 +199,7 @@ pub fn build_klipper_group(
                     point: point as u32,
                     window: None,
                     files: Vec::new(),
+                    steps: vec![],
                 });
                 ranges.push(Vec::new());
                 segments.len() - 1
@@ -262,6 +263,7 @@ pub fn build_klipper_group(
         },
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
+        vibrations_run: None,
         mode: None,
         settings: None,
         printer: None,

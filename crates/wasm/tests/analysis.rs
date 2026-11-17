@@ -70,6 +70,7 @@ fn two_chip_x_meta(w: &Win, ebb_health: Health) -> SessionMeta {
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
+        vibrations_run: None,
         mode: None,
         settings: None,
         printer: None,
@@ -88,6 +89,7 @@ fn two_chip_x_meta(w: &Win, ebb_health: Health) -> SessionMeta {
                 end: w.window.end,
             }),
             files: vec![entry(0, w.adxl.len()), entry(1, w.ebb.len())],
+            steps: vec![],
         }],
     }
 }
@@ -352,6 +354,7 @@ fn belt_meta(w: &Win, with_b: bool) -> SessionMeta {
         point: 0,
         window,
         files: vec![file(0, w.adxl.len())],
+        steps: vec![],
     }];
     if with_b {
         segments.push(SegmentMeta {
@@ -359,6 +362,7 @@ fn belt_meta(w: &Win, with_b: bool) -> SessionMeta {
             point: 0,
             window,
             files: vec![file(1, w.ebb.len())],
+            steps: vec![],
         });
     }
     SessionMeta {
@@ -551,6 +555,7 @@ fn axes_map_meta(
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: Some(am_run()),
+        vibrations_run: None,
         mode: None,
         settings: None,
         printer: None,
@@ -571,6 +576,7 @@ fn axes_map_meta(
                             .map(|n| am_file(c as u32, s, n))
                     })
                     .collect(),
+                steps: vec![],
             })
             .collect(),
     }
