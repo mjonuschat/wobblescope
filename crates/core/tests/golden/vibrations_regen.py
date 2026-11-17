@@ -200,6 +200,10 @@ def run_case(computation_class, name: str, kinematics: str, angles, seed: int, f
     computation._compute_dir_speed_spectrogram = spy_spectrogram
     computation._compute_motor_profiles = spy_motor_profiles
     result = computation.compute()
+    # Shake&Tune keeps the low-frequency flag in a local of compute(), so ask its own helper again
+    # with the arguments compute() passes.
+    common_func = sys.modules["shaketune.helpers.common_func"]
+    *_, lowfreq_max = common_func.compute_mechanical_parameters(result.global_motor_profile, result.target_freqs, 30)
 
     return plain(
         {
@@ -245,6 +249,7 @@ def run_case(computation_class, name: str, kinematics: str, angles, seed: int, f
             "motor_fr": result.motor_fr,
             "motor_zeta": result.motor_zeta,
             "motor_res_idx": result.motor_res_idx,
+            "motor_lowfreq_max": lowfreq_max,
         }
     )
 

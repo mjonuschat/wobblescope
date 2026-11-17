@@ -52,6 +52,25 @@ pub fn trapz(y: &[f64], x: &[f64]) -> f64 {
         .sum()
 }
 
+/// `numpy.convolve(a, v, mode='same')`: the centre of the full convolution, as long as the longer
+/// input. numpy swaps the inputs when `v` is the longer one, and for an even kernel the centre
+/// sits half a bin to the left of the one for an odd kernel. Empty when either input is empty.
+pub fn convolve_same(a: &[f64], v: &[f64]) -> Vec<f64> {
+    let (long, short) = if v.len() > a.len() { (v, a) } else { (a, v) };
+    if short.is_empty() {
+        return Vec::new();
+    }
+    let offset = short.len() - 1 - short.len() / 2;
+    (0..long.len())
+        .map(|i| {
+            let c = i + offset;
+            let lo = c.saturating_sub(short.len() - 1);
+            let hi = c.min(long.len() - 1);
+            (lo..=hi).map(|j| long[j] * short[c - j]).sum()
+        })
+        .collect()
+}
+
 /// A gap longer than this many median sample intervals degrades a recording.
 pub const GAP_FACTOR: f64 = 3.0;
 

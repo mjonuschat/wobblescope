@@ -53,6 +53,29 @@ pub fn detect_peaks_with(
     window: usize,
     vicinity: usize,
 ) -> Vec<usize> {
+    detect_peaks_filtered(psd, threshold, None, window, vicinity)
+}
+
+/// [`detect_peaks_with`] with Shake&Tune's `relative_height_threshold`: a peak of the smoothed
+/// curve is kept only when it rises above the lowest smoothed value within `vicinity` bins by more
+/// than `relative_height` times its own height.
+pub fn detect_peaks_relative(
+    data: &[f64],
+    threshold: f64,
+    relative_height: f64,
+    window: usize,
+    vicinity: usize,
+) -> Vec<usize> {
+    detect_peaks_filtered(data, threshold, Some(relative_height), window, vicinity)
+}
+
+fn detect_peaks_filtered(
+    psd: &[f64],
+    threshold: f64,
+    relative_height: Option<f64>,
+    window: usize,
+    vicinity: usize,
+) -> Vec<usize> {
     let n = psd.len();
     if n < window {
         return Vec::new();
@@ -70,6 +93,14 @@ pub fn detect_peaks_with(
     for j in 0..smoothed.len() - 2 {
         let p = j + 1;
         if smoothed[j] < smoothed[p] && smoothed[p] > smoothed[j + 2] && smoothed[p] > threshold {
+            if let Some(relative) = relative_height {
+                let around =
+                    &smoothed[p.saturating_sub(vicinity)..(p + vicinity + 1).min(smoothed.len())];
+                let lowest = around.iter().copied().fold(f64::INFINITY, f64::min);
+                if smoothed[p] - lowest <= relative * smoothed[p] {
+                    continue;
+                }
+            }
             let start = p.saturating_sub(vicinity);
             let end = (p + vicinity + 1).min(n);
             let offset = psd[start..end].iter().enumerate().fold(0, |best, (k, v)| {
@@ -119,6 +150,15 @@ pub fn psd_peaks(data: &CalibrationData, max_freq: f64) -> Option<PsdPeaks> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relative_height_drops_a_peak_that_barely_rises() {
+        let mut psd = vec![10.0; 30];
+        psd[10..13].copy_from_slice(&[10.2, 10.4, 10.2]);
+        psd[20..23].copy_from_slice(&[14.0, 20.0, 14.0]);
+        assert_eq!(detect_peaks_with(&psd, 1.0, 3, 3).len(), 2);
+        assert_eq!(detect_peaks_relative(&psd, 1.0, 0.04, 3, 3), vec![21]);
+    }
 
     fn data(psd_sum: Vec<f64>) -> CalibrationData {
         CalibrationData {

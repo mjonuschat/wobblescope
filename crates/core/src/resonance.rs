@@ -31,6 +31,55 @@ pub fn estimate_damping(freq_bins: &[f64], psd: &[f64]) -> Option<DampingEstimat
         return None;
     }
     let peak = (0..n).fold(0, |best, i| if psd[i] > psd[best] { i } else { best });
+    Some(half_power_estimate(freq_bins, psd, peak))
+}
+
+/// What [`estimate_damping_above`] finds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MechanicalParams {
+    /// Frequency of the strongest bin at or above `min_freq`, in Hz.
+    pub fr: f64,
+    /// The damping ratio, `None` as for [`DampingEstimate::zeta`].
+    pub zeta: Option<f64>,
+    /// Index of that bin in the input.
+    pub peak_index: usize,
+    /// The strongest bin of the whole spectrum lies below `min_freq`.
+    pub low_freq_max: bool,
+}
+
+/// Shake&Tune's `compute_mechanical_parameters` with a `min_freq`: the resonance is the strongest
+/// bin at or above `min_freq`, the half-power points are searched over the whole spectrum as in
+/// [`estimate_damping`], and `low_freq_max` tells when the strongest bin overall is below
+/// `min_freq`. `None` when `min_freq` is above every bin, or for empty input or slices of
+/// different lengths.
+pub fn estimate_damping_above(
+    freq_bins: &[f64],
+    psd: &[f64],
+    min_freq: f64,
+) -> Option<MechanicalParams> {
+    let n = freq_bins.len();
+    if n == 0 || psd.len() != n {
+        return None;
+    }
+    let first = freq_bins.partition_point(|f| *f < min_freq);
+    if first >= n {
+        return None;
+    }
+    let argmax =
+        |from: usize| (from..n).fold(from, |best, i| if psd[i] > psd[best] { i } else { best });
+    let low_freq_max = argmax(0) < first;
+    let peak_index = argmax(first);
+    let found = half_power_estimate(freq_bins, psd, peak_index);
+    Some(MechanicalParams {
+        fr: found.fr,
+        zeta: found.zeta,
+        peak_index,
+        low_freq_max,
+    })
+}
+
+/// The half-power estimate around the bin `peak`.
+fn half_power_estimate(freq_bins: &[f64], psd: &[f64], peak: usize) -> DampingEstimate {
     let fr = freq_bins[peak];
     let half = psd[peak] * HALF_POWER_LEVEL;
     let below = psd[..peak].iter().rposition(|p| *p <= half);
@@ -39,7 +88,7 @@ pub fn estimate_damping(freq_bins: &[f64], psd: &[f64]) -> Option<DampingEstimat
         .position(|p| *p <= half)
         .map(|k| k + peak);
     let (Some(lo), Some(hi)) = (below, above) else {
-        return Some(DampingEstimate { fr, zeta: None });
+        return DampingEstimate { fr, zeta: None };
     };
     let f_below = freq_bins[lo]
         + (half - psd[lo]) * (freq_bins[lo + 1] - freq_bins[lo]) / (psd[lo + 1] - psd[lo]);
@@ -52,5 +101,5 @@ pub fn estimate_damping(freq_bins: &[f64], psd: &[f64]) -> Option<DampingEstimat
         .then(|| 0.5 - inner.sqrt())
         .filter(|x| x.is_finite() && *x >= 0.0)
         .map(f64::sqrt);
-    Some(DampingEstimate { fr, zeta })
+    DampingEstimate { fr, zeta }
 }
