@@ -201,6 +201,17 @@ pub fn plan_vibrations(
              max_speed",
         );
     }
+    // The analysis needs at least two speeds, so a run with one would record for minutes and
+    // then be unanalysable.
+    if speed_list(max_speed, speed_increment).len() < 2 {
+        return refuse(
+            "speed_increment",
+            format!(
+                "the speed range {MIN_SPEED} to {max_speed} mm/s with this step has fewer than two \
+                 speeds; lower speed_increment or raise max_speed"
+            ),
+        );
+    }
     let Some(kinematics) = printer.machine.kinematics.clone() else {
         return refuse(
             "kinematics",
@@ -493,6 +504,16 @@ mod tests {
         assert_eq!(refused(&r).field, "max_speed");
         r.max_speed = Some(200.0);
         assert!(planned(&r).is_ok());
+    }
+
+    #[test]
+    fn fewer_than_two_speeds_is_refused() {
+        let mut r = request();
+        r.max_speed = Some(10.0);
+        r.speed_increment = Some(9.0);
+        assert_eq!(refused(&r).field, "speed_increment");
+        r.speed_increment = Some(8.0);
+        assert_eq!(vibrations(&r).speeds.len(), 2);
     }
 
     #[test]

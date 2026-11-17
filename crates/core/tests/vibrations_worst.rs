@@ -1,6 +1,9 @@
 //! The worst case of the vibrations profile over several chips.
 
-use wobblescope_core::vibrations::{Grid, Kinematics, VibrationsParams, worst_case};
+use wobblescope_core::RawSamples;
+use wobblescope_core::vibrations::{
+    Grid, Kinematics, StepInput, VibrationsParams, analyze_chip, worst_case,
+};
 
 fn params() -> VibrationsParams {
     VibrationsParams {
@@ -70,4 +73,48 @@ fn worst_case_of_one_chip_equals_that_chip() {
     if let Some(s) = got.symmetry {
         assert_eq!(s, want);
     }
+}
+
+/// Steps of a Cartesian run at 20 to 100 mm/s with a deterministic signal.
+fn steps() -> Vec<StepInput> {
+    let mut out = Vec::new();
+    for angle in [0.0, 90.0] {
+        for speed in (2..=10).map(|i| f64::from(i) * 10.0) {
+            let t: Vec<f64> = (0..3200).map(|i| f64::from(i) / 3200.0).collect();
+            let wave = |f: f64, k: f64| -> Vec<f64> {
+                t.iter()
+                    .map(|t| (t * f * k).sin() * speed / 50.0 + (t * 977.0).cos() * 0.1)
+                    .collect()
+            };
+            out.push(StepInput {
+                angle,
+                speed,
+                samples: RawSamples {
+                    x: wave(90.0 + angle, std::f64::consts::TAU),
+                    y: wave(150.0 + speed, std::f64::consts::TAU),
+                    z: wave(40.0, std::f64::consts::TAU),
+                    t,
+                },
+            });
+        }
+    }
+    out
+}
+
+#[test]
+fn worst_case_of_one_chip_matches_analyze_chip_in_every_other_field() {
+    let steps = steps();
+    let mut want = analyze_chip(&steps, &params()).unwrap();
+    // The grid is the one analyze_chip derived its figures from.
+    let grid = Grid {
+        angles: want.angles.clone(),
+        speeds: want.speeds.clone(),
+        data: want.grid.clone(),
+    };
+    let mut got = worst_case(&[&grid], &params()).unwrap();
+    want.steps.clear();
+    want.motor = None;
+    got.steps.clear();
+    got.motor = None;
+    assert_eq!(got, want);
 }

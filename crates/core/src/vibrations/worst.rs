@@ -15,6 +15,7 @@ pub fn worst_case(grids: &[&Grid], p: &VibrationsParams) -> Option<VibrationsRes
     let same_shape = |g: &&Grid| {
         g.data.len() == first.data.len()
             && g.speeds == first.speeds
+            && g.angles == first.angles
             && g.data
                 .iter()
                 .zip(&first.data)
@@ -37,6 +38,18 @@ pub fn worst_case(grids: &[&Grid], p: &VibrationsParams) -> Option<VibrationsRes
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mismatched_angles_give_no_worst_case() {
+        let grid = |angles: Vec<f64>| Grid {
+            angles,
+            speeds: vec![20.0, 25.0],
+            data: vec![vec![1.0, 2.0], vec![2.0, 3.0]],
+        };
+        let a = grid(vec![0.0, 90.0]);
+        let b = grid(vec![0.0, 180.0]);
+        assert!(worst_case(&[&a, &b], &VibrationsParams::default()).is_none());
+    }
 
     #[test]
     fn a_grid_with_fewer_than_two_speeds_gives_none() {

@@ -1,13 +1,12 @@
 //! The vibrations profile, computed the way Shake&Tune's `vibrations_computation.py` computes it
 //! (at the commit pinned in `docs/specs/shaketune-deviations.md`).
 
+mod analysis;
 mod grid;
 mod motor;
 mod steps;
 mod worst;
 mod zones;
-
-mod analysis;
 
 pub use crate::resonance::{MechanicalParams, estimate_damping_above};
 pub use analysis::{MotorResult, StepEnergy, VibrationsParams, VibrationsResult, analyze_chip};

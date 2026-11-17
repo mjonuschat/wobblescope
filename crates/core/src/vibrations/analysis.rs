@@ -108,7 +108,11 @@ pub struct VibrationsResult {
 }
 
 /// The figures derived from a grid: everything but the steps and the motor profile.
+///
+/// The grid must have at least two speeds, as the speed step is read from the first two. Both
+/// callers check this before they call.
 pub(crate) fn derive(grid: &Grid, kinematics: Kinematics) -> VibrationsResult {
+    debug_assert!(grid.speeds.len() >= 2, "callers check for two speeds");
     let main = kinematics.main_angles();
     let angle_energy = angle_powers(grid);
     let curves = speed_powers(grid);
