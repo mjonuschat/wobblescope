@@ -136,7 +136,6 @@ describe("the orientation view", () => {
       grid: { left: number };
     };
     expect(option.yAxis).toMatchObject({ name: "Velocity (mm/s)", nameLocation: "middle", nameRotate: 90 });
-    // The grid leaves room for the values and then the label.
     expect(option.grid.left).toBeGreaterThan(option.yAxis.nameGap);
   });
 
@@ -151,7 +150,6 @@ describe("the orientation view", () => {
     // The padded ends are not round numbers and are not labelled.
     const label = (movementOption(result()) as unknown as { yAxis: { axisLabel: object } }).yAxis.axisLabel;
     expect(label).toMatchObject({ showMinLabel: false, showMaxLabel: false });
-    // A flat recording still gets an axis with some height.
     const flat = { min: 0, max: 0 };
     expect(yAxis.max(flat)).toBeGreaterThan(yAxis.min(flat));
   });
@@ -197,19 +195,15 @@ describe("the orientation view", () => {
     render(<AxesMapPlot result={result()} />);
     expect(screen.getByRole("heading", { name: "Movement sequence" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Chip orientation" })).toBeTruthy();
-    // The key is a tooltip on an (i) button beside the title, not text on the page.
     expect(screen.queryByText(/Dashed: printer axes/)).toBeNull();
     fireEvent.focus(screen.getByRole("button", { name: "About chip orientation" }));
     expect(
       (await screen.findAllByText(/Dashed: printer axes\. Coloured: chip axes, as mounted\./)).length,
     ).toBeGreaterThan(0);
-    // The machine and the chip axes are each X, Y and Z, told apart by colour.
     for (const letter of ["X", "Y", "Z"]) expect(screen.getAllByText(letter)).toHaveLength(2);
     expect(screen.queryByText(/inferred/i)).toBeNull();
     expect(screen.queryByText("y")).toBeNull();
-    // The map, the axes and the Euler angles are in the Result card and the table, not repeated here.
     expect(screen.queryByText(/Detected axes map/)).toBeNull();
-    // Gravity and noise are in the chip panel's fields, not repeated on the chart.
     expect(screen.queryByText(/Measured gravity/)).toBeNull();
     expect(screen.queryByText(/^Noise:/)).toBeNull();
     expect(screen.getByRole("img", { name: /movement sequence/i })).toBeTruthy();

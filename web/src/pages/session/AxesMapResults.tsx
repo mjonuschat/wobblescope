@@ -8,10 +8,6 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { Header } from "./SessionResults";
 import { AxesMapChipTab, AxesMapSummary } from "./AxesMapChipTab";
 
-/**
- * The outcome of an axes-map calibration session. The chip tabs and what the analysis says about
- * the chip go in the page's result header; the chip's detail follows.
- */
 export function AxesMapResults({ id, meta, header }: { id: string; meta: SessionMeta; header: Header }) {
   const query = useAxesMapAnalysis(id);
   const [chipName, setChipName] = useState<string | null>(null);

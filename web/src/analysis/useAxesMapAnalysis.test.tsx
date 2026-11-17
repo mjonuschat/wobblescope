@@ -93,7 +93,6 @@ describe("useAxesMapAnalysis", () => {
       const { mount } = harness(fetchSample);
       const first = mount();
       await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Incomplete"));
-      // The page is left; the cached outcomes stay for a while.
       first.unmount();
       fail = false;
       const back = mount();
@@ -131,7 +130,6 @@ describe("useAxesMapAnalysis", () => {
       expect(analyse).toHaveBeenCalledTimes(1);
       first.unmount();
       const back = mount();
-      // The cached outcomes are there at once and stay as they are.
       expect(back.result.current.data).toBeDefined();
       await waitFor(() => expect(back.result.current.isFetching).toBe(false));
       expect(analyse).toHaveBeenCalledTimes(1);

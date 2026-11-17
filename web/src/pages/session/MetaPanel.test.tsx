@@ -43,7 +43,6 @@ describe("the session details", () => {
     const cell = (label: string) => screen.getByText(label).parentElement as HTMLElement;
     expect(cell("Klipper").className).toContain("lg:col-span-3");
     expect(cell("Probe Points").className).toContain("col-span-full");
-    // A short field stays one column wide.
     expect(cell("Printer").className).not.toContain("col-span");
   });
 

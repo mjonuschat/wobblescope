@@ -17,8 +17,6 @@ const PULSE_ACCEL: f64 = 1600.0;
 const PULSE_SECONDS: f64 = 0.05;
 const WINDOW: std::ops::Range<f64> = 2.0..3.7;
 
-/// A recording from `start` to 3.8 s with one pulse along `axis` at 2.5 s, inside `WINDOW`, and
-/// the given extra pulses at their times. Gravity is on z and a small ripple is on every axis.
 fn recording(start: f64, axis: usize, extra: &[(f64, [f64; 3])]) -> RawSamples {
     let mut s = RawSamples::default();
     let count = ((3.8 - start) * RATE_HZ) as usize;
@@ -54,8 +52,8 @@ fn recording(start: f64, axis: usize, extra: &[(f64, [f64; 3])]) -> RawSamples {
     s
 }
 
-/// X, Y and Z moves. The first recording starts at 0 s, before its window, and holds a faster
-/// diagonal travel move on x and y at 0.5 s; the others start 0.1 s before their windows.
+/// The three moves. The first recording starts at 0 s, before its window, and holds a faster
+/// diagonal travel move on x and y at 0.5 s. The other two start 0.1 s before their windows.
 fn input(windows: [Option<std::ops::Range<f64>>; 3]) -> AxesMapInput {
     AxesMapInput {
         chip: "adxl345".to_owned(),
@@ -96,9 +94,8 @@ fn a_window_leaves_out_the_travel_move() {
     assert!(got.axes[0].tilt_deg < 2.0, "tilt {}", got.axes[0].tilt_deg);
     assert!(got.axes[0].confidence > 0.99);
     let peak = got.axes[0].peak_velocity;
-    // The low-pass filter trims a pulse this short; the travel move's 160 mm/s is not counted.
+    // The low-pass filter trims a pulse this short. The travel move's 160 mm/s is not counted.
     assert!((55.0..90.0).contains(&peak), "peak {peak}");
-    // The plot starts at the window, so the first segment is no longer than the window.
     let curve = &got.curves[0].t;
     assert!(curve[curve.len() - 1] <= WINDOW.end - WINDOW.start + 0.01);
 }

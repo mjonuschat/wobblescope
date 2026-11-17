@@ -9,8 +9,8 @@ const TONES = {
 } as const;
 
 /**
- * A boxed notice inside a card: an icon, a title and one line per finding. A warning is announced
- * politely and an error as an alert.
+ * A boxed notice inside a card, with an icon, a title and one line per finding. A warning is
+ * announced politely and an error as an alert.
  */
 export function Callout({ tone, title, children }: { tone: keyof typeof TONES; title: string; children: ReactNode }) {
   const { box, icon, Icon } = TONES[tone];

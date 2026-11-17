@@ -11,7 +11,6 @@ export function formatMap(map: string): string {
     .join(", ");
 }
 
-/** The noise floor with its verdict: `412 mm/s² (High)`. */
 export function noiseText(result: AxesMapResult): string {
   return `${result.noise.toFixed(0)} mm/s² (${NOISE_WORDS[result.noise_verdict]})`;
 }

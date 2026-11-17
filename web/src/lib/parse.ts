@@ -6,7 +6,7 @@ export function parseNumber(text: string): number | undefined {
   return Number.isFinite(value) ? value : Number.NaN;
 }
 
-/** A length in mm as shown in a field: rounded to 0.01 so float noise from a midpoint does not show. */
+/** A length in mm as shown in a field. It is rounded to 0.01 so float noise from a midpoint does not show. */
 export function formatMm(value: number): string {
   return String(Math.round(value * 100) / 100);
 }

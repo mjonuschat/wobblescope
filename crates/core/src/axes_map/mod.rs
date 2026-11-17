@@ -6,6 +6,9 @@ pub(crate) mod orientation;
 pub(crate) mod quality;
 pub(crate) mod segment;
 
+use std::borrow::Cow;
+use std::ops::Range;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
@@ -46,14 +49,13 @@ pub struct AxesMapParams {
     pub max_z_accel: Option<f64>,
 }
 
-/// The samples of `samples` inside `window`, or all of them without one.
 fn within<'a>(
     samples: &'a RawSamples,
-    window: Option<&std::ops::Range<f64>>,
-) -> Result<std::borrow::Cow<'a, RawSamples>, CoreError> {
+    window: Option<&Range<f64>>,
+) -> Result<Cow<'a, RawSamples>, CoreError> {
     Ok(match window {
-        Some(range) => std::borrow::Cow::Owned(samples.slice(samples.window(range.clone())?)),
-        None => std::borrow::Cow::Borrowed(samples),
+        Some(range) => Cow::Owned(samples.slice(samples.window(range.clone())?)),
+        None => Cow::Borrowed(samples),
     })
 }
 
@@ -67,7 +69,7 @@ pub struct AxesMapInput {
     /// Only the samples inside it are analysed. A recording can start earlier than its window
     /// (the first one starts before the travel to the start point), and that earlier motion
     /// would count as part of the move. `None` analyses the whole recording.
-    pub windows: [Option<std::ops::Range<f64>>; 3],
+    pub windows: [Option<Range<f64>>; 3],
     /// The axes_map value currently in the Klipper config, if any.
     pub configured_map: Option<String>,
     /// Whether the chip is on the toolhead or the bed.

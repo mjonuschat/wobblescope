@@ -1,4 +1,3 @@
-//! A real axes-map capture from the daemon, analysed through the session bridge.
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::path::Path;
@@ -20,7 +19,7 @@ fn capture() -> (wobblescope_session::meta::SessionMeta, ChipCapture) {
 
 #[test]
 fn the_first_recording_starts_well_before_its_window() {
-    // Why the window matters: the travel to the start point is in the first file.
+    // The window matters because the first file holds the travel to the start point.
     let (meta, ChipCapture::Ready { input, .. }) = capture() else {
         panic!("expected a ready capture");
     };
@@ -48,7 +47,7 @@ fn a_real_capture_reads_cleanly_inside_its_windows() {
 
 #[test]
 fn the_same_capture_read_whole_gives_the_false_warning() {
-    // What the windows fix: the travel move in the first file read as a 15.3 degree angle error.
+    // Without the windows, the travel move in the first file reads as a 15.3 degree angle error.
     let (meta, ChipCapture::Ready { mut input, .. }) = capture() else {
         panic!("expected a ready capture");
     };

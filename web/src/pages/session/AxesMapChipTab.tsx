@@ -28,13 +28,13 @@ const CONFIG_WORDS: Record<ConfigCheck, string> = {
   does_not_match: "differs from the detected map",
 };
 
-/** The map Klipper uses for a chip with no `axes_map` set. */
 const QUALITY_WORDS: Record<QualityStatus, { word: string; tone: Tone }> = {
   Ok: { word: "Good", tone: "ok" },
   Warning: { word: "Warning", tone: "warn" },
   Error: { word: "Error", tone: "error" },
 };
 
+/** The map Klipper uses for a chip with no `axes_map` set. */
 const DEFAULT_MAP = "x, y, z";
 
 const degrees = (value: number) => `${value.toFixed(1)}°`;
@@ -84,7 +84,6 @@ function stateText(result: AxesMapResult): string | null {
   }
 }
 
-/** The snippet to put in the printer config, or null when the result is not a complete map. */
 function snippetOf(outcome: Extract<AxesMapChip, { state: "Analysed" }>, chip: ChipMeta | null): string | null {
   const { result } = outcome;
   // Only a complete map gets a snippet, so a partial or noise-built map never reaches the config.
@@ -93,10 +92,6 @@ function snippetOf(outcome: Extract<AxesMapChip, { state: "Analysed" }>, chip: C
     : null;
 }
 
-/**
- * What the Result card says about a chip: the detected map, the configured one with whether they
- * agree, what the analysis could not determine, and the snippet to copy.
- */
 export function AxesMapSummary({
   outcome,
   chip,
@@ -144,7 +139,6 @@ export function AxesMapSummary({
 
 type AnalysedOutcome = Extract<AxesMapChip, { state: "Analysed" }>;
 
-/** The analysed chip's fields, one grid cell each. */
 function AnalysedFields({ outcome }: { outcome: AnalysedOutcome }) {
   const { result } = outcome;
   const quality = QUALITY_WORDS[result.quality.status];
@@ -162,7 +156,6 @@ function AnalysedFields({ outcome }: { outcome: AnalysedOutcome }) {
   );
 }
 
-/** One chip's axes-map outcome: how it is mounted, how healthy the capture was, and the detail of the analysis. */
 export function AxesMapChipTab({ outcome, chip }: { outcome: AxesMapChip; chip: ChipMeta | null }) {
   // Sessions from before mountings were recorded are analysed as toolhead chips.
   const mounting = chip?.mounting ?? "toolhead";

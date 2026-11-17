@@ -18,7 +18,6 @@ export function FieldError({ name, text }: { name: string; text: string | undefi
   );
 }
 
-/** A titled card of a run form, with an optional control in the header. */
 export function FormCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <Card>
@@ -31,7 +30,6 @@ export function FormCard({ title, action, children }: { title: string; action?: 
   );
 }
 
-/** A labelled group of controls with its error underneath. */
 export function ChoiceRow({ label, error, children }: { label: string; error?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-2">
@@ -42,7 +40,6 @@ export function ChoiceRow({ label, error, children }: { label: string; error?: R
   );
 }
 
-/** The header button that puts a form's overrides back to the printer's values. */
 export function ResetButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
     <Tooltip>

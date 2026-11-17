@@ -53,7 +53,6 @@ export const BELT_MINIMUMS = "Belt tests need Klipper v0.12.0 or newer, or Kalic
 
 export const AUTO_CONTINUE_SECONDS = 5;
 
-/** What the user is told when a calibration could not put Klipper's state back. */
 export const RESTART_INSTRUCTION =
   "The calibration may have left changed acceleration limits or input shaping. Send RESTART from the Klipper console. The printer needs homing afterwards, and any positioning mode or offsets you rely on must be set again.";
 
@@ -81,12 +80,12 @@ function useCountdown(active: boolean, onDone: () => void): number | null {
   return active ? Math.max(left, 0) : null;
 }
 
-/** The level at which a signal bar is full, in mm/s². Display only; the bar is on a square-root scale. */
+/** The level at which a signal bar is full, in mm/s². Display only. The bar is on a square-root scale. */
 const LEVEL_FULL = 1000;
 
 /**
- * Each chip's vibration on its own x, y and z axes while a calibration moves. The bar for the chip
- * axis that follows the current move should rise well above the others.
+ * Each chip's vibration on its own axes while a calibration moves. The bar for the axis that
+ * follows the current move should rise well above the others.
  */
 function SignalLevels({ test }: { test: TestState }) {
   const shown = test.chips.filter((c) => c.level);

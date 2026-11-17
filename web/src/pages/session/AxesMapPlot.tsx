@@ -184,8 +184,7 @@ export interface OrientationArrow {
 
 /**
  * The dashed machine axes and the chip axes of the orientation view. Column `i` of the rotation
- * is where chip axis `i` points in machine coordinates. The two sets are told apart by colour, and
- * both are labelled X, Y and Z. Null when there is no rotation.
+ * is where chip axis `i` points in machine coordinates. Null when there is no rotation.
  */
 export function orientationArrows(
   result: AxesMapResult,
@@ -322,7 +321,6 @@ function padding({ min, max }: { min: number; max: number }): number {
 
 const GRAPH_TITLE = "text-sm font-medium";
 
-/** The axes-map plot: the movement sequence and the orientation view. The map itself is in the Result card. */
 export function AxesMapPlot({ result }: { result: AxesMapResult }) {
   return (
     <div className={cn("grid gap-4", result.rotation !== null && "lg:grid-cols-[5fr_3fr]")}>

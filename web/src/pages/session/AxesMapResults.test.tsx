@@ -157,7 +157,6 @@ async function openTab(name: string) {
   return screen.findByRole("region", { name: `Chip ${name}` });
 }
 
-/** The Result card: chip tabs, the detected and configured map, the verdict, quality notes and the snippet. */
 async function summaryText(): Promise<string> {
   return (await screen.findByRole("region", { name: "Result" })).textContent ?? "";
 }
@@ -335,7 +334,6 @@ describe("the axes-map result page", () => {
     expect(within(callout).getByText(angle).tagName).toBe("P");
     expect(within(callout).getByText(noise).tagName).toBe("P");
     expect(card.querySelector("ul")).toBeNull();
-    // The findings are not repeated in the chip panel.
     expect(tab.textContent).not.toContain(angle);
   });
 

@@ -173,10 +173,8 @@ mod tests {
 
     #[test]
     fn config_check_compares_an_unset_map_as_the_identity() {
-        // No configured map is Klipper's default, x,y,z.
         assert_eq!(config_check(None, "x, -z, y"), ConfigCheck::DoesNotMatch);
         assert_eq!(config_check(None, "x, y, z"), ConfigCheck::AlreadyCorrect);
-        // An explicit identity map is the same as none.
         assert_eq!(
             config_check(Some("x, y, z"), "x, -z, y"),
             ConfigCheck::DoesNotMatch
@@ -185,12 +183,10 @@ mod tests {
             config_check(Some("X,Y,Z"), "x, y, z"),
             ConfigCheck::AlreadyCorrect
         );
-        // A matching map, spaces and case ignored.
         assert_eq!(
             config_check(Some("x,-z,y"), "x, -z, y"),
             ConfigCheck::AlreadyCorrect
         );
-        // A different map.
         assert_eq!(
             config_check(Some("-z, y, x"), "x, -z, y"),
             ConfigCheck::DoesNotMatch

@@ -30,7 +30,7 @@ const PARAMETERS: { key: ParameterKey; label: string; unit: string; fallback: nu
   { key: "travel_speed", label: "Travel speed", unit: "mm/s", fallback: 120, min: 20 },
 ];
 
-/** How far the X and Y moves reach from the middle of the travel; the daemon's `HALF_SPAN` in `capture/axes_map.rs`. */
+/** How far the X and Y moves reach from the middle of the travel. It must match the daemon's `HALF_SPAN` in `capture/axes_map.rs`. */
 const HALF_SPAN = 15;
 
 interface Props {
@@ -215,7 +215,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
               </ul>
             </div>
           )}
-          {/* The reason Start is disabled shows in its tooltip; this copy is for screen readers. */}
+          {/* The reason Start is disabled shows in its tooltip. This copy is for screen readers. */}
           {problem && <p className="sr-only">{problem}</p>}
         </div>
         <Tooltip>

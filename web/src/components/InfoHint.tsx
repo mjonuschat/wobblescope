@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-/** A small (i) button that explains the thing named by `label` in a tooltip. */
 export function InfoHint({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Tooltip>

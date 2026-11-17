@@ -1,6 +1,5 @@
 import type { Mounting } from "@/lib/generated/Mounting";
 
-/** The places a chip can be mounted, as the form offers them. */
 export const MOUNTINGS: { value: Mounting; text: string }[] = [
   { value: "toolhead", text: "Toolhead" },
   { value: "bed", text: "Bed" },
