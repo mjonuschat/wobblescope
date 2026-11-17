@@ -2,15 +2,20 @@
 
 use std::path::Path;
 
-use wobblescope_core::axes_map::{MapState, analyze_axes_map};
+use wobblescope_core::axes_map::{AxisState, MapState, QualityStatus, analyze_axes_map};
 use wobblescope_session::bridge::{ChipCapture, axes_map_inputs, axes_map_params};
 use wobblescope_session::fs::open_session;
 
 const ID: &str = "test-20261117T011928Z";
+const BEACON_ID: &str = "test-20261117T034234Z";
 
 fn capture() -> (wobblescope_session::meta::SessionMeta, ChipCapture) {
+    capture_of(ID)
+}
+
+fn capture_of(id: &str) -> (wobblescope_session::meta::SessionMeta, ChipCapture) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/axes_map");
-    let session = open_session(&root, ID).expect("the fixture opens");
+    let session = open_session(&root, id).expect("the fixture opens");
     let meta = session.meta().clone();
     let mut captures = axes_map_inputs(&meta, |file| session.load(file)).expect("inputs");
     assert_eq!(captures.len(), 1);
@@ -61,4 +66,19 @@ fn the_same_capture_read_whole_gives_the_false_warning() {
             .iter()
             .any(|m| m.contains("High angle error"))
     );
+}
+
+#[test]
+fn a_real_beacon_capture_infers_the_z_axis_it_cannot_feel() {
+    // On a printer whose bed moves Z, the toolhead's Beacon sees a 10 mm/s wiggle on chip x during
+    // the Z move, at 34 % confidence. It matches the chip axis the X move already has.
+    let (meta, ChipCapture::Ready { input, .. }) = capture_of(BEACON_ID) else {
+        panic!("expected a ready capture");
+    };
+    let params = axes_map_params(&meta).expect("params");
+    let got = analyze_axes_map(&input, &params).expect("analysis");
+    assert_eq!(got.state, MapState::Complete);
+    assert_eq!(got.map.as_deref(), Some("-x, -y, z"));
+    assert_eq!(got.axes[2].state, AxisState::Virtual);
+    assert_ne!(got.quality.status, QualityStatus::Error);
 }

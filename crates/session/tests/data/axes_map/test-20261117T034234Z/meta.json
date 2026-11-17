@@ -1,0 +1,139 @@
+{
+  "format_version": 2,
+  "id": "test-20261117T034234Z",
+  "created_at": "2026-11-17T03:42:34Z",
+  "source": "Capture",
+  "time_domain": "KlipperPrintTime",
+  "mode": null,
+  "settings": null,
+  "printer": {
+    "name": "uku",
+    "klipper_version": "v2026.09.00-5-g84a410572",
+    "mcu_firmware": [
+      "mcu: v2026.09.00-5-g84a410572"
+    ],
+    "square_corner_velocity": 5.0,
+    "damping_ratio_x": 0.064,
+    "damping_ratio_y": 0.044
+  },
+  "outcome": "Complete",
+  "axes_map_run": {
+    "speed": 80.0,
+    "max_velocity": 400.0,
+    "accel": 1500.0,
+    "z_height": 20.0,
+    "travel_speed": 120.0,
+    "max_z_velocity": 20.0,
+    "max_z_accel": 500.0
+  },
+  "notes": [],
+  "probe_points": [
+    {
+      "position": [
+        60.0,
+        60.0,
+        20.0
+      ]
+    },
+    {
+      "position": [
+        90.0,
+        60.0,
+        20.0
+      ]
+    },
+    {
+      "position": [
+        90.0,
+        90.0,
+        20.0
+      ]
+    }
+  ],
+  "chips": [
+    {
+      "name": "beacon",
+      "chip_type": "beacon",
+      "nominal_rate_hz": null,
+      "observed_rate_hz": 3294.733867475513,
+      "axes_map": null,
+      "mounting": "toolhead",
+      "health": "Ok",
+      "health_notes": []
+    }
+  ],
+  "segments": [
+    {
+      "axis": {
+        "Vector": [
+          1,
+          0,
+          0
+        ]
+      },
+      "point": 0,
+      "window": {
+        "start": 420542.25663124037,
+        "end": 420543.941763868
+      },
+      "files": [
+        {
+          "chip": 0,
+          "sample_file": "c0-s0.zst",
+          "sample_count": 12976,
+          "coverage": "Complete",
+          "health": "Ok",
+          "health_notes": []
+        }
+      ]
+    },
+    {
+      "axis": {
+        "Vector": [
+          0,
+          1,
+          0
+        ]
+      },
+      "point": 1,
+      "window": {
+        "start": 420545.0185005154,
+        "end": 420546.7030021949
+      },
+      "files": [
+        {
+          "chip": 0,
+          "sample_file": "c0-s1.zst",
+          "sample_count": 6504,
+          "coverage": "Complete",
+          "health": "Ok",
+          "health_notes": []
+        }
+      ]
+    },
+    {
+      "axis": {
+        "Vector": [
+          0,
+          0,
+          1
+        ]
+      },
+      "point": 2,
+      "window": {
+        "start": 420547.77812468074,
+        "end": 420550.57453796343
+      },
+      "files": [
+        {
+          "chip": 0,
+          "sample_file": "c0-s2.zst",
+          "sample_count": 10672,
+          "coverage": "Complete",
+          "health": "Ok",
+          "health_notes": []
+        }
+      ]
+    }
+  ]
+}

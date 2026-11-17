@@ -49,6 +49,34 @@ fn under_floor(axis: usize, seg: &SegmentResult, p: &AxesMapParams) -> Option<bo
     Some(largest < FLOOR_FRACTION * expected)
 }
 
+/// A weak segment is noise-only when another segment has the chip axis it claims and a peak
+/// four times as large.
+const REPEAT_FRACTION: f64 = 0.25;
+
+/// The segment that only repeats a chip axis another segment has, with a peak under
+/// `REPEAT_FRACTION` of that segment's, when exactly one pair of segments claims the same chip
+/// axis. Shake&Tune reports "same axis detected" there. A toolhead chip on a printer whose bed
+/// moves Z feels almost nothing during the Z move, and a small wiggle on a horizontal chip axis
+/// can reach the confidence the relative rule asks for, so Z would take X's axis and the run
+/// would fail. Two strong segments on one axis still fail, as does a third on the same axis.
+fn weak_repeat(seg: &[SegmentResult; 3], peaks: [f64; 3]) -> Option<usize> {
+    let claimed: [usize; 3] =
+        std::array::from_fn(|i| super::quality::dominant_index(&seg[i].direction_vector));
+    let pairs: Vec<(usize, usize)> = [(0, 1), (0, 2), (1, 2)]
+        .into_iter()
+        .filter(|&(i, j)| claimed[i] == claimed[j])
+        .collect();
+    let [(i, j)] = pairs.as_slice() else {
+        return None;
+    };
+    let (weaker, stronger) = if peaks[*i] < peaks[*j] {
+        (*i, *j)
+    } else {
+        (*j, *i)
+    };
+    (peaks[weaker] < REPEAT_FRACTION * peaks[stronger]).then_some(weaker)
+}
+
 /// Decide which of the three printer axes carry motion.
 ///
 /// # Errors
@@ -77,7 +105,9 @@ pub(crate) fn classify(
                     .fold(0.0_f64, |m, v| m.max(v.abs()))
             });
             Ok(
-                match super::orientation::relative_noise_only_axis(confidences, peaks)? {
+                match super::orientation::relative_noise_only_axis(confidences, peaks)?
+                    .or_else(|| weak_repeat(seg, peaks))
+                {
                     Some(missing) => MotionCase::Complete { missing },
                     None => MotionCase::Full,
                 },
@@ -215,6 +245,114 @@ mod tests {
 
     const ALL_THREE: [(Option<usize>, f64); 3] =
         [(Some(0), ABOVE), (Some(1), ABOVE), (Some(2), ABOVE)];
+
+    /// A segment that claims chip axis `claimed`, as `process_segment` reports the dominant one.
+    fn claiming(claimed: usize, peaks: [f64; 3], confidence: f64) -> SegmentResult {
+        let mut s = seg(peaks, confidence);
+        s.direction_vector = [0.0; 3];
+        s.direction_vector[claimed] = 1.0;
+        s
+    }
+
+    #[test]
+    fn a_weak_segment_that_repeats_a_chip_axis_is_noise_only_for_a_toolhead_chip() {
+        // The weak Z has 34 % confidence, so the relative rule keeps it, and it matches the chip
+        // axis that X already has.
+        let segs = [
+            claiming(0, [80.0, 2.0, 1.0], 1.0),
+            claiming(1, [3.0, 80.0, 1.0], 1.0),
+            claiming(0, [10.0, 3.0, 4.0], 0.34),
+        ];
+        assert_eq!(
+            classify(Mounting::Toolhead, &segs, &known()),
+            Ok(MotionCase::Complete { missing: 2 })
+        );
+    }
+
+    #[test]
+    fn the_weak_repeating_segment_can_be_any_of_the_three() {
+        let x_weak = [
+            claiming(1, [3.0, 10.0, 1.0], 0.34),
+            claiming(1, [3.0, 80.0, 1.0], 1.0),
+            claiming(2, [1.0, 1.0, 80.0], 1.0),
+        ];
+        assert_eq!(
+            classify(Mounting::Toolhead, &x_weak, &known()),
+            Ok(MotionCase::Complete { missing: 0 })
+        );
+        let y_weak = [
+            claiming(0, [80.0, 2.0, 1.0], 1.0),
+            claiming(2, [1.0, 1.0, 10.0], 0.34),
+            claiming(2, [1.0, 1.0, 80.0], 1.0),
+        ];
+        assert_eq!(
+            classify(Mounting::Toolhead, &y_weak, &known()),
+            Ok(MotionCase::Complete { missing: 1 })
+        );
+    }
+
+    #[test]
+    fn two_strong_segments_that_repeat_a_chip_axis_are_not_noise() {
+        // A chip that really is mounted so that two moves look alike keeps the error.
+        let segs = [
+            claiming(0, [80.0, 2.0, 1.0], 1.0),
+            claiming(1, [3.0, 80.0, 1.0], 1.0),
+            claiming(0, [60.0, 3.0, 4.0], 0.9),
+        ];
+        assert_eq!(
+            classify(Mounting::Toolhead, &segs, &known()),
+            Ok(MotionCase::Full)
+        );
+    }
+
+    #[test]
+    fn a_repeating_peak_at_a_quarter_of_the_stronger_one_is_not_noise() {
+        let at_a_quarter = [
+            claiming(0, [80.0, 2.0, 1.0], 1.0),
+            claiming(1, [3.0, 80.0, 1.0], 1.0),
+            claiming(0, [20.0, 3.0, 4.0], 0.34),
+        ];
+        assert_eq!(
+            classify(Mounting::Toolhead, &at_a_quarter, &known()),
+            Ok(MotionCase::Full)
+        );
+    }
+
+    #[test]
+    fn three_segments_on_one_chip_axis_are_left_to_the_error() {
+        let segs = [
+            claiming(0, [80.0, 2.0, 1.0], 1.0),
+            claiming(0, [70.0, 3.0, 1.0], 1.0),
+            claiming(0, [10.0, 3.0, 4.0], 0.34),
+        ];
+        assert_eq!(
+            classify(Mounting::Toolhead, &segs, &known()),
+            Ok(MotionCase::Full)
+        );
+    }
+
+    #[test]
+    fn a_weak_z_that_repeats_the_x_axis_is_inferred_for_a_toolhead_chip() {
+        let result = analyze(
+            Mounting::Toolhead,
+            [(Some(0), ABOVE), (Some(1), ABOVE), (Some(0), 10.0)],
+            &known(),
+        );
+        assert_eq!(result.state, MapState::Complete);
+        assert_eq!(result.map.as_deref(), Some("x, y, z"));
+        assert_eq!(result.axes[2].state, AxisState::Virtual);
+    }
+
+    #[test]
+    fn a_strong_z_that_repeats_the_x_axis_is_still_an_error() {
+        let result = analyze(
+            Mounting::Toolhead,
+            [(Some(0), ABOVE), (Some(1), ABOVE), (Some(0), 60.0)],
+            &known(),
+        );
+        assert_eq!(result.state, MapState::Ambiguous);
+        assert_eq!(result.quality.status, QualityStatus::Error);
+    }
 
     #[test]
     fn guard_rejects_a_toolhead_chip_that_never_moved() {

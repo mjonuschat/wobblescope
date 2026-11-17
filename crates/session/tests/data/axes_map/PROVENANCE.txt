@@ -11,3 +11,18 @@ The files are exactly as the daemon wrote them. The first segment's recording st
 before its window, because it holds the travel to the start point. The other two start 0.3 s
 before. Analysed whole, the X move reads as a 15.3 degree angle error at 68 % confidence, which is
 the travel move. Inside its window it reads as about 4 degrees at 100 %.
+
+A second real axes-map calibration, written by the daemon (session format 2).
+
+Printer:   uku, a Trident with a Beacon (Klipper v2026.09.00-5-g84a410572, Moonraker)
+Captured:  2026-11-16 (session id test-20261117T034234Z)
+Chip:      beacon, the Beacon's accelerometer, mounted on the toolhead directly behind the nozzle,
+           nose forward. About 3290 Hz observed. No accel_axes_map is set. The Beacon documentation
+           gives -x, -y, z for that mounting.
+Run:       speed 80 mm/s, accel 1500 mm/s^2, Z height 20 mm, travel speed 120 mm/s. Z is limited to
+           20 mm/s and 500 mm/s^2.
+
+The files are exactly as the daemon wrote them. The bed moves Z, so the Beacon feels almost nothing
+during the Z move. A 10.5 mm/s wiggle on chip x, at 34 % confidence, matches the chip axis that the
+X move already has. Shake&Tune reports that as the same axis twice. Here Z is inferred from the
+other two and the map reads -x, -y, z.
