@@ -46,12 +46,28 @@ pub struct AxesMapParams {
     pub max_z_accel: Option<f64>,
 }
 
+/// The samples of `samples` inside `window`, or all of them without one.
+fn within<'a>(
+    samples: &'a RawSamples,
+    window: Option<&std::ops::Range<f64>>,
+) -> Result<std::borrow::Cow<'a, RawSamples>, CoreError> {
+    Ok(match window {
+        Some(range) => std::borrow::Cow::Owned(samples.slice(samples.window(range.clone())?)),
+        None => std::borrow::Cow::Borrowed(samples),
+    })
+}
+
 /// Raw input for an axes-map analysis: three one-axis sweep recordings.
 pub struct AxesMapInput {
     /// Chip name (matches Klipper config section).
     pub chip: String,
     /// One segment per printer axis (X sweep, Y sweep, Z sweep).
     pub segments: [RawSamples; 3],
+    /// The time range of each segment's measured move, in the clock of the sample timestamps.
+    /// Only the samples inside it are analysed. A recording can start earlier than its window
+    /// (the first one starts before the travel to the start point), and that earlier motion
+    /// would count as part of the move. `None` analyses the whole recording.
+    pub windows: [Option<std::ops::Range<f64>>; 3],
     /// The axes_map value currently in the Klipper config, if any.
     pub configured_map: Option<String>,
     /// Whether the chip is on the toolhead or the bed.
@@ -207,10 +223,16 @@ pub fn analyze_axes_map(
 ) -> Result<AxesMapResult, CoreError> {
     let inverse = map::inverse_matrix(input.configured_map.as_deref());
     let [s0, s1, s2] = &input.segments;
+    let [w0, w1, w2] = &input.windows;
+    let (s0, s1, s2) = (
+        within(s0, w0.as_ref())?,
+        within(s1, w1.as_ref())?,
+        within(s2, w2.as_ref())?,
+    );
     let segments = [
-        segment::process_segment(s0, inverse.as_ref())?,
-        segment::process_segment(s1, inverse.as_ref())?,
-        segment::process_segment(s2, inverse.as_ref())?,
+        segment::process_segment(&s0, inverse.as_ref())?,
+        segment::process_segment(&s1, inverse.as_ref())?,
+        segment::process_segment(&s2, inverse.as_ref())?,
     ];
 
     let case = bed::classify(input.mounting, &segments, params)?;

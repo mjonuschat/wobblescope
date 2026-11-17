@@ -206,6 +206,7 @@ mod tests {
         let input = AxesMapInput {
             chip: "adxl345".to_owned(),
             segments: sweeps.map(|(axis, peak)| trapezoid(axis, peak)),
+            windows: [None, None, None],
             configured_map: None,
             mounting,
         };

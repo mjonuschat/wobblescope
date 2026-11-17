@@ -31,6 +31,7 @@ fn run(case: &AxesMapCase) -> AxesMapResult {
     let input = AxesMapInput {
         chip: "adxl345".to_owned(),
         segments: std::array::from_fn(|i| raw(&case.segments[i])),
+        windows: [None, None, None],
         configured_map: case.configured_map.clone(),
         mounting: Mounting::Toolhead,
     };
@@ -159,6 +160,7 @@ fn a_degenerate_cross_product_is_ambiguous_not_nan() {
             raw(&case.segments[0]),
             raw(&case.segments[2]),
         ],
+        windows: [None, None, None],
         configured_map: None,
         mounting: Mounting::Toolhead,
     };
@@ -192,6 +194,7 @@ fn a_configured_map_gives_the_same_map_as_none() {
     let input = AxesMapInput {
         chip: "adxl345".to_owned(),
         segments: std::array::from_fn(|i| remap_minus_z_y_x(&identity.segments[i])),
+        windows: [None, None, None],
         configured_map: Some("-z, y, x".to_owned()),
         mounting: Mounting::Toolhead,
     };

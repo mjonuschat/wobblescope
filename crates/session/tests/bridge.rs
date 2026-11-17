@@ -585,6 +585,19 @@ fn missing_of(c: &ChipCapture) -> &str {
 }
 
 parity_test! {
+    fn the_segment_windows_go_to_the_analysis_input() {
+        let mut m = axes_map_meta(vec![chip("adxl345", Health::Ok)], vec![full(6)]);
+        m.segments[0].window = Some(TimeWindow { start: 10.0, end: 11.5 });
+        m.segments[2].window = Some(TimeWindow { start: 14.0, end: 17.25 });
+        let out = axes_map_inputs(&m, axes_map_loader(&m, vec![])).unwrap();
+        let ChipCapture::Ready { input, .. } = &out[0] else {
+            panic!("expected Ready");
+        };
+        assert_eq!(input.windows, [Some(10.0..11.5), None, Some(14.0..17.25)]);
+    }
+}
+
+parity_test! {
     fn three_complete_segments_make_a_ready_input() {
         let mut chips = vec![chip("adxl345", Health::Ok)];
         chips[0].axes_map = Some("x,y,z".to_owned());

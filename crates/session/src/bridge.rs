@@ -317,6 +317,12 @@ where
             input: AxesMapInput {
                 chip: chip.name.clone(),
                 segments,
+                windows: std::array::from_fn(|segment| {
+                    meta.segments
+                        .get(segment)
+                        .and_then(|s| s.window)
+                        .map(|w| w.start..w.end)
+                }),
                 configured_map: chip.axes_map.clone(),
                 mounting: if chip.mounting.as_deref() == Some("bed") {
                     Mounting::Bed

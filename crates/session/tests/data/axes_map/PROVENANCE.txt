@@ -1,0 +1,13 @@
+A real axes-map calibration, written by the daemon (session format 2).
+
+Printer:   buster, CoreXY (Klipper v0.13.0-821-gaf81d23f-dirty, Moonraker)
+Captured:  2026-11-16 (session id test-20261117T011928Z)
+Chip:      lis2dw ebb36, LIS2DW on the EBB36 toolhead board, 1600 Hz nominal, mounted on the
+           toolhead, axes_map x,y,z (the default, nothing set)
+Run:       speed 80 mm/s, accel 1500 mm/s^2, Z height 20 mm, travel speed 120 mm/s; start at
+           X 135.5, Y 139 (the middle of the travel less 15 mm)
+
+The files are exactly as the daemon wrote them. The first segment's recording starts about 3.4 s
+before its window, because it holds the travel to the start point; the other two start 0.3 s
+before. Analysed whole, the X move reads as a 15.3 degree angle error at 68 % confidence, which is
+the travel move; inside its window it reads as about 4 degrees at 100 %.
