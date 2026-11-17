@@ -32,7 +32,12 @@ struct Rig {
     app: Router,
 }
 
+/// A rig whose guard checks the Host header, which is what most of these tests are about.
 fn rig(proxies: &[&str], hosts: &[&str]) -> Rig {
+    rig_checking(proxies, hosts, true)
+}
+
+fn rig_checking(proxies: &[&str], hosts: &[&str], check_host: bool) -> Rig {
     let data = tempfile::tempdir().unwrap();
     let (storage, _) = open(data.path(), 1 << 30);
     let (publisher, moonraker) = channel();
@@ -41,7 +46,8 @@ fn rig(proxies: &[&str], hosts: &[&str]) -> Rig {
         moonraker.clone(),
         proxies.iter().map(|p| Net::parse(p).unwrap()).collect(),
         hosts.iter().map(|h| (*h).to_owned()).collect(),
-    );
+    )
+    .with_host_check(check_host);
     Rig {
         publisher,
         moonraker,
@@ -183,6 +189,42 @@ async fn a_rebinding_host_is_refused_with_or_without_a_matching_origin() {
             assert_eq!(code(&body), "host_not_allowed");
         }
     }
+}
+
+#[tokio::test]
+async fn without_the_check_any_host_is_accepted_but_an_unlisted_origin_still_is_not() {
+    let rig = rig_checking(&[], &[], false);
+    rig.publish(real_policy());
+    for host in ["rebind.example:7140", "uku.sharks-with-lasers.net:7140"] {
+        let (status, _) = rig.get(LAN, host, "/api/status").await;
+        assert_eq!(status, StatusCode::OK, "{host}");
+    }
+    let (status, _) = rig.ask(LAN, "GET", "/api/status", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = rig
+        .ask(
+            LAN,
+            "GET",
+            "/api/status",
+            &[
+                ("host", "buster.local:7140"),
+                ("origin", "https://evil.example"),
+            ],
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code(&body), "cross_origin");
+}
+
+#[tokio::test]
+async fn without_the_check_an_untrusted_client_is_still_refused() {
+    let rig = rig_checking(&[], &[], false);
+    rig.publish(real_policy());
+    let (status, body) = rig
+        .get("8.8.8.8", "rebind.example:7140", "/api/status")
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code(&body), "untrusted_client");
 }
 
 #[tokio::test]

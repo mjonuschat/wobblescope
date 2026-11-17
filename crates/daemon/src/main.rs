@@ -53,6 +53,17 @@ fn log_access(settings: &config::Settings) {
     };
     tracing::info!("listening on {}", settings.listen);
     tracing::info!(
+        "Host header check: {}",
+        if settings.check_host_header {
+            "on"
+        } else {
+            "off"
+        }
+    );
+    if let Some(warning) = settings.host_header_warning() {
+        tracing::warn!("{warning}");
+    }
+    tracing::info!(
         "trusted_proxies: {}; allowed_hosts: {}",
         list(
             settings
@@ -106,7 +117,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             moonraker.clone(),
             settings.trusted_proxies.clone(),
             settings.allowed_hosts.clone(),
-        ),
+        )
+        .with_host_check(settings.check_host_header),
     );
     log_access(&settings);
     let listener = tokio::net::TcpListener::bind(settings.listen).await?;

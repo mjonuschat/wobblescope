@@ -124,6 +124,7 @@ struct RawConfig {
     listen: Option<String>,
     trusted_proxies: Option<Vec<String>>,
     allowed_hosts: Option<Vec<String>>,
+    check_host_header: Option<bool>,
 }
 
 /// The storage settings, with sizes in bytes.
@@ -159,8 +160,11 @@ pub struct Settings {
     /// the daemon believes.
     pub trusted_proxies: Vec<Net>,
     /// The host names, lowercase, that the `Host` check admits besides the ones Moonraker's
-    /// lists imply.
+    /// lists imply. They count only when `check_host_header` is on.
     pub allowed_hosts: Vec<String>,
+    /// Whether a request whose `Host` is not a name the daemon knows is refused, which guards
+    /// against DNS rebinding. Off by default.
+    pub check_host_header: bool,
 }
 
 impl Settings {
@@ -197,6 +201,17 @@ impl Settings {
             || host
                 .parse::<std::net::IpAddr>()
                 .is_ok_and(|address| address.is_loopback())
+    }
+
+    /// A warning for a config that lists `allowed_hosts` while the `Host` check is off, where
+    /// the list has no effect.
+    #[must_use]
+    pub fn host_header_warning(&self) -> Option<String> {
+        (!self.check_host_header && !self.allowed_hosts.is_empty()).then(|| {
+            "allowed_hosts is set but check_host_header is off, so every Host is accepted and the \
+             list has no effect; turn check_host_header on to use it"
+                .to_owned()
+        })
     }
 
     #[must_use]
@@ -268,6 +283,7 @@ impl fmt::Debug for Settings {
             .field("listen", &self.listen)
             .field("trusted_proxies", &self.trusted_proxies)
             .field("allowed_hosts", &self.allowed_hosts)
+            .field("check_host_header", &self.check_host_header)
             .field(
                 "moonraker_api_key",
                 &self.moonraker_api_key.as_ref().map(|_| "<redacted>"),
@@ -294,6 +310,7 @@ impl Default for Settings {
             listen: DEFAULT_LISTEN,
             trusted_proxies: Vec::new(),
             allowed_hosts: Vec::new(),
+            check_host_header: false,
         }
     }
 }
@@ -501,6 +518,7 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         listen,
         trusted_proxies,
         allowed_hosts,
+        check_host_header: raw.check_host_header.unwrap_or(defaults.check_host_header),
         moonraker_url,
         moonraker_tls,
         moonraker_api_key: raw.moonraker_api_key,

@@ -24,6 +24,7 @@ pub struct AccessGuard {
     moonraker: Moonraker,
     proxies: Arc<[Net]>,
     allowed_hosts: Arc<[String]>,
+    check_host: bool,
     warned_forwarded: Arc<AtomicBool>,
     names: Names,
 }
@@ -37,9 +38,19 @@ impl AccessGuard {
             moonraker,
             proxies: proxies.into(),
             allowed_hosts: allowed_hosts.into(),
+            check_host: false,
             warned_forwarded: Arc::new(AtomicBool::new(false)),
             names: Names::system(),
         }
+    }
+
+    /// The same guard with the `Host` check on or off. It starts off. With it on, a request whose
+    /// `Host` is not an address, `localhost`, an `allowed_hosts` name or a name Moonraker's lists
+    /// imply is refused.
+    #[must_use]
+    pub fn with_host_check(mut self, on: bool) -> Self {
+        self.check_host = on;
+        self
     }
 
     /// The same guard with another source of names for reverse lookups.
@@ -143,8 +154,14 @@ impl AccessGuard {
         authority: Option<&str>,
         origin: Option<&header::HeaderValue>,
     ) -> Option<ApiError> {
-        let Some(authority) = authority.filter(|a| host_allowed(a, policy, &self.allowed_hosts))
-        else {
+        // Without the check, a missing Host leaves nothing to compare an Origin with, so only the
+        // listed origins can pass.
+        let authority = if self.check_host {
+            authority.filter(|a| host_allowed(a, policy, &self.allowed_hosts))
+        } else {
+            Some(authority.unwrap_or_default())
+        };
+        let Some(authority) = authority else {
             return Some(ApiError::HostNotAllowed {
                 message: "the Host of this request is not allowed, which guards against DNS \
                           rebinding; open the UI by a name Moonraker's cors_domains lists, or \

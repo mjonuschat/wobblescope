@@ -265,6 +265,32 @@ fn max_segment_seconds_defaults_to_600_and_zero_is_refused() {
 }
 
 #[test]
+fn the_host_header_check_is_off_unless_the_config_turns_it_on() {
+    assert!(!load_text("").unwrap().check_host_header);
+    assert!(
+        !load_text("check_host_header = false\n")
+            .unwrap()
+            .check_host_header
+    );
+    assert!(
+        load_text("check_host_header = true\n")
+            .unwrap()
+            .check_host_header
+    );
+    refused_naming("check_host_header = \"yes\"\n", "check_host_header");
+}
+
+#[test]
+fn allowed_hosts_with_the_check_off_is_warned_about_and_otherwise_not() {
+    let off = load_text("allowed_hosts = [\"uku.example\"]\n").unwrap();
+    let warning = off.host_header_warning().expect("a warning");
+    assert!(warning.contains("allowed_hosts") && warning.contains("check_host_header"));
+    let on = load_text("allowed_hosts = [\"uku.example\"]\ncheck_host_header = true\n").unwrap();
+    assert!(on.host_header_warning().is_none());
+    assert!(load_text("").unwrap().host_header_warning().is_none());
+}
+
+#[test]
 fn the_access_keys_default_to_every_interface_and_empty_lists() {
     let s = load_text("").unwrap();
     assert_eq!(s.listen, "0.0.0.0:7140".parse().unwrap());
