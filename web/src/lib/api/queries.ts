@@ -13,6 +13,7 @@ import type { FitParams } from "@/lib/generated/FitParams";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
 import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
+import type { VibrationsRequest } from "@/lib/generated/VibrationsRequest";
 import type { Summary } from "@/lib/generated/Summary";
 import type { ImportGroupState } from "@/pages/sessions/importModel";
 
@@ -39,6 +40,7 @@ import {
   pinSession,
   saveResult,
   startAxesMap,
+  startVibrations,
   startTest,
   stopPrinter,
 } from "./endpoints";
@@ -63,6 +65,10 @@ export const queryKeys = {
   /** One chip's belt comparison. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
   belts: (id: string, chip: string, maxFreq: number, includeExcluded: boolean, createdAt = "", resultId = "") =>
     ["belts", id, chip, maxFreq, includeExcluded, createdAt, resultId] as const,
+  vibrationsOf: (id: string) => ["vibrations", id] as const,
+  /** A session's vibrations profile. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
+  vibrations: (id: string, maxFreq: number, includeExcluded: boolean, createdAt = "", resultId = "") =>
+    ["vibrations", id, maxFreq, includeExcluded, createdAt, resultId] as const,
   /** Per-chip outcomes of a calibration session; under `analysesOf` so deleting the session drops them. */
   axesMapAnalysis: (id: string, createdAt = "") => ["analysis", id, "axes-map", createdAt] as const,
   /** `createdAt` tells a session written again under the same id from the one analysed before. */
@@ -202,6 +208,7 @@ export function useDeleteSession() {
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(id) });
       queryClient.removeQueries({ queryKey: queryKeys.spectrogramsOf(id) });
       queryClient.removeQueries({ queryKey: queryKeys.beltsOf(id) });
+      queryClient.removeQueries({ queryKey: queryKeys.vibrationsOf(id) });
       getAnalysisClient().forget(id);
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessionLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
@@ -343,11 +350,16 @@ export function useDeleteResult() {
       queryClient.removeQueries({ queryKey: queryKeys.analysesOf(`result:${id}`) });
       queryClient.removeQueries({ queryKey: queryKeys.spectrogramsOf(`result:${id}`) });
       queryClient.removeQueries({ queryKey: queryKeys.beltsOf(`result:${id}`) });
+      queryClient.removeQueries({ queryKey: queryKeys.vibrationsOf(`result:${id}`) });
       getAnalysisClient().forget(`result:${id}`);
       void queryClient.invalidateQueries({ queryKey: queryKeys.results });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storage });
     },
   });
+}
+
+export function useStartVibrations() {
+  return useMutation({ mutationFn: (request: VibrationsRequest) => startVibrations(request) });
 }
 
 export function useStartAxesMap() {

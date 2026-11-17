@@ -1,5 +1,6 @@
 import type { Axis } from "@/lib/generated/Axis";
 import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
+import type { VibrationsRequest } from "@/lib/generated/VibrationsRequest";
 import type { TestKind } from "@/lib/generated/TestKind";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Homed } from "@/lib/generated/Homed";
@@ -230,6 +231,14 @@ export function startTest(request: StartTestRequest) {
 
 export function startAxesMap(request: AxesMapRequest) {
   return apiJson<StartedTest>("axes-map", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+}
+
+export function startVibrations(request: VibrationsRequest) {
+  return apiJson<StartedTest>("vibrations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),

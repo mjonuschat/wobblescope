@@ -128,6 +128,8 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
   useWarningToasts(test.id, test.chips);
   const left = useCountdown(ended !== null, onNext);
   const axesMap = test.kind === "axes_map";
+  // Axes-map and vibrations runs have no frequency sweep to draw, only the chips' latest levels.
+  const levels = axesMap || test.kind === "vibrations";
   const move = axesMap ? AXES_MAP_MOVES[test.segment - 1] : undefined;
   const label = move ? `Moving ${move}` : test.axis ? segmentLabel(test.axis) : null;
   // A run that completed has done every segment, whatever the last live snapshot said.
@@ -179,8 +181,8 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
       </Panel>
       {/* A sweep's graph stays so its last part can be seen. The calibration's levels are only the last
           live reading, which says nothing once the chips have stopped. */}
-      {!(axesMap && ended !== null) && (
-        <Panel title="Signal">{axesMap ? <SignalLevels test={test} /> : <LiveChart test={test} />}</Panel>
+      {!(levels && ended !== null) && (
+        <Panel title="Signal">{levels ? <SignalLevels test={test} /> : <LiveChart test={test} />}</Panel>
       )}
       <Separator />
       <div className="flex items-center justify-between gap-4">

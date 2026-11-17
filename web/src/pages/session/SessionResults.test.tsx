@@ -11,7 +11,13 @@ import { summary } from "@/test/summaries";
 
 import { SessionResults } from "./SessionResults";
 
-const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), belts: vi.fn(), forget: vi.fn() }));
+const fake = vi.hoisted(() => ({
+  analyze: vi.fn(),
+  spectrogram: vi.fn(),
+  belts: vi.fn(),
+  vibrations: vi.fn(),
+  forget: vi.fn(),
+}));
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
@@ -51,6 +57,7 @@ function renderResults() {
 beforeEach(() => {
   fake.analyze.mockReset();
   fake.belts.mockReset();
+  fake.vibrations.mockReset();
 });
 
 describe("the session results", () => {
@@ -107,6 +114,27 @@ describe("the session results", () => {
       "Direction 1,1 at point 1",
       "Direction X at (10, 20, 30)",
     ]);
+    expect(fake.analyze).not.toHaveBeenCalled();
+    expect(fake.belts).not.toHaveBeenCalled();
+  });
+
+  it("vibrations_renders_the_vibrations_view", async () => {
+    const meta = twoAxisMeta();
+    meta.vibrations_run = {
+      size: 100,
+      z_height: 20,
+      max_speed: 100,
+      speed_increment: 20,
+      accel: 3000,
+      travel_speed: 120,
+      min_speed: 20,
+      kinematics: "corexy",
+    };
+    fake.vibrations.mockResolvedValue({ per_chip: [], worst_case: null, core_version: "0.0.0" });
+    serve("vibrations", meta);
+    renderResults();
+    expect(await screen.findByRole("tab", { name: "Worst case" })).toBeTruthy();
+    expect(screen.getByText("Max Speed")).toBeTruthy();
     expect(fake.analyze).not.toHaveBeenCalled();
     expect(fake.belts).not.toHaveBeenCalled();
   });

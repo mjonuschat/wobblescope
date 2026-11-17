@@ -9,6 +9,7 @@ import type { CalibrationResult } from "@/lib/generated/CalibrationResult";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { FitSettings } from "@/lib/generated/FitSettings";
 import type { Recommendation } from "@/lib/generated/Recommendation";
+import type { VibrationsAnalysis } from "@/lib/generated/VibrationsAnalysis";
 import type { Spectrogram } from "@/lib/generated/Spectrogram";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
@@ -209,6 +210,15 @@ export function beltsComparison(chip = "adxl345", result: BeltsResult = beltsRes
     belt_a: side(result.a.psd),
     belt_b: side(result.b.psd),
     result,
+    core_version: "0.0.0",
+  };
+}
+
+/** A vibrations analysis of one chip that could not be analysed, with no worst case. */
+export function vibrationsAnalysis(chip = "adxl345"): VibrationsAnalysis {
+  return {
+    per_chip: [{ chip, decisions: [], excluded: null, result: null, failure: "no recordings" }],
+    worst_case: null,
     core_version: "0.0.0",
   };
 }

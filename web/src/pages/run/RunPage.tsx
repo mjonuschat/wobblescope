@@ -12,6 +12,7 @@ import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { KIND_PAGES, KIND_TITLES, offersBelts } from "./kinds";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
+import { useStartedRun } from "./useStartedRun";
 
 const STEPS = [
   { id: "setup", label: "Setup" },
@@ -26,7 +27,7 @@ export function RunPage({ kind }: { kind: TestKind }) {
   const live = useLive();
   const [chosen, setChosen] = useState<string[] | null>(null);
   // The test the form just started, until the live socket names it.
-  const [startedId, setStartedId] = useState<string | null>(null);
+  const [startedId, setStartedId] = useStartedRun(live);
   // The finished test whose result the user has dismissed.
   const [dismissed, setDismissed] = useState<string | null>(null);
   // The running test as last seen, so its progress can stay on screen when it ends.

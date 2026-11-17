@@ -94,13 +94,21 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
   const fit = analysis ? effectiveSettings(analysis) : null;
   const s = meta.settings;
   const degraded = degradedSegments(meta);
+  const usesShaper = !meta.axes_map_run && !meta.vibrations_run;
   return (
     <Panel title="Session" label="Session details">
       <Fields aria-label="The recording">
         {row("Source", sourceText(meta))}
         {fileName(meta) !== null && row("File Name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
-        {row("Mode", meta.axes_map_run ? "Axes map calibration" : (meta.mode ?? "Not recorded"))}
+        {row(
+          "Mode",
+          meta.axes_map_run
+            ? "Axes map calibration"
+            : meta.vibrations_run
+              ? "Vibrations profile"
+              : (meta.mode ?? "Not recorded"),
+        )}
         {row("Outcome", outcomeText(meta.outcome))}
         <Field label="Probe Points" className="col-span-full">
           <ProbePoints points={meta.probe_points} />
@@ -109,14 +117,14 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
       <Fields aria-label="The printer">
         {row("Printer", meta.printer?.name ?? "Not recorded")}
         {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version, "col-span-2 lg:col-span-3")}
-        {/* The input shaper's settings, which a calibration does not use. */}
-        {!meta.axes_map_run &&
+        {/* The input shaper's settings, which the axes map and vibrations runs do not use. */}
+        {usesShaper &&
           meta.printer?.square_corner_velocity != null &&
           row("Square corner velocity", `${meta.printer.square_corner_velocity} mm/s`)}
-        {!meta.axes_map_run &&
+        {usesShaper &&
           meta.printer?.damping_ratio_x != null &&
           row("Damping ratio X", String(meta.printer.damping_ratio_x))}
-        {!meta.axes_map_run &&
+        {usesShaper &&
           meta.printer?.damping_ratio_y != null &&
           row("Damping ratio Y", String(meta.printer.damping_ratio_y))}
       </Fields>
@@ -125,6 +133,18 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
           {row("Speed", `${meta.axes_map_run.speed} mm/s`)}
           {row("Acceleration", `${meta.axes_map_run.accel} mm/s²`)}
           {row("Z height", `${meta.axes_map_run.z_height} mm`)}
+        </Fields>
+      )}
+      {meta.vibrations_run && (
+        <Fields aria-label="Vibrations settings">
+          {row("Size", `${meta.vibrations_run.size} mm`)}
+          {row("Z Height", `${meta.vibrations_run.z_height} mm`)}
+          {row("Min Speed", `${meta.vibrations_run.min_speed} mm/s`)}
+          {row("Max Speed", `${meta.vibrations_run.max_speed} mm/s`)}
+          {row("Speed Increment", `${meta.vibrations_run.speed_increment} mm/s`)}
+          {row("Acceleration", `${meta.vibrations_run.accel} mm/s²`)}
+          {row("Travel Speed", `${meta.vibrations_run.travel_speed} mm/s`)}
+          {row("Kinematics", meta.vibrations_run.kinematics)}
         </Fields>
       )}
       {s && (

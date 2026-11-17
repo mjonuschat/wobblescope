@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { calibrationFile, calibrationMeta, realWasm } from "@/test/calibration";
-import { analysis, beltsAnalysis, candidate, defaultParams, spectrogram, twoAxisMeta } from "@/test/fixtures";
+import {
+  analysis,
+  beltsAnalysis,
+  candidate,
+  defaultParams,
+  spectrogram,
+  twoAxisMeta,
+  vibrationsAnalysis,
+} from "@/test/fixtures";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { Spectrogram } from "@/lib/generated/Spectrogram";
@@ -40,6 +48,11 @@ class FakeSession implements SessionHandle {
   belts(chip: unknown, maxFreq: unknown, includeExcluded: unknown) {
     this.beltsCalls.push([chip, maxFreq, includeExcluded]);
     return beltsAnalysis();
+  }
+  vibrationsCalls: unknown[][] = [];
+  vibrations(maxFreq: unknown, includeExcluded: unknown) {
+    this.vibrationsCalls.push([maxFreq, includeExcluded]);
+    return vibrationsAnalysis();
   }
   free() {
     this.freed = true;
@@ -162,6 +175,23 @@ describe("the worker handler", () => {
     });
     expect(response).toEqual({ type: "belts", id: 6, result: beltsAnalysis() });
     expect(sessions[0].beltsCalls).toEqual([["adxl345", 150, true]]);
+    expect([...sessions[0].files.keys()]).toEqual(["c0-s0.zst"]);
+  });
+
+  it("answers a vibrations request with the wasm result and the same id", async () => {
+    const { module, sessions } = fakeModule();
+    const handle = createHandler(async () => module);
+    const response = await handle({
+      type: "vibrations",
+      id: 7,
+      sessionId: "s1",
+      meta: twoAxisMeta("s1"),
+      maxFreq: 800,
+      includeExcluded: true,
+      files: { "c0-s0.zst": bytes(1) },
+    });
+    expect(response).toEqual({ type: "vibrations", id: 7, result: vibrationsAnalysis() });
+    expect(sessions[0].vibrationsCalls).toEqual([[800, true]]);
     expect([...sessions[0].files.keys()]).toEqual(["c0-s0.zst"]);
   });
 

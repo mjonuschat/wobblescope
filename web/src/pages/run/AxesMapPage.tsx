@@ -12,6 +12,7 @@ import { AxesMapForm } from "./AxesMapForm";
 import { KIND_PAGES, KIND_TITLES } from "./kinds";
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { useLive } from "./useLive";
+import { useStartedRun } from "./useStartedRun";
 
 const STEPS = [
   { id: "setup", label: "Setup" },
@@ -24,7 +25,7 @@ export function AxesMapPage() {
   const chips = useChips();
   const live = useLive();
   // The run the form just started, until the live socket names it.
-  const [startedId, setStartedId] = useState<string | null>(null);
+  const [startedId, setStartedId] = useStartedRun(live);
   // The finished run whose result the user has dismissed.
   const [dismissed, setDismissed] = useState<string | null>(null);
   // The running test as last seen, so its progress can stay on screen when it ends.

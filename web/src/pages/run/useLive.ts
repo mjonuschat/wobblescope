@@ -21,9 +21,11 @@ export interface LiveState {
   test: TestState | null;
   /** The last test that ended. */
   last: FinishedTest | null;
+  /** How many snapshots have arrived since the page opened. */
+  seq: number;
 }
 
-const INITIAL: LiveState = { connected: false, known: false, test: null, last: null };
+const INITIAL: LiveState = { connected: false, known: false, test: null, last: null, seq: 0 };
 
 /**
  * The websocket URL: `api/live` below the document base, with `ws` or `wss` for the page's
@@ -74,7 +76,13 @@ export function useLive(): LiveState & { retry: () => void } {
       socket.onmessage = (event: MessageEvent) => {
         const snapshot = parse(event.data);
         if (!snapshot) return;
-        setState({ connected: true, known: true, test: snapshot.test, last: snapshot.last });
+        setState((old) => ({
+          connected: true,
+          known: true,
+          test: snapshot.test,
+          last: snapshot.last,
+          seq: old.seq + 1,
+        }));
         const id = snapshot.last?.id ?? null;
         // The first snapshot only sets the baseline: a test that ended before the page opened
         // changed nothing the page has cached.

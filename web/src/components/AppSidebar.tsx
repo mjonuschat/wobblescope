@@ -7,6 +7,7 @@ import {
   FlaskConicalIcon,
   FolderClockIcon,
   PrinterIcon,
+  WavesIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,16 +23,24 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { offersBelts } from "@/pages/run/kinds";
+import { offersBelts, offersVibrations } from "@/pages/run/kinds";
 import { useSettings, useStatus } from "@/lib/api/queries";
 
-type Path = "/" | "/run/shaper" | "/run/belts" | "/run/axes-map" | "/stream" | "/sessions" | "/results";
+type Path =
+  | "/"
+  | "/run/shaper"
+  | "/run/belts"
+  | "/run/axes-map"
+  | "/run/vibrations"
+  | "/stream"
+  | "/sessions"
+  | "/results";
 
 interface Page {
   to: Path;
   label: string;
   icon: LucideIcon;
-  children?: { to: Path; label: string; icon: LucideIcon; needsBelts?: boolean }[];
+  children?: { to: Path; label: string; icon: LucideIcon; needsBelts?: boolean; needsVibrations?: boolean }[];
 }
 
 const pages: Page[] = [
@@ -44,6 +53,7 @@ const pages: Page[] = [
       { to: "/run/shaper", label: "Input Shaper", icon: ActivityIcon },
       { to: "/run/belts", label: "Belts", icon: ChevronsLeftRightIcon, needsBelts: true },
       { to: "/run/axes-map", label: "Axes map calibration", icon: CompassIcon },
+      { to: "/run/vibrations", label: "Vibrations profile", icon: WavesIcon, needsVibrations: true },
       { to: "/stream", label: "Live View", icon: AudioLinesIcon },
     ],
   },
@@ -52,7 +62,9 @@ const pages: Page[] = [
 
 export function AppSidebar() {
   const version = useStatus().data?.version;
-  const beltsOffered = offersBelts(useSettings().data?.machine.kinematics);
+  const kinematics = useSettings().data?.machine.kinematics;
+  const beltsOffered = offersBelts(kinematics);
+  const vibrationsOffered = offersVibrations(kinematics);
   const path = useRouterState({ select: (state) => state.location.pathname });
   return (
     <Sidebar
@@ -82,7 +94,10 @@ export function AppSidebar() {
                   {children && (
                     <SidebarMenuSub aria-label={`${label} pages`}>
                       {children
-                        .filter((child) => !child.needsBelts || beltsOffered)
+                        .filter(
+                          (child) =>
+                            (!child.needsBelts || beltsOffered) && (!child.needsVibrations || vibrationsOffered),
+                        )
                         .map((child) => (
                           <SidebarMenuSubItem key={child.to}>
                             <SidebarMenuSubButton render={<Link to={child.to} activeProps={{ "data-active": true }} />}>

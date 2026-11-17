@@ -6,6 +6,7 @@ import { PrinterPage } from "@/pages/printer/PrinterPage";
 import { ResultRoute } from "@/pages/results/ResultRoute";
 import { ResultsPage } from "@/pages/results/ResultsPage";
 import { AxesMapPage } from "@/pages/run/AxesMapPage";
+import { VibrationsPage } from "@/pages/run/VibrationsPage";
 import { RunPage } from "@/pages/run/RunPage";
 import { SessionRoute } from "@/pages/session/SessionRoute";
 import { SessionsPage } from "@/pages/sessions/SessionsPage";
@@ -43,6 +44,12 @@ const axesMapRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/run/axes-map",
   component: AxesMapPage,
+});
+
+const vibrationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/run/vibrations",
+  component: VibrationsPage,
 });
 
 const streamRoute = createRoute({
@@ -87,6 +94,7 @@ export const routeTree = rootRoute.addChildren([
   shaperRoute,
   beltsRoute,
   axesMapRoute,
+  vibrationsRoute,
   streamRoute,
   historyRoute.addChildren([sessionsRoute, resultsRoute]),
   sessionRoute,

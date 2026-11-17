@@ -38,6 +38,33 @@ describe("the sidebar", () => {
     }
   });
 
+  it("lists_the_vibrations_page_on_every_supported_kinematics", async () => {
+    for (const [kinematics, offered] of [
+      ["cartesian", true],
+      ["limited_cartesian", true],
+      ["corexy", true],
+      ["limited_corexy", true],
+      ["corexz", true],
+      ["limited_corexz", true],
+      ["delta", false],
+      [null, false],
+    ] as const) {
+      stubApiWithStatus((call) =>
+        apiPath(call) === "settings"
+          ? { body: withKinematics(kinematics) }
+          : { status: 404, body: { error: "not_found", message: "no" } },
+      );
+      renderRoute("/");
+      await screen.findByRole("link", { name: "Input Shaper" });
+      if (offered) {
+        expect(await screen.findByRole("link", { name: "Vibrations profile" })).toBeTruthy();
+      } else {
+        await waitFor(() => expect(screen.queryByRole("link", { name: "Vibrations profile" })).toBeNull());
+      }
+      cleanup();
+    }
+  });
+
   it("hides_the_belts_page_while_settings_are_not_available", async () => {
     stubApiWithStatus(() => ({ status: 404, body: { error: "not_found", message: "no" } }));
     renderRoute("/");

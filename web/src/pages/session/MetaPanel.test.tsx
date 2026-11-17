@@ -226,4 +226,56 @@ describe("the session details", () => {
     expect(labels.slice(0, 4)).toEqual(["Source", "Created", "Mode", "Outcome"]);
     expect(labels[labels.length - 1]).toBe("Probe Points");
   });
+
+  it("shows_the_vibrations_run_parameters", () => {
+    const meta = twoAxisMeta();
+    meta.vibrations_run = {
+      size: 100,
+      z_height: 20,
+      max_speed: 100,
+      speed_increment: 5,
+      accel: 3000,
+      travel_speed: 120,
+      min_speed: 20,
+      kinematics: "corexy",
+    };
+    render(<MetaPanel meta={meta} />);
+    const group = screen.getByLabelText("Vibrations settings");
+    const value = (label: string) => within(group).getByText(label).nextElementSibling?.textContent;
+    expect(value("Size")).toBe("100 mm");
+    expect(value("Z Height")).toBe("20 mm");
+    expect(value("Min Speed")).toBe("20 mm/s");
+    expect(value("Max Speed")).toBe("100 mm/s");
+    expect(value("Speed Increment")).toBe("5 mm/s");
+    expect(value("Acceleration")).toBe("3000 mm/s²");
+    expect(value("Travel Speed")).toBe("120 mm/s");
+    expect(value("Kinematics")).toBe("corexy");
+    expect(screen.getByText("Vibrations profile")).toBeTruthy();
+  });
+
+  it("hides_the_input_shaper_rows_for_a_vibrations_session", () => {
+    const meta = twoAxisMeta();
+    meta.printer = {
+      name: "buster",
+      klipper_version: "v0.13.0-821-gaf81d23f-dirty",
+      mcu_firmware: [],
+      square_corner_velocity: 5,
+      damping_ratio_x: 0.059,
+      damping_ratio_y: 0.123,
+    };
+    meta.vibrations_run = {
+      size: 100,
+      z_height: 20,
+      max_speed: 100,
+      speed_increment: 5,
+      accel: 3000,
+      travel_speed: 120,
+      min_speed: 20,
+      kinematics: "corexy",
+    };
+    render(<MetaPanel meta={meta} />);
+    expect(screen.queryByText("Square corner velocity")).toBeNull();
+    expect(screen.queryByText("Damping ratio X")).toBeNull();
+    expect(screen.queryByText("Damping ratio Y")).toBeNull();
+  });
 });

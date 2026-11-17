@@ -15,6 +15,7 @@ import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
 import { BeltResults } from "./belts/BeltResults";
 import { UnsupportedDirections } from "./belts/UnsupportedDirections";
+import { VibrationsResults } from "./vibrations/VibrationsResults";
 import { SaveResultButton } from "./SaveResultDialog";
 import { baselineFor } from "./fit";
 
@@ -92,6 +93,13 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
       return (
         <div className="space-y-4">
           <AxesMapResults id={id} meta={meta} header={header} />
+          <MetaPanel meta={meta} />
+        </div>
+      );
+    case "vibrations":
+      return (
+        <div className="space-y-4">
+          <VibrationsResults id={id} meta={meta} header={header} />
           <MetaPanel meta={meta} />
         </div>
       );

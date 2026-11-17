@@ -4,6 +4,7 @@ import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { Spectrogram } from "@/lib/generated/Spectrogram";
+import type { VibrationsAnalysis } from "@/lib/generated/VibrationsAnalysis";
 import {
   type OnBytes,
   fetchResultSample as fetchResultSampleFile,
@@ -63,6 +64,18 @@ export interface AxesMapJob {
   meta: SessionMeta;
 }
 
+/** A vibrations session to analyse. Every chip recorded every step, so all its files are needed. */
+export interface VibrationsJob {
+  /** The cache key for the worker's files. Also the fetch route when `resultId` is not set. */
+  sessionId: string;
+  resultId?: string;
+  meta: SessionMeta;
+  /** The profile keeps the frequencies up to this, in Hz. */
+  maxFreq: number;
+  /** Let a chip that its health or coverage would exclude take part in the worst case. */
+  includeExcluded: boolean;
+}
+
 /** A queued request that a newer one replaced before it was sent. */
 export class SupersededError extends Error {
   constructor() {
@@ -97,6 +110,11 @@ export interface AnalysisClient {
    * belt comparison in the queue.
    */
   analyzeAxesMap(job: AxesMapJob, signal?: AbortSignal): Promise<AxesMapChip[]>;
+  /**
+   * The vibrations profile of every chip of a vibrations session. It runs after the calibration
+   * analysis in the queue.
+   */
+  vibrations(job: VibrationsJob, signal?: AbortSignal): Promise<VibrationsAnalysis>;
   /** Drops what is held for a session id that may be written again. */
   forget(sessionId: string): void;
 }
@@ -107,9 +125,9 @@ interface Options {
   fetchResultSample?: typeof fetchResultSampleFile;
 }
 
-type Kind = "analysis" | "spectrogram" | "belts" | "axesMap";
+type Kind = "analysis" | "spectrogram" | "belts" | "axesMap" | "vibrations";
 
-type Answer = AnalysisResult | Spectrogram | BeltsAnalysis | AxesMapChip[];
+type Answer = AnalysisResult | Spectrogram | BeltsAnalysis | AxesMapChip[] | VibrationsAnalysis;
 
 type Queued =
   | {
@@ -139,6 +157,13 @@ type Queued =
       job: AxesMapJob;
       signal?: AbortSignal;
       resolve: (result: AxesMapChip[]) => void;
+      reject: (error: unknown) => void;
+    }
+  | {
+      kind: "vibrations";
+      job: VibrationsJob;
+      signal?: AbortSignal;
+      resolve: (result: VibrationsAnalysis) => void;
       reject: (error: unknown) => void;
     };
 
@@ -199,7 +224,7 @@ function beltFilesFor(meta: SessionMeta, chip: string) {
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
  * request at a time. A newer request replaces a waiting one of the same kind, and a waiting
  * analysis goes before a waiting spectrogram, which goes before a waiting belt comparison, which
- * goes before a waiting calibration analysis.
+ * goes before a waiting calibration analysis, which goes before a waiting vibrations profile.
  */
 export function createAnalysisClient({
   createWorker,
@@ -213,7 +238,13 @@ export function createAnalysisClient({
   let nextId = 1;
   const pending = new Map<number, { resolve: (r: Answer) => void; reject: (e: unknown) => void }>();
   let active: Queued | null = null;
-  const waiting: Record<Kind, Queued | null> = { analysis: null, spectrogram: null, belts: null, axesMap: null };
+  const waiting: Record<Kind, Queued | null> = {
+    analysis: null,
+    spectrogram: null,
+    belts: null,
+    axesMap: null,
+    vibrations: null,
+  };
 
   // Background download state, scoped to one identity and created_at.
   let bgIdentity: string | null = null;
@@ -271,7 +302,7 @@ export function createAnalysisClient({
     const missing = (
       queued.kind === "belts"
         ? beltFilesFor(job.meta, queued.job.chip)
-        : queued.kind === "axesMap"
+        : queued.kind === "axesMap" || queued.kind === "vibrations"
           ? allFiles(job.meta)
           : filesFor(job.meta, queued.job.axis)
     ).filter((f) => !alreadyHeld.has(f.name));
@@ -390,28 +421,38 @@ export function createAnalysisClient({
             }
           : queued.kind === "axesMap"
             ? { type: "axesMap", id, sessionId: identity, meta: job.meta, files }
-            : queued.kind === "belts"
+            : queued.kind === "vibrations"
               ? {
-                  type: "belts",
+                  type: "vibrations",
                   id,
                   sessionId: identity,
                   meta: job.meta,
-                  chip: queued.job.chip,
                   maxFreq: queued.job.maxFreq,
                   includeExcluded: queued.job.includeExcluded,
                   files,
                 }
-              : {
-                  type: "spectrogram",
-                  id,
-                  sessionId: identity,
-                  meta: job.meta,
-                  axis: queued.job.axis,
-                  chip: queued.job.chip,
-                  point: queued.job.point,
-                  maxFreq: queued.job.maxFreq,
-                  files,
-                },
+              : queued.kind === "belts"
+                ? {
+                    type: "belts",
+                    id,
+                    sessionId: identity,
+                    meta: job.meta,
+                    chip: queued.job.chip,
+                    maxFreq: queued.job.maxFreq,
+                    includeExcluded: queued.job.includeExcluded,
+                    files,
+                  }
+                : {
+                    type: "spectrogram",
+                    id,
+                    sessionId: identity,
+                    meta: job.meta,
+                    axis: queued.job.axis,
+                    chip: queued.job.chip,
+                    point: queued.job.point,
+                    maxFreq: queued.job.maxFreq,
+                    files,
+                  },
         buffers,
       );
     });
@@ -433,7 +474,9 @@ export function createAnalysisClient({
             ? "belts"
             : waiting.axesMap
               ? "axesMap"
-              : null;
+              : waiting.vibrations
+                ? "vibrations"
+                : null;
       const next = kind && waiting[kind];
       if (kind) waiting[kind] = null;
       if (next) void start(next);
@@ -553,6 +596,15 @@ export function createAnalysisClient({
           return;
         }
         submit({ kind: "axesMap", job, signal, resolve, reject });
+      });
+    },
+    vibrations(job, signal) {
+      return new Promise<VibrationsAnalysis>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        submit({ kind: "vibrations", job, signal, resolve, reject });
       });
     },
     forget(sessionId) {
