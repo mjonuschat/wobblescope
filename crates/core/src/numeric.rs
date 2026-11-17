@@ -186,7 +186,35 @@ pub fn interp(x: &[f64], xp: &[f64], fp: &[f64]) -> Vec<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::trapz;
+    use super::{convolve_same, trapz};
+
+    // The expected values below come from numpy 2.x:
+    // np.convolve([1,2,3], [1,1], mode='same') == [1 3 5]
+    // np.convolve([1,2,3,4], [1,2,3], mode='same') == [4 10 16 17]
+    // np.convolve([1,2], [1,2,3,4,5], mode='same') == [1 4 7 10 13]
+    #[test]
+    fn convolve_same_aligns_an_even_kernel_like_numpy() {
+        assert_eq!(
+            convolve_same(&[1.0, 2.0, 3.0], &[1.0, 1.0]),
+            [1.0, 3.0, 5.0]
+        );
+    }
+
+    #[test]
+    fn convolve_same_centres_an_odd_kernel_like_numpy() {
+        assert_eq!(
+            convolve_same(&[1.0, 2.0, 3.0, 4.0], &[1.0, 2.0, 3.0]),
+            [4.0, 10.0, 16.0, 17.0]
+        );
+    }
+
+    #[test]
+    fn convolve_same_with_a_kernel_longer_than_the_input_returns_the_longer_length() {
+        assert_eq!(
+            convolve_same(&[1.0, 2.0], &[1.0, 2.0, 3.0, 4.0, 5.0]),
+            [1.0, 4.0, 7.0, 10.0, 13.0]
+        );
+    }
 
     #[test]
     fn trapz_integrates_uneven_spacing_like_numpy() {

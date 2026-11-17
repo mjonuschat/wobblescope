@@ -347,7 +347,6 @@ fn rms_without_mean(samples: &RawSamples) -> [f64; 3] {
     [rms(&samples.x), rms(&samples.y), rms(&samples.z)]
 }
 
-/// The samples with `start <= t < end`, in their order.
 fn cut_to(samples: &RawSamples, start: f64, end: f64) -> RawSamples {
     let mut kept = RawSamples::default();
     for (row, &t) in samples.t.iter().enumerate() {

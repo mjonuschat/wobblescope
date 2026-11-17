@@ -116,7 +116,6 @@ fn length_multiplier(speed: f64) -> f64 {
     }
 }
 
-/// How many back-and-forth moves a step at `speed` makes: 1 below 150 mm/s, 2 below 250, else 3.
 fn repeats(speed: f64) -> u32 {
     if speed < 150.0 {
         1
@@ -127,7 +126,6 @@ fn repeats(speed: f64) -> u32 {
     }
 }
 
-/// The direction a segment records under: the axis at 0 and 90 degrees, else the diagonal.
 fn angle_direction(angle: f64) -> Direction {
     if angle == 0.0 {
         Direction::X
@@ -326,7 +324,6 @@ pub fn plan_vibrations(
     })
 }
 
-/// Where the step at `angle` degrees and `speed` mm/s starts and ends.
 #[must_use]
 pub fn step_geometry(plan: &VibrationsPlan, angle: f64, speed: f64) -> StepGeometry {
     let multiplier = length_multiplier(speed);
@@ -348,7 +345,6 @@ pub(super) fn feed(speed: f64) -> String {
     text.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
-/// The G-code of one step: the move to its start, the back-and-forth moves and the pause.
 #[must_use]
 pub fn step_script(plan: &VibrationsPlan, angle: f64, speed: f64) -> String {
     let geometry = step_geometry(plan, angle, speed);
@@ -384,7 +380,6 @@ fn estimated_step_seconds(run: &VibrationsRun, requested: f64) -> f64 {
     length / travel_speed + moves * (length / speed + speed / run.accel) + STEP_DWELL_SECONDS
 }
 
-/// The time one angle is expected to take, with its positioning moves and pauses, in seconds.
 #[must_use]
 pub fn estimated_angle_seconds(plan: &VibrationsPlan) -> f64 {
     plan.speeds
@@ -393,7 +388,6 @@ pub fn estimated_angle_seconds(plan: &VibrationsPlan) -> f64 {
         .sum()
 }
 
-/// The time the slowest step of the plan is expected to take, in seconds.
 #[must_use]
 pub fn slowest_step_seconds(plan: &VibrationsPlan) -> f64 {
     plan.speeds

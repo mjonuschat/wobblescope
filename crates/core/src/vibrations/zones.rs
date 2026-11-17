@@ -17,7 +17,7 @@ pub struct Zone {
 
 /// The zones of `power` below `mean + (max - min) / 4 - threshold * std`, sorted from lowest to
 /// highest `energy`. A zone whose mean is NaN is left out. That is the case of a one-sample zone
-/// at the very end of the data. An empty curve has no zones.
+/// at the end of the data. An empty curve has no zones.
 pub fn low_energy_zones(power: &[f64], threshold: f64) -> Vec<Zone> {
     if power.is_empty() {
         return Vec::new();
@@ -62,7 +62,7 @@ pub fn low_energy_zones(power: &[f64], threshold: f64) -> Vec<Zone> {
 }
 
 /// Cuts `deletion_range` samples either side of every peak out of the zones it falls in, then
-/// merges zones that overlap, keeping the lower energy. The result is sorted by `start`, not by
+/// merges zones that overlap, keeping the lower energy. The result is in order of `start`, not of
 /// energy, as Shake&Tune leaves it (D41).
 ///
 /// `peak_speed_indices` pairs each peak speed with its index in `speeds`. A peak counts for a zone

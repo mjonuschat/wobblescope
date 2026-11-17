@@ -10,7 +10,6 @@ fn params() -> VibrationsParams {
     }
 }
 
-/// A grid of 720 angles and 12 speeds with a value that depends on `seed`, angle and speed.
 fn grid(seed: f64) -> Grid {
     let angles: Vec<f64> = (0..720).map(|i| i as f64 * 360.0 / 719.0).collect();
     let speeds: Vec<f64> = (0..12).map(|i| 20.0 + i as f64 * 5.0).collect();
@@ -73,7 +72,6 @@ fn worst_case_of_one_chip_equals_that_chip() {
     }
 }
 
-/// Steps of a Cartesian run at 20 to 100 mm/s with a deterministic signal.
 fn steps() -> Vec<StepInput> {
     let mut out = Vec::new();
     for angle in [0.0, 90.0] {

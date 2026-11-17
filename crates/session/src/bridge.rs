@@ -350,7 +350,8 @@ pub struct ChipVibrations {
     pub chip: String,
     /// One decision per angle recording the chip made, in angle order.
     pub decisions: Vec<DatasetDecision>,
-    /// Why the chip is left out of the worst case. `None` when it takes part.
+    /// Why the chip is left out of the worst case, also when that is because its analysis
+    /// failed. `None` when it takes part.
     pub excluded: Option<String>,
     /// The chip's own profile. `None` when its data could not be analysed or an angle is missing.
     pub result: Option<VibrationsResult>,
@@ -358,7 +359,6 @@ pub struct ChipVibrations {
     pub failure: Option<String>,
 }
 
-/// The vibrations profile of every chip of a session, and their worst case.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VibrationsAnalysis {
@@ -378,7 +378,6 @@ fn invalid(field: &str, reason: impl Into<String>) -> SessionError {
     }
 }
 
-/// The two measured angles and the kinematics of a vibrations session.
 fn vibrations_setup(meta: &SessionMeta) -> Result<([f64; 2], Kinematics), SessionError> {
     meta.validate()?;
     let Some(run) = &meta.vibrations_run else {
@@ -454,8 +453,9 @@ where
 /// Analyses every chip of a complete vibrations session and the worst case over the chips that
 /// take part.
 ///
-/// A chip takes part when each of the two angles has a recording and neither is excluded by
-/// health, coverage or an undersampled rate. `include_excluded` lets both take part anyway. A
+/// A chip takes part when each of the two angles has a recording and the eligibility rules leave
+/// both in, which they do not for poor health, coverage or an undersampled rate. `include_excluded`
+/// lets both take part anyway. A
 /// chip left out still gets its own profile when its data can be analysed. A file `load`
 /// cannot read, or a profile that cannot be computed, is that chip's `failure` and no other
 /// chip's. The worst case is `None` when no chip takes part or their grids differ.
@@ -518,7 +518,7 @@ where
                 reasons.push(format!("{angle} degrees: {}", decision.reasons.join(", ")));
             }
         }
-        let excluded = (!reasons.is_empty()).then(|| reasons.join("; "));
+        let mut excluded = (!reasons.is_empty()).then(|| reasons.join("; "));
 
         let (mut result, mut failure) = (None, None);
         if missing_angles.is_empty() {
@@ -529,6 +529,9 @@ where
                 Ok(profile) => result = Some(profile),
                 Err(reason) => failure = Some(reason),
             }
+        }
+        if let (Some(reason), None) = (&failure, &excluded) {
+            excluded = Some(format!("left out of the worst case: {reason}"));
         }
         if let (Some(profile), None) = (&result, &excluded) {
             grids.push(Grid {

@@ -8,7 +8,8 @@ export type ChipVibrations = { chip: string,
  */
 decisions: Array<DatasetDecision>, 
 /**
- * Why the chip is left out of the worst case. `None` when it takes part.
+ * Why the chip is left out of the worst case, also when that is because its analysis
+ * failed. `None` when it takes part.
  */
 excluded: string | null, 
 /**

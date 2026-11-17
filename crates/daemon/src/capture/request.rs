@@ -158,7 +158,6 @@ pub struct TestPlan {
     pub(super) pulse_zeroes_period: bool,
     /// What an axes-map calibration adds; present exactly when `kind` is [`TestKind::AxesMap`].
     pub axes_map: Option<AxesMapPlan>,
-    /// What a vibrations profile adds.
     pub vibrations: Option<VibrationsPlan>,
 }
 

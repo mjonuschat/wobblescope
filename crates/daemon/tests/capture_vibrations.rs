@@ -2,7 +2,7 @@ mod common;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use common::fake_moonraker::Script;
+use common::fake_moonraker::{Gate, Script};
 use common::sim_printer::{Rig, rig};
 use serde_json::{Value, json};
 use wobblescope::capture::live::{FinishedOutcome, FinishedTest};
@@ -103,7 +103,6 @@ fn on_step(rig: &Rig, nth: usize, act: impl Fn() + Send + Sync + 'static) {
     });
 }
 
-/// Answers the first script `matches` with a Klipper error.
 fn refuse_script(rig: &Rig, matches: impl Fn(&str) -> bool + Send + Sync + 'static) {
     let done = std::sync::atomic::AtomicBool::new(false);
     rig.sim.intercept(move |script| {
@@ -118,7 +117,6 @@ fn assert_clean(rig: &Rig) {
     assert_eq!(rig.bridges_open(), 0, "a bridge connection is still open");
 }
 
-/// The restore script ends the run, with the saved limits put back and the shaper left alone.
 fn assert_restored(rig: &Rig) {
     let scripts = rig.sim.scripts();
     let restore = scripts.last().unwrap();
@@ -206,7 +204,6 @@ async fn a_stop_in_the_second_angle_keeps_the_first_and_the_finished_steps_of_th
     assert_eq!(meta.segments[1].steps.len(), 1);
     assert!(matches!(meta.outcome, Outcome::Failed { .. }));
     meta.validate().unwrap();
-    // The interrupted angle holds samples up to the end of its last finished step.
     let second = &meta.segments[1];
     assert_eq!(second.window.unwrap().end, second.steps[0].window.end);
     assert_eq!(second.files.len(), 2);
@@ -282,7 +279,6 @@ async fn a_stop_before_any_step_finishes_leaves_no_session() {
 #[tokio::test]
 async fn acceleration_limits_are_restored_after_failure() {
     let rig = vibrations_rig(true).await;
-    // The second step of the first angle fails.
     let seen = std::sync::atomic::AtomicUsize::new(0);
     rig.sim.intercept(move |script| {
         (is_step(script) && seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1)
@@ -388,4 +384,69 @@ async fn posting_a_run_starts_it_and_returns_202() {
     let finished = rig.finished().await;
     assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
     assert_eq!(finished.session_id.as_deref(), answer["id"].as_str());
+}
+
+#[tokio::test]
+async fn a_chip_that_dies_mid_run_restores_the_limits_and_keeps_finished_steps() {
+    let rig = vibrations_rig(true).await;
+    let sim = rig.sim.clone();
+    on_step(&rig, 2, move || sim.bridge().drop_sensor("ebb36"));
+    let finished = run(&rig, &plan()).await;
+    assert_ne!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
+    assert!(!finished.needs_restart);
+    let meta = meta_of(&rig, &finished);
+    assert!(
+        matches!(meta.outcome, Outcome::Failed { .. }),
+        "{:?}",
+        meta.outcome
+    );
+    assert_eq!(meta.segments[0].steps.len(), 2);
+    assert!(meta.segments.iter().map(|s| s.steps.len()).sum::<usize>() >= 2);
+    meta.validate().unwrap();
+    assert_restored(&rig);
+    assert_clean(&rig);
+}
+
+#[tokio::test]
+async fn klipper_going_down_mid_run_ends_the_session_without_a_restore_attempt_that_hangs() {
+    let rig = vibrations_rig(true).await;
+    let gate = Gate::new();
+    let held = gate.clone();
+    let seen = std::sync::atomic::AtomicUsize::new(0);
+    rig.sim.intercept(move |script| {
+        (is_step(script) && seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 2)
+            .then(|| Script::Gated(held.clone()))
+    });
+    let task = match rig.start(&plan()).await {
+        Ok(task) => task,
+        Err(_) => panic!("pre-flight must pass"),
+    };
+    rig.until("the third step", || {
+        rig.sim.scripts().iter().filter(|s| is_step(s)).count() == 3
+    })
+    .await;
+    rig.sim.printer.set_state("shutdown");
+    rig.sim
+        .printer
+        .set_message("MCU 'mcu' shutdown: Timer too close");
+    rig.sim.fake.push("notify_klippy_shutdown", json!([]));
+    rig.until("Klipper down", || {
+        rig.moonraker.status().klippy.state != wobblescope::moonraker::status::KlippyState::Ready
+    })
+    .await;
+    gate.release(Script::error(400, "Klipper state: Shutdown"));
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(finished.outcome, FinishedOutcome::Failed, "{finished:?}");
+    assert!(
+        reason(&finished).contains("Timer too close"),
+        "{}",
+        reason(&finished)
+    );
+    assert!(!finished.needs_restart);
+    let scripts = rig.sim.scripts();
+    assert!(!scripts.iter().any(|s| is_restore(s)), "{scripts:#?}");
+    let meta = meta_of(&rig, &finished);
+    assert_eq!(meta.segments[0].steps.len(), 2);
+    assert_clean(&rig);
 }

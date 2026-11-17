@@ -746,8 +746,8 @@ mod vibrations {
     use wobblescope_session::SessionError;
     use wobblescope_session::bridge::{analyze_vibrations, vibrations_inputs};
     use wobblescope_session::meta::{
-        ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, StepMeta,
-        TimeDomain, TimeWindow, VibrationsRun, sample_file_name,
+        ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source,
+        StepMeta, TimeDomain, TimeWindow, VibrationsRun, sample_file_name,
     };
 
     const RATE: f64 = 1600.0;
@@ -1019,6 +1019,53 @@ mod vibrations {
             let a = out.per_chip[0].result.as_ref().unwrap();
             assert!(out.per_chip[0].failure.is_none());
             assert_eq!(out.worst_case.as_ref().unwrap().grid, a.grid);
+        }
+    }
+    parity_test! {
+        fn a_corexy_session_maps_its_diagonal_segments_to_45_and_135_degrees() {
+            let (mut meta, files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 1.0)]);
+            meta.vibrations_run.as_mut().unwrap().kinematics = "corexy".to_owned();
+            meta.format_version = 2;
+            // The daemon writes the 45 degree segment as BELT_B and the 135 degree one as BELT_A.
+            meta.segments[0].axis = Direction::Vector([1, 1, 0]);
+            meta.segments[1].axis = Direction::Vector([1, -1, 0]);
+            assert_eq!(meta.kind(), SessionKind::Vibrations);
+
+            let steps = vibrations_inputs(&meta, "a", loader(&files)).unwrap();
+            assert_eq!(steps.len(), 2 * SPEEDS.len());
+            for (i, step) in steps.iter().enumerate() {
+                let angle = if i < SPEEDS.len() { 45.0 } else { 135.0 };
+                assert_eq!(step.angle, angle);
+            }
+
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            for chip in &out.per_chip {
+                assert!(chip.excluded.is_none() && chip.failure.is_none(), "{chip:?}");
+                assert!(chip.result.is_some(), "{chip:?}");
+            }
+            assert!(out.worst_case.is_some());
+
+            meta.segments[1].files.retain(|f| f.chip != 1);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let b = &out.per_chip[1];
+            assert!(b.excluded.as_deref().unwrap().contains("no recording at 135 degrees"));
+            assert!(b.result.is_none() && b.failure.is_none());
+            assert!(out.per_chip[0].excluded.is_none());
+            assert!(out.worst_case.is_some());
+        }
+    }
+
+    parity_test! {
+        fn a_chip_whose_analysis_fails_is_marked_as_left_out_of_the_worst_case() {
+            let (meta, mut files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 2.0)]);
+            files.remove(&sample_file_name(1, 1));
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let b = &out.per_chip[1];
+            let failure = b.failure.as_deref().unwrap();
+            let excluded = b.excluded.as_deref().unwrap();
+            assert!(excluded.contains("left out of the worst case"), "{excluded}");
+            assert!(excluded.contains(failure), "{excluded}");
+            assert!(out.per_chip[0].excluded.is_none());
         }
     }
 }

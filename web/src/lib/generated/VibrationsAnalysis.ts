@@ -2,9 +2,6 @@
 import type { ChipVibrations } from "./ChipVibrations";
 import type { VibrationsResult } from "./VibrationsResult";
 
-/**
- * The vibrations profile of every chip of a session, and their worst case.
- */
 export type VibrationsAnalysis = { 
 /**
  * One entry per chip, in the order of `meta.chips`.

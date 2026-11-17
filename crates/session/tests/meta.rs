@@ -655,7 +655,6 @@ fn vibrations_run(kinematics: &str) -> VibrationsRun {
     }
 }
 
-/// A vibrations session over the given directions, each segment holding two speed steps.
 fn vibrations_meta(kinematics: &str, axes: [Direction; 2]) -> SessionMeta {
     let mut meta = vector_meta(&[(axes[0], 0), (axes[1], 0)]);
     meta.mode = None;
