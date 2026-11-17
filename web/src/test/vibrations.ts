@@ -1,7 +1,6 @@
 import type { MotorResult } from "@/lib/generated/MotorResult";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 
-/** A motor profile of five frequency bins with a resonance at index 2. */
 export function motorResult(overrides: Partial<MotorResult> = {}): MotorResult {
   return {
     freqs: [10, 20, 30, 40, 50],
@@ -46,7 +45,6 @@ export function vibrationsResult(overrides: Partial<VibrationsResult> = {}): Vib
   };
 }
 
-/** `n` evenly spaced values from `start` to `stop` inclusive, as numpy's linspace. */
 function linspace(start: number, stop: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => start + ((stop - start) * i) / (n - 1));
 }

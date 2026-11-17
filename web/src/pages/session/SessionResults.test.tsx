@@ -133,7 +133,7 @@ describe("the session results", () => {
     fake.vibrations.mockResolvedValue({ per_chip: [], worst_case: null, core_version: "0.0.0" });
     serve("vibrations", meta);
     renderResults();
-    expect(await screen.findByRole("tab", { name: "Worst case" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "All Chips" })).toBeTruthy();
     expect(screen.getByText("Max Speed")).toBeTruthy();
     expect(fake.analyze).not.toHaveBeenCalled();
     expect(fake.belts).not.toHaveBeenCalled();

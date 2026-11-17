@@ -22,7 +22,6 @@ interface Args {
   maxFreq?: number;
   /** Let a chip that its health or coverage would exclude take part in the worst case. */
   includeExcluded: boolean;
-  /** The profile is only made once this is true. */
   enabled: boolean;
   client?: AnalysisClient;
 }

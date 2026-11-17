@@ -5,7 +5,6 @@ import { twoAxisMeta } from "@/test/fixtures";
 
 import { vibrationsProgress } from "./vibrationsProgress";
 
-/** A run of speeds 20, 40, 60, 80 and 100 (five per angle) with `done` finished steps per angle. */
 function metaWith(...done: number[]): SessionMeta {
   const meta = twoAxisMeta();
   meta.vibrations_run = {

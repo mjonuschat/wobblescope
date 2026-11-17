@@ -1,14 +1,20 @@
-import { useMemo } from "react";
+import type { EChartsCoreOption } from "echarts/core";
+import { type ReactNode, useMemo } from "react";
 
+import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
+import { Field, Fields } from "@/components/Fields";
 import { Panel } from "@/components/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { Button } from "@/components/ui/button";
 import { chipLabel } from "@/lib/format";
 import type { ChipVibrations } from "@/lib/generated/ChipVibrations";
+import type { MotorResult } from "@/lib/generated/MotorResult";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 
 import { explainReason } from "../EligibilityPanel";
+import { GoodAngleRanges } from "./VibrationsSummary";
 import {
+  LOW_FREQ_WARNING,
   angularProfilesOption,
   heatmapOption,
   motorProfileOption,
@@ -17,8 +23,59 @@ import {
   speedProfileOption,
 } from "./vibrationsOptions";
 
+/** The height of the two polar plots, which leaves room for their 15 degree labels. */
+const POLAR_HEIGHT = 440;
+
 /** The highest frequency of the motor profile in Hz. The analysis keeps the frequencies up to it. */
 export const MAX_FREQ = 1000;
+
+function ChartPanel({
+  title,
+  option,
+  label,
+  height = 380,
+  intro,
+  below,
+}: {
+  title: string;
+  option: EChartsCoreOption;
+  label: string;
+  height?: number;
+  intro?: ReactNode;
+  /** What the chart's numbers refer to, shown under it and in the expanded view. */
+  below?: ReactNode;
+}) {
+  return (
+    <Panel
+      title={title}
+      label={title}
+      action={
+        <ExpandDialog title={title}>
+          {intro}
+          <EChart option={option} label={label} height={EXPANDED_CHART_HEIGHT} />
+          {below}
+        </ExpandDialog>
+      }
+    >
+      {intro}
+      <EChart option={option} label={label} height={height} />
+      {below}
+    </Panel>
+  );
+}
+
+/** The motor resonance and damping ratio, which Shake&Tune prints inside its chart. */
+function MotorFigures({ motor }: { motor: MotorResult }) {
+  return (
+    <div className="space-y-3">
+      <Fields aria-label="Motor resonance">
+        <Field label="Resonant Frequency">{`${motor.fr.toFixed(1)} Hz`}</Field>
+        <Field label="Damping Ratio">{motor.zeta === null ? "Not available" : motor.zeta.toFixed(3)}</Field>
+      </Fields>
+      {motor.low_freq_warning && <p className="text-sm text-amber-400">{LOW_FREQ_WARNING}</p>}
+    </div>
+  );
+}
 
 /** The charts of one result, made once for it as the heatmaps are large. */
 function Charts({ result, kinematics, name }: { result: VibrationsResult; kinematics: string; name: string }) {
@@ -36,32 +93,35 @@ function Charts({ result, kinematics, name }: { result: VibrationsResult; kinema
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Angular Energy" label="Angular Energy">
-          <EChart option={options.polarAngle} label={`Angular energy of ${name}`} height={380} />
-        </Panel>
-        <Panel title="Polar Energy Heatmap" label="Polar Energy Heatmap">
-          <EChart option={options.polarHeatmap} label={`Polar energy heatmap of ${name}`} height={380} />
-        </Panel>
+        <ChartPanel
+          title="Angular Energy"
+          option={options.polarAngle}
+          label={`Angular energy of ${name}`}
+          height={POLAR_HEIGHT}
+          below={<GoodAngleRanges result={result} />}
+        />
+        <ChartPanel
+          title="Polar Energy Heatmap"
+          option={options.polarHeatmap}
+          label={`Polar energy heatmap of ${name}`}
+          height={POLAR_HEIGHT}
+        />
       </div>
-      <Panel title="Speed Energy Profile" label="Speed Energy Profile">
-        <EChart option={options.speed} label={`Speed energy profile of ${name}`} height={380} zoom />
-      </Panel>
-      <Panel title="Angular Speed Profiles" label="Angular Speed Profiles">
-        <EChart option={options.angular} label={`Angular speed profiles of ${name}`} height={380} zoom />
-      </Panel>
-      <Panel title="Energy Heatmap" label="Energy Heatmap">
-        <EChart option={options.heatmap} label={`Energy heatmap of ${name}`} height={420} />
-      </Panel>
-      {options.motor && (
-        <Panel title="Motor Resonance Profile" label="Motor Resonance Profile">
-          <EChart option={options.motor} label={`Motor resonance profile of ${name}`} height={380} zoom />
-        </Panel>
+      <ChartPanel title="Speed Energy Profile" option={options.speed} label={`Speed energy profile of ${name}`} />
+      <ChartPanel title="Angular Speed Profiles" option={options.angular} label={`Angular speed profiles of ${name}`} />
+      <ChartPanel title="Energy Heatmap" option={options.heatmap} label={`Energy heatmap of ${name}`} height={420} />
+      {options.motor && result.motor && (
+        <ChartPanel
+          title="Motor Resonance Profile"
+          option={options.motor}
+          label={`Motor resonance profile of ${name}`}
+          intro={<MotorFigures motor={result.motor} />}
+        />
       )}
     </>
   );
 }
 
-/** What is wrong with a chip's data, with the way to include a chip that was left out. */
 function DataQuality({ chips, onInclude }: { chips: ChipVibrations[]; onInclude: () => void }) {
   const problems = chips.filter((c) => c.excluded !== null || c.failure !== null);
   if (problems.length === 0) return null;
@@ -72,10 +132,10 @@ function DataQuality({ chips, onInclude }: { chips: ChipVibrations[]; onInclude:
           <li key={c.chip}>
             <span className="font-mono font-medium">{c.chip}</span>
             {c.failure !== null && (
-              <span className="text-destructive">{`: could not be analysed: ${c.failure}. It is not part of the worst case.`}</span>
+              <span className="text-destructive">{`: could not be analysed: ${c.failure}. It is not included in All Chips.`}</span>
             )}
             {c.failure === null && c.excluded !== null && (
-              <span>{`: left out of the worst case. ${explainReason(c.excluded)}`}</span>
+              <span>{`: left out of All Chips. ${explainReason(c.excluded)}`}</span>
             )}
           </li>
         ))}
@@ -89,16 +149,16 @@ function DataQuality({ chips, onInclude }: { chips: ChipVibrations[]; onInclude:
   );
 }
 
-/** The panels of the selected tab: a chip, or null for the worst case. */
+/** The panels of the selected tab: a chip, or null for the chips combined. */
 export function VibrationsView({
   perChip,
-  worstCase,
+  combined,
   chip,
   kinematics,
   onInclude,
 }: {
   perChip: ChipVibrations[];
-  worstCase: VibrationsResult | null;
+  combined: VibrationsResult | null;
   chip: string | null;
   kinematics: string;
   onInclude: () => void;
@@ -107,11 +167,11 @@ export function VibrationsView({
     return (
       <>
         <DataQuality chips={perChip} onInclude={onInclude} />
-        {worstCase ? (
-          <Charts result={worstCase} kinematics={kinematics} name="the worst case" />
+        {combined ? (
+          <Charts result={combined} kinematics={kinematics} name="all chips" />
         ) : (
           <p role="status" className="text-sm">
-            No chip qualifies for the worst case.
+            No chip qualifies for All Chips.
           </p>
         )}
       </>

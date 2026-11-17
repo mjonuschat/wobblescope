@@ -12,10 +12,9 @@ import { VibrationsSummary } from "./VibrationsSummary";
 import { VibrationsView } from "./VibrationsView";
 import { vibrationsProgress } from "./vibrationsProgress";
 
-/** The value of the tab that shows the worst case. No chip is named like this. */
-const WORST_CASE = "\u0000worst-case";
+/** The value of the tab that combines the chips. No chip is named like this. */
+const ALL_CHIPS = "\u0000all-chips";
 
-/** A run that stopped part way: how far it got and why, with nothing to analyse. */
 function IncompleteRun({ meta }: { meta: SessionMeta }) {
   const reason =
     meta.outcome === "Complete"
@@ -35,10 +34,9 @@ function IncompleteRun({ meta }: { meta: SessionMeta }) {
   );
 }
 
-/** Owns the selected tab and whether the excluded chips take part, for the summary and the charts below. */
 export function VibrationsResults({ id, meta, header }: { id: string; meta: SessionMeta; header: Header }) {
   const complete = meta.outcome === "Complete";
-  const [selected, setSelected] = useState(WORST_CASE);
+  const [selected, setSelected] = useState(ALL_CHIPS);
   const [includeExcluded, setIncludeExcluded] = useState(false);
   const query = useVibrations({ sessionId: id, meta, includeExcluded, enabled: complete });
 
@@ -53,9 +51,9 @@ export function VibrationsResults({ id, meta, header }: { id: string; meta: Sess
 
   const data = query.data;
   const chips = data ? data.per_chip.map((c) => c.chip) : [];
-  const tab = chips.includes(selected) ? selected : WORST_CASE;
+  const tab = chips.includes(selected) ? selected : ALL_CHIPS;
   const shown = data
-    ? tab === WORST_CASE
+    ? tab === ALL_CHIPS
       ? data.worst_case
       : (data.per_chip.find((c) => c.chip === tab)?.result ?? null)
     : null;
@@ -63,8 +61,8 @@ export function VibrationsResults({ id, meta, header }: { id: string; meta: Sess
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={setSelected}>
         <TabsList variant="line">
-          <TabsTrigger value={WORST_CASE} className="after:bg-primary">
-            Worst case
+          <TabsTrigger value={ALL_CHIPS} className="after:bg-primary">
+            All Chips
           </TabsTrigger>
           {chips.map((name) => (
             <TabsTrigger key={name} value={name} className="after:bg-primary">
@@ -89,8 +87,8 @@ export function VibrationsResults({ id, meta, header }: { id: string; meta: Sess
       ) : (
         <VibrationsView
           perChip={query.data.per_chip}
-          worstCase={query.data.worst_case}
-          chip={tab === WORST_CASE ? null : tab}
+          combined={query.data.worst_case}
+          chip={tab === ALL_CHIPS ? null : tab}
           kinematics={meta.vibrations_run?.kinematics ?? ""}
           onInclude={() => setIncludeExcluded(true)}
         />

@@ -214,7 +214,6 @@ export function beltsComparison(chip = "adxl345", result: BeltsResult = beltsRes
   };
 }
 
-/** A vibrations analysis of one chip that could not be analysed, with no worst case. */
 export function vibrationsAnalysis(chip = "adxl345"): VibrationsAnalysis {
   return {
     per_chip: [{ chip, decisions: [], excluded: null, result: null, failure: "no recordings" }],

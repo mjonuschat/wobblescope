@@ -7,7 +7,7 @@ import { createQueryClient } from "@/lib/api/queries";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import type { VibrationsAnalysis } from "@/lib/generated/VibrationsAnalysis";
 import { twoAxisMeta } from "@/test/fixtures";
-import { vibrationsResult } from "@/test/vibrations";
+import { motorResult, vibrationsResult } from "@/test/vibrations";
 
 import type { Header } from "../SessionResults";
 import { VibrationsResults } from "./VibrationsResults";
@@ -75,17 +75,19 @@ beforeEach(() => {
 });
 
 describe("the vibrations view", () => {
-  it("has_a_tab_per_chip_and_the_worst_case_selected", async () => {
+  it("has_a_tab_per_chip_and_all_chips_selected", async () => {
     fake.vibrations.mockResolvedValue(analysis());
     renderView();
-    expect(await screen.findByRole("tab", { name: "Worst case" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Worst case" }).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByRole("tab", { name: "All Chips" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "All Chips" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "ADXL345" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "LIS2DW EBB36" })).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Speed Energy Profile" })).toBeTruthy();
     expect(panel("Motor Resonance Profile")).toBeNull();
     expect(panel("Summary")).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Test result" })).getByText("Speeds to avoid")).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Test result" })).getByText("Recommended speed ranges"),
+    ).toBeTruthy();
     expect(fake.vibrations).toHaveBeenCalledTimes(1);
   });
 
@@ -96,9 +98,60 @@ describe("the vibrations view", () => {
     expect(await screen.findByRole("region", { name: "Motor Resonance Profile" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Speed Energy Profile" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Energy Heatmap" })).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Test result" })).getByText("Motor resonance")).toBeTruthy();
-    // Computed once for the whole session.
     expect(fake.vibrations).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows_the_recommended_speed_ranges_in_the_result_card_and_the_angle_ranges_beside_their_plot", async () => {
+    fake.vibrations.mockResolvedValue(analysis());
+    renderView();
+    await screen.findByRole("region", { name: "Speed Energy Profile" });
+    const result = screen.getByRole("region", { name: "Test result" });
+    expect(within(result).getByText("Recommended speed ranges")).toBeTruthy();
+    expect(within(result).queryByText("Speeds to avoid")).toBeNull();
+    expect(within(result).queryByText("Good angle ranges")).toBeNull();
+    expect(
+      within(screen.getByRole("region", { name: "Speed Energy Profile" })).queryByText("Recommended speed ranges"),
+    ).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Angular Energy" })).getByText("Good angle ranges")).toBeTruthy();
+  });
+
+  it("shows_the_resonance_and_damping_in_the_motor_card_and_not_in_the_chart", async () => {
+    fake.vibrations.mockResolvedValue(analysis());
+    renderView();
+    fireEvent.click(await screen.findByRole("tab", { name: "ADXL345" }));
+    const motor = await screen.findByRole("region", { name: "Motor Resonance Profile" });
+    expect(within(motor).getByText("Resonant Frequency").parentElement?.textContent).toContain("30.0 Hz");
+    expect(within(motor).getByText("Damping Ratio").parentElement?.textContent).toContain("0.123");
+    expect(within(motor).queryByText(/too high an acceleration/)).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Test result" })).queryByText("Motor resonance")).toBeNull();
+  });
+
+  it("warns_in_the_motor_card_about_low_frequency_vibrations", async () => {
+    const data = analysis();
+    data.per_chip[0].result = { ...data.per_chip[0].result!, motor: motorResult({ low_freq_warning: true }) };
+    fake.vibrations.mockResolvedValue(data);
+    renderView();
+    fireEvent.click(await screen.findByRole("tab", { name: "ADXL345" }));
+    const motor = await screen.findByRole("region", { name: "Motor Resonance Profile" });
+    expect(within(motor).getByText(/too high an acceleration/)).toBeTruthy();
+  });
+
+  it("offers_the_expand_button_the_other_session_charts_have_and_no_zoom_buttons", async () => {
+    fake.vibrations.mockResolvedValue(analysis());
+    renderView();
+    await screen.findByRole("region", { name: "Speed Energy Profile" });
+    for (const name of [
+      "Angular Energy",
+      "Polar Energy Heatmap",
+      "Speed Energy Profile",
+      "Angular Speed Profiles",
+      "Energy Heatmap",
+    ]) {
+      expect(
+        within(screen.getByRole("region", { name })).getByRole("button", { name: /Expand the chart/ }),
+      ).toBeTruthy();
+    }
+    expect(screen.queryByRole("button", { name: /zoom/i })).toBeNull();
   });
 
   it("shows_why_a_chip_is_left_out_and_still_shows_its_charts", async () => {
@@ -110,19 +163,19 @@ describe("the vibrations view", () => {
     expect(await screen.findByText(/The capture looks unreliable/)).toBeTruthy();
     expect(screen.getByRole("region", { name: "Speed Energy Profile" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Include excluded chips anyway" }));
-    expect(await screen.findByRole("tab", { name: "Worst case" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "All Chips" })).toBeTruthy();
     expect(fake.vibrations).toHaveBeenLastCalledWith(
       expect.objectContaining({ includeExcluded: true }),
       expect.anything(),
     );
   });
 
-  it("shows_a_chip_failure_and_that_it_is_not_in_the_worst_case", async () => {
+  it("shows_a_chip_failure_and_that_it_is_not_in_all_chips", async () => {
     const data = analysis();
     data.per_chip[0] = {
       chip: "adxl345",
       decisions: [],
-      excluded: "left out of the worst case: no samples",
+      excluded: "left out of All Chips: no samples",
       result: null,
       failure: "no samples",
     };
@@ -130,16 +183,16 @@ describe("the vibrations view", () => {
     renderView();
     fireEvent.click(await screen.findByRole("tab", { name: "ADXL345" }));
     expect(await screen.findByText(/no samples/)).toBeTruthy();
-    expect(screen.getByText(/not part of the worst case/)).toBeTruthy();
-    expect(screen.queryByText(/left out of the worst case/)).toBeNull();
+    expect(screen.getByText(/not included in All Chips/)).toBeTruthy();
+    expect(screen.queryByText(/left out of All Chips/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Include excluded chips anyway/ })).toBeNull();
     expect(panel("Speed Energy Profile")).toBeNull();
   });
 
-  it("shows_an_empty_state_for_a_null_worst_case", async () => {
+  it("shows_an_empty_state_when_no_chip_qualifies_for_all_chips", async () => {
     fake.vibrations.mockResolvedValue(analysis({ worst_case: null }));
     renderView();
-    expect(await screen.findByText("No chip qualifies for the worst case.")).toBeTruthy();
+    expect(await screen.findByText("No chip qualifies for All Chips.")).toBeTruthy();
     expect(panel("Speed Energy Profile")).toBeNull();
   });
 
