@@ -129,8 +129,6 @@ pub enum MapState {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigCheck {
-    /// No axes_map is set (or it is the identity).
-    NoneConfigured,
     /// The configured map matches the detected map.
     AlreadyCorrect,
     /// The configured map does not match the detected map.
@@ -201,8 +199,9 @@ pub struct AxesMapResult {
     pub noise_verdict: NoiseVerdict,
     /// Quality assessment.
     pub quality: Quality,
-    /// Whether the configured map matches the detected map.
-    pub config_check: ConfigCheck,
+    /// Whether the configured map (the identity when none is set) matches the detected map. `None`
+    /// when no map was detected.
+    pub config_check: Option<ConfigCheck>,
     /// Velocity curves per segment for plotting.
     pub curves: [SegmentCurves; 3],
     /// Version of the analysis core that produced this result.
@@ -263,10 +262,9 @@ pub fn analyze_axes_map(
         quality,
     } = outcome;
 
-    let config_check = match &map {
-        Some(detected) => map::config_check(input.configured_map.as_deref(), detected),
-        None => ConfigCheck::NoneConfigured,
-    };
+    let config_check = map
+        .as_deref()
+        .map(|detected| map::config_check(input.configured_map.as_deref(), detected));
 
     let [c0, c1, c2] = segments.map(|s| s.curves);
     Ok(AxesMapResult {

@@ -95,15 +95,13 @@ fn chip_axis_name(axis: ChipAxis) -> &'static str {
     }
 }
 
-/// Compare the currently-configured axes_map with what was detected.
+/// Compare the configured axes_map with what was detected. A chip with no map set uses Klipper's
+/// default, the identity `x,y,z`, so that is what an unset map is compared as.
 pub(crate) fn config_check(configured: Option<&str>, detected: &str) -> ConfigCheck {
-    let Some(raw) = configured else {
-        return ConfigCheck::NoneConfigured;
-    };
-    let norm = raw.replace(' ', "").to_lowercase();
-    if norm == "x,y,z" {
-        return ConfigCheck::NoneConfigured;
-    }
+    let norm = configured.map_or_else(
+        || "x,y,z".to_owned(),
+        |raw| raw.replace(' ', "").to_lowercase(),
+    );
     let det_norm = detected.replace(' ', "").to_lowercase();
     if norm == det_norm {
         ConfigCheck::AlreadyCorrect
@@ -174,20 +172,25 @@ mod tests {
     }
 
     #[test]
-    fn config_check_ignores_spaces_and_identity() {
-        // No configured map → NoneConfigured.
-        assert_eq!(config_check(None, "x, -z, y"), ConfigCheck::NoneConfigured);
-        // Identity configured map → NoneConfigured.
+    fn config_check_compares_an_unset_map_as_the_identity() {
+        // No configured map is Klipper's default, x,y,z.
+        assert_eq!(config_check(None, "x, -z, y"), ConfigCheck::DoesNotMatch);
+        assert_eq!(config_check(None, "x, y, z"), ConfigCheck::AlreadyCorrect);
+        // An explicit identity map is the same as none.
         assert_eq!(
             config_check(Some("x, y, z"), "x, -z, y"),
-            ConfigCheck::NoneConfigured
+            ConfigCheck::DoesNotMatch
         );
-        // Matching map (spaces ignored) → AlreadyCorrect.
+        assert_eq!(
+            config_check(Some("X,Y,Z"), "x, y, z"),
+            ConfigCheck::AlreadyCorrect
+        );
+        // A matching map, spaces and case ignored.
         assert_eq!(
             config_check(Some("x,-z,y"), "x, -z, y"),
             ConfigCheck::AlreadyCorrect
         );
-        // Mismatching map → DoesNotMatch.
+        // A different map.
         assert_eq!(
             config_check(Some("-z, y, x"), "x, -z, y"),
             ConfigCheck::DoesNotMatch
