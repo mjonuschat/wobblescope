@@ -12,8 +12,11 @@ import { createHandler } from "./handler";
 import type { WorkerResponse } from "./protocol";
 import { useAxesMapAnalysis } from "./useAxesMapAnalysis";
 
-/** A worker that runs the real handler over the real wasm build. */
-function setup(fetchSample: (id: string, chip: number, segment: number) => Promise<ArrayBuffer>) {
+/**
+ * A worker that runs the real handler over the real wasm build, behind one query client, so a
+ * hook can be mounted again as the page is when the user comes back to it.
+ */
+function harness(fetchSample: (id: string, chip: number, segment: number) => Promise<ArrayBuffer>) {
   const handle = createHandler(async () => realWasm());
   const worker: WorkerLike = {
     onmessage: null,
@@ -31,7 +34,11 @@ function setup(fetchSample: (id: string, chip: number, segment: number) => Promi
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  return renderHook(() => useAxesMapAnalysis("cal1", client), { wrapper });
+  return { client, mount: () => renderHook(() => useAxesMapAnalysis("cal1", client), { wrapper }) };
+}
+
+function setup(fetchSample: (id: string, chip: number, segment: number) => Promise<ArrayBuffer>) {
+  return harness(fetchSample).mount();
 }
 
 const outcomes = (chips: { chip: string; state: string; result?: { map: string | null } }[]) =>
@@ -71,5 +78,63 @@ describe("useAxesMapAnalysis", () => {
     fail = false;
     await first.result.current.refetch();
     await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Analysed"));
+  });
+
+  describe("when the user navigates away and comes back", () => {
+    const downloads = (spy: { mock: { calls: unknown[][] } }, chip: number, segment: number) =>
+      spy.mock.calls.filter(([, c, s]) => c === chip && s === segment).length;
+
+    it("downloads_an_incomplete_chip_again_and_completes_it_once_the_failure_has_passed", async () => {
+      let fail = true;
+      const fetchSample = vi.fn(async (_id: string, chip: number, segment: number) => {
+        if (fail && chip === 1 && segment === 2) throw new Error("connection reset");
+        return calibrationFile(chip, segment);
+      });
+      const { mount } = harness(fetchSample);
+      const first = mount();
+      await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Incomplete"));
+      // The page is left; the cached outcomes stay for a while.
+      first.unmount();
+      fail = false;
+      const back = mount();
+      await waitFor(() => expect(back.result.current.data?.[1]?.state).toBe("Analysed"));
+      expect(outcomes(back.result.current.data!)).toEqual([
+        ["a", "Analysed", "x, y, z"],
+        ["b", "Analysed", "y, x, z"],
+      ]);
+      expect(downloads(fetchSample, 1, 2)).toBe(2);
+    });
+
+    it("keeps_an_incomplete_chip_incomplete_without_an_error_while_the_failure_lasts", async () => {
+      const fetchSample = vi.fn(async (_id: string, chip: number, segment: number) => {
+        if (chip === 1 && segment === 2) throw new Error("connection reset");
+        return calibrationFile(chip, segment);
+      });
+      const { mount } = harness(fetchSample);
+      const first = mount();
+      await waitFor(() => expect(first.result.current.data?.[1]?.state).toBe("Incomplete"));
+      first.unmount();
+      const back = mount();
+      await waitFor(() => expect(downloads(fetchSample, 1, 2)).toBe(2));
+      await waitFor(() => expect(back.result.current.isFetching).toBe(false));
+      expect(back.result.current.isError).toBe(false);
+      expect(back.result.current.data?.[1]?.state).toBe("Incomplete");
+    });
+
+    it("does_not_analyse_a_complete_result_again", async () => {
+      const fetchSample = vi.fn(async (_id: string, chip: number, segment: number) => calibrationFile(chip, segment));
+      const { client, mount } = harness(fetchSample);
+      // The worker keeps the files it has downloaded, so what shows a needless refetch is the analysis.
+      const analyse = vi.spyOn(client, "analyzeAxesMap");
+      const first = mount();
+      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+      expect(analyse).toHaveBeenCalledTimes(1);
+      first.unmount();
+      const back = mount();
+      // The cached outcomes are there at once and stay as they are.
+      expect(back.result.current.data).toBeDefined();
+      await waitFor(() => expect(back.result.current.isFetching).toBe(false));
+      expect(analyse).toHaveBeenCalledTimes(1);
+    });
   });
 });
