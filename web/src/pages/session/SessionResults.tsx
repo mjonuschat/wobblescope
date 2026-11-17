@@ -91,8 +91,7 @@ export function SessionResults({ id, header = defaultHeader }: { id: string; hea
     case "axesmap":
       return (
         <div className="space-y-4">
-          {header(null)}
-          <AxesMapResults id={id} meta={meta} />
+          <AxesMapResults id={id} meta={meta} header={header} />
           <MetaPanel meta={meta} />
         </div>
       );

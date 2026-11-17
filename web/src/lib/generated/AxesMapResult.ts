@@ -55,9 +55,10 @@ noise_verdict: NoiseVerdict,
  */
 quality: Quality, 
 /**
- * Whether the configured map matches the detected map.
+ * Whether the configured map (the identity when none is set) matches the detected map. `None`
+ * when no map was detected.
  */
-config_check: ConfigCheck, 
+config_check: ConfigCheck | null, 
 /**
  * Velocity curves per segment for plotting.
  */

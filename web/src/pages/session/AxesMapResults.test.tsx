@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAnalysisClient, type WorkerLike } from "@/analysis/client";
@@ -111,7 +111,7 @@ function result(chip: string, over: Partial<AxesMapResult> = {}): AxesMapResult 
     noise: 120,
     noise_verdict: "Fine",
     quality: { status: "Ok", messages: [] },
-    config_check: "none_configured",
+    config_check: "does_not_match",
     curves: curves(),
     core_version: "0.1.0",
     ...over,
@@ -155,6 +155,11 @@ function show(meta: SessionMeta, outcomes: AxesMapChip[]) {
 async function openTab(name: string) {
   fireEvent.click(await screen.findByRole("tab", { name }));
   return screen.findByRole("region", { name: `Chip ${name}` });
+}
+
+/** The Result card: chip tabs, the detected and configured map, the verdict, quality notes and the snippet. */
+async function summaryText(): Promise<string> {
+  return (await screen.findByRole("region", { name: "Result" })).textContent ?? "";
 }
 
 /** The text of the snippet block on screen, or null when there is none. */
@@ -207,12 +212,12 @@ describe("the axes-map result page", () => {
         },
       }),
     ]);
-    const tab = await openTab("adxl345 bed");
+    await openTab("adxl345 bed");
     const rows = (await screen.findAllByRole("row")).map((r) => r.textContent);
     expect(rows.find((r) => r?.startsWith("Y"))).toContain("-y");
     expect(rows.find((r) => r?.startsWith("X"))).toContain("not determined");
     expect(rows.find((r) => r?.startsWith("Z"))).toContain("not determined");
-    expect(tab.textContent).toContain("Only the Y axis was seen moving");
+    expect(await summaryText()).toContain("Only the Y axis was seen moving");
     expect(snippetText()).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
   });
@@ -229,10 +234,12 @@ describe("the axes-map result page", () => {
         quality: { status: "Error", messages: ["Same axis detected twice."] },
       }),
     ]);
-    expect((await openTab("still")).textContent).toMatch(/no motion seen by this chip/i);
+    await openTab("still");
+    expect(await summaryText()).toMatch(/no motion seen by this chip/i);
     expect(snippetText()).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
-    expect((await openTab("twisted")).textContent).toMatch(/unable to determine correctly/i);
+    await openTab("twisted");
+    expect(await summaryText()).toMatch(/unable to determine correctly/i);
     expect(snippetText()).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
   });
@@ -256,25 +263,150 @@ describe("the axes-map result page", () => {
     show(sessionMeta([chipMeta("same"), chipMeta("other"), chipMeta("unset")]), [
       analysed("same", { configured_map: "x, -z, y", config_check: "already_correct" }),
       analysed("other", { configured_map: "x, y, z", config_check: "does_not_match" }),
-      analysed("unset", { configured_map: null, config_check: "none_configured" }),
+      analysed("unset", { configured_map: null, config_check: "does_not_match" }),
     ]);
-    expect((await openTab("same")).textContent).toContain("already correct");
-    expect((await openTab("other")).textContent).toContain("does not match");
-    expect((await openTab("unset")).textContent).toContain("none configured");
+    await openTab("same");
+    expect(await summaryText()).toContain("matches the detected map");
+    expect(await summaryText()).toContain("No change needed");
+    await openTab("other");
+    expect(await summaryText()).toContain("differs from the detected map");
+    expect(await summaryText()).not.toContain("No change needed");
+    await openTab("unset");
+    expect(await summaryText()).toContain("differs from the detected map");
+  });
+
+  it("an_unset_map_is_shown_and_compared_as_x_y_z", async () => {
+    show(sessionMeta([chipMeta("plain")]), [
+      analysed("plain", { map: "x, y, z", configured_map: null, config_check: "already_correct" }),
+    ]);
+    await openTab("plain");
+    const text = await summaryText();
+    expect(text).toMatch(/Configured map\s*x, y, z/);
+    expect(text).toContain("matches the detected map");
+    expect(text).not.toMatch(/none configured/i);
   });
 
   it("the_configured_value_is_shown_from_the_result", async () => {
     // The session's chip record holds another value. The page shows the one the analysis compared.
     show(sessionMeta([chipMeta("set", { axes_map: "z, y, x" }), chipMeta("unset", { axes_map: "z, y, x" })]), [
       analysed("set", { configured_map: "x, -y, -z", config_check: "does_not_match" }),
-      analysed("unset", { configured_map: null, config_check: "none_configured" }),
+      analysed("unset", { configured_map: null, config_check: "does_not_match" }),
     ]);
-    const set = await openTab("set");
-    expect(set.textContent).toContain("x, -y, -z");
-    expect(set.textContent).not.toContain("z, y, x");
-    const unset = await openTab("unset");
-    expect(unset.textContent).toContain("none configured");
-    expect(unset.textContent).not.toContain("z, y, x");
+    await openTab("set");
+    const set = await summaryText();
+    expect(set).toContain("x, -y, -z");
+    expect(set).not.toContain("z, y, x");
+    await openTab("unset");
+    const unset = await summaryText();
+    expect(unset).toContain("x, y, z");
+    expect(unset).not.toContain("z, y, x");
+  });
+
+  it("the_detected_and_configured_maps_are_written_alike", async () => {
+    show(sessionMeta([chipMeta("c")]), [
+      analysed("c", { map: "x, -z, y", configured_map: "x,-z,y", config_check: "already_correct" }),
+    ]);
+    await openTab("c");
+    const text = await summaryText();
+    expect(text).toMatch(/Detected map\s*x, -z, y/);
+    expect(text).toMatch(/Configured map\s*x, -z, y/);
+    expect(text).not.toContain("x,-z,y");
+  });
+
+  it("a_good_detection_shows_a_status_and_no_callout_or_sentence", async () => {
+    show(sessionMeta([chipMeta("c")]), [analysed("c")]);
+    const tab = await openTab("c");
+    expect(tab.textContent).toMatch(/Detection quality\s*Good/);
+    expect(document.body.textContent).not.toContain("Detection quality: GOOD");
+    const card = await screen.findByRole("region", { name: "Result" });
+    expect(card.textContent).not.toContain("Detection quality:");
+    expect(within(card).queryByRole("alert")).toBeNull();
+  });
+
+  it("a_warning_is_a_callout_in_the_result_card_with_one_line_per_finding", async () => {
+    const angle = "High angle error detected (15.3 degrees)";
+    const noise = "High noise level (800 mm/s^2)";
+    show(sessionMeta([chipMeta("c")]), [analysed("c", { quality: { status: "Warning", messages: [angle, noise] } })]);
+    const tab = await openTab("c");
+    expect(tab.textContent).toMatch(/Detection quality\s*Warning/);
+    const card = await screen.findByRole("region", { name: "Result" });
+    const callout = within(card).getByText("Detection quality: Warning").closest('[role="status"]') as HTMLElement;
+    expect(callout).toBeTruthy();
+    expect(within(callout).getByText(angle).tagName).toBe("P");
+    expect(within(callout).getByText(noise).tagName).toBe("P");
+    expect(card.querySelector("ul")).toBeNull();
+    // The findings are not repeated in the chip panel.
+    expect(tab.textContent).not.toContain(angle);
+  });
+
+  it("an_error_is_announced_as_an_alert", async () => {
+    show(sessionMeta([chipMeta("c")]), [
+      analysed("c", {
+        state: "ambiguous",
+        map: null,
+        config_check: null,
+        euler_deg: null,
+        rotation: null,
+        quality: { status: "Error", messages: ["Same axis detected twice."] },
+      }),
+    ]);
+    await openTab("c");
+    const card = await screen.findByRole("region", { name: "Result" });
+    const alert = within(card).getByRole("alert");
+    expect(alert.textContent).toContain("Detection quality: Error");
+    expect(alert.textContent).toContain("Unable to determine correctly");
+    expect(alert.textContent).toContain("Same axis detected twice.");
+  });
+
+  it("an_axis_without_signal_is_called_inferred", async () => {
+    show(sessionMeta([chipMeta("c")]), [
+      analysed("c", {
+        axes: [
+          axis({ chip_axis: "X" }),
+          axis({ chip_axis: "Z", negative: true }),
+          axis({ state: "virtual", chip_axis: "Y", confidence: 0, tilt_deg: 0 }),
+        ],
+      }),
+    ]);
+    await openTab("c");
+    const rows = (await screen.findAllByRole("row")).map((r) => r.textContent);
+    expect(rows.find((r) => r?.startsWith("Z"))).toContain("Inferred");
+    expect(document.body.textContent).not.toMatch(/virtual/i);
+  });
+
+  it("the_page_shows_neither_euler_angles_nor_gravity", async () => {
+    show(sessionMeta([chipMeta("c")]), [analysed("c", { euler_deg: [90.9, -1.4, 5.7] })]);
+    const tab = await openTab("c");
+    expect(tab.textContent).toContain("Noise");
+    expect(document.body.textContent).not.toMatch(/euler|roll|pitch|yaw|gravity/i);
+  });
+
+  it("every_field_is_in_one_grid_and_the_health_notes_are_below_it", async () => {
+    show(sessionMeta([chipMeta("c")]), [analysed("c", {}, "Degraded", ["segment Y: 12 samples dropped"])]);
+    const tab = await openTab("c");
+    const grid = tab.querySelector("dl") as HTMLElement;
+    const labels = Array.from(grid.querySelectorAll("dt")).map((dt) => dt.textContent);
+    expect(labels).toEqual(["Mounted on", "Type", "Capture health", "Detection quality", "Noise"]);
+    const notes = within(tab).getByRole("list", { name: "Capture health notes" });
+    expect(notes.textContent).toContain("segment Y: 12 samples dropped");
+    expect(grid.contains(notes)).toBe(false);
+  });
+
+  it("the_mounting_is_written_in_title_case", async () => {
+    show(sessionMeta([chipMeta("c", { mounting: "toolhead" }), chipMeta("d", { mounting: "bed" })]), [
+      analysed("c"),
+      analysed("d"),
+    ]);
+    expect((await openTab("c")).textContent).toMatch(/Mounted on\s*Toolhead/);
+    expect((await openTab("d")).textContent).toMatch(/Mounted on\s*Bed/);
+  });
+
+  it("the_result_card_holds_the_chip_tabs_and_the_detected_map", async () => {
+    show(sessionMeta([chipMeta("a"), chipMeta("b")]), [analysed("a"), analysed("b")]);
+    const card = await screen.findByRole("region", { name: "Result" });
+    expect(card.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    expect(card.textContent).toContain("Detected map");
+    expect(card.textContent).toContain("x, -z, y");
   });
 
   it("a_degraded_complete_capture_shows_its_health_notes_and_keeps_the_snippet", async () => {
@@ -288,8 +420,8 @@ describe("the axes-map result page", () => {
 
   it("a_no_motion_result_shows_the_unknown_z_limit_note", async () => {
     show(sessionMeta([chipMeta("lis2dw bed", { chip_type: "lis2dw", mounting: "bed" })]), [noMotion("lis2dw bed")]);
-    const tab = await openTab("lis2dw bed");
-    expect(tab.textContent).toContain(NO_Z_LIMITS);
+    await openTab("lis2dw bed");
+    expect(await summaryText()).toContain(NO_Z_LIMITS);
   });
 
   it("the_mounting_is_shown_for_each_chip", async () => {
@@ -297,10 +429,10 @@ describe("the axes-map result page", () => {
       analysed("on bed"),
       { state: "Failed", chip: "old", message: "segment X: not enough samples" },
     ]);
-    expect((await openTab("on bed")).textContent).toMatch(/mounted on\s*bed/i);
+    expect((await openTab("on bed")).textContent).toMatch(/Mounted on\s*Bed/);
     const old = await openTab("old");
     // A session from before mountings were recorded was analysed as a toolhead chip.
-    expect(old.textContent).toMatch(/mounted on\s*toolhead/i);
+    expect(old.textContent).toMatch(/Mounted on\s*Toolhead/);
     expect(old.textContent).toContain("segment X: not enough samples");
   });
 

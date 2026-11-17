@@ -22,9 +22,69 @@ describe("the session details", () => {
     expect(screen.queryByText("MCU firmware")).toBeNull();
     expect(screen.queryByText("mcu: v0.13.0-658-gbd09e017")).toBeNull();
     const rows = screen.getAllByRole("row");
-    expect(within(rows[2]).getByText("x,z,-y")).toBeTruthy();
+    // Written as the Result card writes a map, with a space after each comma.
+    expect(within(rows[2]).getByText("x, z, -y")).toBeTruthy();
     // A chip whose config sets no axes map shows a dash.
     expect(within(rows[1]).getAllByText("–").length).toBeGreaterThan(0);
+  });
+
+  it("gives the long Klipper version and the probe points two columns so they do not wrap", () => {
+    const meta = twoAxisMeta();
+    meta.printer = {
+      name: "buster",
+      klipper_version: "v0.13.0-821-gaf81d23f-dirty",
+      mcu_firmware: [],
+      square_corner_velocity: null,
+      damping_ratio_x: null,
+      damping_ratio_y: null,
+    };
+    meta.probe_points = [{ position: [135.5, 139, 20] }, { position: [165.5, 139, 20] }];
+    render(<MetaPanel meta={meta} />);
+    const cell = (label: string) => screen.getByText(label).parentElement as HTMLElement;
+    expect(cell("Klipper").className).toContain("lg:col-span-3");
+    expect(cell("Probe Points").className).toContain("col-span-full");
+    // A short field stays one column wide.
+    expect(cell("Printer").className).not.toContain("col-span");
+  });
+
+  it("groups the recording and the printer, each in its own grid", () => {
+    const meta = twoAxisMeta();
+    meta.printer = {
+      name: "buster",
+      klipper_version: "v0.13.0-821-gaf81d23f-dirty",
+      mcu_firmware: [],
+      square_corner_velocity: 5,
+      damping_ratio_x: 0.059,
+      damping_ratio_y: 0.123,
+    };
+    render(<MetaPanel meta={meta} />);
+    const labelsOf = (name: string) =>
+      Array.from(screen.getByLabelText(name).querySelectorAll("dt")).map((dt) => dt.textContent);
+    expect(labelsOf("The recording")).toEqual(["Source", "Created", "Mode", "Outcome", "Probe Points"]);
+    expect(labelsOf("The printer")).toEqual([
+      "Printer",
+      "Klipper",
+      "Square corner velocity",
+      "Damping ratio X",
+      "Damping ratio Y",
+    ]);
+  });
+
+  it("leaves out the input shaper's settings for an axes-map calibration", () => {
+    const meta = calibrationMeta();
+    meta.printer = {
+      name: "buster",
+      klipper_version: "v0.13.0",
+      mcu_firmware: [],
+      square_corner_velocity: 5,
+      damping_ratio_x: 0.059,
+      damping_ratio_y: 0.123,
+    };
+    render(<MetaPanel meta={meta} />);
+    expect(screen.getByText("Klipper")).toBeTruthy();
+    expect(screen.queryByText("Square corner velocity")).toBeNull();
+    expect(screen.queryByText("Damping ratio X")).toBeNull();
+    expect(screen.queryByText("Damping ratio Y")).toBeNull();
   });
 
   it("shows the printer's corner velocity and damping ratios when they were recorded", () => {
@@ -143,10 +203,12 @@ describe("the session details", () => {
     });
   });
 
-  it("puts the outcome last among the recording's facts", () => {
+  it("keeps the outcome with the source, the time and the mode, and the probe points on a row of their own", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
-    const labels = [...document.querySelectorAll("dt")].map((dt) => dt.textContent);
-    const first = labels.indexOf("Source");
-    expect(labels.slice(first).indexOf("Outcome")).toBeGreaterThan(labels.slice(first).indexOf("Probe Points"));
+    const labels = Array.from(screen.getByLabelText("The recording").querySelectorAll("dt")).map(
+      (dt) => dt.textContent,
+    );
+    expect(labels.slice(0, 4)).toEqual(["Source", "Created", "Mode", "Outcome"]);
+    expect(labels[labels.length - 1]).toBe("Probe Points");
   });
 });

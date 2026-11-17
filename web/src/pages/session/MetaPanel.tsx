@@ -10,6 +10,7 @@ import type { Analysis } from "@/lib/generated/Analysis";
 import type { Outcome } from "@/lib/generated/Outcome";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
+import { formatMap } from "./axesMapFormat";
 import { directionLabel } from "./belts/UnsupportedDirections";
 import { effectiveSettings } from "./fit";
 
@@ -95,22 +96,29 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
   const degraded = degradedSegments(meta);
   return (
     <Panel title="Session" label="Session details">
-      <Fields>
+      <Fields aria-label="The recording">
         {row("Source", sourceText(meta))}
         {fileName(meta) !== null && row("File Name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
         {row("Mode", meta.axes_map_run ? "Axes map calibration" : (meta.mode ?? "Not recorded"))}
-        {row("Printer", meta.printer?.name ?? "Not recorded")}
-        {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version)}
-        {meta.printer?.square_corner_velocity != null &&
-          row("Square corner velocity", `${meta.printer.square_corner_velocity} mm/s`)}
-        {meta.printer?.damping_ratio_x != null && row("Damping ratio X", String(meta.printer.damping_ratio_x))}
-        {meta.printer?.damping_ratio_y != null && row("Damping ratio Y", String(meta.printer.damping_ratio_y))}
-        <Field label="Probe Points">
+        {row("Outcome", outcomeText(meta.outcome))}
+        <Field label="Probe Points" className="col-span-full">
           <ProbePoints points={meta.probe_points} />
         </Field>
-        {/* The last item, in the fourth column where there are four. */}
-        {row("Outcome", outcomeText(meta.outcome), "lg:col-start-4")}
+      </Fields>
+      <Fields aria-label="The printer">
+        {row("Printer", meta.printer?.name ?? "Not recorded")}
+        {meta.printer?.klipper_version && row("Klipper", meta.printer.klipper_version, "col-span-2 lg:col-span-3")}
+        {/* The input shaper's settings, which a calibration does not use. */}
+        {!meta.axes_map_run &&
+          meta.printer?.square_corner_velocity != null &&
+          row("Square corner velocity", `${meta.printer.square_corner_velocity} mm/s`)}
+        {!meta.axes_map_run &&
+          meta.printer?.damping_ratio_x != null &&
+          row("Damping ratio X", String(meta.printer.damping_ratio_x))}
+        {!meta.axes_map_run &&
+          meta.printer?.damping_ratio_y != null &&
+          row("Damping ratio Y", String(meta.printer.damping_ratio_y))}
       </Fields>
       {s && (
         <Fields aria-label="Recorded sweep settings">
@@ -150,7 +158,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
             <TableRow key={c.name} className="align-top">
               <TableCell className="font-mono">{c.name}</TableCell>
               <TableCell>{c.chip_type ?? "–"}</TableCell>
-              <TableCell className="font-mono">{c.axes_map ?? "–"}</TableCell>
+              <TableCell className="font-mono">{c.axes_map === null ? "–" : formatMap(c.axes_map)}</TableCell>
               <TableCell className="font-mono">
                 {c.nominal_rate_hz ?? "–"} / {c.observed_rate_hz?.toFixed(0) ?? "–"} Hz
               </TableCell>

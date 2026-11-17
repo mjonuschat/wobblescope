@@ -13,11 +13,13 @@ import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { formatMm } from "@/lib/parse";
 import type { FinishedOutcome } from "@/lib/generated/FinishedOutcome";
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
 import type { TestState } from "@/lib/generated/TestState";
 
+import { CHIP_AXIS_COLORS } from "@/pages/session/AxesMapPlot";
 import { SessionResults } from "@/pages/session/SessionResults";
 
 import { LiveChart } from "./LiveChart";
@@ -51,6 +53,10 @@ export const BELT_MINIMUMS = "Belt tests need Klipper v0.12.0 or newer, or Kalic
 
 export const AUTO_CONTINUE_SECONDS = 5;
 
+/** What the user is told when a calibration could not put Klipper's state back. */
+export const RESTART_INSTRUCTION =
+  "The calibration may have left changed acceleration limits or input shaping. Send RESTART from the Klipper console. The printer needs homing afterwards, and any positioning mode or offsets you rely on must be set again.";
+
 interface ProgressProps {
   test: TestState;
   /** Whether the live socket is open. */
@@ -75,6 +81,46 @@ function useCountdown(active: boolean, onDone: () => void): number | null {
   return active ? Math.max(left, 0) : null;
 }
 
+/** The level at which a signal bar is full, in mm/s². Display only; the bar is on a square-root scale. */
+const LEVEL_FULL = 1000;
+
+/**
+ * Each chip's vibration on its own x, y and z axes while a calibration moves. The bar for the chip
+ * axis that follows the current move should rise well above the others.
+ */
+function SignalLevels({ test }: { test: TestState }) {
+  const shown = test.chips.filter((c) => c.level);
+  if (shown.length === 0) return <p className="text-sm text-muted-foreground">Waiting for the chips…</p>;
+  return (
+    <div className="space-y-4">
+      {shown.map(({ chip, level }) => (
+        <section key={chip} aria-label={`Signal level of ${chip}`} className="space-y-1.5">
+          <h3 className="font-mono text-sm">{chip}</h3>
+          <ul className="grid grid-cols-[auto_1fr_6rem] items-center gap-x-3 gap-y-1 text-sm">
+            {(level ?? []).map((rms, i) => (
+              <li key={"xyz"[i]} className="contents">
+                <span className="font-medium">{"xyz"[i]}</span>
+                <span aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className="block h-full rounded-full"
+                    style={{
+                      width: `${Math.min(1, Math.sqrt(rms / LEVEL_FULL)) * 100}%`,
+                      backgroundColor: CHIP_AXIS_COLORS[i],
+                    }}
+                  />
+                </span>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {Math.round(rms)} <span className="text-xs">mm/s²</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 /**
  * A running test: where it is, how long it has run and each chip's signal. When the test has
  * ended it stays for a few seconds, so the last of the graph can be seen, and then goes on.
@@ -85,7 +131,11 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
   const axesMap = test.kind === "axes_map";
   const move = axesMap ? AXES_MAP_MOVES[test.segment - 1] : undefined;
   const label = move ? `Moving ${move}` : test.axis ? segmentLabel(test.axis) : null;
-  const segment = `${test.segment} of ${test.segments}${label ? `: ${label}` : ""}`;
+  // A run that completed has done every segment, whatever the last live snapshot said.
+  const segment =
+    ended?.outcome === "complete"
+      ? `${test.segments} of ${test.segments}`
+      : `${test.segment} of ${test.segments}${label ? `: ${label}` : ""}`;
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
   return (
@@ -101,33 +151,37 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
           <dd>{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</dd>
           <dt className="text-muted-foreground">Segment</dt>
           <dd>{segment}</dd>
-          {test.position && (
+          {test.position && ended === null && (
             <>
               <dt className="text-muted-foreground">Position</dt>
-              <dd>{formatPosition(test.position)}</dd>
+              <dd className="flex items-baseline gap-4 tabular-nums">
+                <span className="sr-only">{formatPosition(test.position)}</span>
+                {(["X", "Y", "Z"] as const).map((axis, i) => (
+                  <span key={axis} aria-hidden="true">
+                    <span className="mr-1 text-muted-foreground">{axis}</span>
+                    {formatMm(test.position?.[i] ?? 0)}
+                  </span>
+                ))}
+                <span aria-hidden="true" className="text-muted-foreground">
+                  mm
+                </span>
+              </dd>
             </>
           )}
         </dl>
-        <Progress value={percent} aria-label="Segment progress" />
-        <p className="text-sm text-muted-foreground">
-          {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}
-        </p>
-        {axesMap && (
-          <ul aria-label="Signal level" className="space-y-0.5 text-sm text-muted-foreground">
-            {test.chips.map(({ chip, level }) =>
-              level ? (
-                <li key={chip}>
-                  {chip}: {level.map((rms) => Math.round(rms)).join(" / ")} mm/s²
-                </li>
-              ) : null,
-            )}
-          </ul>
+        {ended === null && (
+          <>
+            <Progress value={percent} aria-label="Segment progress" />
+            <p className="text-sm text-muted-foreground">
+              {formatDuration(test.elapsed_seconds)} of about {formatDuration(test.expected_segment_seconds)}
+            </p>
+          </>
         )}
       </Panel>
-      {!axesMap && (
-        <Panel title="Signal">
-          <LiveChart test={test} />
-        </Panel>
+      {/* A sweep's graph stays so its last part can be seen. The calibration's levels are only the last
+          live reading, which says nothing once the chips have stopped. */}
+      {!(axesMap && ended !== null) && (
+        <Panel title="Signal">{axesMap ? <SignalLevels test={test} /> : <LiveChart test={test} />}</Panel>
       )}
       <Separator />
       <div className="flex items-center justify-between gap-4">
@@ -238,6 +292,11 @@ export function ResultView({ last, onNewTest }: ResultProps) {
     >
       {details}
       {summary}
+      {last.needs_restart && (
+        <p role="alert" className="text-sm text-amber-400">
+          {RESTART_INSTRUCTION}
+        </p>
+      )}
       {last.motion_uncertain && (
         <div className="space-y-1">
           <p role="alert" className="text-sm text-amber-400">

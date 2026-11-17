@@ -3,4 +3,4 @@
 /**
  * Whether the detected map agrees with the configured map.
  */
-export type ConfigCheck = "none_configured" | "already_correct" | "does_not_match";
+export type ConfigCheck = "already_correct" | "does_not_match";

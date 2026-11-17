@@ -3,10 +3,11 @@ import { useId } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { EChart } from "@/components/charts/EChart";
+import { InfoHint } from "@/components/InfoHint";
+import { cn } from "@/lib/utils";
 import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisMatch } from "@/lib/generated/AxisMatch";
 import type { ChipAxis } from "@/lib/generated/ChipAxis";
-import type { NoiseVerdict } from "@/lib/generated/NoiseVerdict";
 
 /** Shake&Tune's colours for the chip axes x, y and z. */
 export const CHIP_AXIS_COLORS = ["#70088C", "#FF8D32", "#F2055C"] as const;
@@ -19,7 +20,6 @@ const GRID = "rgba(255, 255, 255, 0.08)";
 const WATERMARK = "rgba(212, 212, 212, 0.3)";
 const VIRTUAL_ZONE = "rgba(128, 128, 128, 0.15)";
 const VIRTUAL_TEXT = "rgba(160, 160, 160, 0.45)";
-const NOISE_WORDS: Record<NoiseVerdict, string> = { Fine: "OK", High: "High", TooHigh: "Too high" };
 
 /** A chip axis as the map writes it, with its sign: `-z`. */
 export function chipAxisText(match: AxisMatch): string {
@@ -48,7 +48,7 @@ export function movementZones(result: AxesMapResult): MovementZone[] {
     offset = end;
     const virtual = match.state === "virtual";
     const note = virtual
-      ? "Extrapolated (no signal on this axis)"
+      ? "Inferred (no signal on this axis)"
       : match.state === "measured"
         ? `Confidence: ${Math.round(match.confidence * 100)}%`
         : "Not determined";
@@ -63,14 +63,6 @@ export function movementZones(result: AxesMapResult): MovementZone[] {
         : null;
     return { axis: MACHINE_AXES[i], start, end, virtual, note, peak };
   });
-}
-
-export function gravityText(result: AxesMapResult): string {
-  return `Measured gravity: ${result.gravity.toFixed(3)} m/s²`;
-}
-
-export function noiseText(result: AxesMapResult): string {
-  return `Noise: ${result.noise.toFixed(0)} mm/s² (${NOISE_WORDS[result.noise_verdict]})`;
 }
 
 /**
@@ -127,7 +119,7 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
         itemStyle: { color: z.virtual ? VIRTUAL_ZONE : "transparent" },
         label: {
           position: "inside",
-          formatter: `{letter|${z.axis}}\n{note|${z.note}}`,
+          formatter: `{letter|${z.axis}}\n{note|${z.note.replace(" (", "\n(")}}`,
           rich: {
             letter: { fontSize: 56, fontWeight: "bold", color: z.virtual ? VIRTUAL_TEXT : WATERMARK },
             note: {
@@ -147,15 +139,7 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
     textStyle: { color: TEXT },
     tooltip: { trigger: "axis", valueFormatter: (v: number) => `${v.toFixed(1)} mm/s` },
     legend: { data: series.map((s) => s.name as string), top: 0, left: 56, textStyle: { color: TEXT } },
-    graphic: [
-      {
-        type: "text",
-        right: 24,
-        top: 0,
-        style: { text: `${gravityText(result)}\n${noiseText(result)}`, fill: MUTED, fontSize: 12, align: "right" },
-      },
-    ],
-    grid: { top: 52, left: 64, right: 24, bottom: 40 },
+    grid: { top: 52, left: 76, right: 24, bottom: 40 },
     xAxis: {
       type: "value",
       name: "Time (s)",
@@ -163,9 +147,17 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
       nameGap: 26,
       min: 0,
       max: total,
+      axisLabel: { showMaxLabel: false },
       splitLine: { lineStyle: { color: GRID } },
     },
-    yAxis: { type: "value", name: "Velocity (mm/s)", splitLine: { lineStyle: { color: GRID } } },
+    yAxis: {
+      type: "value",
+      name: "Velocity (mm/s)",
+      nameLocation: "middle",
+      nameRotate: 90,
+      nameGap: 46,
+      splitLine: { lineStyle: { color: GRID } },
+    },
     series,
   };
 }
@@ -187,15 +179,14 @@ export interface OrientationArrow {
 
 /**
  * The dashed machine axes and the chip axes of the orientation view. Column `i` of the rotation
- * is where chip axis `i` points in machine coordinates. The chip axis behind a virtual machine
- * axis is labelled "(virtual)". Null when there is no rotation.
+ * is where chip axis `i` points in machine coordinates. The two sets are told apart by colour, and
+ * both are labelled X, Y and Z. Null when there is no rotation.
  */
 export function orientationArrows(
   result: AxesMapResult,
 ): { machine: OrientationArrow[]; chip: OrientationArrow[] } | null {
   const rotation = result.rotation;
   if (rotation === null) return null;
-  const virtualChipAxis = result.axes.find((a) => a.state === "virtual")?.chip_axis ?? null;
   const scaled = (v: number[], s: number) => isometric(v.map((c) => c * s));
   const machine = MACHINE_AXES.map((label, i) => {
     const unit = [0, 0, 0];
@@ -204,32 +195,26 @@ export function orientationArrows(
   });
   const chip = CHIP_AXIS_COLORS.map((color, i) => {
     const column = [rotation[0][i], rotation[1][i], rotation[2][i]];
-    const name = "xyz"[i];
-    const virtual = virtualChipAxis !== null && CHIP_AXIS_INDEX[virtualChipAxis] === i;
     return {
-      label: virtual ? `${name} (virtual)` : name,
+      label: "XYZ"[i],
       color,
       end: scaled(column, 0.9),
-      labelAt: scaled(column, 1.05),
+      labelAt: besideArrow(scaled(column, 0.9)),
     };
   });
   return { machine, chip };
 }
 
-const degrees = (value: number) => `${value.toFixed(1)}°`;
-
-/** The detected map, one line per machine axis and the Euler angles, as Shake&Tune's title has them. */
-export function orientationHeader(result: AxesMapResult): { map: string; axes: string[]; euler: string | null } {
-  const axes = result.axes.map((match, i) => {
-    const machine = MACHINE_AXES[i];
-    if (match.state === "not_determined" || match.chip_axis === null) return `${machine}: not determined`;
-    const detail = match.state === "virtual" ? "(extrapolated)" : `(angle error: ${degrees(match.tilt_deg)})`;
-    return `${machine} -> ${chipAxisText(match)} ${detail}`;
-  });
-  const euler = result.euler_deg
-    ? `Euler orientation: X=${degrees(result.euler_deg[0])} Y=${degrees(result.euler_deg[1])} Z=${degrees(result.euler_deg[2])}`
-    : null;
-  return { map: `Detected axes map: ${result.map ?? "none"}`, axes, euler };
+/**
+ * A label position beside an arrow, to its left, near the tip. Chip axes often lie along the
+ * machine axes, so a label past the tip would sit on the machine arrow and its label.
+ */
+function besideArrow(end: [number, number]): [number, number] {
+  const length = Math.hypot(end[0], end[1]) || 1;
+  const [dx, dy] = [end[0] / length, end[1] / length];
+  const side = dy > 0 ? 1 : -1;
+  const [px, py] = [-dy * side, dx * side];
+  return [end[0] * 0.8 + px * 0.12, end[1] * 0.8 + py * 0.12];
 }
 
 function Arrow({
@@ -308,9 +293,9 @@ function OrientationView({ result }: { result: AxesMapResult }) {
             x={a.labelAt[0]}
             y={a.labelAt[1]}
             fill={a.color}
-            fontSize={a.label.length > 1 ? 0.12 : 0.18}
+            fontSize={0.18}
             fontWeight="bold"
-            textAnchor="middle"
+            textAnchor="end"
             dominantBaseline="middle"
           >
             {a.label}
@@ -322,44 +307,39 @@ function OrientationView({ result }: { result: AxesMapResult }) {
 }
 
 function MovementChart({ result, height }: { result: AxesMapResult; height?: number | string }) {
-  return (
-    <EChart
-      option={movementOption(result)}
-      label={`Movement sequence of ${result.chip}: ${gravityText(result)}, ${noiseText(result)}`}
-      height={height}
-    />
-  );
+  return <EChart option={movementOption(result)} label={`Movement sequence of ${result.chip}`} height={height} />;
 }
 
-/** Shake&Tune's axes-map plot: the header lines, the movement sequence and the orientation view. */
+const GRAPH_TITLE = "text-sm font-medium";
+
+/** The axes-map plot: the movement sequence and the orientation view. The map itself is in the Result card. */
 export function AxesMapPlot({ result }: { result: AxesMapResult }) {
-  const header = orientationHeader(result);
   return (
-    <div className="space-y-3">
-      <div className="space-y-0.5 font-mono text-sm">
-        <p className="font-semibold">{header.map}</p>
-        {header.axes.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
-        {header.euler && <p>{header.euler}</p>}
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[5fr_3fr]">
-        <div className="relative">
-          <MovementChart result={result} />
-          <div className="absolute top-6 right-0">
-            <ExpandDialog title={`Movement sequence: ${result.chip}`}>
-              <MovementChart result={result} height={EXPANDED_CHART_HEIGHT} />
-            </ExpandDialog>
+    <div className={cn("grid gap-4", result.rotation !== null && "lg:grid-cols-[5fr_3fr]")}>
+      <section aria-labelledby="movement-title" className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <h3 id="movement-title" className={GRAPH_TITLE}>
+            Movement sequence
+          </h3>
+          <ExpandDialog title={`Movement sequence: ${result.chip}`}>
+            <MovementChart result={result} height={EXPANDED_CHART_HEIGHT} />
+          </ExpandDialog>
+        </div>
+        <MovementChart result={result} />
+      </section>
+      {result.rotation !== null && (
+        <section aria-labelledby="orientation-title" className="space-y-1">
+          <div className="flex h-8 items-center gap-1">
+            <h3 id="orientation-title" className={GRAPH_TITLE}>
+              Chip orientation
+            </h3>
+            <InfoHint label="Chip orientation">Dashed: printer axes. Coloured: chip axes, as mounted.</InfoHint>
           </div>
-        </div>
-        <div className="flex items-center justify-center">
-          <OrientationView result={result} />
-        </div>
-      </div>
-      <ul className="sr-only">
-        <li>{gravityText(result)}</li>
-        <li>{noiseText(result)}</li>
-      </ul>
+          <div className="flex justify-center">
+            <OrientationView result={result} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

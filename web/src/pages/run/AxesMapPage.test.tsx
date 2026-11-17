@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FinishedTest } from "@/lib/generated/FinishedTest";
@@ -10,19 +11,27 @@ import { renderRoute } from "@/test/render";
 import { apiPath, stubApiWithStatus } from "@/test/status";
 import { FakeSocket, stubWebSocket } from "@/test/websocket";
 
+import { RESTART_INSTRUCTION } from "./ProgressView";
+
+vi.mock("@/pages/session/SessionResults", () => ({
+  SessionResults: ({ id, header }: { id: string; header?: (save: unknown) => ReactNode }) => (
+    <div>
+      {header?.(null)}
+      <p>Results of {id}</p>
+    </div>
+  ),
+}));
+
 vi.mock("@/components/charts/EChart", () => ({
   EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
 }));
 
-const RESTART_INSTRUCTION =
-  "The calibration may have left changed acceleration limits or input shaping. Send RESTART from the Klipper console. The printer needs homing afterwards, and any positioning mode or offsets you rely on must be set again.";
-
-function api(start: Reply = { status: 202, body: { id: "run-1" } }) {
+function api(start: Reply = { status: 202, body: { id: "run-1" } }, busy: string | null = null) {
   return stubApiWithStatus((call: ApiCall) => {
     const path = apiPath(call);
     if (path === "settings") return { body: printerSettings() };
     if (path === "chips") return { body: chipsSnapshot() };
-    if (path === "printer") return { body: { homed_axes: "xyz" } };
+    if (path === "printer") return { body: { homed_axes: "xyz", busy } };
     if (path === "axes-map" && call.method === "POST") return start;
     return { status: 404, body: { error: "not_found", message: "no" } };
   });
@@ -30,13 +39,12 @@ function api(start: Reply = { status: 202, body: { id: "run-1" } }) {
 
 const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && apiPath(c) === "axes-map");
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
-const startButton = () =>
-  screen.getByRole("button", { name: /Start calibration|Checking printer/ }) as HTMLButtonElement;
+const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ }) as HTMLButtonElement;
 
 async function open(start?: Reply) {
   const calls = api(start);
   renderRoute("/run/axes-map");
-  await screen.findByRole("button", { name: "Start calibration" });
+  await screen.findByRole("button", { name: "Run Test" });
   await waitFor(() => expect(startButton().disabled).toBe(false));
   return calls;
 }
@@ -74,14 +82,29 @@ async function openWithFinished(last: FinishedTest) {
 describe("the axes-map run page", () => {
   beforeEach(() => stubWebSocket({ idle: true }));
 
+  it("shows_the_fixed_start_of_the_moves_as_a_read_only_test_point", async () => {
+    await open();
+    const x = field(/^X$/);
+    const y = field(/^Y$/);
+    expect([x.readOnly, y.readOnly]).toEqual([true, true]);
+    expect(field(/^Z$/).readOnly).toBe(false);
+    expect([x.value, y.value]).toEqual(["135.5", "139"]);
+  });
+
+  it("keeps_start_disabled_while_the_printer_is_busy_even_if_every_axis_reads_homed", async () => {
+    api(undefined, "The printer is homing.");
+    renderRoute("/run/axes-map");
+    expect(await screen.findByText("The printer is homing.")).toBeTruthy();
+    expect(startButton().disabled).toBe(true);
+  });
+
   it("submits_chips_mounting_and_overrides", async () => {
     const calls = await open();
-    expect(field(/Z height/).value).toBe("20");
+    expect(field(/^Z$/).value).toBe("20");
     expect(field(/^Speed/).value).toBe("80");
     expect(field(/Acceleration/).value).toBe("1500");
     expect(field(/Travel speed/).value).toBe("120");
-    expect(screen.getByText("A chip mounted under the nozzle needs a higher Z height")).toBeTruthy();
-    fireEvent.change(field(/Z height/), { target: { value: "40" } });
+    fireEvent.change(field(/^Z$/), { target: { value: "40" } });
     fireEvent.change(field(/Acceleration/), { target: { value: "2000" } });
     fireEvent.click(startButton());
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
@@ -121,7 +144,7 @@ describe("the axes-map run page", () => {
 
   it("bed_mounting_is_sent_for_a_bed_chip", async () => {
     const calls = await open();
-    fireEvent.click(screen.getByRole("checkbox", { name: "adxl345" }));
+    fireEvent.click(screen.getByRole("switch", { name: "adxl345" }));
     await chooseMounting("adxl345", "Bed");
     fireEvent.click(startButton());
     await waitFor(() => expect(posted(calls)).toHaveLength(1));
@@ -133,27 +156,33 @@ describe("the axes-map run page", () => {
 
   it("refuses to start with no chip chosen", async () => {
     await open();
-    fireEvent.click(screen.getByRole("checkbox", { name: "lis2dw ebb36" }));
+    fireEvent.click(screen.getByRole("switch", { name: "lis2dw ebb36" }));
     expect(screen.getByText("Choose at least one chip.")).toBeTruthy();
     expect(startButton().disabled).toBe(true);
   });
 
   it("shows_the_restart_instruction_only_when_needs_restart", async () => {
     await openWithFinished(finished());
-    expect(await screen.findByText("The test finished.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "New test" })).toBeTruthy();
     expect(screen.queryByText(RESTART_INSTRUCTION)).toBeNull();
   });
 
   it("shows the restart instruction when the run needs a restart", async () => {
     await openWithFinished(finished({ outcome: "failed", reason: "restore failed", needs_restart: true }));
     expect(await screen.findByText(RESTART_INSTRUCTION)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "New calibration" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "New test" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("links_to_the_session_when_done", async () => {
+  it("shows_the_session_results_on_the_page_when_done", async () => {
     await openWithFinished(finished());
-    const link = await screen.findByRole("link", { name: "Open the session" });
-    expect(link.getAttribute("href")).toBe("/sessions/run-1");
+    expect(await screen.findByText("Results of run-1")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Open the session" })).toBeNull();
+  });
+
+  it("shows_no_results_when_no_session_was_saved", async () => {
+    await openWithFinished(finished({ outcome: "failed", reason: "chip lost", session_id: null }));
+    expect(await screen.findByText("No session was saved.")).toBeTruthy();
+    expect(screen.queryByText(/^Results of/)).toBeNull();
   });
 
   it("names the move of the running segment and draws no frequency chart", async () => {
@@ -220,13 +249,13 @@ describe("a test of another kind on the axes-map run page", () => {
     await openWith({ test: running(other), last: null });
     expect(await screen.findByText(text)).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
-    expect(await screen.findByRole("button", { name: /Start calibration|Checking printer/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByLabelText("Segment progress")).toBeNull();
   });
 
   it("a finished test of another kind shows the form, not the result", async () => {
     await openWith({ test: null, last: finished({ kind: "belts", outcome: "failed", reason: "boom" }) });
-    expect(await screen.findByRole("button", { name: /Start calibration|Checking printer/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByText("boom")).toBeNull();
   });
 });

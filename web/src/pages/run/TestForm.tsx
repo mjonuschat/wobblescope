@@ -1,9 +1,7 @@
-import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
-import { useIsMutating } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { ChevronDownIcon, MinusIcon, PlayIcon, PlusIcon } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
@@ -18,16 +16,16 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
-import { homeMutationKey, usePrinterState, useStartTest } from "@/lib/api/queries";
+import { useStartTest } from "@/lib/api/queries";
 import type { Axis } from "@/lib/generated/Axis";
 import type { CheckFailure } from "@/lib/generated/CheckFailure";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { Mode } from "@/lib/generated/Mode";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { TestKind } from "@/lib/generated/TestKind";
-import { parseNumber } from "@/lib/parse";
-import { homedTone } from "@/components/PrinterControls";
+import { formatMm, parseNumber } from "@/lib/parse";
 
+import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
@@ -69,34 +67,13 @@ interface Props {
 }
 
 function rowFrom(point: [number, number, number] | null): PointRow {
-  return point ? { x: String(point[0]), y: String(point[1]), z: String(point[2]) } : { x: "", y: "", z: "" };
+  return point ? { x: formatMm(point[0]), y: formatMm(point[1]), z: formatMm(point[2]) } : { x: "", y: "", z: "" };
 }
 
 /** The daemon names the field it refuses as a `field: reason` prefix. */
 function fieldOf(message: string): { field: string; text: string } | null {
   const match = /^([a-z_]+): (.*)$/s.exec(message);
   return match ? { field: match[1], text: match[2] } : null;
-}
-
-function FieldError({ name, text }: { name: string; text: string | undefined }) {
-  if (!text) return null;
-  return (
-    <p id={`error-${name}`} role="alert" className="text-sm text-destructive">
-      {text}
-    </p>
-  );
-}
-
-function FormCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <Card>
-      <CardHeader className="flex items-center justify-between gap-4">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
-        {action}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
 }
 
 /** The X, Y and Z inputs of one test point; ids and labels are what the tests and error links rely on. */
@@ -133,19 +110,8 @@ function PointInputs({
   );
 }
 
-function ChoiceRow({ label, error, children }: { label: string; error: ReactNode; children: ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
-      {children}
-      {error}
-    </div>
-  );
-}
-
 export function TestForm({ kind, settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
-  const printer = usePrinterState(true);
   const belts = kind === "belts";
   const [axes, setAxes] = useState<Axis[]>(["X", "Y"]);
   const [chosenMode, setChosenMode] = useState<Mode | null>(null);
@@ -184,17 +150,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
     ({ key }) => settings.settings[key].needed && defaultOf(key) === null && overrides[key] === undefined,
   );
 
-  // The poll may lag behind a Home pressed here, so the pending mutation counts at once.
-  const homing = useIsMutating({ mutationKey: homeMutationKey }) > 0;
-  let problem = blocked;
-  if (!problem && printer.isPending) problem = "Checking whether the printer is homed…";
-  if (!problem && homing) problem = "The printer is homing.";
-  if (!problem && printer.data?.busy) problem = printer.data.busy;
-  if (!problem && printer.data && homedTone(printer.data.homed_axes) !== "full") {
-    const axes = printer.data.homed_axes ?? "";
-    const notHomed = ["X", "Y", "Z"].filter((a) => !axes.toLowerCase().includes(a.toLowerCase()));
-    problem = `Home the printer first. Not homed: ${notHomed.join(", ")}.`;
-  }
+  let problem = usePrinterProblem(blocked);
   if (!problem && chips.length === 0) problem = "Choose at least one chip.";
   if (!problem && !belts && axes.length === 0) problem = "Choose at least one axis.";
   if (!problem && !pointsValid) problem = "Give every test point an X, Y and Z.";
@@ -263,25 +219,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
     ) : null;
 
   const anyOverride = OVERRIDE_FIELDS.some(({ key }) => (texts[key] ?? "") !== "");
-  const resetButton = (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Reset"
-            disabled={!anyOverride}
-            onClick={() => setTexts({})}
-          />
-        }
-      >
-        <RotateCcwIcon />
-      </TooltipTrigger>
-      <TooltipContent side="top">Back to the printer's values</TooltipContent>
-    </Tooltip>
-  );
+  const resetButton = <ResetButton disabled={!anyOverride} onClick={() => setTexts({})} />;
 
   const overrideInput = (key: OverrideKey, unit: string, extra: { label?: string; className?: string } = {}) => {
     const setting = settings.settings[key];

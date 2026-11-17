@@ -1,27 +1,41 @@
+import { Callout } from "@/components/Callout";
 import { Field, Fields } from "@/components/Fields";
 import { Panel } from "@/components/Panel";
+import { Dot, type Tone } from "@/components/StatusDots";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisState } from "@/lib/generated/AxisState";
 import type { ChipMeta } from "@/lib/generated/ChipMeta";
 import type { ConfigCheck } from "@/lib/generated/ConfigCheck";
+import type { QualityStatus } from "@/lib/generated/QualityStatus";
 
-import { AxesMapPlot, chipAxisText, noiseText } from "./AxesMapPlot";
+import { mountingLabel } from "@/lib/mounting";
+
+import { AxesMapPlot, chipAxisText } from "./AxesMapPlot";
 import { CopyButton } from "./CopyButton";
+import { formatMap, noiseText } from "./axesMapFormat";
 import { axesMapSnippet } from "./axesMapSnippet";
 
 const STATE_WORDS: Record<AxisState, string> = {
   measured: "Measured",
-  virtual: "Virtual",
+  virtual: "Inferred",
   not_determined: "not determined",
 };
 
 const CONFIG_WORDS: Record<ConfigCheck, string> = {
-  already_correct: "already correct",
-  does_not_match: "does not match",
-  none_configured: "none configured",
+  already_correct: "matches the detected map",
+  does_not_match: "differs from the detected map",
 };
+
+/** The map Klipper uses for a chip with no `axes_map` set. */
+const QUALITY_WORDS: Record<QualityStatus, { word: string; tone: Tone }> = {
+  Ok: { word: "Good", tone: "ok" },
+  Warning: { word: "Warning", tone: "warn" },
+  Error: { word: "Error", tone: "error" },
+};
+
+const DEFAULT_MAP = "x, y, z";
 
 const degrees = (value: number) => `${value.toFixed(1)}°`;
 
@@ -70,76 +84,108 @@ function stateText(result: AxesMapResult): string | null {
   }
 }
 
-function Analysed({ outcome, chip }: { outcome: Extract<AxesMapChip, { state: "Analysed" }>; chip: ChipMeta | null }) {
+/** The snippet to put in the printer config, or null when the result is not a complete map. */
+function snippetOf(outcome: Extract<AxesMapChip, { state: "Analysed" }>, chip: ChipMeta | null): string | null {
   const { result } = outcome;
   // Only a complete map gets a snippet, so a partial or noise-built map never reaches the config.
-  const snippet =
-    result.state === "complete" && result.map !== null
-      ? axesMapSnippet({ name: outcome.chip, chip_type: chip?.chip_type ?? null }, result.map)
-      : null;
+  return result.state === "complete" && result.map !== null
+    ? axesMapSnippet({ name: outcome.chip, chip_type: chip?.chip_type ?? null }, result.map)
+    : null;
+}
+
+/**
+ * What the Result card says about a chip: the detected map, the configured one with whether they
+ * agree, what the analysis could not determine, and the snippet to copy.
+ */
+export function AxesMapSummary({
+  outcome,
+  chip,
+}: {
+  outcome: Extract<AxesMapChip, { state: "Analysed" }>;
+  chip: ChipMeta | null;
+}) {
+  const { result } = outcome;
+  const snippet = snippetOf(outcome, chip);
   const state = stateText(result);
   return (
-    <>
-      {snippet !== null && (
-        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <pre className="font-mono text-sm">{snippet}</pre>
-          <CopyButton text={snippet} />
-        </div>
-      )}
-      {state && (
-        <p role="status" className="text-sm">
-          {state}
-        </p>
-      )}
+    <div className="space-y-4">
       <Fields>
-        <Field label="Configured">
-          {result.configured_map ?? "none configured"}
-          {snippet !== null && result.configured_map !== null && (
-            <span className="text-muted-foreground"> ({CONFIG_WORDS[result.config_check]})</span>
+        <Field label="Detected map">{result.map === null ? "not determined" : formatMap(result.map)}</Field>
+        <Field label="Configured map" className="sm:col-span-2">
+          {result.configured_map === null ? DEFAULT_MAP : formatMap(result.configured_map)}
+          {result.config_check !== null && (
+            <span className="font-sans text-muted-foreground"> ({CONFIG_WORDS[result.config_check]})</span>
           )}
         </Field>
-        <Field label="Euler angles">
-          {result.euler_deg ? result.euler_deg.map((a, i) => `${"XYZ"[i]} ${degrees(a)}`).join(", ") : "–"}
-        </Field>
-        <Field label="Gravity">{result.gravity.toFixed(3)} m/s²</Field>
-        <Field label="Noise">{noiseText(result).replace(/^Noise: /, "")}</Field>
       </Fields>
-      {result.quality.messages.length > 0 && (
-        <ul aria-label="Quality messages" className="list-disc pl-5 text-sm">
-          {result.quality.messages.map((m) => (
-            <li key={m}>{m}</li>
-          ))}
-        </ul>
+      {snippet !== null && (
+        <div className="space-y-1">
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+            <pre className="font-mono text-sm">{snippet}</pre>
+            <CopyButton text={snippet} />
+          </div>
+          {result.config_check === "already_correct" && (
+            <p className="text-sm text-muted-foreground">No change needed.</p>
+          )}
+        </div>
       )}
-      <AxisTable result={result} />
-      <AxesMapPlot result={result} />
+      {(state !== null || result.quality.status !== "Ok") && (
+        <Callout
+          tone={result.quality.status === "Error" ? "error" : "warn"}
+          title={`Detection quality: ${QUALITY_WORDS[result.quality.status].word}`}
+        >
+          {state && <p>{state}</p>}
+          {result.quality.status !== "Ok" && result.quality.messages.map((m) => <p key={m}>{m}</p>)}
+        </Callout>
+      )}
+    </div>
+  );
+}
+
+type AnalysedOutcome = Extract<AxesMapChip, { state: "Analysed" }>;
+
+/** The analysed chip's fields, one grid cell each. */
+function AnalysedFields({ outcome }: { outcome: AnalysedOutcome }) {
+  const { result } = outcome;
+  const quality = QUALITY_WORDS[result.quality.status];
+  return (
+    <>
+      <Field label="Capture health">{outcome.health}</Field>
+      <Field label="Detection quality">
+        <span className="inline-flex items-center gap-2">
+          <Dot tone={quality.tone} />
+          {quality.word}
+        </span>
+      </Field>
+      <Field label="Noise">{noiseText(result)}</Field>
     </>
   );
 }
 
-/** One chip's axes-map outcome: the snippet when there is one, and what the analysis found. */
+/** One chip's axes-map outcome: how it is mounted, how healthy the capture was, and the detail of the analysis. */
 export function AxesMapChipTab({ outcome, chip }: { outcome: AxesMapChip; chip: ChipMeta | null }) {
   // Sessions from before mountings were recorded are analysed as toolhead chips.
   const mounting = chip?.mounting ?? "toolhead";
   return (
     <Panel title="Axes Map" label={`Chip ${outcome.chip}`}>
-      <Fields>
-        <Field label="Mounted on">{mounting}</Field>
+      <Fields className="lg:grid-cols-5">
+        <Field label="Mounted on">{mountingLabel(mounting)}</Field>
         {chip?.chip_type && <Field label="Type">{chip.chip_type}</Field>}
-        {outcome.state === "Analysed" && (
-          <Field label="Capture health" className="sm:col-span-2">
-            {outcome.health}
-            {outcome.health_notes.length > 0 && (
-              <ul className="list-disc pl-5 font-sans text-muted-foreground">
-                {outcome.health_notes.map((n) => (
-                  <li key={n}>{n}</li>
-                ))}
-              </ul>
-            )}
-          </Field>
-        )}
+        {outcome.state === "Analysed" && <AnalysedFields outcome={outcome} />}
       </Fields>
-      {outcome.state === "Analysed" && <Analysed outcome={outcome} chip={chip} />}
+      {outcome.state === "Analysed" && (
+        <>
+          {outcome.health_notes.length > 0 && (
+            <ul aria-label="Capture health notes" className="list-disc pl-5 text-sm text-muted-foreground">
+              {outcome.health_notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <AxisTable result={outcome.result} />
+          <AxesMapPlot result={outcome.result} />
+        </>
+      )}
       {outcome.state === "Incomplete" && (
         <p role="status" className="text-sm">
           Incomplete capture: {outcome.missing}. This chip was not analysed and no snippet is offered.

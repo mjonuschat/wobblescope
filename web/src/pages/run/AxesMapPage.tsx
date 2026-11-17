@@ -2,17 +2,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { Panel } from "@/components/Panel";
 import { Steps } from "@/components/Steps";
 import { Button } from "@/components/ui/button";
 import { queryKeys, useChips, useStatus } from "@/lib/api/queries";
-import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { TestKind } from "@/lib/generated/TestKind";
 import type { TestState } from "@/lib/generated/TestState";
 
 import { AxesMapForm } from "./AxesMapForm";
 import { KIND_PAGES, KIND_TITLES } from "./kinds";
-import { OUTCOME_ICON, OUTCOME_WORDS, ProgressView, SHUTDOWN_NOTICE, StartingView } from "./ProgressView";
+import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { useLive } from "./useLive";
 
 const STEPS = [
@@ -20,63 +18,6 @@ const STEPS = [
   { id: "measuring", label: "Measuring" },
   { id: "results", label: "Results" },
 ];
-
-/** What the user is told when the run could not put Klipper's state back. */
-export const RESTART_INSTRUCTION =
-  "The calibration may have left changed acceleration limits or input shaping. Send RESTART from the Klipper console. The printer needs homing afterwards, and any positioning mode or offsets you rely on must be set again.";
-
-function AxesMapResultView({ last, onNewRun }: { last: FinishedTest; onNewRun: () => void }) {
-  const { Icon, className } = OUTCOME_ICON[last.outcome];
-  return (
-    <Panel
-      title="Result"
-      label="Calibration result"
-      action={
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onNewRun}
-            disabled={last.motion_uncertain}
-            title={last.motion_uncertain ? "Stop the printer first: it may still be moving." : undefined}
-          >
-            New calibration
-          </Button>
-          {last.session_id && (
-            <Button render={<Link to="/sessions/$id" params={{ id: last.session_id }} />}>Open the session</Button>
-          )}
-        </div>
-      }
-    >
-      <div className="flex items-start gap-3">
-        <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${className}`} />
-        <div className="space-y-1">
-          <h2 className="font-medium">{OUTCOME_WORDS[last.outcome]}</h2>
-          {last.reason && <p className="text-sm">{last.reason}</p>}
-          {last.reason === "emergency stop" && (
-            <p role="status" className="text-sm text-muted-foreground">
-              {SHUTDOWN_NOTICE}
-            </p>
-          )}
-          {!last.session_id && <p className="text-sm text-muted-foreground">No session was saved.</p>}
-        </div>
-      </div>
-      {last.needs_restart && (
-        <p role="alert" className="text-sm text-amber-400">
-          {RESTART_INSTRUCTION}
-        </p>
-      )}
-      {last.motion_uncertain && (
-        <div className="space-y-1">
-          <p role="alert" className="text-sm text-amber-400">
-            The printer may still be moving.
-          </p>
-          <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
-        </div>
-      )}
-    </Panel>
-  );
-}
 
 export function AxesMapPage() {
   const status = useStatus();
@@ -156,7 +97,7 @@ export function AxesMapPage() {
   } else if (starting && startedId) {
     body = <StartingView connected={live.connected} />;
   } else if (showResult && finished) {
-    body = <AxesMapResultView last={finished} onNewRun={newRun} />;
+    body = <ResultView last={finished} onNewTest={newRun} />;
   } else {
     body = (
       <>
@@ -180,7 +121,7 @@ export function AxesMapPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <h1 className="text-xl font-semibold">Axes map calibration</h1>
       <Steps
         steps={STEPS}

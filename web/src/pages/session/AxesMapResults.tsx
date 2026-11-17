@@ -5,29 +5,47 @@ import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
-import { AxesMapChipTab } from "./AxesMapChipTab";
+import type { Header } from "./SessionResults";
+import { AxesMapChipTab, AxesMapSummary } from "./AxesMapChipTab";
 
-/** The outcome of an axes-map calibration session, one tab per chip. */
-export function AxesMapResults({ id, meta }: { id: string; meta: SessionMeta }) {
+/**
+ * The outcome of an axes-map calibration session. The chip tabs and what the analysis says about
+ * the chip go in the page's result header; the chip's detail follows.
+ */
+export function AxesMapResults({ id, meta, header }: { id: string; meta: SessionMeta; header: Header }) {
   const query = useAxesMapAnalysis(id);
   const [chipName, setChipName] = useState<string | null>(null);
 
   if (query.isPending) {
-    return <Waiting>Analysing the calibration…</Waiting>;
+    return (
+      <div className="space-y-4">
+        {header(null)}
+        <Waiting>Analysing the calibration…</Waiting>
+      </div>
+    );
   }
   if (query.isError) {
     return (
-      <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
-        The analysis failed: {query.error.message}
-      </p>
+      <div className="space-y-4">
+        {header(null)}
+        <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
+          The analysis failed: {query.error.message}
+        </p>
+      </div>
     );
   }
   const outcomes = query.data;
   const shown = outcomes.find((o) => o.chip === chipName) ?? outcomes[0];
   if (!shown) {
-    return <p className="text-sm">This session has no chips to analyse.</p>;
+    return (
+      <div className="space-y-4">
+        {header(null)}
+        <p className="text-sm">This session has no chips to analyse.</p>
+      </div>
+    );
   }
-  return (
+  const chip = meta.chips.find((c) => c.name === shown.chip) ?? null;
+  const summary = (
     <div className="space-y-4">
       <Tabs value={shown.chip} onValueChange={setChipName}>
         <TabsList variant="line">
@@ -38,7 +56,13 @@ export function AxesMapResults({ id, meta }: { id: string; meta: SessionMeta }) 
           ))}
         </TabsList>
       </Tabs>
-      <AxesMapChipTab outcome={shown} chip={meta.chips.find((c) => c.name === shown.chip) ?? null} />
+      {shown.state === "Analysed" && <AxesMapSummary outcome={shown} chip={chip} />}
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      {header(null, summary)}
+      <AxesMapChipTab outcome={shown} chip={chip} />
     </div>
   );
 }

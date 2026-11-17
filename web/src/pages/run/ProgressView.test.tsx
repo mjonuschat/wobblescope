@@ -128,12 +128,56 @@ describe("a running test", () => {
       send({ test: null, last: done });
       expect(await screen.findByText("The test finished.")).toBeTruthy();
       expect(currentStep()).toContain("Measuring");
-      expect(screen.getByText(/^3 of 4/)).toBeTruthy();
+      // The run is over, so every segment is done and the segment's own progress is gone.
+      expect(screen.getByText("4 of 4")).toBeTruthy();
+      expect(screen.queryByRole("progressbar", { name: "Segment progress" })).toBeNull();
+      expect(screen.queryByText(/of about/)).toBeNull();
       expect(screen.getByText("Continuing to the results in 5 s")).toBeTruthy();
       expect(nextButton().disabled).toBe(false);
       fireEvent.click(nextButton());
       await waitFor(() => expect(currentStep()).toContain("Results"));
       expect(screen.getByRole("button", { name: "New test" })).toBeTruthy();
+    });
+
+    it("shows the progress of a running test and hides it once the test has ended", async () => {
+      await mount({ test: running, last: null });
+      expect(await screen.findByRole("progressbar", { name: "Segment progress" })).toBeTruthy();
+      expect(screen.getByText("12 s of about 2 min 25 s")).toBeTruthy();
+      expect(screen.getByText(/^3 of 4/)).toBeTruthy();
+    });
+
+    it("hides the signal levels of an axes-map run once it has ended but keeps a sweep's graph", async () => {
+      await mount({ test: { ...running, kind: "axes_map" }, last: null }, "/run/axes-map");
+      expect(await screen.findByRole("region", { name: "Signal" })).toBeTruthy();
+      send({ test: null, last: { ...done, kind: "axes_map" } });
+      expect(await screen.findByText("4 of 4")).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "Signal" })).toBeNull();
+    });
+
+    it("keeps a sweep's signal graph on screen after the test ended", async () => {
+      await mount({ test: running, last: null });
+      expect(await screen.findByRole("region", { name: "Signal" })).toBeTruthy();
+      send({ test: null, last: done });
+      expect(await screen.findByText("The test finished.")).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Signal" })).toBeTruthy();
+    });
+
+    it("shows the position while the test runs and hides it once the test has ended", async () => {
+      await mount({ test: running, last: null });
+      expect(await screen.findByText("Position")).toBeTruthy();
+      send({ test: null, last: done });
+      expect(await screen.findByText("The test finished.")).toBeTruthy();
+      expect(screen.queryByText("Position")).toBeNull();
+    });
+
+    it("keeps the segment a failed test reached and hides its progress", async () => {
+      await mount({ test: running, last: null });
+      await screen.findByText("Progress");
+      send({ test: null, last: { ...done, outcome: "failed", reason: "chip lost" } });
+      expect(await screen.findByText("The test failed.")).toBeTruthy();
+      expect(screen.getByText(/^3 of 4/)).toBeTruthy();
+      expect(screen.queryByRole("progressbar", { name: "Segment progress" })).toBeNull();
+      expect(screen.queryByText(/of about/)).toBeNull();
     });
 
     it("goes on to the results by itself after five seconds", async () => {
@@ -170,10 +214,15 @@ describe("a running test", () => {
     expect(await screen.findByText("Failure recorded, waiting for the sweep to end")).toBeTruthy();
   });
 
-  it("shows each chip's signal level as text during an axes-map run", async () => {
+  it("shows each chip's signal level per chip axis during an axes-map run", async () => {
     await mount({ test: { ...running, kind: "axes_map" }, last: null }, "/run/axes-map");
-    expect(await screen.findByText("adxl345: 120 / 40 / 8 mm/s²")).toBeTruthy();
-    expect(screen.queryByText(/lis2dw ebb36:/)).toBeNull();
+    const region = await screen.findByRole("region", { name: "Signal level of adxl345" });
+    expect(
+      within(region)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["x120 mm/s²", "y40 mm/s²", "z8 mm/s²"]);
+    expect(screen.queryByRole("region", { name: "Signal level of lis2dw ebb36" })).toBeNull();
     expect(screen.queryByRole("img", { name: /Signal against frequency/ })).toBeNull();
   });
 
@@ -370,7 +419,9 @@ describe("belt tests", () => {
     expect(screen.getByText("Status").nextElementSibling?.textContent).toBe("Measuring");
     expect(screen.getByText("Segment")).toBeTruthy();
     expect(screen.getByText("Position")).toBeTruthy();
-    expect(screen.getByText("X 150.5, Y 154, Z 20 mm")).toBeTruthy();
+    expect(screen.getByText("X 150.5, Y 154, Z 20 mm").parentElement?.textContent).toBe(
+      "X 150.5, Y 154, Z 20 mmX150.5Y154Z20mm",
+    );
     send({ test: { ...running, segment: 2, segments: 2, axis: { Vector: [1, 1, 0] } }, last: null });
     expect(screen.getByText("2 of 2: Belt B (Axis 1,1)")).toBeTruthy();
   });

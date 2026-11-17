@@ -1,19 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisMatch } from "@/lib/generated/AxisMatch";
 
-import {
-  AxesMapPlot,
-  gravityText,
-  isometric,
-  movementOption,
-  movementZones,
-  noiseText,
-  orientationArrows,
-  orientationHeader,
-} from "./AxesMapPlot";
+import { AxesMapPlot, isometric, movementOption, movementZones, orientationArrows } from "./AxesMapPlot";
 
 vi.mock("@/components/charts/EChart", () => ({
   EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
@@ -66,7 +57,7 @@ function result(over: Partial<AxesMapResult> = {}): AxesMapResult {
     noise: 412.4,
     noise_verdict: "High",
     quality: { status: "Ok", messages: [] },
-    config_check: "none_configured",
+    config_check: "does_not_match",
     curves: [segment(0), segment(2), segment(1)],
     core_version: "0.1.0",
     ...over,
@@ -93,12 +84,12 @@ describe("the movement sequence", () => {
     expect(series[0].data.map(([, v]) => v)).toEqual([0, 80, 0, 0, 1, 0, 0, 1, 0]);
   });
 
-  it("labels_each_zone_with_its_letter_and_confidence_or_the_extrapolated_note", () => {
+  it("labels_each_zone_with_its_letter_and_confidence_or_the_inferred_note", () => {
     const zones = movementZones(result());
     expect(zones.map((z) => [z.axis, z.virtual, z.note])).toEqual([
       ["X", false, "Confidence: 87%"],
       ["Y", false, "Confidence: 50%"],
-      ["Z", true, "Extrapolated (no signal on this axis)"],
+      ["Z", true, "Inferred (no signal on this axis)"],
     ]);
   });
 
@@ -132,20 +123,23 @@ describe("the movement sequence", () => {
     expect(markArea.data.map(([from]) => from.label.formatter)).toEqual([
       "{letter|X}\n{note|Confidence: 87%}",
       "{letter|Y}\n{note|Confidence: 50%}",
-      "{letter|Z}\n{note|Extrapolated (no signal on this axis)}",
+      "{letter|Z}\n{note|Inferred\n(no signal on this axis)}",
     ]);
     expect(markArea.data[2][0].itemStyle.color).not.toBe(markArea.data[0][0].itemStyle.color);
-  });
-
-  it("states_gravity_and_the_noise_verdict", () => {
-    expect(gravityText(result())).toBe("Measured gravity: 9.812 m/s²");
-    expect(noiseText(result())).toBe("Noise: 412 mm/s² (High)");
-    expect(noiseText(result({ noise: 120, noise_verdict: "Fine" }))).toBe("Noise: 120 mm/s² (OK)");
-    expect(noiseText(result({ noise: 900, noise_verdict: "TooHigh" }))).toBe("Noise: 900 mm/s² (Too high)");
   });
 });
 
 describe("the orientation view", () => {
+  it("puts_the_velocity_label_left_of_the_values_turned_a_quarter", () => {
+    const option = movementOption(result()) as unknown as {
+      yAxis: { name: string; nameLocation: string; nameRotate: number; nameGap: number };
+      grid: { left: number };
+    };
+    expect(option.yAxis).toMatchObject({ name: "Velocity (mm/s)", nameLocation: "middle", nameRotate: 90 });
+    // The grid leaves room for the values and then the label.
+    expect(option.grid.left).toBeGreaterThan(option.yAxis.nameGap);
+  });
+
   it("projects_machine_axes_isometrically", () => {
     const [zx, zy] = isometric([0, 0, 1]);
     expect(zx).toBeCloseTo(0);
@@ -166,9 +160,9 @@ describe("the orientation view", () => {
     const arrows = orientationArrows(result())!;
     expect(arrows.machine.map((a) => a.label)).toEqual(["X", "Y", "Z"]);
     expect(arrows.chip.map((a) => [a.label, a.color])).toEqual([
-      ["x", "#70088C"],
-      ["y (virtual)", "#FF8D32"],
-      ["z", "#F2055C"],
+      ["X", "#70088C"],
+      ["Y", "#FF8D32"],
+      ["Z", "#F2055C"],
     ]);
     // Column 1 of the rotation is chip y: machine (0, 0, 1). Column 2 is chip z: machine (0, -1, 0).
     const [y1, y2] = isometric([0, 0, 0.9]);
@@ -183,34 +177,32 @@ describe("the orientation view", () => {
     expect(orientationArrows(result({ rotation: null }))).toBeNull();
   });
 
-  it("lists_the_map_each_axis_and_the_euler_angles", () => {
-    expect(orientationHeader(result())).toEqual({
-      map: "Detected axes map: x, -z, y",
-      axes: ["X -> x (angle error: 2.3°)", "Y -> -z (angle error: 1.0°)", "Z -> y (extrapolated)"],
-      euler: "Euler orientation: X=90.0° Y=0.0° Z=0.0°",
-    });
-    const undetermined = axis({ state: "not_determined", chip_axis: null });
-    expect(
-      orientationHeader(result({ map: null, euler_deg: null, axes: [axis(), undetermined, undetermined] })),
-    ).toEqual({
-      map: "Detected axes map: none",
-      axes: ["X -> x (angle error: 2.3°)", "Y: not determined", "Z: not determined"],
-      euler: null,
-    });
-  });
-
-  it("draws_the_virtual_label_and_the_zone_labels_on_screen", () => {
+  it("titles_both_graphs_and_labels_both_sets_of_axes_in_capitals", async () => {
     render(<AxesMapPlot result={result()} />);
-    expect(screen.getByText("y (virtual)")).toBeTruthy();
-    expect(screen.getByText("Detected axes map: x, -z, y")).toBeTruthy();
-    expect(screen.getByText("Z -> y (extrapolated)")).toBeTruthy();
-    expect(screen.getByText("Measured gravity: 9.812 m/s²")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Movement sequence" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Chip orientation" })).toBeTruthy();
+    // The key is a tooltip on an (i) button beside the title, not text on the page.
+    expect(screen.queryByText(/Dashed: printer axes/)).toBeNull();
+    fireEvent.focus(screen.getByRole("button", { name: "About chip orientation" }));
+    expect(
+      (await screen.findAllByText(/Dashed: printer axes\. Coloured: chip axes, as mounted\./)).length,
+    ).toBeGreaterThan(0);
+    // The machine and the chip axes are each X, Y and Z, told apart by colour.
+    for (const letter of ["X", "Y", "Z"]) expect(screen.getAllByText(letter)).toHaveLength(2);
+    expect(screen.queryByText(/inferred/i)).toBeNull();
+    expect(screen.queryByText("y")).toBeNull();
+    // The map, the axes and the Euler angles are in the Result card and the table, not repeated here.
+    expect(screen.queryByText(/Detected axes map/)).toBeNull();
+    // Gravity and noise are in the chip panel's fields, not repeated on the chart.
+    expect(screen.queryByText(/Measured gravity/)).toBeNull();
+    expect(screen.queryByText(/^Noise:/)).toBeNull();
     expect(screen.getByRole("img", { name: /movement sequence/i })).toBeTruthy();
   });
 
   it("draws_no_orientation_without_a_rotation", () => {
     render(<AxesMapPlot result={result({ rotation: null })} />);
-    expect(screen.queryByText("y (virtual)")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Chip orientation" })).toBeNull();
     expect(screen.queryByRole("img", { name: /orientation/i })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Movement sequence" })).toBeTruthy();
   });
 });
