@@ -30,8 +30,8 @@ const PARAMETERS: { key: ParameterKey; label: string; unit: string; fallback: nu
   { key: "travel_speed", label: "Travel speed", unit: "mm/s", fallback: 120, min: 20 },
 ];
 
-/** How far the X and Y moves reach from the middle of the travel. It must match the daemon's `HALF_SPAN` in `capture/axes_map.rs`. */
-const HALF_SPAN = 15;
+/** How far the X and Y moves reach from the middle of the travel, as in the daemon. `halfSpan.test.ts` keeps the two equal. */
+export const HALF_SPAN = 15;
 
 interface Props {
   chipList: ChipsSnapshot;
