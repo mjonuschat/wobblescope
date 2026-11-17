@@ -49,7 +49,7 @@ pub struct Saved {
 }
 
 /// A number as G-code text, without a trailing `.0`.
-fn num(v: f64) -> String {
+pub(crate) fn num(v: f64) -> String {
     if v.fract() == 0.0 {
         format!("{v:.0}")
     } else {

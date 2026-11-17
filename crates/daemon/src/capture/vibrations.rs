@@ -160,6 +160,14 @@ pub fn plan_vibrations(
     chip_rates: &[Option<f64>],
 ) -> Result<TestPlan, RequestError> {
     check_chips(&request.chips)?;
+    // Shake&Tune refuses to run without an input shaper object, and the profile is meant to be
+    // measured with the printer's shaper on.
+    if !printer.input_shaper_configured {
+        return refuse(
+            "input_shaper",
+            "the input shaper is not configured; run the shaper calibration first",
+        );
+    }
     let size = setting("size", request.size, DEFAULT_SIZE, MIN_SIZE)?;
     let z_height = request.z_height.unwrap_or(DEFAULT_Z_HEIGHT);
     if !z_height.is_finite() {
@@ -329,7 +337,7 @@ pub fn step_geometry(plan: &VibrationsPlan, angle: f64, speed: f64) -> StepGeome
 }
 
 /// A feed rate in mm/min for a speed in mm/s, rounded to three decimals with no trailing zeros.
-fn feed(speed: f64) -> String {
+pub(super) fn feed(speed: f64) -> String {
     let text = format!("{:.3}", speed * 60.0);
     text.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
@@ -356,26 +364,36 @@ pub fn step_script(plan: &VibrationsPlan, angle: f64, speed: f64) -> String {
     script
 }
 
+/// The time one step at `requested` mm/s is expected to take, with its positioning move and
+/// pause, in seconds.
+fn estimated_step_seconds(run: &VibrationsRun, requested: f64) -> f64 {
+    // Klipper caps every move at max_velocity, so a faster step takes longer.
+    let cap = run.max_velocity.unwrap_or(f64::INFINITY);
+    let speed = requested.min(cap);
+    let travel_speed = run.travel_speed.min(cap);
+    let length = run.size * length_multiplier(requested);
+    let moves = f64::from(repeats(requested)) * 2.0;
+    // Each move takes its length at speed plus the time to reach that speed; the positioning
+    // move is taken at its full length.
+    length / travel_speed + moves * (length / speed + speed / run.accel) + STEP_DWELL_SECONDS
+}
+
 /// The time one angle is expected to take, with its positioning moves and pauses, in seconds.
 #[must_use]
 pub fn estimated_angle_seconds(plan: &VibrationsPlan) -> f64 {
-    let run = &plan.run;
     plan.speeds
         .iter()
-        .map(|&requested| {
-            // Klipper caps every move at max_velocity, so a faster step takes longer.
-            let cap = run.max_velocity.unwrap_or(f64::INFINITY);
-            let speed = requested.min(cap);
-            let travel_speed = run.travel_speed.min(cap);
-            let length = run.size * length_multiplier(requested);
-            let moves = f64::from(repeats(requested)) * 2.0;
-            // Each move takes its length at speed plus the time to reach that speed; the
-            // positioning move is taken at its full length.
-            length / travel_speed
-                + moves * (length / speed + speed / run.accel)
-                + STEP_DWELL_SECONDS
-        })
+        .map(|&requested| estimated_step_seconds(&plan.run, requested))
         .sum()
+}
+
+/// The time the slowest step of the plan is expected to take, in seconds.
+#[must_use]
+pub fn slowest_step_seconds(plan: &VibrationsPlan) -> f64 {
+    plan.speeds
+        .iter()
+        .map(|&requested| estimated_step_seconds(&plan.run, requested))
+        .fold(0.0, f64::max)
 }
 
 #[cfg(test)]
@@ -392,6 +410,7 @@ mod tests {
         let mut printer =
             parse_settings(&read("real_settings.json"), &read("real_printer_info.json")).unwrap();
         printer.machine.kinematics = kinematics.map(str::to_owned);
+        printer.input_shaper_configured = true;
         let travel = Limits {
             min: 0.0,
             max: 250.0,
@@ -474,6 +493,15 @@ mod tests {
         assert_eq!(refused(&r).field, "max_speed");
         r.max_speed = Some(200.0);
         assert!(planned(&r).is_ok());
+    }
+
+    #[test]
+    fn a_printer_without_an_input_shaper_section_is_refused() {
+        let mut printer = printer(Some("corexy"));
+        printer.input_shaper_configured = false;
+        let err = plan_vibrations(&request(), &printer, 600, &[Some(3200.0)]).unwrap_err();
+        assert_eq!(err.field, "input_shaper");
+        assert!(err.to_string().contains("shaper calibration"), "{err}");
     }
 
     #[test]

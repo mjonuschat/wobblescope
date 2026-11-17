@@ -1,4 +1,4 @@
-//! `POST /api/tests`, `POST /api/axes-map` and `POST /api/tests/{id}/emergency-stop`.
+//! `POST /api/tests`, `POST /api/axes-map`, `POST /api/vibrations` and `POST /api/tests/{id}/emergency-stop`.
 
 use axum::Json;
 use axum::extract::State;
@@ -12,6 +12,7 @@ use crate::capture::axes_map::{AxesMapRequest, plan_axes_map};
 use crate::capture::preflight::{Deps, Refusal, run};
 use crate::capture::request::{TestPlan, TestRequest, plan};
 use crate::capture::runner::Job;
+use crate::capture::vibrations::{VibrationsRequest, plan_vibrations};
 
 /// The answer to a started test.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -46,6 +47,35 @@ pub(super) async fn start_axes_map(
     let printer = settings::read(&state).await?;
     let plan = plan_axes_map(&request, &printer, state.capture.max_segment_seconds)
         .map_err(|e| ApiError::invalid(e.to_string()))?;
+    start_plan(state, plan).await
+}
+
+pub(super) async fn start_vibrations(
+    State(state): State<ApiState>,
+    ApiJson(request): ApiJson<VibrationsRequest>,
+) -> Result<(StatusCode, Json<StartedTest>), ApiError> {
+    let printer = settings::read(&state).await?;
+    // The nominal rate of each requested chip, `None` for a chip that is not known.
+    let snapshot = state.moonraker.chips();
+    let rates: Vec<Option<f64>> = request
+        .chips
+        .iter()
+        .map(|name| {
+            snapshot
+                .list
+                .chips
+                .iter()
+                .find(|c| c.section == *name)
+                .and_then(|c| c.nominal_rate_hz)
+        })
+        .collect();
+    let plan = plan_vibrations(
+        &request,
+        &printer,
+        state.capture.max_segment_seconds,
+        &rates,
+    )
+    .map_err(|e| ApiError::invalid(e.to_string()))?;
     start_plan(state, plan).await
 }
 

@@ -230,6 +230,17 @@ impl Sim {
         self.state.lock().unwrap().intercept = Some(Arc::new(intercept));
     }
 
+    /// Lets `seconds` pass with every chip delivering, as a step that is still running would.
+    pub fn stream(&self, seconds: f64) {
+        {
+            let mut s = self.state.lock().unwrap();
+            let to = s.t + seconds;
+            s.t = to;
+            self.advance(&mut s, to);
+        }
+        self.sync_clock();
+    }
+
     /// Answers the pending move as a move that did not happen.
     pub fn release_move(&self) {
         let gate = self.state.lock().unwrap().pending_move.take();
@@ -469,6 +480,17 @@ impl Sim {
                 self.printer
                     .set_field("toolhead", "estimated_print_time", json!(delivered));
             }
+        } else if script.contains("G4 P") {
+            // A dwell with no move, as a vibrations run sends after positioning: time passes
+            // and the next window starts after the samples already delivered.
+            let to = s.t + 0.5;
+            s.t = to;
+            self.advance(&mut s, to + 0.3);
+            let delivered = s.next_sample_at.values().copied().fold(to, f64::max);
+            drop(s);
+            self.sync_clock();
+            self.printer
+                .set_field("toolhead", "estimated_print_time", json!(delivered));
         }
         Script::Result(json!("ok"))
     }

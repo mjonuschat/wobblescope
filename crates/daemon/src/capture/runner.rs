@@ -14,7 +14,7 @@ use wobblescope_core::RawSamples;
 use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_session::meta::{
-    PrinterInfo, SegmentMeta, SessionMeta, TimeWindow, undersampled_note,
+    PrinterInfo, SegmentMeta, SessionMeta, StepMeta, TimeWindow, undersampled_note,
 };
 
 use super::availability::OpenChip;
@@ -29,6 +29,7 @@ use super::recorder::{Level, Missing, Recorder, Taken};
 use super::request::{Segment, TestPlan, diagonal_refusal};
 use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
+use super::vibrations::slowest_step_seconds;
 use crate::hold::settings::{Saved, calibration_setup};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
@@ -37,6 +38,8 @@ use crate::moonraker::status::{KlippyState, Status};
 use crate::storage::Reservation;
 use crate::storage::capture::Capture;
 use crate::storage::{Storage, StorageError, run_blocking};
+
+mod vibrations_run;
 
 /// The seconds added to `max_segment_seconds` for the sweep call's own timeout.
 const SWEEP_TIMEOUT_MARGIN_SECONDS: u64 = 60;
@@ -293,6 +296,8 @@ struct Run {
     status: watch::Receiver<Status>,
     /// What an axes-map calibration must put back, once it may have changed Klipper's state.
     restore: Option<Saved>,
+    /// The finished steps of the vibrations angle that is running, in order.
+    angle_steps: Vec<StepMeta>,
 }
 
 impl Run {
@@ -332,6 +337,7 @@ impl Run {
             incomplete: Vec::new(),
             status,
             restore: None,
+            angle_steps: Vec::new(),
         };
         let setup = Setup {
             reservation: started.reservation,
@@ -419,6 +425,10 @@ impl Run {
             }
             axes_map.run.max_velocity = Some(saved.max_velocity);
         }
+        let vibrations_saved = match &self.plan.vibrations {
+            None => None,
+            Some(_) => Some(self.read_vibrations_saved(&control).await?),
+        };
         let mut mcus: Vec<String> = facts.iter().filter_map(|f| f.mcu.clone()).collect();
         let printer = printer_info(&control, &mut mcus).await;
         let meta = initial(&self.plan, &self.id, &self.created_at, &facts, printer);
@@ -437,6 +447,10 @@ impl Run {
         for open in chips {
             self.recorders
                 .push(Recorder::spawn(open, Some(levels_tx.clone())));
+        }
+
+        if let Some(saved) = vibrations_saved {
+            return self.run_vibrations(saved).await;
         }
 
         for index in 0..self.plan.segments.len() {
@@ -466,7 +480,8 @@ impl Run {
                     // The measured moves follow on from each other, so only the first is
                     // preceded by the setup and the travel to the start.
                     if index == 0 {
-                        self.change_settings(saved, *accel).await?;
+                        self.change_settings(saved, &calibration_setup(saved, *accel))
+                            .await?;
                         self.position(&segment).await?;
                     }
                     window_start_plain(&self.control()?, query).await?
@@ -481,15 +496,15 @@ impl Run {
             let end = window_end(&control, self.r.timings.positioning.query)
                 .await
                 .map_err(|e| Failure::certain(format!("cannot read the window end: {e}")))?;
-            self.drain_and_store(&segment, start, end).await?;
+            self.drain_and_store(&segment, start, end, vec![]).await?;
             self.current = None;
         }
         Ok(())
     }
 
-    /// Saves Klipper's G-code state and sends the calibration's setup. The restore is armed once
+    /// Saves Klipper's G-code state and sends the run's setup `setup`. The restore is armed once
     /// the save may have run.
-    async fn change_settings(&mut self, saved: &Saved, accel: f64) -> Result<(), Failure> {
+    async fn change_settings(&mut self, saved: &Saved, setup: &str) -> Result<(), Failure> {
         let control = self.control()?;
         let timeout = self.r.timings.positioning.script;
         // Neither script moves the toolhead, so a lost answer leaves no motion uncertain.
@@ -502,7 +517,7 @@ impl Run {
             self.restore = Some(saved.clone());
         }
         saving.map_err(refused)?;
-        calibration::send(&control, &calibration_setup(saved, accel), timeout)
+        calibration::send(&control, setup, timeout)
             .await
             .map_err(refused)
     }
@@ -624,16 +639,34 @@ impl Run {
     /// Runs the sweep and waits for it, publishing progress, watching for Klipper's shutdown and
     /// a stop, and recording a lost chip without leaving the slot while the toolhead may move.
     async fn sweep(&mut self, segment: &Segment) -> Result<(), Failure> {
-        let control = self.control()?;
         let script = match self.plan.axes_map {
             None => format!("{}\nM400", self.plan.command(segment, &self.id)),
             Some(_) => self.plan.segment_script(segment),
         };
-        let timeout = self.r.timings.sweep_timeout.unwrap_or_else(|| {
-            Duration::from_secs(
-                u64::from(self.r.max_segment_seconds) + SWEEP_TIMEOUT_MARGIN_SECONDS,
-            )
-        });
+        self.run_script(script, segment, Phase::Measuring).await
+    }
+
+    /// Sends `script` and waits for it as `sweep` does, showing `phase` while it runs.
+    async fn run_script(
+        &mut self,
+        script: String,
+        segment: &Segment,
+        phase: Phase,
+    ) -> Result<(), Failure> {
+        let control = self.control()?;
+        let timeout = self
+            .r
+            .timings
+            .sweep_timeout
+            .unwrap_or_else(|| match &self.plan.vibrations {
+                Some(plan) => vibrations_run::step_timeout(
+                    self.r.max_segment_seconds,
+                    slowest_step_seconds(plan),
+                ),
+                None => Duration::from_secs(
+                    u64::from(self.r.max_segment_seconds) + SWEEP_TIMEOUT_MARGIN_SECONDS,
+                ),
+            });
         let call = control.call(
             "printer.gcode.script",
             Some(json!({"script": script})),
@@ -686,7 +719,7 @@ impl Run {
             self.publish(if recorded.is_some() {
                 Phase::WaitingForSweep
             } else {
-                Phase::Measuring
+                phase
             });
         }
     }
@@ -697,6 +730,7 @@ impl Run {
         segment: &Segment,
         start: f64,
         end: f64,
+        steps: Vec<StepMeta>,
     ) -> Result<(), Failure> {
         self.publish(Phase::Draining);
         let waits = self
@@ -742,7 +776,8 @@ impl Run {
             self.warn(&chip, &note);
         }
         let window = TimeWindow { start, end };
-        self.store_segment(segment, index, outcome, window).await?;
+        self.store_segment(segment, index, outcome, window, steps)
+            .await?;
         failure.map_or(Ok(()), Err)
     }
 
@@ -752,6 +787,7 @@ impl Run {
         index: usize,
         outcome: SegmentOutcome,
         window: TimeWindow,
+        steps: Vec<StepMeta>,
     ) -> Result<(), Failure> {
         let SegmentOutcome { recordings, judged } = outcome;
         let mut files = self
@@ -779,7 +815,7 @@ impl Run {
             point: segment.point as u32,
             window: Some(window),
             files,
-            steps: vec![],
+            steps,
         });
         // Version 2 is written only once a vector segment is in the journal, so a session with
         // none stays readable by a daemon that predates belt tests.
@@ -787,6 +823,7 @@ impl Run {
         // The run settings join with the first segment: before it the session is not yet an
         // axes-map session and may not carry them.
         stored.meta.axes_map_run = self.plan.axes_map.as_ref().map(|a| a.run.clone());
+        stored.meta.vibrations_run = self.plan.vibrations.as_ref().map(|v| v.run.clone());
         let journal = stored.meta.clone();
         self.with_capture(move |capture| capture.journal(&journal))
             .await
@@ -824,6 +861,10 @@ impl Run {
     /// Adds the segment that was running when the test failed, as incomplete, when at least one
     /// chip delivered a sample at or after its window start.
     async fn add_interrupted_segment(&mut self) {
+        if self.plan.vibrations.is_some() {
+            self.add_interrupted_angle().await;
+            return;
+        }
         let Some(current) = &self.current else { return };
         let Some(start) = current.start else { return };
         let index = current.index;
@@ -854,7 +895,7 @@ impl Run {
             .push(format!("segment {} was interrupted", at + 1));
         // A failure to write it leaves the finished segments, which are already journaled.
         let _ = self
-            .store_segment(&segment, at, outcome, TimeWindow { start, end })
+            .store_segment(&segment, at, outcome, TimeWindow { start, end }, vec![])
             .await;
     }
 

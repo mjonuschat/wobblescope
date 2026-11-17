@@ -170,6 +170,9 @@ pub struct PrinterSettings {
     pub default_point: Option<[f64; 3]>,
     /// Seconds a segment takes besides the sweep, which the form adds to its estimate.
     pub segment_overhead_seconds: f64,
+    /// Whether the config has an `[input_shaper]` section. Klipper's `input_shaper` status object
+    /// can be empty on a configured printer, so the config is the reliable source.
+    pub input_shaper_configured: bool,
 }
 
 /// Why an answer could not be turned into settings.
@@ -270,6 +273,7 @@ pub fn parse_settings(query: &Value, info: &Value) -> Result<PrinterSettings, Se
         axis_limits,
         default_point,
         segment_overhead_seconds: crate::capture::request::SEGMENT_OVERHEAD_SECONDS,
+        input_shaper_configured: all.contains_key("input_shaper"),
     })
 }
 

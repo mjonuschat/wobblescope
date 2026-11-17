@@ -62,6 +62,8 @@ pub fn initial(
     printer: Option<PrinterInfo>,
 ) -> SessionMeta {
     let axes_map = plan.axes_map.as_ref();
+    // A calibration and a vibrations profile record no test mode or sweep settings.
+    let swept = axes_map.is_none() && plan.vibrations.is_none();
     SessionMeta {
         format_version: FORMAT_VERSION,
         id: id.to_owned(),
@@ -70,8 +72,8 @@ pub fn initial(
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
         vibrations_run: None,
-        mode: axes_map.is_none().then_some(plan.mode),
-        settings: axes_map.is_none().then(|| plan.sweep_settings()),
+        mode: swept.then_some(plan.mode),
+        settings: swept.then(|| plan.sweep_settings()),
         printer,
         outcome: Outcome::Complete,
         notes: Vec::new(),

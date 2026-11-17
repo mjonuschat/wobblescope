@@ -240,9 +240,23 @@ impl Recorder {
     /// Ends the segment and returns its samples and report for the window `start..end`.
     #[must_use]
     pub fn take(&self, start: f64, end: f64) -> Taken {
+        self.take_cut(start, end, false)
+    }
+
+    /// Like [`Recorder::take`], but keeps only the samples with `start <= t < end`, so the
+    /// recording and its judgement both cover just that window.
+    #[must_use]
+    pub fn take_within(&self, start: f64, end: f64) -> Taken {
+        self.take_cut(start, end, true)
+    }
+
+    fn take_cut(&self, start: f64, end: f64, cut: bool) -> Taken {
         let mut i = lock(&self.shared.inner);
         i.active = false;
-        let samples = std::mem::take(&mut i.samples);
+        let mut samples = std::mem::take(&mut i.samples);
+        if cut {
+            samples = cut_to(&samples, start, end);
+        }
         let report = judge(&i, &samples, start, end);
         i.degraded |= report.degraded;
         i.taken += 1;
@@ -331,6 +345,20 @@ fn rms_without_mean(samples: &RawSamples) -> [f64; 3] {
         (column.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n).sqrt()
     };
     [rms(&samples.x), rms(&samples.y), rms(&samples.z)]
+}
+
+/// The samples with `start <= t < end`, in their order.
+fn cut_to(samples: &RawSamples, start: f64, end: f64) -> RawSamples {
+    let mut kept = RawSamples::default();
+    for (row, &t) in samples.t.iter().enumerate() {
+        if t >= start && t < end {
+            kept.t.push(t);
+            kept.x.push(samples.x[row]);
+            kept.y.push(samples.y[row]);
+            kept.z.push(samples.z[row]);
+        }
+    }
+    kept
 }
 
 fn judge(i: &Inner, samples: &RawSamples, start: f64, end: f64) -> ChipSegmentReport {

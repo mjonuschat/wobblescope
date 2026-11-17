@@ -187,6 +187,24 @@ fn a_machine_value_klipper_did_not_report_is_none() {
 }
 
 #[test]
+fn the_input_shaper_counts_as_configured_when_the_config_has_the_section() {
+    let mut query = fixture("real_settings.json");
+    let info = fixture("real_printer_info.json");
+    assert!(
+        !parse_settings(&query, &info)
+            .unwrap()
+            .input_shaper_configured
+    );
+    query["status"]["configfile"]["settings"]["input_shaper"] =
+        json!({"shaper_type_x": "mzv", "shaper_freq_x": "62.2"});
+    assert!(
+        parse_settings(&query, &info)
+            .unwrap()
+            .input_shaper_configured
+    );
+}
+
+#[test]
 fn the_shaping_comes_from_the_toolhead_and_the_input_shaper_section() {
     use wobblescope::moonraker::settings::parse_shaping;
     let query = json!({"status": {

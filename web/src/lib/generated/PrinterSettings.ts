@@ -37,4 +37,9 @@ default_point: [number, number, number] | null,
 /**
  * Seconds a segment takes besides the sweep, which the form adds to its estimate.
  */
-segment_overhead_seconds: number, };
+segment_overhead_seconds: number, 
+/**
+ * Whether the config has an `[input_shaper]` section. Klipper's `input_shaper` status object
+ * can be empty on a configured printer, so the config is the reliable source.
+ */
+input_shaper_configured: boolean, };

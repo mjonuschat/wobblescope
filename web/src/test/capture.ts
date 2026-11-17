@@ -44,6 +44,7 @@ export function printerSettings(overrides: Partial<PrinterSettings["settings"]> 
     },
     default_point: [150.5, 154, 20],
     segment_overhead_seconds: 15,
+    input_shaper_configured: true,
   };
 }
 
