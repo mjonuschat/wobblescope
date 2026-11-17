@@ -192,6 +192,7 @@ pub fn plan_axes_map(
             mountings,
             points,
         }),
+        vibrations: None,
     })
 }
 

@@ -13,6 +13,7 @@ pub mod runner;
 mod seal;
 pub mod session_id;
 pub mod slot;
+pub mod vibrations;
 
 use serde::Serialize;
 use time::{OffsetDateTime, UtcOffset};

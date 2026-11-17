@@ -7,6 +7,7 @@ use wobblescope_core::fit::Axis;
 use wobblescope_session::meta::{Mode, SweepSettings};
 
 use super::axes_map::AxesMapPlan;
+use super::vibrations::VibrationsPlan;
 use crate::moonraker::settings::PrinterSettings;
 
 /// Seconds a segment needs besides the sweep itself: the move, the pause and the tail.
@@ -59,6 +60,9 @@ pub enum TestKind {
     /// An axes-map calibration: one move each along X, Y and Z. It is started through
     /// `POST /api/axes-map`, not as a test request.
     AxesMap,
+    /// A vibrations profile: back-and-forth moves at rising speeds along two angles. It is
+    /// started through `POST /api/vibrations`, not as a test request.
+    Vibrations,
 }
 
 /// `POST /api/tests`.
@@ -154,6 +158,8 @@ pub struct TestPlan {
     pub(super) pulse_zeroes_period: bool,
     /// What an axes-map calibration adds; present exactly when `kind` is [`TestKind::AxesMap`].
     pub axes_map: Option<AxesMapPlan>,
+    /// What a vibrations profile adds; present exactly when `kind` is [`TestKind::Vibrations`].
+    pub vibrations: Option<VibrationsPlan>,
 }
 
 impl TestPlan {
@@ -342,6 +348,7 @@ pub fn plan(
         // effective period is known to be 0 already.
         pulse_zeroes_period: pulse && sweeping_period != Some(0.0),
         axes_map: None,
+        vibrations: None,
     })
 }
 
@@ -397,6 +404,7 @@ fn directions(
             }
         }
         TestKind::AxesMap => refuse("kind", "an axes-map calibration starts at /api/axes-map"),
+        TestKind::Vibrations => refuse("kind", "a vibrations profile starts at /api/vibrations"),
     }
 }
 

@@ -3,4 +3,4 @@
 /**
  * What a test measures.
  */
-export type TestKind = "axes" | "belts" | "axes_map";
+export type TestKind = "axes" | "belts" | "axes_map" | "vibrations";
