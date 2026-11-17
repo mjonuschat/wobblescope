@@ -140,6 +140,22 @@ describe("the orientation view", () => {
     expect(option.grid.left).toBeGreaterThan(option.yAxis.nameGap);
   });
 
+  it("pads_the_velocity_axis_by_15_percent_of_the_data_range_so_peak_labels_clear_the_edge", () => {
+    const { yAxis } = movementOption(result()) as unknown as {
+      yAxis: { min: (e: { min: number; max: number }) => number; max: (e: { min: number; max: number }) => number };
+    };
+    const extent = { min: -90, max: 70 };
+    // Shake&Tune pads by 15 % of the range at each end.
+    expect(yAxis.min(extent)).toBeCloseTo(-90 - 0.15 * 160);
+    expect(yAxis.max(extent)).toBeCloseTo(70 + 0.15 * 160);
+    // The padded ends are not round numbers and are not labelled.
+    const label = (movementOption(result()) as unknown as { yAxis: { axisLabel: object } }).yAxis.axisLabel;
+    expect(label).toMatchObject({ showMinLabel: false, showMaxLabel: false });
+    // A flat recording still gets an axis with some height.
+    const flat = { min: 0, max: 0 };
+    expect(yAxis.max(flat)).toBeGreaterThan(yAxis.min(flat));
+  });
+
   it("projects_machine_axes_isometrically", () => {
     const [zx, zy] = isometric([0, 0, 1]);
     expect(zx).toBeCloseTo(0);

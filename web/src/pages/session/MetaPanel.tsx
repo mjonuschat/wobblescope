@@ -120,6 +120,13 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
           meta.printer?.damping_ratio_y != null &&
           row("Damping ratio Y", String(meta.printer.damping_ratio_y))}
       </Fields>
+      {meta.axes_map_run && (
+        <Fields aria-label="Calibration settings">
+          {row("Speed", `${meta.axes_map_run.speed} mm/s`)}
+          {row("Acceleration", `${meta.axes_map_run.accel} mm/s²`)}
+          {row("Z height", `${meta.axes_map_run.z_height} mm`)}
+        </Fields>
+      )}
       {s && (
         <Fields aria-label="Recorded sweep settings">
           {row("Frequency range", `${s.freq_start} to ${s.freq_end} Hz`)}

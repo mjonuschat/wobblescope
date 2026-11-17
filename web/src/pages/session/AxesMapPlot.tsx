@@ -156,6 +156,11 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
       nameLocation: "middle",
       nameRotate: 90,
       nameGap: 46,
+      // Shake&Tune pads the range by 15 % at each end, so the peak labels clear the edge.
+      min: (extent: { min: number; max: number }) => extent.min - padding(extent),
+      max: (extent: { min: number; max: number }) => extent.max + padding(extent),
+      // The padded ends are not round numbers, so only the ticks inside the range are labelled.
+      axisLabel: { showMinLabel: false, showMaxLabel: false },
       splitLine: { lineStyle: { color: GRID } },
     },
     series,
@@ -308,6 +313,11 @@ function OrientationView({ result }: { result: AxesMapResult }) {
 
 function MovementChart({ result, height }: { result: AxesMapResult; height?: number | string }) {
   return <EChart option={movementOption(result)} label={`Movement sequence of ${result.chip}`} height={height} />;
+}
+
+/** The padding at each end of the velocity axis: 15 % of the data range, or 1 mm/s for a flat recording. */
+function padding({ min, max }: { min: number; max: number }): number {
+  return max > min ? (max - min) * 0.15 : 1;
 }
 
 const GRAPH_TITLE = "text-sm font-medium";

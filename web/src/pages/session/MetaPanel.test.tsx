@@ -70,6 +70,22 @@ describe("the session details", () => {
     ]);
   });
 
+  it("shows the speed, acceleration and Z height a calibration ran with, and only for a calibration", () => {
+    const { rerender } = render(<MetaPanel meta={calibrationMeta()} />);
+    const settings = screen.getByLabelText("Calibration settings");
+    const pairs = Array.from(settings.querySelectorAll("dt")).map((dt) => [
+      dt.textContent,
+      dt.nextElementSibling?.textContent,
+    ]);
+    expect(pairs).toEqual([
+      ["Speed", "80 mm/s"],
+      ["Acceleration", "3000 mm/s²"],
+      ["Z height", "30 mm"],
+    ]);
+    rerender(<MetaPanel meta={twoAxisMeta()} />);
+    expect(screen.queryByLabelText("Calibration settings")).toBeNull();
+  });
+
   it("leaves out the input shaper's settings for an axes-map calibration", () => {
     const meta = calibrationMeta();
     meta.printer = {
