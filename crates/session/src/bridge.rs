@@ -344,17 +344,15 @@ where
     Ok(out)
 }
 
-/// What a vibrations analysis made of one chip.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChipVibrations {
-    /// Chip name.
     pub chip: String,
     /// One decision per angle recording the chip made, in angle order.
     pub decisions: Vec<DatasetDecision>,
-    /// Why the chip is left out of the worst case; `None` when it takes part.
+    /// Why the chip is left out of the worst case. `None` when it takes part.
     pub excluded: Option<String>,
-    /// The chip's own profile; `None` when its data could not be analysed or an angle is missing.
+    /// The chip's own profile. `None` when its data could not be analysed or an angle is missing.
     pub result: Option<VibrationsResult>,
     /// Why the chip's data could not be loaded or analysed.
     pub failure: Option<String>,
@@ -366,7 +364,7 @@ pub struct ChipVibrations {
 pub struct VibrationsAnalysis {
     /// One entry per chip, in the order of `meta.chips`.
     pub per_chip: Vec<ChipVibrations>,
-    /// The element-wise maximum over the chips that take part; `None` when none does or their
+    /// The element-wise maximum over the chips that take part. `None` when none does or their
     /// grids cannot be combined.
     pub worst_case: Option<VibrationsResult>,
     /// `wobblescope-core` version that produced it.
@@ -457,7 +455,7 @@ where
 /// take part.
 ///
 /// A chip takes part when each of the two angles has a recording and neither is excluded by
-/// health, coverage or an undersampled rate; `include_excluded` lets both take part anyway. A
+/// health, coverage or an undersampled rate. `include_excluded` lets both take part anyway. A
 /// chip left out still gets its own profile when its data can be analysed. A file `load`
 /// cannot read, or a profile that cannot be computed, is that chip's `failure` and no other
 /// chip's. The worst case is `None` when no chip takes part or their grids differ.

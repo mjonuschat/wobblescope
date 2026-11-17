@@ -34,7 +34,6 @@ const MIN_TRAVEL_SPEED: f64 = 20.0;
 
 /// Klipper's highest sample rate, taken for a chip whose rate is unknown, in Hz.
 const UNKNOWN_RATE_HZ: f64 = 3200.0;
-/// Margin on the estimated sample count of an angle.
 const SAMPLE_MARGIN: f64 = 1.1;
 /// Dwell after the moves of a step, in seconds.
 const STEP_DWELL_SECONDS: f64 = 0.3;
@@ -44,7 +43,7 @@ const STEP_DWELL_SECONDS: f64 = 0.3;
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VibrationsRequest {
-    /// The chips that record; every chip records every step.
+    /// The chips that record. Every chip records every step.
     pub chips: Vec<String>,
     /// Side of the square the toolhead moves over, in mm.
     #[serde(default)]
@@ -66,10 +65,8 @@ pub struct VibrationsRequest {
     pub travel_speed: Option<f64>,
 }
 
-/// What the plan of a vibrations profile adds to a [`TestPlan`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct VibrationsPlan {
-    /// The moves the run uses, as the session records them.
     pub run: VibrationsRun,
     /// The two angles in degrees, in running order.
     pub angles: [f64; 2],
@@ -79,14 +76,12 @@ pub struct VibrationsPlan {
     pub mid: [f64; 2],
 }
 
-/// Where a step starts and ends and how often it goes back and forth.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StepGeometry {
     /// The start point `[x, y]` in mm.
     pub start: [f64; 2],
     /// The far end `[x, y]` in mm.
     pub end: [f64; 2],
-    /// How many times the toolhead goes to the end and back.
     pub repeats: u32,
 }
 
@@ -384,7 +379,7 @@ fn estimated_step_seconds(run: &VibrationsRun, requested: f64) -> f64 {
     let travel_speed = run.travel_speed.min(cap);
     let length = run.size * length_multiplier(requested);
     let moves = f64::from(repeats(requested)) * 2.0;
-    // Each move takes its length at speed plus the time to reach that speed; the positioning
+    // Each move takes its length at speed plus the time to reach that speed. The positioning
     // move is taken at its full length.
     length / travel_speed + moves * (length / speed + speed / run.accel) + STEP_DWELL_SECONDS
 }
@@ -456,6 +451,56 @@ mod tests {
 
     fn refused(request: &VibrationsRequest) -> RequestError {
         planned(request).unwrap_err()
+    }
+
+    #[test]
+    fn only_a_vibrations_plan_carries_vibrations() {
+        use crate::capture::axes_map::{AxesMapRequest, ChipChoice, plan_axes_map};
+        use crate::capture::request::{Overrides, TestRequest, plan};
+        use wobblescope_core::axes_map::Mounting;
+        use wobblescope_core::fit::Axis;
+
+        let printer = printer(Some("corexy"));
+        let vibrations_plan = planned(&request()).unwrap();
+        let axes_map_plan = plan_axes_map(
+            &AxesMapRequest {
+                chips: vec![ChipChoice {
+                    chip: "adxl345".to_owned(),
+                    mounting: Mounting::Toolhead,
+                }],
+                z_height: None,
+                speed: None,
+                accel: None,
+                travel_speed: None,
+            },
+            &printer,
+            600,
+        )
+        .unwrap();
+        let sweep_plan = plan(
+            &TestRequest {
+                chips: vec!["adxl345".to_owned()],
+                kind: TestKind::Axes,
+                axes: Some(vec![Axis::X]),
+                mode: Mode::Sweep,
+                overrides: Overrides::default(),
+                points: None,
+            },
+            &printer,
+            600,
+        )
+        .unwrap();
+        for plan in [&vibrations_plan, &axes_map_plan, &sweep_plan] {
+            assert_eq!(
+                plan.vibrations.is_some(),
+                plan.kind == TestKind::Vibrations,
+                "{:?}",
+                plan.kind
+            );
+        }
+        assert_eq!(vibrations_plan.kind, TestKind::Vibrations);
+        assert_eq!(axes_map_plan.kind, TestKind::AxesMap);
+        assert_eq!(sweep_plan.kind, TestKind::Axes);
     }
 
     #[test]

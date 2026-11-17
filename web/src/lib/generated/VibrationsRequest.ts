@@ -5,7 +5,7 @@
  */
 export type VibrationsRequest = { 
 /**
- * The chips that record; every chip records every step.
+ * The chips that record. Every chip records every step.
  */
 chips: Array<string>, 
 /**

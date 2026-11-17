@@ -3,11 +3,7 @@
 /**
  * A stretch of a curve below the quiet threshold.
  */
-export type Zone = { 
-/**
- * Index of the first sample of the zone.
- */
-start: number, 
+export type Zone = { start: number, 
 /**
  * Index at which the zone ends. It is the first sample at or above the threshold, so it is
  * outside the zone, except for a zone that runs to the end of the data, where it is the last

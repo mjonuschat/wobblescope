@@ -192,7 +192,7 @@ async fn step_windows_do_not_overlap_and_lie_inside_the_segment_window() {
 async fn a_stop_in_the_second_angle_keeps_the_first_and_the_finished_steps_of_the_second() {
     let rig = vibrations_rig(true).await;
     let slot = rig.slot.clone();
-    // The first step of the second angle runs; the stop is seen before the next one.
+    // The first step of the second angle runs. The stop is seen before the next one.
     on_step(&rig, 2, move || {
         assert!(slot.request_stop_current().is_some());
     });

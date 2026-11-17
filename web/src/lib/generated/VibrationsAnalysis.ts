@@ -11,7 +11,7 @@ export type VibrationsAnalysis = {
  */
 per_chip: Array<ChipVibrations>, 
 /**
- * The element-wise maximum over the chips that take part; `None` when none does or their
+ * The element-wise maximum over the chips that take part. `None` when none does or their
  * grids cannot be combined.
  */
 worst_case: VibrationsResult | null, 

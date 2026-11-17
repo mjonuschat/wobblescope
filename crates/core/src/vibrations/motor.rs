@@ -7,7 +7,6 @@ use crate::numeric::{convolve_same, trapz};
 /// profile sums the PSDs in it.
 pub type PsdByAngleSpeed = Vec<(f64, Vec<(f64, Vec<f64>)>)>;
 
-/// Width of the moving average of a motor profile.
 const PROFILE_SMOOTHING: usize = 20;
 /// Power the energy and the area under the profile are raised to for the weights.
 const ENERGY_AMPLIFICATION: i32 = 2;
@@ -21,7 +20,7 @@ const ENERGY_AMPLIFICATION: i32 = 2;
 /// row every half degree, so 90 degrees reads the row of 45 degrees (D38). When the weights add up
 /// to zero the global profile is the unweighted sum of the profiles.
 ///
-/// Both `main` angles must be in `psds` and below the length of `angle_energy`; the caller checks,
+/// Both `main` angles must be in `psds` and below the length of `angle_energy`. The caller checks,
 /// as Shake&Tune does. An angle missing from `psds` is skipped.
 pub fn motor_profiles(
     freqs: &[f64],

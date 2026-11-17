@@ -1,5 +1,3 @@
-//! The worst case of the vibrations profile over several chips.
-
 use wobblescope_core::RawSamples;
 use wobblescope_core::vibrations::{
     Grid, Kinematics, StepInput, VibrationsParams, analyze_chip, worst_case,

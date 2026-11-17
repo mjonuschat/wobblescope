@@ -296,7 +296,6 @@ struct Run {
     status: watch::Receiver<Status>,
     /// What an axes-map calibration must put back, once it may have changed Klipper's state.
     restore: Option<Saved>,
-    /// The finished steps of the vibrations angle that is running, in order.
     angle_steps: Vec<StepMeta>,
 }
 

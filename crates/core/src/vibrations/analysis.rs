@@ -25,12 +25,10 @@ const GOOD_ANGLES_THRESHOLD: f64 = 1.1;
 /// Width in mm/s cut out of a good speed zone either side of a peak.
 const PEAK_CLEARANCE_MM_S: f64 = 3.0;
 
-/// What a vibrations profile is computed with.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VibrationsParams {
     /// Highest frequency analysed, in Hz.
     pub max_freq: f64,
-    /// The printer's kinematics.
     pub kinematics: Kinematics,
 }
 
@@ -43,7 +41,6 @@ impl Default for VibrationsParams {
     }
 }
 
-/// The energy of one step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct StepEnergy {
@@ -55,7 +52,6 @@ pub struct StepEnergy {
     pub energy: f64,
 }
 
-/// The motor frequency profile of one chip.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MotorResult {
@@ -67,15 +63,13 @@ pub struct MotorResult {
     pub combined: Vec<f64>,
     /// Resonance frequency in Hz.
     pub fr: f64,
-    /// Damping ratio; `None` when the half-power points cannot be found.
+    /// Damping ratio. `None` when the half-power points cannot be found.
     pub zeta: Option<f64>,
-    /// Index of the resonance in `freqs`.
     pub peak_index: usize,
     /// The strongest bin of the profile lies below the resonance search range.
     pub low_freq_warning: bool,
 }
 
-/// Every figure of a vibrations profile.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VibrationsResult {
@@ -85,7 +79,6 @@ pub struct VibrationsResult {
     pub speeds: Vec<f64>,
     /// Grid angles in degrees.
     pub angles: Vec<f64>,
-    /// Energy per grid angle.
     pub angle_energy: Vec<f64>,
     /// Energy over angle (rows) and speed (columns).
     pub grid: Vec<Vec<f64>>,
@@ -99,9 +92,9 @@ pub struct VibrationsResult {
     pub peak_speeds: Vec<f64>,
     pub good_speeds: Vec<Zone>,
     pub good_angles: Vec<Zone>,
-    /// Symmetry score; `None` when Shake&Tune's value is NaN (D36).
+    /// Symmetry score. `None` when Shake&Tune's value is NaN (D36).
     pub symmetry: Option<f64>,
-    /// The motor profile; `None` for a worst case and when no resonance can be found.
+    /// The motor profile. `None` for a worst case and when no resonance can be found.
     pub motor: Option<MotorResult>,
     /// `wobblescope-core` version that produced it.
     pub core_version: String,
@@ -118,7 +111,7 @@ pub(crate) fn derive(grid: &Grid, kinematics: Kinematics) -> VibrationsResult {
     let curves = speed_powers(grid);
 
     // D44: the window and the vicinity are counts of grid points, so their width in mm/s depends
-    // on the grid's speed step; kept as Shake&Tune has it.
+    // on the grid's speed step. Kept as Shake&Tune has it.
     let max_metric = curves
         .metric
         .iter()
@@ -169,7 +162,7 @@ pub(crate) fn derive(grid: &Grid, kinematics: Kinematics) -> VibrationsResult {
 ///
 /// # Errors
 /// [`CoreError::InvalidParameter`] when there are no steps, when a main angle of the kinematics
-/// has no step, or when the steps cover fewer than two distinct speeds; and whatever
+/// has no step, or when the steps cover fewer than two distinct speeds. It also returns what
 /// [`CalibrationData::from_samples`](crate::psd::CalibrationData::from_samples) rejects in a
 /// recording, such as one with no samples.
 pub fn analyze_chip(

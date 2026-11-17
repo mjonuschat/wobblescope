@@ -25,6 +25,6 @@ window: TimeWindow | null,
  */
 files: Array<SegmentFile>, 
 /**
- * The speed steps of a vibrations segment, in time order; empty for other sessions.
+ * The speed steps of a vibrations segment, in time order. Empty for other sessions.
  */
 steps: Array<StepMeta>, };

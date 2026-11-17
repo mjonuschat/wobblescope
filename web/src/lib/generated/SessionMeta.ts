@@ -57,7 +57,7 @@ outcome: Outcome,
  */
 axes_map_run: AxesMapRun | null, 
 /**
- * The moves of a vibrations run; present exactly when [`SessionMeta::kind`] is
+ * The moves of a vibrations run. Present exactly when [`SessionMeta::kind`] is
  * [`SessionKind::Vibrations`].
  */
 vibrations_run: VibrationsRun | null, 

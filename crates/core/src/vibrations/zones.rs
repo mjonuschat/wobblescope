@@ -5,7 +5,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Zone {
-    /// Index of the first sample of the zone.
     pub start: usize,
     /// Index at which the zone ends. It is the first sample at or above the threshold, so it is
     /// outside the zone, except for a zone that runs to the end of the data, where it is the last
@@ -17,7 +16,7 @@ pub struct Zone {
 }
 
 /// The zones of `power` below `mean + (max - min) / 4 - threshold * std`, sorted from lowest to
-/// highest `energy`. A zone whose mean is NaN is left out; that is the case of a one-sample zone
+/// highest `energy`. A zone whose mean is NaN is left out. That is the case of a one-sample zone
 /// at the very end of the data. An empty curve has no zones.
 pub fn low_energy_zones(power: &[f64], threshold: f64) -> Vec<Zone> {
     if power.is_empty() {
@@ -69,7 +68,7 @@ pub fn low_energy_zones(power: &[f64], threshold: f64) -> Vec<Zone> {
 /// `peak_speed_indices` pairs each peak speed with its index in `speeds`. A peak counts for a zone
 /// when its speed lies between the speeds at the zone's `start` and `end`.
 ///
-/// Shake&Tune fails with an `IndexError` when no zone is left (D40); this returns an empty list.
+/// Shake&Tune fails with an `IndexError` when no zone is left (D40). This returns an empty list.
 pub fn filter_and_split_zones(
     speeds: &[f64],
     zones: &[Zone],

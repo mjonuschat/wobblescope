@@ -767,7 +767,7 @@ mod vibrations {
     }
 
     /// One segment of four one-second steps, each followed by a one-second gap, sampled at a
-    /// steady rate. A step is a tone as loud as `amplitude` times its speed; the gap is loud
+    /// steady rate. A step is a tone as loud as `amplitude` times its speed. The gap is loud
     /// noise that must never reach an analysis.
     fn recording(amplitude: f64) -> RawSamples {
         let mut s = RawSamples::default();
@@ -932,7 +932,7 @@ mod vibrations {
             for chip in &out.per_chip {
                 let result = chip.result.as_ref().unwrap();
                 assert_eq!(result.steps.len(), 2 * SPEEDS.len());
-                // The motor profile belongs to a chip's own result; the worst case has none.
+                // The motor profile belongs to a chip's own result. The worst case has none.
                 assert!(result.motor.is_some(), "{chip:?}");
             }
             assert!(worst.motor.is_none());

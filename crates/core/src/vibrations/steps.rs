@@ -5,18 +5,15 @@ use crate::numeric::{interp, trapz};
 use crate::psd::CalibrationData;
 use crate::samples::RawSamples;
 
-/// One constant-speed pass of the test, recorded at a movement angle.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepInput {
     /// Movement angle in degrees.
     pub angle: f64,
     /// Movement speed in mm/s.
     pub speed: f64,
-    /// The accelerometer recording of the pass.
     pub samples: RawSamples,
 }
 
-/// The spectrum of one step on the shared frequency grid.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepPsd {
     /// Movement angle in degrees.

@@ -386,7 +386,6 @@ parity_test! {
     fn a_flat_recording_is_an_error_not_nan() {
         let (_, fixture) = fixtures().remove(0);
         let mut steps = inputs(&fixture);
-        // A step with no samples at all.
         steps[3].samples = RawSamples { t: vec![], x: vec![], y: vec![], z: vec![] };
         assert!(analyze_chip(&steps, &params(&fixture)).is_err());
     }

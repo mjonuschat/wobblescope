@@ -1,11 +1,9 @@
-//! The worst case over several chips.
-
 use super::analysis::{VibrationsParams, VibrationsResult, derive};
 use super::grid::Grid;
 
 /// The profile of the element-wise maximum of the chips' grids, with the same derivation as one
 /// chip. It has no motor profile and no steps, which belong to each chip. One grid gives that
-/// chip's own figures; no grids, grids that differ in shape, or a grid of fewer than two speeds give
+/// chip's own figures. No grids, grids that differ in shape, or a grid of fewer than two speeds give
 /// `None`.
 pub fn worst_case(grids: &[&Grid], p: &VibrationsParams) -> Option<VibrationsResult> {
     let (first, rest) = grids.split_first()?;

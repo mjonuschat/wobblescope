@@ -36,7 +36,7 @@ pub(super) fn step_timeout(max_segment_seconds: u32, slowest_step_seconds: f64) 
 
 impl Run {
     /// Reads what the run changes and refuses it when the printer has no input shaper, which the
-    /// run leaves on. The limits it returns are what the restore puts back; the shaper is not
+    /// run leaves on. The limits it returns are what the restore puts back. The shaper is not
     /// part of it, because the run never changes it.
     pub(super) async fn read_vibrations_saved(&mut self, control: &Rpc) -> Result<Saved, Failure> {
         let saved =
@@ -153,7 +153,7 @@ impl Run {
         let _ = futures_util::future::join_all(waits).await;
         let mut outcome = SegmentOutcome::default();
         for (chip, rec) in self.recorders.iter().enumerate() {
-            // The unfinished step kept delivering; only the finished steps are written.
+            // The unfinished step kept delivering. Only the finished steps are written.
             let taken = rec.take_within(start, end);
             if taken.samples.is_empty() {
                 continue;

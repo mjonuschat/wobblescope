@@ -2,24 +2,17 @@
 import type { DatasetDecision } from "./DatasetDecision";
 import type { VibrationsResult } from "./VibrationsResult";
 
-/**
- * What a vibrations analysis made of one chip.
- */
-export type ChipVibrations = { 
-/**
- * Chip name.
- */
-chip: string, 
+export type ChipVibrations = { chip: string, 
 /**
  * One decision per angle recording the chip made, in angle order.
  */
 decisions: Array<DatasetDecision>, 
 /**
- * Why the chip is left out of the worst case; `None` when it takes part.
+ * Why the chip is left out of the worst case. `None` when it takes part.
  */
 excluded: string | null, 
 /**
- * The chip's own profile; `None` when its data could not be analysed or an angle is missing.
+ * The chip's own profile. `None` when its data could not be analysed or an angle is missing.
  */
 result: VibrationsResult | null, 
 /**

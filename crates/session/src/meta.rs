@@ -83,7 +83,6 @@ pub struct AxesMapRun {
     pub max_z_accel: Option<f64>,
 }
 
-/// The moves a vibrations-profile run was made with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VibrationsRun {
@@ -250,7 +249,6 @@ pub struct SegmentFile {
     pub health_notes: Vec<String>,
 }
 
-/// One constant-speed step inside a vibrations segment.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct StepMeta {
@@ -273,7 +271,7 @@ pub struct SegmentMeta {
     pub window: Option<TimeWindow>,
     /// One entry per chip that recorded this segment.
     pub files: Vec<SegmentFile>,
-    /// The speed steps of a vibrations segment, in time order; empty for other sessions.
+    /// The speed steps of a vibrations segment, in time order. Empty for other sessions.
     #[serde(default)]
     pub steps: Vec<StepMeta>,
 }
@@ -324,7 +322,7 @@ pub struct SessionMeta {
     /// [`SessionKind::AxesMap`].
     #[serde(default)]
     pub axes_map_run: Option<AxesMapRun>,
-    /// The moves of a vibrations run; present exactly when [`SessionMeta::kind`] is
+    /// The moves of a vibrations run. Present exactly when [`SessionMeta::kind`] is
     /// [`SessionKind::Vibrations`].
     #[serde(default)]
     pub vibrations_run: Option<VibrationsRun>,
@@ -451,7 +449,7 @@ impl SessionMeta {
         }
     }
 
-    /// The session's kind. Run settings identify `Vibrations` and `AxesMap`; `Belts` needs at
+    /// The session's kind. Run settings identify `Vibrations` and `AxesMap`. `Belts` needs at
     /// least one segment, every segment a belt direction, no belt twice and all at one point.
     pub fn kind(&self) -> SessionKind {
         if self.vibrations_run.is_some() {
@@ -582,7 +580,6 @@ impl SessionMeta {
         Ok(())
     }
 
-    /// The rules of a vibrations session and of speed steps.
     fn validate_vibrations(&self) -> Result<(), SessionError> {
         if let Some(run) = &self.vibrations_run {
             for (field, value) in [

@@ -34,14 +34,12 @@ pub fn estimate_damping(freq_bins: &[f64], psd: &[f64]) -> Option<DampingEstimat
     Some(half_power_estimate(freq_bins, psd, peak))
 }
 
-/// What [`estimate_damping_above`] finds.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MechanicalParams {
     /// Frequency of the strongest bin at or above `min_freq`, in Hz.
     pub fr: f64,
     /// The damping ratio, `None` as for [`DampingEstimate::zeta`].
     pub zeta: Option<f64>,
-    /// Index of that bin in the input.
     pub peak_index: usize,
     /// The strongest bin of the whole spectrum lies below `min_freq`.
     pub low_freq_max: bool,
@@ -78,7 +76,6 @@ pub fn estimate_damping_above(
     })
 }
 
-/// The half-power estimate around the bin `peak`.
 fn half_power_estimate(freq_bins: &[f64], psd: &[f64], peak: usize) -> DampingEstimate {
     let fr = freq_bins[peak];
     let half = psd[peak] * HALF_POWER_LEVEL;

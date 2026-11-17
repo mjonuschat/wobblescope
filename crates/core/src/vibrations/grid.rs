@@ -8,7 +8,6 @@ use crate::numeric::convolve_same;
 /// steps in the order they were recorded.
 pub type EnergyByAngleSpeed = Vec<(f64, Vec<(f64, f64)>)>;
 
-/// How the printer's two motors move for a direction of travel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kinematics {
     /// The motors are the X and Y axes. Also CoreXZ, whose tested axes are X and Y.
@@ -39,7 +38,6 @@ impl Kinematics {
     }
 }
 
-/// Vibration energy over every direction and speed.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Grid {
     /// 720 angles in degrees from 0 to 360.
@@ -50,15 +48,11 @@ pub struct Grid {
     pub data: Vec<Vec<f64>>,
 }
 
-/// Angles on the grid.
 const ANGLE_COUNT: usize = 720;
-/// Grid speeds per measured speed.
 const SPEEDS_PER_MEASURED: usize = 6;
 /// Rows added at each end of the angle powers before smoothing.
 const ANGLE_PAD: usize = 9;
-/// Width of the moving average of the angle powers.
 const ANGLE_SMOOTHING: usize = 15;
-/// Width of the moving average of the speed curves.
 const SPEED_SMOOTHING: usize = 15;
 
 /// `numpy.linspace(start, stop, num)`.
@@ -171,12 +165,9 @@ pub fn angle_powers(grid: &Grid) -> Vec<f64> {
     smoothed[ANGLE_PAD..smoothed.len() - ANGLE_PAD].to_vec()
 }
 
-/// The curves over speed, each of the grid's column count.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpeedCurves {
-    /// Lowest energy over all directions.
     pub min: Vec<f64>,
-    /// Highest energy over all directions.
     pub max: Vec<f64>,
     /// Variance over all directions, rescaled so that its maximum equals the maximum of `max`.
     pub variance: Vec<f64>,
@@ -252,7 +243,7 @@ fn corrcoef(x: &[f64], y: &[f64]) -> f64 {
 /// The two sections are the quarter turn (180 rows) before the midpoint and the one after it, in
 /// the same order, so one is the other rotated by 90 degrees and not mirrored (D37). The score is
 /// capped at 100 but never raised to 0, because Shake&Tune calls `np.clip(0, 100, x)` with its
-/// arguments in the wrong order; an anti-correlated grid raises a negative number to a fractional
+/// arguments in the wrong order. An anti-correlated grid raises a negative number to a fractional
 /// power and gives NaN (D36). Both are reproduced.
 pub fn symmetry(grid: &Grid, main: [f64; 2]) -> f64 {
     let total = grid.angles.len();

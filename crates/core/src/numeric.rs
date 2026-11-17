@@ -44,7 +44,7 @@ pub fn median_rate(t: &[f64]) -> Option<f64> {
 }
 
 /// `numpy.trapz`: the trapezoid rule over the points `(x, y)`. Zero when fewer than two points
-/// are given; extra values in the longer slice are ignored.
+/// are given. Extra values in the longer slice are ignored.
 pub fn trapz(y: &[f64], x: &[f64]) -> f64 {
     x.windows(2)
         .zip(y.windows(2))

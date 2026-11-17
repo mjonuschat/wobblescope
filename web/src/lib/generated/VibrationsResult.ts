@@ -3,9 +3,6 @@ import type { MotorResult } from "./MotorResult";
 import type { StepEnergy } from "./StepEnergy";
 import type { Zone } from "./Zone";
 
-/**
- * Every figure of a vibrations profile.
- */
 export type VibrationsResult = { 
 /**
  * Energy of every step, empty for a worst case.
@@ -18,11 +15,7 @@ speeds: Array<number>,
 /**
  * Grid angles in degrees.
  */
-angles: Array<number>, 
-/**
- * Energy per grid angle.
- */
-angle_energy: Array<number>, 
+angles: Array<number>, angle_energy: Array<number>, 
 /**
  * Energy over angle (rows) and speed (columns).
  */
@@ -36,11 +29,11 @@ peaks: Array<number>,
  */
 peak_speeds: Array<number>, good_speeds: Array<Zone>, good_angles: Array<Zone>, 
 /**
- * Symmetry score; `None` when Shake&Tune's value is NaN (D36).
+ * Symmetry score. `None` when Shake&Tune's value is NaN (D36).
  */
 symmetry: number | null, 
 /**
- * The motor profile; `None` for a worst case and when no resonance can be found.
+ * The motor profile. `None` for a worst case and when no resonance can be found.
  */
 motor: MotorResult | null, 
 /**
