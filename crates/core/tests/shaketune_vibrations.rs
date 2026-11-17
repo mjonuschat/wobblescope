@@ -11,9 +11,9 @@ use serde::Deserialize;
 use wobblescope_core::RawSamples;
 use wobblescope_core::peaks::detect_peaks_relative;
 use wobblescope_core::vibrations::{
-    EnergyByAngleSpeed, Kinematics, PsdByAngleSpeed, StepInput, Zone, angle_powers,
-    direction_speed_grid, estimate_damping_above, filter_and_split_zones, low_energy_zones,
-    motor_profiles, speed_powers, step_psds, symmetry,
+    EnergyByAngleSpeed, Kinematics, PsdByAngleSpeed, StepInput, VibrationsParams, Zone,
+    analyze_chip, angle_powers, direction_speed_grid, estimate_damping_above,
+    filter_and_split_zones, low_energy_zones, motor_profiles, speed_powers, step_psds, symmetry,
 };
 
 #[derive(Deserialize)]
@@ -316,5 +316,97 @@ parity_test! {
             let got = symmetry(&grid(&fixture), main_angles(&fixture));
             close(&format!("{name} symmetry"), got, fixture.symmetry_factor);
         }
+    }
+}
+
+fn params(fixture: &Fixture) -> VibrationsParams {
+    VibrationsParams {
+        max_freq: fixture.max_freq,
+        kinematics: Kinematics::parse(&fixture.kinematics).unwrap(),
+    }
+}
+
+parity_test! {
+    fn analyze_chip_matches_shaketune_end_to_end() {
+        for (name, fixture) in fixtures() {
+            let got = analyze_chip(&inputs(&fixture), &params(&fixture)).unwrap();
+            assert_eq!(got.steps.len(), fixture.energies.len(), "{name} steps");
+            for step in &got.steps {
+                let want = fixture
+                    .energies
+                    .iter()
+                    .find(|e| e.angle == step.angle && e.speed == step.speed)
+                    .unwrap_or_else(|| panic!("{name}: step {} {} missing", step.angle, step.speed));
+                close(&format!("{name} step energy"), step.energy, want.energy);
+            }
+            assert_close(&format!("{name} speeds"), &got.speeds, &fixture.all_speeds);
+            assert_close(&format!("{name} angles"), &got.angles, &fixture.all_angles);
+            assert_close(&format!("{name} angle energy"), &got.angle_energy, &fixture.all_angles_energy);
+            assert_eq!(got.grid.len(), fixture.spectrogram_data.len());
+            for (i, (g, w)) in got.grid.iter().zip(&fixture.spectrogram_data).enumerate() {
+                assert_close(&format!("{name} grid row {i}"), g, w);
+            }
+            assert_close(&format!("{name} min"), &got.speed_min, &fixture.sp_min_energy);
+            assert_close(&format!("{name} max"), &got.speed_max, &fixture.sp_max_energy);
+            assert_close(&format!("{name} variance"), &got.speed_variance, &fixture.sp_variance_energy);
+            assert_close(&format!("{name} metric"), &got.vibration_metric, &fixture.vibration_metric);
+            assert_eq!(got.peaks, fixture.vibration_peaks, "{name} peaks");
+            let peak_speeds: Vec<f64> = fixture.vibration_peaks.iter().map(|i| fixture.all_speeds[*i]).collect();
+            assert_close(&format!("{name} peak speeds"), &got.peak_speeds, &peak_speeds);
+            assert_zones(&format!("{name} good speeds"), &got.good_speeds, &fixture.good_speeds);
+            // The two mirror-image zones tie to within rounding, so which comes first depends on
+            // the last bit of the step energies. Compare the zones in a fixed order.
+            let mut got_angles = got.good_angles.clone();
+            got_angles.sort_by_key(|z| z.start);
+            let mut want_angles = fixture.good_angles.clone();
+            want_angles.sort_by_key(|z| z.0);
+            assert_zones(&format!("{name} good angles"), &got_angles, &want_angles);
+            close(&format!("{name} symmetry"), got.symmetry.unwrap(), fixture.symmetry_factor);
+            let motor = got.motor.expect("motor");
+            assert_close(&format!("{name} motor freqs"), &motor.freqs, &fixture.target_freqs);
+            assert_eq!(motor.profiles.len(), 2);
+            for (angle, profile) in &motor.profiles {
+                let want = &fixture.motor_profiles[&format!("{}", *angle as i64)];
+                assert_close(&format!("{name} profile {angle}"), profile, want);
+            }
+            assert_close(&format!("{name} combined"), &motor.combined, &fixture.global_motor_profile);
+            close(&format!("{name} fr"), motor.fr, fixture.motor_fr);
+            assert_eq!(motor.peak_index, fixture.motor_res_idx);
+            assert_eq!(motor.low_freq_warning, fixture.motor_lowfreq_max);
+            match (motor.zeta, fixture.motor_zeta) {
+                (Some(g), Some(w)) => close(&format!("{name} zeta"), g, w),
+                (g, w) => assert_eq!(g, w, "{name} zeta"),
+            }
+            assert_eq!(got.core_version, wobblescope_core::CORE_VERSION);
+        }
+    }
+}
+
+parity_test! {
+    fn a_flat_recording_is_an_error_not_nan() {
+        let (_, fixture) = fixtures().remove(0);
+        let mut steps = inputs(&fixture);
+        // A step with no samples at all.
+        steps[3].samples = RawSamples { t: vec![], x: vec![], y: vec![], z: vec![] };
+        assert!(analyze_chip(&steps, &params(&fixture)).is_err());
+    }
+}
+
+parity_test! {
+    fn a_missing_main_angle_is_an_error() {
+        let (_, fixture) = fixtures().remove(0);
+        let main = main_angles(&fixture)[1];
+        let steps: Vec<StepInput> = inputs(&fixture).into_iter().filter(|s| s.angle != main).collect();
+        assert!(analyze_chip(&steps, &params(&fixture)).is_err());
+    }
+}
+
+parity_test! {
+    fn a_single_speed_is_an_error() {
+        let (_, fixture) = fixtures().remove(0);
+        let first = inputs(&fixture)[0].speed;
+        let steps: Vec<StepInput> = inputs(&fixture).into_iter().filter(|s| s.speed == first).collect();
+        assert!(steps.len() >= 2, "both main angles at one speed");
+        assert!(analyze_chip(&steps, &params(&fixture)).is_err());
     }
 }

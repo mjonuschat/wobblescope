@@ -2,7 +2,8 @@
 //! `_filter_and_split_ranges` of its `VibrationsComputation`.
 
 /// A stretch of a curve below the quiet threshold.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Zone {
     /// Index of the first sample of the zone.
     pub start: usize,
