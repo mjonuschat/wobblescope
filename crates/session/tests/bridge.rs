@@ -735,3 +735,260 @@ fn axes_map_params_use_recorded_velocity_limit_and_keep_legacy_speed() {
     m.axes_map_run.as_mut().unwrap().max_velocity = Some(0.0);
     assert!(axes_map_params(&m).is_err());
 }
+
+mod vibrations {
+    use std::collections::HashMap;
+
+    use wobblescope_core::RawSamples;
+    use wobblescope_core::direction::Direction;
+    use wobblescope_core::eligibility::{Coverage, Decision, Health};
+    use wobblescope_core::vibrations::{Grid, Kinematics, VibrationsParams, worst_case};
+    use wobblescope_session::SessionError;
+    use wobblescope_session::bridge::{analyze_vibrations, vibrations_inputs};
+    use wobblescope_session::meta::{
+        ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionMeta, Source, StepMeta,
+        TimeDomain, TimeWindow, VibrationsRun, sample_file_name,
+    };
+
+    const RATE: f64 = 1600.0;
+    const SPEEDS: [f64; 4] = [20.0, 30.0, 40.0, 50.0];
+
+    fn chip(name: &str, health: Health) -> ChipMeta {
+        ChipMeta {
+            name: name.to_owned(),
+            chip_type: None,
+            nominal_rate_hz: None,
+            observed_rate_hz: None,
+            axes_map: None,
+            mounting: None,
+            health,
+            health_notes: vec![],
+        }
+    }
+
+    /// One segment of four one-second steps, each followed by a one-second gap, sampled at a
+    /// steady rate. A step is a tone as loud as `amplitude` times its speed; the gap is loud
+    /// noise that must never reach an analysis.
+    fn recording(amplitude: f64) -> RawSamples {
+        let mut s = RawSamples::default();
+        let mut seed = 12345_u64;
+        for i in 0..(SPEEDS.len() * 2 * RATE as usize) {
+            let t = i as f64 / RATE;
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let noise = ((seed >> 33) as f64 / f64::from(1_u32 << 31)) - 0.5;
+            let step = (i / RATE as usize) / 2;
+            let in_step = (i / RATE as usize).is_multiple_of(2);
+            let level = if in_step {
+                amplitude * SPEEDS[step]
+            } else {
+                1000.0
+            };
+            s.t.push(t);
+            s.x.push(level * (2.0 * std::f64::consts::PI * 80.0 * t).sin() + noise);
+            s.y.push(level * 0.5 * (2.0 * std::f64::consts::PI * 110.0 * t).sin() + noise);
+            s.z.push(noise);
+        }
+        s
+    }
+
+    fn segment(axis: Direction, files: Vec<SegmentFile>) -> SegmentMeta {
+        let total = (SPEEDS.len() * 2) as f64;
+        SegmentMeta {
+            axis,
+            point: 0,
+            window: Some(TimeWindow {
+                start: 0.0,
+                end: total,
+            }),
+            files,
+            steps: SPEEDS
+                .iter()
+                .enumerate()
+                .map(|(k, &speed)| StepMeta {
+                    speed,
+                    window: TimeWindow {
+                        start: 2.0 * k as f64,
+                        end: 2.0 * k as f64 + 1.0,
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    fn file(chip: u32, segment: usize) -> SegmentFile {
+        SegmentFile {
+            chip,
+            sample_file: sample_file_name(chip as usize, segment),
+            sample_count: (SPEEDS.len() * 2 * RATE as usize) as u32,
+            coverage: Coverage::Complete,
+            health: None,
+            health_notes: Vec::new(),
+        }
+    }
+
+    /// A Cartesian vibrations session with one chip per `(name, health, amplitude)`, and the
+    /// sample files of all of them by file name.
+    fn session(chips: &[(&str, Health, f64)]) -> (SessionMeta, HashMap<String, RawSamples>) {
+        let mut files = HashMap::new();
+        let mut per_segment: [Vec<SegmentFile>; 2] = [vec![], vec![]];
+        for (index, (_, _, amplitude)) in chips.iter().enumerate() {
+            for (segment, list) in per_segment.iter_mut().enumerate() {
+                let entry = file(index as u32, segment);
+                files.insert(entry.sample_file.clone(), recording(*amplitude));
+                list.push(entry);
+            }
+        }
+        let [x, y] = per_segment;
+        let meta = SessionMeta {
+            format_version: 1,
+            id: "vibrations".to_owned(),
+            created_at: "2026-11-16T10:00:00Z".to_owned(),
+            source: Source::Capture,
+            time_domain: TimeDomain::KlipperPrintTime,
+            mode: None,
+            settings: None,
+            printer: None,
+            outcome: Outcome::Complete,
+            axes_map_run: None,
+            vibrations_run: Some(VibrationsRun {
+                size: 100.0,
+                z_height: 20.0,
+                max_speed: 50.0,
+                speed_increment: 10.0,
+                accel: 3000.0,
+                travel_speed: 120.0,
+                min_speed: 20.0,
+                kinematics: "cartesian".to_owned(),
+                max_velocity: None,
+            }),
+            notes: vec![],
+            probe_points: vec![ProbePoint { position: None }],
+            chips: chips.iter().map(|(n, h, _)| chip(n, *h)).collect(),
+            segments: vec![segment(Direction::X, x), segment(Direction::Y, y)],
+        };
+        (meta, files)
+    }
+
+    fn loader<'a>(
+        files: &'a HashMap<String, RawSamples>,
+    ) -> impl FnMut(&SegmentFile) -> Result<RawSamples, SessionError> + 'a {
+        |file| {
+            files
+                .get(&file.sample_file)
+                .cloned()
+                .ok_or_else(|| SessionError::Invalid {
+                    field: file.sample_file.clone(),
+                    reason: "sample file is not loaded".to_owned(),
+                })
+        }
+    }
+
+    fn grid_of(result: &wobblescope_core::vibrations::VibrationsResult) -> Grid {
+        Grid {
+            angles: result.angles.clone(),
+            speeds: result.speeds.clone(),
+            data: result.grid.clone(),
+        }
+    }
+
+    parity_test! {
+        fn steps_are_cut_from_the_segment_file_by_their_windows() {
+            let (meta, files) = session(&[("a", Health::Ok, 1.0)]);
+            let steps = vibrations_inputs(&meta, "a", loader(&files)).unwrap();
+            assert_eq!(steps.len(), 2 * SPEEDS.len());
+            for (i, step) in steps.iter().enumerate() {
+                let (angle, k) = if i < SPEEDS.len() { (0.0, i) } else { (90.0, i - SPEEDS.len()) };
+                assert_eq!(step.angle, angle);
+                assert_eq!(step.speed, SPEEDS[k]);
+                assert_eq!(step.samples.len(), RATE as usize);
+                assert_eq!(step.samples.t[0], 2.0 * k as f64);
+                assert!(step.samples.t.iter().all(|t| (2.0 * k as f64..2.0 * k as f64 + 1.0).contains(t)));
+            }
+        }
+    }
+
+    parity_test! {
+        fn a_chip_missing_one_angle_is_excluded_with_a_reason() {
+            let (mut meta, files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 1.0)]);
+            meta.segments[1].files.retain(|f| f.chip != 1);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let b = &out.per_chip[1];
+            assert_eq!(b.chip, "b");
+            assert_eq!(b.decisions.len(), 1);
+            assert!(b.excluded.as_deref().unwrap().contains("90"));
+            assert!(b.result.is_none() && b.failure.is_none());
+            let a = &out.per_chip[0];
+            assert!(a.excluded.is_none());
+            assert_eq!(out.worst_case.as_ref().unwrap().grid, a.result.as_ref().unwrap().grid);
+        }
+    }
+
+    parity_test! {
+        fn a_degraded_chip_is_left_out_of_the_worst_case_but_keeps_its_own_result() {
+            let (meta, files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Degraded, 5.0)]);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let b = &out.per_chip[1];
+            assert!(b.excluded.as_deref().unwrap().contains("degraded"));
+            assert!(b.decisions.iter().all(|d| d.decision == Decision::Excluded));
+            assert!(b.result.is_some() && b.failure.is_none());
+            let worst = out.worst_case.as_ref().unwrap();
+            assert!(worst.steps.is_empty() && worst.motor.is_none());
+            assert_eq!(worst.grid, out.per_chip[0].result.as_ref().unwrap().grid);
+
+            let forced = analyze_vibrations(&meta, 200.0, true, loader(&files)).unwrap();
+            assert!(forced.per_chip[1].excluded.is_none());
+            assert!(forced.per_chip[1].decisions.iter().all(|d| d.decision == Decision::Overridden));
+            assert_ne!(forced.worst_case.unwrap().grid, worst.grid);
+        }
+    }
+
+    parity_test! {
+        fn an_incomplete_session_is_refused() {
+            let (mut meta, files) = session(&[("a", Health::Ok, 1.0)]);
+            meta.outcome = Outcome::Incomplete { reason: "stopped".to_owned() };
+            let err = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap_err();
+            assert!(err.to_string().contains("incomplete"), "{err}");
+
+            let (mut meta, files) = session(&[("a", Health::Ok, 1.0)]);
+            meta.vibrations_run = None;
+            assert!(analyze_vibrations(&meta, 200.0, false, loader(&files)).is_err());
+
+            let (mut meta, files) = session(&[("a", Health::Ok, 1.0)]);
+            meta.vibrations_run.as_mut().unwrap().kinematics = "delta".to_owned();
+            assert!(analyze_vibrations(&meta, 200.0, false, loader(&files)).is_err());
+        }
+    }
+
+    parity_test! {
+        fn worst_case_uses_only_eligible_chips() {
+            let (meta, files) = session(&[
+                ("a", Health::Ok, 1.0),
+                ("b", Health::Ok, 3.0),
+                ("c", Health::Degraded, 50.0),
+            ]);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let grid = |i: usize| grid_of(out.per_chip[i].result.as_ref().unwrap());
+            let params = VibrationsParams { max_freq: 200.0, kinematics: Kinematics::Cartesian };
+            let expected = worst_case(&[&grid(0), &grid(1)], &params).unwrap();
+            assert_eq!(out.worst_case.as_ref().unwrap(), &expected);
+            let with_c = worst_case(&[&grid(0), &grid(1), &grid(2)], &params).unwrap();
+            assert_ne!(expected.grid, with_c.grid);
+        }
+    }
+
+    parity_test! {
+        fn a_missing_file_of_one_chip_does_not_stop_another_chip_or_the_worst_case() {
+            let (meta, mut files) = session(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 2.0)]);
+            files.remove(&sample_file_name(1, 1));
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let b = &out.per_chip[1];
+            assert!(b.result.is_none());
+            assert!(b.failure.as_deref().unwrap().contains(&sample_file_name(1, 1)));
+            let a = out.per_chip[0].result.as_ref().unwrap();
+            assert!(out.per_chip[0].failure.is_none());
+            assert_eq!(out.worst_case.as_ref().unwrap().grid, a.grid);
+        }
+    }
+}

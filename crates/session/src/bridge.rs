@@ -1,13 +1,20 @@
 //! The only route from a session to `wobblescope-core`: one [`DatasetInput`] per recording.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wobblescope_core::RawSamples;
 use wobblescope_core::axes_map::{AxesMapInput, AxesMapParams, AxesMapResult, Mounting};
 use wobblescope_core::direction::Direction;
-use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
+use wobblescope_core::eligibility::{
+    Coverage, DatasetDecision, DatasetInput, Decision, Health, select_eligible,
+};
+use wobblescope_core::vibrations::{
+    Grid, Kinematics, StepInput, VibrationsParams, VibrationsResult, analyze_chip, worst_case,
+};
 
 use crate::SessionError;
-use crate::meta::{AXES_MAP_DIRECTIONS, SegmentFile, SessionKind, SessionMeta, undersampled_note};
+use crate::meta::{
+    AXES_MAP_DIRECTIONS, Outcome, SegmentFile, SessionKind, SessionMeta, undersampled_note,
+};
 
 /// Builds the `core` inputs for every recording of `direction`, segments in metadata order and each
 /// segment's files in their recorded order.
@@ -335,4 +342,215 @@ where
         });
     }
     Ok(out)
+}
+
+/// What a vibrations analysis made of one chip.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ChipVibrations {
+    /// Chip name.
+    pub chip: String,
+    /// One decision per angle recording the chip made, in angle order.
+    pub decisions: Vec<DatasetDecision>,
+    /// Why the chip is left out of the worst case; `None` when it takes part.
+    pub excluded: Option<String>,
+    /// The chip's own profile; `None` when its data could not be analysed or an angle is missing.
+    pub result: Option<VibrationsResult>,
+    /// Why the chip's data could not be loaded or analysed.
+    pub failure: Option<String>,
+}
+
+/// The vibrations profile of every chip of a session, and their worst case.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct VibrationsAnalysis {
+    /// One entry per chip, in the order of `meta.chips`.
+    pub per_chip: Vec<ChipVibrations>,
+    /// The element-wise maximum over the chips that take part; `None` when none does or their
+    /// grids cannot be combined.
+    pub worst_case: Option<VibrationsResult>,
+    /// `wobblescope-core` version that produced it.
+    pub core_version: String,
+}
+
+fn invalid(field: &str, reason: impl Into<String>) -> SessionError {
+    SessionError::Invalid {
+        field: field.to_owned(),
+        reason: reason.into(),
+    }
+}
+
+/// The two measured angles and the kinematics of a vibrations session.
+fn vibrations_setup(meta: &SessionMeta) -> Result<([f64; 2], Kinematics), SessionError> {
+    meta.validate()?;
+    let Some(run) = &meta.vibrations_run else {
+        return Err(invalid("kind", "not a vibrations session"));
+    };
+    let (Some(angles), Some(kinematics)) = (run.angles(), Kinematics::parse(&run.kinematics))
+    else {
+        return Err(invalid(
+            "vibrations_run.kinematics",
+            format!("unknown kinematics {}", run.kinematics),
+        ));
+    };
+    Ok((angles, kinematics))
+}
+
+/// The recording `file` holds, checked against the sample count the metadata records.
+fn load_checked<F>(load: &mut F, file: &SegmentFile) -> Result<RawSamples, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    let samples = load(file)?;
+    if samples.len() == file.sample_count as usize {
+        Ok(samples)
+    } else {
+        Err(SessionError::SampleCountMismatch {
+            file: file.sample_file.clone(),
+            expected: file.sample_count,
+            found: samples.len(),
+        })
+    }
+}
+
+/// The steps of `chip`: each step's window cut from its segment file (`start <= t < end`), the
+/// segments in metadata order. Segment 0 is the first angle of the run and segment 1 the second.
+/// A segment the chip has no file for gives no steps. Only the chip's files are loaded.
+///
+/// # Errors
+/// `meta` is not a vibrations session or has unknown kinematics, a file cannot be loaded or
+/// holds a different number of samples than recorded, or a step window cannot be cut from it.
+pub fn vibrations_inputs<F>(
+    meta: &SessionMeta,
+    chip: &str,
+    mut load: F,
+) -> Result<Vec<StepInput>, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    let (angles, _) = vibrations_setup(meta)?;
+    let mut steps = Vec::new();
+    for (segment, angle) in meta.segments.iter().zip(angles) {
+        let Some(file) = segment
+            .files
+            .iter()
+            .find(|f| meta.chips[f.chip as usize].name == chip)
+        else {
+            continue;
+        };
+        let samples = load_checked(&mut load, file)?;
+        for step in &segment.steps {
+            let range = samples
+                .window(step.window.start..step.window.end)
+                .map_err(|e| invalid(&file.sample_file, e.to_string()))?;
+            steps.push(StepInput {
+                angle,
+                speed: step.speed,
+                samples: samples.slice(range),
+            });
+        }
+    }
+    Ok(steps)
+}
+
+/// Analyses every chip of a complete vibrations session and the worst case over the chips that
+/// take part.
+///
+/// A chip takes part when each of the two angles has a recording and neither is excluded by
+/// health, coverage or an undersampled rate; `include_excluded` lets both take part anyway. A
+/// chip left out still gets its own profile when its data can be analysed. A file `load`
+/// cannot read, or a profile that cannot be computed, is that chip's `failure` and no other
+/// chip's. The worst case is `None` when no chip takes part or their grids differ.
+///
+/// # Errors
+/// `meta` is not a vibrations session, is not complete, or has unknown kinematics.
+pub fn analyze_vibrations<F>(
+    meta: &SessionMeta,
+    max_freq: f64,
+    include_excluded: bool,
+    mut load: F,
+) -> Result<VibrationsAnalysis, SessionError>
+where
+    F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
+{
+    let (angles, kinematics) = vibrations_setup(meta)?;
+    if meta.outcome != Outcome::Complete {
+        return Err(invalid(
+            "outcome",
+            "the vibrations session is incomplete and cannot be analysed",
+        ));
+    }
+    let params = VibrationsParams {
+        max_freq,
+        kinematics,
+    };
+
+    let mut per_chip = Vec::with_capacity(meta.chips.len());
+    let mut grids: Vec<Grid> = Vec::new();
+    for chip in &meta.chips {
+        // The decisions need only metadata, so the inputs are made without the samples.
+        let mut inputs = Vec::new();
+        let mut recorded_angles = Vec::new();
+        let mut missing_angles = Vec::new();
+        for (segment, angle) in angles.iter().enumerate() {
+            let recording = meta.segments.get(segment).and_then(|s| {
+                dataset_inputs_for_chip(meta, s.axis, &chip.name, |_| Ok(RawSamples::default()))
+                    .ok()?
+                    .into_iter()
+                    .next()
+            });
+            match recording {
+                Some(mut input) => {
+                    input.include_override = include_excluded;
+                    inputs.push(input);
+                    recorded_angles.push(*angle);
+                }
+                None => missing_angles.push(*angle),
+            }
+        }
+        let (_, eligibility) = select_eligible(&inputs);
+        let decisions = eligibility.decisions;
+
+        let mut reasons: Vec<String> = missing_angles
+            .iter()
+            .map(|angle| format!("no recording at {angle} degrees"))
+            .collect();
+        for (decision, angle) in decisions.iter().zip(&recorded_angles) {
+            if decision.decision == Decision::Excluded {
+                reasons.push(format!("{angle} degrees: {}", decision.reasons.join(", ")));
+            }
+        }
+        let excluded = (!reasons.is_empty()).then(|| reasons.join("; "));
+
+        let (mut result, mut failure) = (None, None);
+        if missing_angles.is_empty() {
+            let analysed = vibrations_inputs(meta, &chip.name, &mut load)
+                .map_err(|e| e.to_string())
+                .and_then(|steps| analyze_chip(&steps, &params).map_err(|e| e.to_string()));
+            match analysed {
+                Ok(profile) => result = Some(profile),
+                Err(reason) => failure = Some(reason),
+            }
+        }
+        if let (Some(profile), None) = (&result, &excluded) {
+            grids.push(Grid {
+                angles: profile.angles.clone(),
+                speeds: profile.speeds.clone(),
+                data: profile.grid.clone(),
+            });
+        }
+        per_chip.push(ChipVibrations {
+            chip: chip.name.clone(),
+            decisions,
+            excluded,
+            result,
+            failure,
+        });
+    }
+    let grid_refs: Vec<&Grid> = grids.iter().collect();
+    Ok(VibrationsAnalysis {
+        per_chip,
+        worst_case: worst_case(&grid_refs, &params),
+        core_version: wobblescope_core::CORE_VERSION.to_owned(),
+    })
 }

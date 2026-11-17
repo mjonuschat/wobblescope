@@ -747,3 +747,76 @@ parity_test! {
         assert!(matches!(&chips[0], AxesMapChip::Analysed { result, .. } if result.map.as_deref() == Some("x, y, z")), "{chips:?}");
     }
 }
+
+fn vibrations_meta(outcome: Outcome) -> SessionMeta {
+    use wobblescope_session::meta::{StepMeta, VibrationsRun};
+    let segment = |axis: Direction, segment: usize| SegmentMeta {
+        axis,
+        point: 0,
+        window: Some(TimeWindow {
+            start: 0.0,
+            end: 4.0,
+        }),
+        files: vec![SegmentFile {
+            chip: 0,
+            sample_file: sample_file_name(0, segment),
+            sample_count: 100,
+            coverage: Coverage::Complete,
+            health: None,
+            health_notes: Vec::new(),
+        }],
+        steps: vec![StepMeta {
+            speed: 20.0,
+            window: TimeWindow {
+                start: 0.0,
+                end: 1.0,
+            },
+        }],
+    };
+    SessionMeta {
+        format_version: 1,
+        id: "vibrations".to_owned(),
+        created_at: "2026-11-16T10:00:00Z".to_owned(),
+        source: Source::Capture,
+        time_domain: TimeDomain::KlipperPrintTime,
+        mode: None,
+        settings: None,
+        printer: None,
+        outcome,
+        axes_map_run: None,
+        vibrations_run: Some(VibrationsRun {
+            size: 100.0,
+            z_height: 20.0,
+            max_speed: 50.0,
+            speed_increment: 10.0,
+            accel: 3000.0,
+            travel_speed: 120.0,
+            min_speed: 20.0,
+            kinematics: "cartesian".to_owned(),
+            max_velocity: None,
+        }),
+        notes: vec![],
+        probe_points: vec![ProbePoint { position: None }],
+        chips: vec![chip("adxl345", Health::Ok)],
+        segments: vec![segment(Direction::X, 0), segment(Direction::Y, 1)],
+    }
+}
+
+parity_test! {
+    fn vibrations_reports_a_file_that_was_never_added_as_that_chips_failure() {
+        let s = Session::new(vibrations_meta(Outcome::Complete)).unwrap();
+        let out = s.vibrations(200.0, false).unwrap();
+        assert!(out.per_chip[0].result.is_none());
+        assert!(out.per_chip[0].failure.as_deref().unwrap().contains("c0-s0.zst"));
+        assert!(out.worst_case.is_none());
+    }
+}
+
+parity_test! {
+    fn vibrations_refuses_an_incomplete_session() {
+        let meta = vibrations_meta(Outcome::Incomplete { reason: "stopped".to_owned() });
+        let err = Session::new(meta).unwrap().vibrations(200.0, false).unwrap_err();
+        assert!(matches!(err, AnalyzeError::Session(_)));
+        assert!(err.to_string().contains("incomplete"));
+    }
+}

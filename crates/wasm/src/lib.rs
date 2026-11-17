@@ -20,8 +20,8 @@ use wobblescope_core::spectrogram::{Spectrogram, spectrogram_of};
 use wobblescope_core::spectrum::{LiveSpectrum, Peak, Spectrum, top_peaks};
 use wobblescope_session::SessionError;
 use wobblescope_session::bridge::{
-    AxesMapChip, ChipCapture, apply_overrides, axes_map_inputs, axes_map_params, belt_inputs,
-    dataset_inputs,
+    AxesMapChip, ChipCapture, VibrationsAnalysis, analyze_vibrations, apply_overrides,
+    axes_map_inputs, axes_map_params, belt_inputs, dataset_inputs,
 };
 use wobblescope_session::codec::decode_samples;
 use wobblescope_session::meta::SessionMeta;
@@ -145,6 +145,35 @@ impl Session {
             input.include_override = include_excluded;
         }
         Ok(analyze_belts(chip, point, a.as_ref(), b.as_ref(), max_freq))
+    }
+
+    /// The vibrations profile of every chip of a vibrations session and their worst case, up to
+    /// `max_freq` Hz. Files are decoded one at a time for the call only. With `include_excluded`
+    /// a chip that health or coverage would leave out of the worst case takes part anyway. A
+    /// file that was never added makes that chip's profile a failure, not an error of the call.
+    ///
+    /// # Errors
+    /// [`AnalyzeError::Session`] when the session is not a complete vibrations session.
+    pub fn vibrations(
+        &self,
+        max_freq: f64,
+        include_excluded: bool,
+    ) -> Result<VibrationsAnalysis, AnalyzeError> {
+        Ok(analyze_vibrations(
+            &self.meta,
+            max_freq,
+            include_excluded,
+            |file| {
+                let bytes =
+                    self.files
+                        .get(&file.sample_file)
+                        .ok_or_else(|| SessionError::Invalid {
+                            field: file.sample_file.clone(),
+                            reason: "sample file is not loaded".to_owned(),
+                        })?;
+                decode_samples(bytes)
+            },
+        )?)
     }
 
     /// The datasets of `axis`, with their samples decoded for the call only.

@@ -82,6 +82,18 @@ impl WasmSession {
         to_js(&analysis)
     }
 
+    /// The vibrations profile of every chip and their worst case up to `max_freq` Hz, as
+    /// `VibrationsAnalysis`. `include_excluded` lets a chip that health or coverage would leave
+    /// out take part in the worst case. Throws when the session is not a complete vibrations
+    /// session.
+    pub fn vibrations(&self, max_freq: f64, include_excluded: bool) -> Result<JsValue, JsError> {
+        let analysis = self
+            .inner
+            .vibrations(max_freq, include_excluded)
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        to_js(&analysis)
+    }
+
     /// The time-frequency map of one chip's recording at one probe point of `axis`, up to
     /// `max_freq` Hz.
     pub fn spectrogram(
