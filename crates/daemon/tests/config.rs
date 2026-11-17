@@ -267,7 +267,7 @@ fn max_segment_seconds_defaults_to_600_and_zero_is_refused() {
 #[test]
 fn the_access_keys_default_to_every_interface_and_empty_lists() {
     let s = load_text("").unwrap();
-    assert_eq!(s.listen, "0.0.0.0:7126".parse().unwrap());
+    assert_eq!(s.listen, "0.0.0.0:7140".parse().unwrap());
     assert!(s.trusted_proxies.is_empty());
     assert!(s.allowed_hosts.is_empty());
 }
@@ -288,7 +288,7 @@ fn the_access_keys_parse_and_host_names_are_lowercased() {
 
 #[test]
 fn a_listen_value_that_is_not_an_address_and_port_is_refused_by_name() {
-    for bad in ["printer.local:7126", "0.0.0.0", "0.0.0.0:99999"] {
+    for bad in ["printer.local:7140", "0.0.0.0", "0.0.0.0:99999"] {
         refused_naming(&format!("listen = \"{bad}\"\n"), "listen");
     }
 }
@@ -306,7 +306,7 @@ fn a_bad_proxy_is_refused_naming_the_key_and_the_entry() {
 
 #[test]
 fn a_bad_allowed_host_is_refused_naming_the_key_and_the_entry() {
-    for bad in ["http://x", "x:7126", ""] {
+    for bad in ["http://x", "x:7140", ""] {
         let err = load_text(&format!("allowed_hosts = [\"{bad}\"]\n")).unwrap_err();
         assert!(
             err.contains("allowed_hosts") && err.contains(&format!("{bad:?}")),
@@ -317,7 +317,7 @@ fn a_bad_allowed_host_is_refused_naming_the_key_and_the_entry() {
 
 #[test]
 fn a_misspelled_listen_key_is_still_refused_by_name() {
-    refused_naming("listen_addr = \"0.0.0.0:7126\"\n", "listen_addr");
+    refused_naming("listen_addr = \"0.0.0.0:7140\"\n", "listen_addr");
 }
 
 #[test]

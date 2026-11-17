@@ -94,13 +94,13 @@ fn the_config_text_and_mode_follow_the_key() {
     let (text, mode) = config_file(None, None);
     assert_eq!(mode, 0o644);
     assert!(!text.contains("moonraker_api_key"));
-    let (text, mode) = config_file(Some("http://127.0.0.1:7126"), Some("k\"ey"));
+    let (text, mode) = config_file(Some("http://127.0.0.1:7140"), Some("k\"ey"));
     assert_eq!(mode, 0o600);
     let parsed: toml::Table = text.parse().unwrap();
     assert_eq!(parsed["moonraker_api_key"].as_str(), Some("k\"ey"));
     assert_eq!(
         parsed["moonraker_url"].as_str(),
-        Some("http://127.0.0.1:7126")
+        Some("http://127.0.0.1:7140")
     );
 }
 

@@ -15,10 +15,10 @@ function workspaceVersion(): string {
 
 /**
  * Where `/api` is proxied. Set `WOBBLESCOPE_TARGET` to a printer's daemon to iterate on the UI
- * against real data, e.g. `WOBBLESCOPE_TARGET=http://voron.local:7126 pnpm dev`. Defaults to a
+ * against real data, e.g. `WOBBLESCOPE_TARGET=http://voron.local:7140 pnpm dev`. Defaults to a
  * daemon on this machine.
  */
-const apiTarget = process.env.WOBBLESCOPE_TARGET ?? 'http://127.0.0.1:7126'
+const apiTarget = process.env.WOBBLESCOPE_TARGET ?? 'http://127.0.0.1:7140'
 
 export default defineConfig({
   define: { __WOBBLESCOPE_VERSION__: JSON.stringify(workspaceVersion()) },

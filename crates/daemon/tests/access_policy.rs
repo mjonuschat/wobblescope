@@ -117,7 +117,7 @@ fn an_answer_without_the_lists_is_unreadable_and_names_the_key() {
 fn a_wildcard_pattern_does_not_cover_a_port() {
     let p = allowing(json!(["*.local"]));
     assert!(p.origin_allowed("http://printer.local"));
-    assert!(!p.origin_allowed("http://printer.local:7126"));
+    assert!(!p.origin_allowed("http://printer.local:7140"));
 }
 
 #[test]
@@ -160,16 +160,16 @@ fn without_an_accepted_pattern_even_a_trusted_ip_origin_is_refused() {
     let trusted = json!(["192.168.0.0/16"]);
     for cors in [json!([]), json!(["*.loc*"])] {
         let p = with(trusted.clone(), cors);
-        assert!(!p.origin_allowed("http://192.168.1.20:7126"));
+        assert!(!p.origin_allowed("http://192.168.1.20:7140"));
     }
 }
 
 #[test]
 fn the_trusted_ip_clause_reads_the_host_as_moonraker_does() {
     let p = with(json!(["192.168.0.0/16", "::1/128"]), json!(["*.local"]));
-    assert!(p.origin_allowed("http://192.168.1.20:7126"));
+    assert!(p.origin_allowed("http://192.168.1.20:7140"));
     assert!(!p.origin_allowed("http://203.0.113.9"));
-    assert!(!p.origin_allowed("http://[::1]:7126"));
+    assert!(!p.origin_allowed("http://[::1]:7140"));
 }
 
 #[test]

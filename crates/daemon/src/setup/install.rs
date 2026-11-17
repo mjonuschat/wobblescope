@@ -353,7 +353,7 @@ pub async fn install(
             ok = false;
             say.step("service", "FAILED to stay running");
             say.note(&format!(
-                "see: journalctl -u {SERVICE} -n 50. Likely causes: the listen port 7126 is \
+                "see: journalctl -u {SERVICE} -n 50. Likely causes: the listen port 7140 is \
                  already in use, or {} is not valid.",
                 paths.config.display()
             ));

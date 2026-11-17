@@ -93,7 +93,7 @@ fn code(body: &Value) -> &str {
 }
 
 const LAN: &str = "192.168.1.20";
-const HOST: &str = "buster.local:7126";
+const HOST: &str = "buster.local:7140";
 
 #[tokio::test]
 async fn a_trusted_client_reaches_the_ui_the_api_and_the_write_guard() {
@@ -171,9 +171,9 @@ async fn an_untrusted_client_is_refused_everywhere_before_any_handler() {
 async fn a_rebinding_host_is_refused_with_or_without_a_matching_origin() {
     let rig = rig(&[], &[]);
     rig.publish(real_policy());
-    let host = "rebind.example:7126";
+    let host = "rebind.example:7140";
     for (method, uri) in [("GET", "/"), ("DELETE", "/api/sessions/x")] {
-        for origin in [None, Some("http://rebind.example:7126")] {
+        for origin in [None, Some("http://rebind.example:7140")] {
             let mut headers = vec![("host", host)];
             if let Some(origin) = origin {
                 headers.push(("origin", origin));
@@ -195,7 +195,7 @@ async fn a_proxy_that_rewrites_host_fails_on_origin_with_a_message_that_says_wha
             "GET",
             "/api/status",
             &[
-                ("host", "127.0.0.1:7126"),
+                ("host", "127.0.0.1:7140"),
                 ("origin", "https://printer.example.com"),
             ],
         )
@@ -211,9 +211,9 @@ async fn host_values_that_name_an_address_or_the_machine_are_allowed() {
     let rig = rig(&[], &[]);
     rig.publish(real_policy());
     for host in [
-        "192.168.1.5:7126",
-        "[fe80::1]:7126",
-        "localhost:7126",
+        "192.168.1.5:7140",
+        "[fe80::1]:7140",
+        "localhost:7140",
         "BUSTER.local.",
     ] {
         let (status, _) = rig.get(LAN, host, "/api/status").await;
@@ -228,7 +228,7 @@ async fn host_values_that_name_an_address_or_the_machine_are_allowed() {
 async fn origins_pass_when_they_are_the_daemons_own_or_listed_and_not_otherwise() {
     let rig = rig(&[], &[]);
     rig.publish(real_policy());
-    for origin in ["http://buster.local:7126", "https://my.mainsail.xyz"] {
+    for origin in ["http://buster.local:7140", "https://my.mainsail.xyz"] {
         let (status, _) = rig
             .ask(
                 LAN,
@@ -264,7 +264,7 @@ async fn a_cross_site_write_from_a_trusted_client_still_meets_the_write_guard() 
             "/api/sessions/x",
             &[
                 ("host", HOST),
-                ("origin", "http://buster.local:7126"),
+                ("origin", "http://buster.local:7140"),
                 ("sec-fetch-site", "cross-site"),
             ],
         )
@@ -300,7 +300,7 @@ async fn the_logins_marker_refuses_loopback_too_and_its_absence_lets_loopback_in
                 peer,
                 "DELETE",
                 "/api/sessions/x",
-                &[("host", "localhost:7126"), ("x-wobblescope-client", "1")],
+                &[("host", "localhost:7140"), ("x-wobblescope-client", "1")],
             )
             .await;
         assert_eq!(status, StatusCode::FORBIDDEN);
@@ -312,7 +312,7 @@ async fn the_logins_marker_refuses_loopback_too_and_its_absence_lets_loopback_in
             "127.0.0.1",
             "DELETE",
             "/api/sessions/x",
-            &[("host", "localhost:7126"), ("x-wobblescope-client", "1")],
+            &[("host", "localhost:7140"), ("x-wobblescope-client", "1")],
         )
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
@@ -322,7 +322,7 @@ async fn the_logins_marker_refuses_loopback_too_and_its_absence_lets_loopback_in
 async fn before_the_lists_are_read_only_loopback_is_admitted_and_then_the_lan_follows() {
     let rig = rig(&[], &[]);
     for uri in ["/", "/api/status"] {
-        let (status, _) = rig.get("127.0.0.1", "localhost:7126", uri).await;
+        let (status, _) = rig.get("127.0.0.1", "localhost:7140", uri).await;
         assert_eq!(status, StatusCode::OK, "{uri}");
     }
     let (status, body) = rig.get(LAN, HOST, "/api/status").await;
@@ -348,7 +348,7 @@ async fn before_the_lists_are_read_loopback_still_meets_the_host_and_origin_chec
             "GET",
             "/api/status",
             &[
-                ("host", "localhost:7126"),
+                ("host", "localhost:7140"),
                 ("origin", "http://evil.example"),
             ],
         )
@@ -502,7 +502,7 @@ async fn without_proxies_the_forwarded_header_is_ignored_and_warned_about_once()
                 "GET",
                 "/api/status",
                 &[
-                    ("host", "localhost:7126"),
+                    ("host", "localhost:7140"),
                     ("x-forwarded-for", "203.0.113.9"),
                 ],
             )

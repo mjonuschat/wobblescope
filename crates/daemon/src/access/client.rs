@@ -401,10 +401,10 @@ mod tests {
     #[test]
     fn host_names_lose_their_port_brackets_and_trailing_dot() {
         assert_eq!(
-            host_name("Buster.local:7126").as_deref(),
+            host_name("Buster.local:7140").as_deref(),
             Some("buster.local")
         );
-        assert_eq!(host_name("[fe80::1]:7126").as_deref(), Some("fe80::1"));
+        assert_eq!(host_name("[fe80::1]:7140").as_deref(), Some("fe80::1"));
         assert_eq!(host_name("buster.local.").as_deref(), Some("buster.local"));
         assert_eq!(host_name("").as_deref(), None);
     }

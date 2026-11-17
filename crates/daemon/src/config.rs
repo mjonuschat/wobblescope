@@ -14,7 +14,7 @@ const MIB: u64 = 1024 * 1024;
 const DEFAULT_CAP_MIB: u64 = 2048;
 const DEFAULT_HEADROOM_MIB: u64 = 256;
 const DEFAULT_MAX_SEGMENT_SECONDS: u32 = 600;
-const DEFAULT_LISTEN: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 7126);
+const DEFAULT_LISTEN: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 7140);
 /// The Moonraker URL used when the config names none.
 pub const DEFAULT_MOONRAKER_URL: &str = "http://127.0.0.1:7125";
 
@@ -452,7 +452,7 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         Some(text) => text.parse().map_err(|_| {
             invalid(
                 "listen",
-                "must be an IP address and port like 0.0.0.0:7126; a host name is not allowed",
+                "must be an IP address and port like 0.0.0.0:7140; a host name is not allowed",
             )
         })?,
         None => DEFAULT_LISTEN,

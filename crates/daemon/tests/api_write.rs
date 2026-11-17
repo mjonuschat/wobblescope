@@ -447,7 +447,7 @@ async fn a_foreign_origin_without_the_client_header_is_refused() {
     let (status, _, _) = send(&app, evil).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(dirs(d.path()), ["s1"]);
-    for origin in ["http://127.0.0.1:7126", "null"] {
+    for origin in ["http://127.0.0.1:7140", "null"] {
         let req = write(
             "PATCH",
             "/api/sessions/s1",
@@ -468,7 +468,7 @@ async fn a_write_with_only_origin_and_a_rewritten_host_is_accepted() {
         &[
             ("x-wobblescope-client", "1"),
             ("origin", "http://printer.local"),
-            ("host", "127.0.0.1:7126"),
+            ("host", "127.0.0.1:7140"),
         ],
         vec![],
     );
