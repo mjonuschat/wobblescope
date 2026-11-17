@@ -43,6 +43,15 @@ pub fn median_rate(t: &[f64]) -> Option<f64> {
     rate.is_finite().then_some(rate)
 }
 
+/// `numpy.trapz`: the trapezoid rule over the points `(x, y)`. Zero when fewer than two points
+/// are given; extra values in the longer slice are ignored.
+pub fn trapz(y: &[f64], x: &[f64]) -> f64 {
+    x.windows(2)
+        .zip(y.windows(2))
+        .map(|(x, y)| (x[1] - x[0]) * (y[0] + y[1]) / 2.0)
+        .sum()
+}
+
 /// A gap longer than this many median sample intervals degrades a recording.
 pub const GAP_FACTOR: f64 = 3.0;
 
@@ -154,4 +163,21 @@ impl InterpPlan {
 /// result is NaN.
 pub fn interp(x: &[f64], xp: &[f64], fp: &[f64]) -> Vec<f64> {
     InterpPlan::new(x, xp).apply(fp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trapz;
+
+    #[test]
+    fn trapz_integrates_uneven_spacing_like_numpy() {
+        // numpy.trapz([1, 3, 2, 5], [0, 1, 3, 4]) == 2 + 5 + 3.5
+        assert_eq!(trapz(&[1.0, 3.0, 2.0, 5.0], &[0.0, 1.0, 3.0, 4.0]), 10.5);
+    }
+
+    #[test]
+    fn trapz_of_fewer_than_two_points_is_zero() {
+        assert_eq!(trapz(&[], &[]), 0.0);
+        assert_eq!(trapz(&[4.0], &[1.0]), 0.0);
+    }
 }

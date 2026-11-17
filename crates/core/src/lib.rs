@@ -19,6 +19,7 @@ pub mod shaper;
 pub mod signal;
 pub mod spectrogram;
 pub mod spectrum;
+pub mod vibrations;
 
 pub use error::CoreError;
 pub use psd::{CalibrationData, MAX_FREQ, MIN_FREQ, WINDOW_T_SEC};
