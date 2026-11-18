@@ -1,5 +1,6 @@
 import type { EChartsCoreOption } from "echarts/core";
 
+import { closestIndex } from "@/components/charts/indexes";
 import { formatHz } from "@/lib/format";
 import type { BeltCurve } from "@/lib/generated/BeltCurve";
 import type { BeltSpectrum } from "@/lib/generated/BeltSpectrum";
@@ -392,18 +393,10 @@ function tickBins(freqs: number[], maxFreq: number): Map<number, number> {
   const half = (freqs[1] - freqs[0]) / 2;
   const step = tickStep(maxFreq);
   for (let multiple = 0; multiple <= maxFreq; multiple += step) {
-    const bin = nearestIndex(freqs, multiple);
+    const bin = closestIndex(freqs, multiple);
     if (Math.abs(freqs[bin] - multiple) <= half) bins.set(bin, multiple);
   }
   return bins;
-}
-
-function nearestIndex(values: number[], target: number): number {
-  let best = 0;
-  values.forEach((value, i) => {
-    if (Math.abs(value - target) < Math.abs(values[best] - target)) best = i;
-  });
-  return best;
 }
 
 /**
@@ -482,7 +475,7 @@ export function spectrogramOption(
                 symbol: "none",
                 lineStyle: { color: theme.series[1], type: "dotted", width: 1 },
                 data: marked.map((peak, n) => ({
-                  xAxis: nearestIndex(freqs, peak.freq),
+                  xAxis: closestIndex(freqs, peak.freq),
                   label: {
                     formatter: `{index|${n + 1}} {value|${formatHz(peak.freq)} Hz}`,
                     position: "end",

@@ -3,6 +3,7 @@ import type { EChartsCoreOption } from "echarts/core";
 import type { MotorResult } from "@/lib/generated/MotorResult";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import { INFERNO, ON_HEATMAP } from "@/components/charts/colormaps";
+import { clampIndex, firstAtOrAbove } from "@/components/charts/indexes";
 import { DEFAULT_CHART_THEME, type ChartTheme } from "@/ui-kit/chartTheme";
 
 const splitLine = (theme: ChartTheme) => ({ lineStyle: { color: theme.grid } });
@@ -39,8 +40,6 @@ export function siEnergy(value: number): string {
   const scaled = value / 1000 ** power;
   return `${Number(scaled.toPrecision(3))}${units[power]}`;
 }
-
-const clampIndex = (index: number, length: number) => Math.max(0, Math.min(index, length - 1));
 
 /** Log10 of the cells, a cell at or below zero taking the log of the smallest positive cell. */
 function logGrid(rows: number[][]): { logs: number[][]; min: number; max: number } {
@@ -518,11 +517,6 @@ function angleLabels(kinematics: string): [number, string][] {
 }
 
 /** The index of the first angle at or above `angle`, as numpy's searchsorted with side left. */
-function nearestRow(angles: number[], angle: number): number {
-  const found = angles.findIndex((a) => a >= angle);
-  return clampIndex(found === -1 ? angles.length - 1 : found, angles.length);
-}
-
 export function angularProfilesOption(
   result: VibrationsResult,
   kinematics: string,
@@ -541,7 +535,7 @@ export function angularProfilesOption(
       name,
       type: "line",
       showSymbol: false,
-      data: (result.grid[nearestRow(result.angles, angle)] ?? []).map((v, i) => [result.speeds[i], v]),
+      data: (result.grid[firstAtOrAbove(result.angles, angle)] ?? []).map((v, i) => [result.speeds[i], v]),
     })),
   };
 }
