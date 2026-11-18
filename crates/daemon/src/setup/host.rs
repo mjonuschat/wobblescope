@@ -192,7 +192,7 @@ impl Runner for SystemRunner {
     }
 }
 
-/// The machine, with its seams: who runs setup, where it puts the unit, which binary it copies
+/// The machine, with its seams: who runs setup, where it puts the unit, which binary the unit starts
 /// and how it runs `systemctl`.
 pub struct Host {
     /// The user the service runs as.
@@ -201,7 +201,7 @@ pub struct Host {
     pub chown: bool,
     /// The directory systemd reads units from.
     pub unit_dir: PathBuf,
-    /// The running binary, which setup copies.
+    /// The running binary, which the unit starts.
     pub binary: PathBuf,
     /// The command runner.
     pub runner: Box<dyn Runner>,

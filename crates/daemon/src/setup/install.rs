@@ -1,23 +1,21 @@
 //! Install, check and remove, in the order that leaves the most recoverable state if a step
-//! fails: ask Moonraker first, then change files, then restart what needs restarting.
+//! fails: ask Moonraker first, then change files, then restart the service. The binary, its
+//! `release_info.json`, the `update_manager` section and the Moonraker restart belong to the
+//! installer script, not to setup.
 
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use super::host::{Host, write_atomic};
-use super::moonraker::{Discovery, Guard, Moonraker, MoonrakerError, Verification};
+use super::moonraker::{Discovery, Moonraker, MoonrakerError};
 use super::render::{self, SERVICE};
 use super::{Options, SetupError};
 use crate::config::DEFAULT_MOONRAKER_URL;
 
-/// Left in the install folder before a change Moonraker only sees after a restart, and deleted
+/// Left beside the binary before a change the service only sees after a restart, and deleted
 /// once that restart happened.
-const MOONRAKER_MARKER: &str = ".pending-moonraker-restart";
-/// The same for a change the service only sees after a restart.
 const SERVICE_MARKER: &str = ".pending-service-restart";
-/// The file Moonraker's updater reads.
-const RELEASE_FILE: &str = "release_info.json";
 
 /// What a step found and did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,22 +43,21 @@ impl Step {
 struct Paths {
     install_dir: PathBuf,
     binary: PathBuf,
-    release: PathBuf,
     config: PathBuf,
     unit: PathBuf,
-    conf: PathBuf,
     asvc: Result<PathBuf, String>,
 }
 
 impl Paths {
-    fn new(host: &Host, disc: &Discovery, asset: &str) -> Self {
-        let install_dir = host.invoker.home.join(SERVICE);
+    fn new(host: &Host, disc: &Discovery) -> Self {
+        let install_dir = host
+            .binary
+            .parent()
+            .map_or_else(|| host.invoker.home.clone(), Path::to_path_buf);
         Self {
-            binary: install_dir.join(asset),
-            release: install_dir.join(RELEASE_FILE),
+            binary: host.binary.clone(),
             config: disc.config_root.join("wobblescope.toml"),
             unit: host.unit_dir.join(format!("{SERVICE}.service")),
-            conf: disc.main_config.clone(),
             asvc: disc.data_path.clone().map(|p| p.join("moonraker.asvc")),
             install_dir,
         }
@@ -133,24 +130,10 @@ fn clear(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
-/// Rewrites a Moonraker-owned file, keeping its owner and mode, after the marker is down.
-fn edit_moonraker_file(
-    path: &Path,
-    text: &str,
-    marker: &Path,
-    owner: Option<(u32, u32)>,
-) -> Result<(), SetupError> {
-    mark(marker, owner)?;
+/// Rewrites a Moonraker-owned file, keeping its owner and mode.
+fn edit_moonraker_file(path: &Path, text: &str) -> Result<(), SetupError> {
     write_atomic(path, text.as_bytes(), None, None)
         .map_err(io_err(format!("cannot update {}", path.display())))
-}
-
-fn same_bytes(a: &Path, b: &Path) -> bool {
-    match (fs::canonicalize(a), fs::canonicalize(b)) {
-        (Ok(x), Ok(y)) if x == y => return true,
-        _ => {}
-    }
-    matches!((fs::read(a), fs::read(b)), (Ok(x), Ok(y)) if x == y)
 }
 
 fn wanted_url(opts: &Options) -> Option<&str> {
@@ -179,7 +162,8 @@ async fn stays_active(host: &Host) -> Result<bool, SetupError> {
     Ok(outcome.success && outcome.stdout == "active")
 }
 
-/// Installs or repairs everything.
+/// Installs or repairs the unit, the config file and the service-list entry, then restarts the
+/// service when something it reads changed.
 ///
 /// # Errors
 /// [`SetupError`] for a failure that stops the run; steps already done stay done and were
@@ -190,41 +174,17 @@ pub async fn install(
     opts: &Options,
     out: &mut dyn Write,
 ) -> Result<bool, SetupError> {
-    let asset = render::asset_name()
-        .ok_or_else(|| SetupError::new("no release asset is published for this architecture"))?;
     let disc = discover(host, mr).await?;
-    let paths = Paths::new(host, &disc, asset);
+    let paths = Paths::new(host, &disc);
     let owner = host.owner();
     let mut say = Say { out };
     let mut ok = true;
-    // Read before anything changes, so a main config file that cannot be read does not leave a
-    // partial install.
-    let conf = read(&paths.conf)?.ok_or_else(|| {
-        SetupError::new(format!(
-            "{} does not exist, though Moonraker reports it as its main config file. \
-             Nothing was changed.",
-            paths.conf.display()
-        ))
-    })?;
     warn_logins(&mut say, &disc);
 
-    if !paths.install_dir.exists() {
-        fs::create_dir_all(&paths.install_dir).map_err(io_err(format!(
-            "cannot create {}",
-            paths.install_dir.display()
-        )))?;
-        if let Some((uid, gid)) = owner {
-            std::os::unix::fs::chown(&paths.install_dir, Some(uid), Some(gid)).map_err(io_err(
-                format!("cannot chown {}", paths.install_dir.display()),
-            ))?;
-        }
-    }
     let service_marker = paths.marker(SERVICE_MARKER);
-    let moonraker_marker = paths.marker(MOONRAKER_MARKER);
     let mut service_changed = false;
-    let mut moonraker_changed = false;
 
-    // The unit, then the files it points at.
+    // The unit, then the file it points at.
     let unit_text = render::unit(&host.invoker.name, &paths.binary, &paths.config);
     if read(&paths.unit)?.as_deref() != Some(unit_text.as_str()) {
         mark(&service_marker, owner)?;
@@ -242,31 +202,6 @@ pub async fn install(
         host.systemctl_ok(&["enable", SERVICE])?;
         say.step("service enabled", "installed");
     }
-
-    let same = paths.binary.exists() && same_bytes(&host.binary, &paths.binary);
-    let step = if same {
-        Step::Current
-    } else {
-        mark(&service_marker, owner)?;
-        let bytes = fs::read(&host.binary)
-            .map_err(io_err(format!("cannot read {}", host.binary.display())))?;
-        let existed = paths.binary.exists();
-        write_atomic(&paths.binary, &bytes, Some(0o755), owner)
-            .map_err(io_err(format!("cannot write {}", paths.binary.display())))?;
-        if existed {
-            Step::Repaired
-        } else {
-            Step::Installed
-        }
-    };
-    service_changed |= step.changed();
-    say.step("binary", step.text());
-
-    let release = render::release_info(asset, env!("CARGO_PKG_VERSION"));
-    say.step(
-        "release_info.json",
-        put(&paths.release, &release, 0o644, owner)?.text(),
-    );
 
     match read(&paths.config)? {
         None => {
@@ -294,53 +229,21 @@ pub async fn install(
         }
     }
 
-    // Moonraker's own files.
     match &paths.asvc {
         Ok(asvc) => {
             let text = read(asvc)?.unwrap_or_default();
             match render::with_service(&text, SERVICE) {
                 Some(updated) => {
-                    edit_moonraker_file(asvc, &updated, &moonraker_marker, owner)?;
-                    moonraker_changed = true;
+                    edit_moonraker_file(asvc, &updated)?;
                     say.step("moonraker.asvc", "installed");
+                    say.note("restart Moonraker for wobblescope to appear in the service menu");
                 }
                 None => say.step("moonraker.asvc", "already current"),
             }
         }
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
-    let block = render::update_block(&paths.install_dir);
-    if render::has_block(&conf) {
-        match render::with_block(&conf, &block) {
-            Some(updated) => {
-                edit_moonraker_file(&paths.conf, &updated, &moonraker_marker, owner)?;
-                moonraker_changed = true;
-                say.step("update_manager section", "repaired");
-            }
-            None => say.step("update_manager section", "already current"),
-        }
-    } else if disc.wobblescope_loaded() || render::has_own_section(&conf) {
-        say.step("update_manager section", "skipped: you already have one");
-        let here = paths.install_dir.to_string_lossy();
-        if disc
-            .wobblescope_path
-            .as_deref()
-            .is_some_and(|p| p.trim_end_matches('/') != here)
-        {
-            say.note(&format!(
-                "warning: your [update_manager wobblescope] path is not {here}, so it would \
-                 update a different binary from the one the service runs"
-            ));
-        }
-    } else {
-        if let Some(updated) = render::with_block(&conf, &block) {
-            edit_moonraker_file(&paths.conf, &updated, &moonraker_marker, owner)?;
-        }
-        moonraker_changed = true;
-        say.step("update_manager section", "installed");
-    }
 
-    // Restart the service.
     let active = host.systemctl(&["is-active", SERVICE])?;
     let active = active.success && active.stdout == "active";
     if service_changed || service_marker.exists() || !active {
@@ -361,70 +264,6 @@ pub async fn install(
     } else {
         say.step("service", "already current");
     }
-
-    // Restart Moonraker.
-    let needs = moonraker_changed
-        || moonraker_marker.exists()
-        || (disc.has_update_manager() && !disc.wobblescope_loaded());
-    if !needs {
-        say.step("moonraker", "already current");
-        if disc.has_update_manager() {
-            // A verdict that failed on an earlier run must not turn into success on a rerun.
-            match mr.entry().await.map_err(moonraker_err)? {
-                Some(verdict) if verdict.valid => {
-                    say.step("update manager", "lists wobblescope as valid");
-                }
-                Some(verdict) => {
-                    ok = false;
-                    say.step("update manager", "lists wobblescope as NOT valid");
-                    for line in verdict.warnings.iter().chain(&verdict.anomalies) {
-                        say.note(&format!("Moonraker says: {line}"));
-                    }
-                }
-                None => {
-                    ok = false;
-                    say.step("update manager", "does not list wobblescope");
-                }
-            }
-        }
-        return Ok(ok);
-    }
-    mark(&moonraker_marker, owner)?;
-    match mr.print_guard().await.map_err(moonraker_err)? {
-        Guard::Blocked(why) => {
-            say.step("moonraker restart", &format!("NOT DONE: {why}"));
-            say.note("everything else is done; run `sudo wobblescope setup` again once it is safe to restart Moonraker");
-            return Ok(false);
-        }
-        Guard::Clear => {}
-    }
-    mr.restart().await.map_err(moonraker_err)?;
-    clear(&moonraker_marker);
-    say.step("moonraker restart", "done");
-    if disc.has_update_manager() {
-        match mr.verify().await {
-            Verification::Listed(verdict) if verdict.valid => {
-                say.step("update manager", "lists wobblescope as valid");
-            }
-            Verification::Listed(verdict) => {
-                ok = false;
-                say.step("update manager", "lists wobblescope as NOT valid");
-                for line in verdict.warnings.iter().chain(&verdict.anomalies) {
-                    say.note(&format!("Moonraker says: {line}"));
-                }
-            }
-            Verification::TimedOut => {
-                ok = false;
-                say.step("update manager", "did not list wobblescope in time");
-            }
-        }
-    } else {
-        say.step(
-            "update manager",
-            "skipped: Moonraker has no [update_manager] section",
-        );
-        say.note("add an [update_manager] section to moonraker.conf for updates; setup does not");
-    }
     Ok(ok)
 }
 
@@ -438,10 +277,8 @@ pub async fn check(
     _opts: &Options,
     out: &mut dyn Write,
 ) -> Result<bool, SetupError> {
-    let asset = render::asset_name()
-        .ok_or_else(|| SetupError::new("no release asset is published for this architecture"))?;
     let disc = discover(host, mr).await?;
-    let paths = Paths::new(host, &disc, asset);
+    let paths = Paths::new(host, &disc);
     let mut say = Say { out };
     let mut ok = true;
     let mut report = |say: &mut Say, label: &str, good: bool, state: &str| {
@@ -450,21 +287,6 @@ pub async fn check(
     };
     warn_logins(&mut say, &disc);
 
-    let binary = if !paths.binary.exists() {
-        (false, "missing")
-    } else if same_bytes(&host.binary, &paths.binary) {
-        (true, "ok")
-    } else {
-        (false, "stale: differs from this binary")
-    };
-    report(&mut say, "binary", binary.0, binary.1);
-    let release = render::release_info(asset, env!("CARGO_PKG_VERSION"));
-    let state = match read(&paths.release)? {
-        None => (false, "missing"),
-        Some(t) if t == release => (true, "ok"),
-        Some(_) => (false, "stale"),
-    };
-    report(&mut say, "release_info.json", state.0, state.1);
     let exists = paths.config.exists();
     report(
         &mut say,
@@ -508,59 +330,14 @@ pub async fn check(
         }
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
-    let conf = read(&paths.conf)?.unwrap_or_default();
-    let block = render::update_block(&paths.install_dir);
-    let state = if render::has_block(&conf) {
-        if render::with_block(&conf, &block).is_none() {
-            (true, "ok")
-        } else {
-            (false, "stale")
-        }
-    } else if render::has_own_section(&conf) || disc.wobblescope_loaded() {
-        (true, "ok (yours)")
-    } else {
-        (false, "missing")
-    };
-    report(&mut say, "update_manager section", state.0, state.1);
-
-    if disc.has_update_manager() {
-        match mr.entry().await.map_err(moonraker_err)? {
-            Some(v) if v.valid => report(&mut say, "moonraker verdict", true, "valid"),
-            Some(v) => {
-                report(&mut say, "moonraker verdict", false, "NOT valid");
-                for line in v.warnings.iter().chain(&v.anomalies) {
-                    say.note(&format!("Moonraker says: {line}"));
-                }
-            }
-            None => report(&mut say, "moonraker verdict", false, "not listed"),
-        }
-    } else {
-        say.step("moonraker verdict", "skipped: no [update_manager] section");
-    }
-    for (name, what) in [
-        (MOONRAKER_MARKER, "Moonraker"),
-        (SERVICE_MARKER, "the service"),
-    ] {
-        if paths.marker(name).exists() {
-            report(&mut say, "pending restart", false, what);
-        }
+    if paths.marker(SERVICE_MARKER).exists() {
+        report(&mut say, "pending restart", false, "the service");
     }
     Ok(ok)
 }
 
-/// Deletes the binary and the release file. Removal does this last, so a run deferred by a
-/// print can be finished with the very binary it deferred.
-fn remove_install_files(paths: &Paths, say: &mut Say) -> Result<(), SetupError> {
-    for file in [&paths.binary, &paths.release] {
-        if file.exists() {
-            fs::remove_file(file).map_err(io_err(format!("cannot remove {}", file.display())))?;
-        }
-    }
-    say.step("install folder", "binary and release file removed");
-    Ok(())
-}
-
-/// Takes the install apart. The config file and the recorded sessions stay.
+/// Stops and removes the service and its service-list entry. The binary, `release_info.json`,
+/// the `update_manager` section, the config file and the recorded sessions stay.
 ///
 /// # Errors
 /// [`SetupError`] for a failure that stops the run.
@@ -570,15 +347,9 @@ pub async fn remove(
     _opts: &Options,
     out: &mut dyn Write,
 ) -> Result<bool, SetupError> {
-    let asset = render::asset_name()
-        .ok_or_else(|| SetupError::new("no release asset is published for this architecture"))?;
     let disc = discover(host, mr).await?;
-    let paths = Paths::new(host, &disc, asset);
-    let owner = host.owner();
-    let moonraker_marker = paths.marker(MOONRAKER_MARKER);
+    let paths = Paths::new(host, &disc);
     let mut say = Say { out };
-    let mut ok = true;
-    let mut changed = false;
 
     if paths.unit.exists() {
         host.systemctl_ok(&["disable", "--now", SERVICE])?;
@@ -589,70 +360,23 @@ pub async fn remove(
     } else {
         say.step("service", "not installed");
     }
+    clear(&paths.marker(SERVICE_MARKER));
 
     match &paths.asvc {
         Ok(asvc) => match read(asvc)?.and_then(|t| render::without_service(&t, SERVICE)) {
             Some(updated) => {
-                edit_moonraker_file(asvc, &updated, &moonraker_marker, owner)?;
-                changed = true;
+                edit_moonraker_file(asvc, &updated)?;
                 say.step("moonraker.asvc", "entry removed");
+                say.note("restart Moonraker to drop wobblescope from the service menu");
             }
             None => say.step("moonraker.asvc", "no entry"),
         },
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
-    let conf = read(&paths.conf)?.unwrap_or_default();
-    match render::without_block(&conf) {
-        Some(updated) => {
-            edit_moonraker_file(&paths.conf, &updated, &moonraker_marker, owner)?;
-            changed = true;
-            say.step("update_manager section", "removed");
-        }
-        None if render::has_own_section(&conf) => {
-            say.step("update_manager section", "left alone: you wrote it");
-        }
-        None => say.step("update_manager section", "none to remove"),
-    }
-
-    let own_section_loaded = disc.wobblescope_loaded() && !render::has_own_section(&conf);
-    if changed || moonraker_marker.exists() || own_section_loaded {
-        if paths.install_dir.exists() {
-            mark(&moonraker_marker, owner)?;
-        }
-        match mr.print_guard().await.map_err(moonraker_err)? {
-            Guard::Blocked(why) => {
-                say.step("moonraker restart", &format!("NOT DONE: {why}"));
-                say.step("install folder", "kept until Moonraker is restarted");
-                say.note("run `sudo wobblescope setup --remove` again once it is safe to restart Moonraker");
-                return Ok(false);
-            }
-            Guard::Clear => {}
-        }
-        mr.restart().await.map_err(moonraker_err)?;
-        clear(&moonraker_marker);
-        say.step("moonraker restart", "done");
-        remove_install_files(&paths, &mut say)?;
-        if disc.has_update_manager() {
-            let after = discover(host, mr).await?;
-            if after.wobblescope_loaded() {
-                say.step(
-                    "update manager",
-                    "still has a wobblescope section you wrote",
-                );
-            } else if mr.entry().await.map_err(moonraker_err)?.is_some() {
-                ok = false;
-                say.step("update manager", "still lists wobblescope");
-            } else {
-                say.step("update manager", "no longer lists wobblescope");
-            }
-        }
-    } else {
-        say.step("moonraker", "already current");
-        remove_install_files(&paths, &mut say)?;
-    }
-    if fs::read_dir(&paths.install_dir).is_ok_and(|mut d| d.next().is_none()) {
-        let _ = fs::remove_dir(&paths.install_dir);
-    }
-    say.note("kept: wobblescope.toml and the recorded sessions");
-    Ok(ok)
+    say.note(&format!(
+        "kept: wobblescope.toml, the recorded sessions, and {}, with its release_info.json and \
+         the [update_manager wobblescope] section in moonraker.conf",
+        paths.install_dir.display()
+    ));
+    Ok(true)
 }

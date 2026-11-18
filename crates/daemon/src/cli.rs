@@ -27,8 +27,8 @@ pub struct SetupArgs {
     /// Report the state of each piece and change nothing
     #[arg(long, conflicts_with = "remove")]
     pub check: bool,
-    /// Stop and remove the service and its Moonraker entries; the config file and the recorded
-    /// sessions stay
+    /// Stop and remove the service and its service-list entry; the binary, the update manager
+    /// section, the config file and the recorded sessions stay
     #[arg(long)]
     pub remove: bool,
     /// Where Moonraker listens, when not at the default
