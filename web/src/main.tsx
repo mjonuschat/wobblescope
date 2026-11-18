@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { createQueryClient } from "./lib/api/queries";
 import "./index.css";
 import { routeTree } from "./routes";
+import { ThemeProvider } from "./ui-kit/ThemeProvider";
 
 const queryClient = createQueryClient();
 const router = createRouter({
@@ -20,8 +21,10 @@ declare module "@tanstack/react-router" {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <ThemeProvider storageKey="wobblescope-theme">
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

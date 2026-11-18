@@ -19,13 +19,52 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      "a11y": { "noNoninteractiveTabindex": "off" }
+      "a11y": {
+        "noNoninteractiveTabindex": "off"
+      }
     }
   },
   "overrides": [
     {
       "includes": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"],
-      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui-kit/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@/pages/**",
+                      "@/lib/api/**",
+                      "@/lib/generated/**",
+                      "@/analysis/**",
+                      "@/stream/**",
+                      "@/wasm/**",
+                      "@/routes",
+                      "@/brand*",
+                      "@/components/*",
+                      "!@/components/ui/**"
+                    ],
+                    "message": "The ui-kit must not import product code. See docs/specs/2026-11-16-ui-polish-design.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "assist": {
