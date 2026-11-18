@@ -9,11 +9,11 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use time::OffsetDateTime;
 
-use super::CheckFailure;
 use super::availability::{AVAILABILITY_TIMEOUT, OpenChip, open_chips};
 use super::request::TestPlan;
 use super::session_id::{base_id, first_free_id};
 use super::slot::TestSlot;
+use super::{CheckFailure, CheckId};
 use crate::capture::iso_utc;
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
@@ -91,7 +91,7 @@ impl PrinterState {
         let mut out = Vec::new();
         if let Some(state @ ("printing" | "paused")) = self.print_state.as_deref() {
             out.push(CheckFailure::new(
-                "not_printing",
+                CheckId::NotPrinting,
                 format!("a print is {state}; wait for it to end or cancel it"),
             ));
         }
@@ -102,7 +102,7 @@ impl PrinterState {
                          idle while a sweep may still be running"
                     .to_owned(),
             };
-            out.push(CheckFailure::new("toolhead_idle", why));
+            out.push(CheckFailure::new(CheckId::ToolheadIdle, why));
         }
         let homed = self.homed_axes.as_deref().unwrap_or_default();
         let missing: Vec<char> = ['x', 'y', 'z']
@@ -115,7 +115,7 @@ impl PrinterState {
                 .map(|a| a.to_ascii_uppercase().to_string())
                 .collect();
             out.push(CheckFailure::new(
-                "homed",
+                CheckId::Homed,
                 format!("home X, Y and Z first; not homed: {}", names.join(", ")),
             ));
         }
@@ -132,7 +132,7 @@ pub async fn check_printer(moonraker: &Moonraker, quarantined: bool) -> Vec<Chec
         .filter(|_| status.moonraker.state == MoonrakerState::Connected)
     else {
         out.push(CheckFailure::new(
-            "moonraker_connected",
+            CheckId::MoonrakerConnected,
             "the daemon is not connected to Moonraker",
         ));
         return out;
@@ -140,7 +140,7 @@ pub async fn check_printer(moonraker: &Moonraker, quarantined: bool) -> Vec<Chec
     let ready = status.klippy.state == KlippyState::Ready;
     if !ready {
         out.push(CheckFailure::new(
-            "klipper_ready",
+            CheckId::KlipperReady,
             format!("Klipper is {}, not ready", status.klippy.state.as_str()),
         ));
     }
@@ -149,7 +149,7 @@ pub async fn check_printer(moonraker: &Moonraker, quarantined: bool) -> Vec<Chec
     match read_printer_state(&control).await {
         Ok(state) => out.extend(state.failures(quarantined)),
         Err(e) if ready => out.push(CheckFailure::new(
-            "moonraker_connected",
+            CheckId::MoonrakerConnected,
             format!("cannot read the printer's state: {e}"),
         )),
         Err(_) => {}
@@ -207,7 +207,7 @@ impl<'a> Deps<'a> {
 #[must_use]
 pub fn quarantine_failure(left: Duration) -> CheckFailure {
     CheckFailure::new(
-        "quarantine",
+        CheckId::Quarantine,
         format!(
             "a sweep may still be running after a restart or a lost connection; no test can \
              start for another {} s",
@@ -226,18 +226,18 @@ pub fn busy_failure(slot: &TestSlot, failures: &mut Vec<CheckFailure>) -> CheckF
         .and_then(|id| id.strip_prefix("hold-"))
     {
         return CheckFailure::new(
-            "no_test_running",
+            CheckId::NoTestRunning,
             format!("a hold started {since} is running"),
         );
     }
     if slot.is_homing() {
-        failures.retain(|f| f.check != "toolhead_idle");
+        failures.retain(|f| f.check != CheckId::ToolheadIdle);
         return CheckFailure::new(
-            "no_test_running",
+            CheckId::NoTestRunning,
             "the printer is homing; wait until it finishes",
         );
     }
-    CheckFailure::new("no_test_running", "another test is already running")
+    CheckFailure::new(CheckId::NoTestRunning, "another test is already running")
 }
 
 /// Runs every check for `plan`. `busy` says another test already holds the slot.
@@ -261,7 +261,7 @@ pub async fn run(
     }
     let Some(storage) = deps.storage.get() else {
         failures.push(CheckFailure::new(
-            "storage_open",
+            CheckId::StorageOpen,
             "the daemon is waiting for Moonraker to report where to store sessions",
         ));
         return Err(Refusal::Checks(failures));
@@ -290,7 +290,7 @@ pub async fn run(
         .await
         .map_err(|e| {
             Refusal::Checks(vec![CheckFailure::new(
-                "moonraker_connected",
+                CheckId::MoonrakerConnected,
                 e.to_string(),
             )])
         })?;
@@ -322,7 +322,7 @@ pub async fn run(
         first_free_id(&base, |id| storage.admit(id, estimate)).map_err(Refusal::Storage)?;
     let Some((id, reservation)) = admitted else {
         return Err(Refusal::Checks(vec![CheckFailure::new(
-            "disk_space",
+            CheckId::DiskSpace,
             "no free test id for this second",
         )]));
     };
@@ -338,7 +338,7 @@ fn chips_refused(reasons: Vec<String>) -> Refusal {
     Refusal::Checks(
         reasons
             .into_iter()
-            .map(|r| CheckFailure::new("chips_available", r))
+            .map(|r| CheckFailure::new(CheckId::ChipsAvailable, r))
             .collect(),
     )
 }

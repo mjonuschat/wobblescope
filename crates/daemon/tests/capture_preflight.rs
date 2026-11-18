@@ -9,6 +9,7 @@ use common::{cell, open, test_plan};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use time::OffsetDateTime;
+use wobblescope::capture::CheckId;
 use wobblescope::capture::preflight::{Deps, Refusal, Started, run};
 use wobblescope::capture::slot::TestSlot;
 use wobblescope::config::Settings;
@@ -102,7 +103,16 @@ async fn attempt(rig: &Rig, busy: bool) -> Result<Started, Refusal> {
 
 fn failed_checks(result: Result<Started, Refusal>) -> Vec<String> {
     match result {
-        Err(Refusal::Checks(failures)) => failures.into_iter().map(|f| f.check).collect(),
+        Err(Refusal::Checks(failures)) => failures
+            .into_iter()
+            .map(|f| {
+                serde_json::to_value(f.check)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect(),
         Err(Refusal::Storage(e)) => panic!("a storage refusal: {e}"),
         Ok(_) => panic!("the test started"),
     }
@@ -162,7 +172,7 @@ async fn a_request_while_homing_says_so_and_adds_no_toolhead_failure() {
         panic!("pre-flight must refuse");
     };
     assert_eq!(failures.len(), 1, "{failures:?}");
-    assert_eq!(failures[0].check, "no_test_running");
+    assert_eq!(failures[0].check, CheckId::NoTestRunning);
     assert!(failures[0].message.contains("homing"), "{failures:?}");
 }
 
@@ -198,7 +208,7 @@ async fn the_quarantine_refuses_with_the_time_left_and_lets_go_when_it_ends() {
     match attempt(&rig, false).await {
         Err(Refusal::Checks(failures)) => {
             assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].check, "quarantine");
+            assert_eq!(failures[0].check, CheckId::Quarantine);
             assert!(
                 failures[0].message.contains("another"),
                 "{}",
@@ -221,7 +231,7 @@ async fn one_chip_unavailable_refuses_naming_it_and_closes_the_other_connection(
     match attempt(&rig, false).await {
         Err(Refusal::Checks(failures)) => {
             assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].check, "chips_available");
+            assert_eq!(failures[0].check, CheckId::ChipsAvailable);
             assert!(failures[0].message.contains("lis2dw ebb36"));
             assert!(failures[0].message.contains("not valid"));
         }

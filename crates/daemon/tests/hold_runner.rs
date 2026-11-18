@@ -69,7 +69,16 @@ impl Running {
 
 fn checks(refusal: Refusal) -> Vec<String> {
     match refusal {
-        Refusal::Checks(failures) => failures.into_iter().map(|f| f.check).collect(),
+        Refusal::Checks(failures) => failures
+            .into_iter()
+            .map(|f| {
+                serde_json::to_value(f.check)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect(),
         Refusal::Invalid(m) => panic!("expected checks, got invalid: {m}"),
     }
 }

@@ -7,11 +7,11 @@ use serde_json::json;
 
 use super::tests::StopDispatched;
 use super::{ApiError, ApiState};
-use crate::capture::CheckFailure;
 use crate::capture::preflight::quarantine_duration;
 use crate::capture::preflight::read_printer_state;
 use crate::capture::runner::watch_idle;
 use crate::capture::slot::HOMING_ID;
+use crate::capture::{CheckFailure, CheckId};
 use crate::moonraker::rpc::RpcError;
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -118,13 +118,13 @@ pub(super) async fn emergency_stop(
 pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, ApiError> {
     let Some(_permit) = state.capture.slot.try_acquire_as(HOMING_ID) else {
         return Err(ApiError::preflight(vec![CheckFailure::new(
-            "no_test_running",
+            CheckId::NoTestRunning,
             "a test is running; the printer cannot home until it ends",
         )]));
     };
     if state.capture.slot.motion_uncertain().is_some() {
         return Err(ApiError::preflight(vec![CheckFailure::new(
-            "no_uncertain_motion",
+            CheckId::NoUncertainMotion,
             "the printer may still be moving; stop it first",
         )]));
     }

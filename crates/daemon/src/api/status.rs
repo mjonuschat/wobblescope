@@ -8,8 +8,8 @@ use serde::Serialize;
 use time::OffsetDateTime;
 
 use super::{ApiError, ApiState};
-use crate::capture::CheckFailure;
 use crate::capture::availability::{AVAILABILITY_TIMEOUT, availability_of, open_chips};
+use crate::capture::{CheckFailure, CheckId};
 use crate::moonraker::ChipsSnapshot;
 use crate::moonraker::status::{KlippyState, KlippyStatus, MoonrakerState, MoonrakerStatus};
 
@@ -75,18 +75,18 @@ pub(super) async fn check_chips(
     let mut failures = Vec::new();
     if state.capture.slot.is_held() {
         failures.push(CheckFailure::new(
-            "no_test_running",
+            CheckId::NoTestRunning,
             "a test is running; chips are in use until it ends",
         ));
     }
     if status.moonraker.state != MoonrakerState::Connected {
         failures.push(CheckFailure::new(
-            "moonraker_connected",
+            CheckId::MoonrakerConnected,
             "the daemon is not connected to Moonraker",
         ));
     } else if status.klippy.state != KlippyState::Ready {
         failures.push(CheckFailure::new(
-            "klipper_ready",
+            CheckId::KlipperReady,
             format!(
                 "Klipper is {}, not ready; chips can be checked once it is",
                 status.klippy.state.as_str()
@@ -101,7 +101,7 @@ pub(super) async fn check_chips(
         .await
         .map_err(|e| {
             ApiError::preflight(vec![CheckFailure::new(
-                "moonraker_connected",
+                CheckId::MoonrakerConnected,
                 e.to_string(),
             )])
         })?;
