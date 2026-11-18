@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::eligibility::DatasetInput;
 use crate::error::CoreError;
-use crate::numeric::strictly_increasing;
+use crate::numeric::{percentile_sorted, strictly_increasing};
 use crate::psd::{WINDOW_T_SEC, kaiser};
 use crate::samples::RawSamples;
 
@@ -41,10 +41,7 @@ pub fn percentile(values: &[f64], percent: f64) -> Option<f64> {
     }
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
-    let rank = percent / 100.0 * (sorted.len() - 1) as f64;
-    let (lower, upper) = (rank.floor() as usize, rank.ceil() as usize);
-    let fraction = rank - lower as f64;
-    Some(sorted[lower] + (sorted[upper] - sorted[lower]) * fraction)
+    Some(percentile_sorted(&sorted, percent))
 }
 
 /// Shake&Tune's spectrogram of `samples`, keeping the frequencies up to `max_freq`.

@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::numeric::interp;
+use crate::numeric::{interp, linspace, median_sorted as median, percentile_sorted as percentile};
 use crate::peaks::detect_peaks_with;
 
 pub const GRID_POINTS: usize = 500;
@@ -258,14 +258,6 @@ fn health_text(score: f64) -> String {
     text.to_owned()
 }
 
-/// `numpy.linspace` with the endpoint included.
-fn linspace(start: f64, stop: f64, n: usize) -> Vec<f64> {
-    let step = (stop - start) / (n - 1) as f64;
-    let mut out: Vec<f64> = (0..n).map(|i| i as f64 * step + start).collect();
-    out[n - 1] = stop;
-    out
-}
-
 /// Maximum that is NaN when any value is, as `ndarray.max`.
 fn nan_max(init: f64, values: &[f64]) -> f64 {
     values.iter().fold(init, |m, &v| {
@@ -275,31 +267,6 @@ fn nan_max(init: f64, values: &[f64]) -> f64 {
             m.max(v)
         }
     })
-}
-
-/// `numpy.median` of sorted values.
-fn median(sorted: &[f64]) -> f64 {
-    let n = sorted.len();
-    if n % 2 == 1 {
-        sorted[n / 2]
-    } else {
-        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
-    }
-}
-
-/// `numpy.percentile` of sorted values, linear interpolation.
-fn percentile(sorted: &[f64], q: f64) -> f64 {
-    let position = (sorted.len() - 1) as f64 * (q / 100.0);
-    let below = position.floor();
-    let t = position - below;
-    let lo = sorted[below as usize];
-    let hi = sorted[(below as usize + 1).min(sorted.len() - 1)];
-    // numpy's `_lerp`, which counts from the nearer end.
-    if t >= 0.5 {
-        hi - (hi - lo) * (1.0 - t)
-    } else {
-        lo + (hi - lo) * t
-    }
 }
 
 /// numpy's pairwise summation, so that means round as `ndarray.mean` does.

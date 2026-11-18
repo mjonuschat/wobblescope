@@ -2,7 +2,7 @@
 
 use super::SegmentCurves;
 use crate::error::CoreError;
-use crate::numeric::strictly_increasing;
+use crate::numeric::{median_sorted, strictly_increasing};
 use crate::samples::RawSamples;
 
 /// Fewest samples a segment may have.
@@ -170,16 +170,11 @@ pub(crate) fn process_segment(
     })
 }
 
-/// numpy's `median`: the mean of the two middle values for an even count.
+/// `numpy.median`: the mean of the two middle values for an even count.
 fn median(data: &[f64]) -> f64 {
     let mut sorted = data.to_vec();
     sorted.sort_by(f64::total_cmp);
-    let n = sorted.len();
-    if n % 2 == 1 {
-        sorted[n / 2]
-    } else {
-        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
-    }
+    median_sorted(&sorted)
 }
 
 /// `np.convolve(data, ones(width) / width, mode='same')` for odd `width`: a centred,

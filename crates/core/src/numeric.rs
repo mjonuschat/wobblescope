@@ -184,6 +184,44 @@ pub fn interp(x: &[f64], xp: &[f64], fp: &[f64]) -> Vec<f64> {
     InterpPlan::new(x, xp).apply(fp)
 }
 
+/// `numpy.linspace(start, stop, num)` with the endpoint included.
+pub fn linspace(start: f64, stop: f64, num: usize) -> Vec<f64> {
+    if num == 1 {
+        return vec![start];
+    }
+    let step = (stop - start) / (num - 1) as f64;
+    let mut out: Vec<f64> = (0..num).map(|i| i as f64 * step + start).collect();
+    if let Some(last) = out.last_mut() {
+        *last = stop;
+    }
+    out
+}
+
+/// `numpy.median` of sorted, non-empty values.
+pub fn median_sorted(sorted: &[f64]) -> f64 {
+    let n = sorted.len();
+    if n % 2 == 1 {
+        sorted[n / 2]
+    } else {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+    }
+}
+
+/// `numpy.percentile` of sorted, non-empty values, interpolating linearly between ranks.
+pub fn percentile_sorted(sorted: &[f64], q: f64) -> f64 {
+    let position = (sorted.len() - 1) as f64 * (q / 100.0);
+    let below = position.floor();
+    let t = position - below;
+    let lo = sorted[below as usize];
+    let hi = sorted[(below as usize + 1).min(sorted.len() - 1)];
+    // numpy's `_lerp`, which counts from the nearer end.
+    if t >= 0.5 {
+        hi - (hi - lo) * (1.0 - t)
+    } else {
+        lo + (hi - lo) * t
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{convolve_same, trapz};
