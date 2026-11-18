@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAxesMapAnalysis } from "@/analysis/useAxesMapAnalysis";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { chipLabel } from "@/lib/format";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import type { Header } from "./SessionResults";
@@ -47,7 +48,7 @@ export function AxesMapResults({ id, meta, header }: { id: string; meta: Session
         <TabsList variant="line">
           {outcomes.map((o) => (
             <TabsTrigger key={o.chip} value={o.chip} className="after:bg-primary">
-              {o.chip}
+              {chipLabel(o.chip)}
             </TabsTrigger>
           ))}
         </TabsList>

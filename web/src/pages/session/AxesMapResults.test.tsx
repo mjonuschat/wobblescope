@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAnalysisClient, type WorkerLike } from "@/analysis/client";
 import { createHandler } from "@/analysis/handler";
 import type { WorkerResponse } from "@/analysis/protocol";
+import { chipLabel } from "@/lib/format";
 import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
 import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisMatch } from "@/lib/generated/AxisMatch";
@@ -153,7 +154,7 @@ function show(meta: SessionMeta, outcomes: AxesMapChip[]) {
 }
 
 async function openTab(name: string) {
-  fireEvent.click(await screen.findByRole("tab", { name }));
+  fireEvent.click(await screen.findByRole("tab", { name: chipLabel(name) }));
   return screen.findByRole("region", { name: `Chip ${name}` });
 }
 
@@ -181,7 +182,7 @@ describe("the axes-map result page", () => {
     fake.analyzeAxesMap.mockImplementation((job, signal) => client.analyzeAxesMap(job, signal));
     serve(calibrationMeta("s1"));
     renderRoute("/sessions/s1");
-    expect((await screen.findAllByRole("tab")).map((t) => t.textContent)).toEqual(["a", "b"]);
+    expect((await screen.findAllByRole("tab")).map((t) => t.textContent)).toEqual(["A", "B"]);
   });
 
   it("a_complete_result_shows_a_copyable_snippet", async () => {
