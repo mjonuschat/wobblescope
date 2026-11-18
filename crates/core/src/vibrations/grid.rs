@@ -2,7 +2,7 @@
 //! `_compute_dir_speed_spectrogram`, `_compute_angle_powers`, `_compute_speed_powers` and
 //! `_compute_symmetry_analysis` of Shake&Tune's `VibrationsComputation`.
 
-use crate::numeric::convolve_same;
+use crate::numeric::{convolve_same, linspace};
 
 /// Energy of every step: for each measured angle in degrees, the `(speed, energy)` pairs of its
 /// steps in the order they were recorded.
@@ -54,19 +54,6 @@ const SPEEDS_PER_MEASURED: usize = 6;
 const ANGLE_PAD: usize = 9;
 const ANGLE_SMOOTHING: usize = 15;
 const SPEED_SMOOTHING: usize = 15;
-
-/// `numpy.linspace(start, stop, num)`.
-fn linspace(start: f64, stop: f64, num: usize) -> Vec<f64> {
-    if num == 1 {
-        return vec![start];
-    }
-    let step = (stop - start) / (num - 1) as f64;
-    let mut out: Vec<f64> = (0..num).map(|i| i as f64 * step + start).collect();
-    if let Some(last) = out.last_mut() {
-        *last = stop;
-    }
-    out
-}
 
 /// Shake&Tune's `get_interpolated_vibrations`: the energy at `speed`, interpolated linearly
 /// between the two measured speeds around it, or extrapolated from the first or last pair.
