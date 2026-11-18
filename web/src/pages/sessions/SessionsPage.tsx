@@ -4,7 +4,8 @@ import { type ReactNode, useState } from "react";
 
 import { Panel } from "@/ui-kit/Panel";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/ui-kit/StatusBadge";
+import type { Tone } from "@/ui-kit/tone";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -24,10 +25,10 @@ const PIN_HINTS = {
   unpin: "Allow this session to be deleted again.",
 };
 
-const OUTCOME_CLASS: Record<OutcomeKind, string> = {
-  Complete: "border-success/50 text-success",
-  Incomplete: "border-warning/50 text-warning",
-  Failed: "border-destructive/50 text-destructive",
+const OUTCOME_TONE: Record<OutcomeKind, Tone> = {
+  Complete: "success",
+  Incomplete: "warning",
+  Failed: "danger",
 };
 
 function IconAction({
@@ -114,30 +115,29 @@ export function SessionsPage() {
       </div>
     );
   } else {
-    const head = "h-9 text-xs font-medium text-muted-foreground";
     const filter = (column: FilterColumn) => (
       <ColumnFilter column={column} filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
     );
     body = (
       <Table>
-        <TableHeader className="bg-muted/40">
+        <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className={head}>
+            <TableHead>
               <span className="inline-flex items-center gap-1">
                 Session <DateFilter filters={filters} onChange={setFilters} />
               </span>
             </TableHead>
-            <TableHead className={head}>Source</TableHead>
-            <TableHead className={head}>Mode</TableHead>
-            <TableHead className={head}>
+            <TableHead>Source</TableHead>
+            <TableHead>Mode</TableHead>
+            <TableHead>
               <span className="inline-flex items-center gap-1">Chips {filter("chip")}</span>
             </TableHead>
-            <TableHead className={head}>
+            <TableHead>
               <span className="inline-flex items-center gap-1">Printer {filter("printer")}</span>
             </TableHead>
-            <TableHead className={head}>Outcome</TableHead>
-            <TableHead className={head}>Size</TableHead>
-            <TableHead className={`${head} text-right`}>
+            <TableHead>Outcome</TableHead>
+            <TableHead>Size</TableHead>
+            <TableHead className="text-right">
               <span className="inline-flex items-center gap-1">Actions {filter("pinned")}</span>
             </TableHead>
           </TableRow>
@@ -168,18 +168,12 @@ export function SessionsPage() {
                 <TableCell>{s.source === "CsvImport" ? "CSV" : "Wobblescope"}</TableCell>
                 <TableCell>
                   {s.mode ?? "–"}
-                  {s.kind === "belts" && (
-                    <Badge variant="outline" className="ml-2">
-                      Belts
-                    </Badge>
-                  )}
+                  {s.kind === "belts" && <span className="ml-2 text-xs text-muted-foreground">Belts</span>}
                 </TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>
                 <TableCell>{s.printer ?? "–"}</TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={OUTCOME_CLASS[s.outcome]}>
-                    {s.outcome}
-                  </Badge>
+                  <StatusBadge tone={OUTCOME_TONE[s.outcome]}>{s.outcome}</StatusBadge>
                 </TableCell>
                 <TableCell>{formatBytes(s.size_bytes)}</TableCell>
                 <TableCell className="space-x-2 text-right">

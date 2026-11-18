@@ -139,7 +139,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
       {meta.vibrations_run && (
         <Fields aria-label="Vibrations settings">
           {row("Size", `${meta.vibrations_run.size} mm`)}
-          {row("Z Height", `${meta.vibrations_run.z_height} mm`)}
+          {row("Z height", `${meta.vibrations_run.z_height} mm`)}
           {row("Min speed", `${meta.vibrations_run.min_speed} mm/s`)}
           {row("Max speed", `${meta.vibrations_run.max_speed} mm/s`)}
           {row("Speed increment", `${meta.vibrations_run.speed_increment} mm/s`)}

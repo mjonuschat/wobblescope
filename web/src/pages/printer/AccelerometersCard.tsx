@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/ui-kit/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,13 +17,13 @@ interface Props {
 function AvailabilityCell({ availability }: { availability: Availability }) {
   switch (availability.state) {
     case "unchecked":
-      return <Badge variant="outline">unchecked</Badge>;
+      return <StatusBadge>unchecked</StatusBadge>;
     case "available":
-      return <Badge variant="secondary">available · {Math.round(availability.observed_rate_hz)} Hz</Badge>;
+      return <StatusBadge tone="success">available · {Math.round(availability.observed_rate_hz)} Hz</StatusBadge>;
     case "unavailable":
       return (
         <div className="space-y-1">
-          <Badge variant="destructive">unavailable</Badge>
+          <StatusBadge tone="danger">unavailable</StatusBadge>
           <p className="text-xs text-muted-foreground">{availability.reason}</p>
         </div>
       );

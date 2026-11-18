@@ -243,7 +243,7 @@ describe("the session details", () => {
     const group = screen.getByLabelText("Vibrations settings");
     const value = (label: string) => within(group).getByText(label).nextElementSibling?.textContent;
     expect(value("Size")).toBe("100 mm");
-    expect(value("Z Height")).toBe("20 mm");
+    expect(value("Z height")).toBe("20 mm");
     expect(value("Min speed")).toBe("20 mm/s");
     expect(value("Max speed")).toBe("100 mm/s");
     expect(value("Speed increment")).toBe("5 mm/s");

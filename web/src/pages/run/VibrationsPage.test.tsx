@@ -47,7 +47,7 @@ describe("the vibrations run page", () => {
     await open();
     expect(screen.getByRole("heading", { name: "Vibrations profile" })).toBeTruthy();
     expect(field(/^Size/).value).toBe("100");
-    expect(field(/^Z Height/).value).toBe("20");
+    expect(field(/^Z height/).value).toBe("20");
     expect(field(/^Max speed/).value).toBe("200");
     expect(field(/^Speed increment/).value).toBe("2");
     expect(field(/^Acceleration/).value).toBe("3000");
@@ -80,7 +80,7 @@ describe("the vibrations run page", () => {
     const calls = await open();
     fireEvent.click(screen.getByRole("switch", { name: "adxl345" }));
     fireEvent.change(field(/^Size/), { target: { value: "120" } });
-    fireEvent.change(field(/^Z Height/), { target: { value: "40" } });
+    fireEvent.change(field(/^Z height/), { target: { value: "40" } });
     fireEvent.change(field(/^Acceleration/), { target: { value: "2500" } });
     fireEvent.click(startButton());
     await waitFor(() => expect(posted(calls)).toHaveLength(1));

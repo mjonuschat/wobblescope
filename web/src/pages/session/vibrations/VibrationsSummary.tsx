@@ -47,7 +47,7 @@ function ZoneTable({
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               <TableHead>{`Range (${unit})`}</TableHead>
-              <TableHead className="text-right">Avg. Vibration (% of Max)</TableHead>
+              <TableHead className="text-right">Avg. vibration (% of max)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -14,14 +14,14 @@ import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { VibrationsRequest } from "@/lib/generated/VibrationsRequest";
 import { parseNumber } from "@/lib/parse";
 
-import { FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
+import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
 
 type ParameterKey = "size" | "z_height" | "max_speed" | "speed_increment" | "accel" | "travel_speed";
 
 /** Shake&Tune's defaults and the lowest values the form accepts. */
 const PARAMETERS: { key: ParameterKey; label: string; unit: string; fallback: number; min: number | null }[] = [
   { key: "size", label: "Size", unit: "mm", fallback: 100, min: 50 },
-  { key: "z_height", label: "Z Height", unit: "mm", fallback: 20, min: null },
+  { key: "z_height", label: "Z height", unit: "mm", fallback: 20, min: null },
   { key: "max_speed", label: "Max speed", unit: "mm/s", fallback: 200, min: 10 },
   { key: "speed_increment", label: "Speed increment", unit: "mm/s", fallback: 2, min: 1 },
   { key: "accel", label: "Acceleration", unit: "mm/s²", fallback: 3000, min: 100 },
@@ -52,7 +52,7 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
     if (value === undefined) continue;
     if (Number.isNaN(value)) complaints[key] = "Enter a number.";
     else if (min !== null && value < min) complaints[key] = `${label} must be at least ${min} ${unit}.`;
-    else if (key === "z_height" && value <= 0) complaints[key] = "Z Height must be above 0 mm.";
+    else if (key === "z_height" && value <= 0) complaints[key] = "Z height must be above 0 mm.";
     else values[key] = value;
   }
 
@@ -103,35 +103,36 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
         {chipList.chips.length === 0 ? (
           <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
         ) : (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Chips</p>
-            {chipList.chips.map((chip, index) => {
-              const unavailable = !isUsable(chip.section);
-              return (
-                <div
-                  key={chip.section}
-                  className="flex items-center gap-2"
-                  title={chip.availability.state === "unavailable" ? chip.availability.reason : undefined}
-                >
-                  <Switch
-                    id={`vibrations-chip-${index}`}
-                    checked={selected.includes(chip.section)}
-                    disabled={unavailable}
-                    onCheckedChange={(checked) =>
-                      setChosen(
-                        chipList.chips
-                          .map((c) => c.section)
-                          .filter((s) => (s === chip.section ? checked : selected.includes(s))),
-                      )
-                    }
-                  />
-                  <Label htmlFor={`vibrations-chip-${index}`} className="font-mono">
-                    {chip.section}
-                  </Label>
-                </div>
-              );
-            })}
-          </div>
+          <ChoiceRow label="Chips">
+            <div className="flex flex-wrap gap-x-6 gap-y-3">
+              {chipList.chips.map((chip, index) => {
+                const unavailable = !isUsable(chip.section);
+                return (
+                  <div
+                    key={chip.section}
+                    className="flex items-center gap-2"
+                    title={chip.availability.state === "unavailable" ? chip.availability.reason : undefined}
+                  >
+                    <Switch
+                      id={`vibrations-chip-${index}`}
+                      checked={selected.includes(chip.section)}
+                      disabled={unavailable}
+                      onCheckedChange={(checked) =>
+                        setChosen(
+                          chipList.chips
+                            .map((c) => c.section)
+                            .filter((s) => (s === chip.section ? checked : selected.includes(s))),
+                        )
+                      }
+                    />
+                    <Label htmlFor={`vibrations-chip-${index}`} className="font-mono">
+                      {chip.section}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+          </ChoiceRow>
         )}
       </FormCard>
 

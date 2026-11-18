@@ -28,7 +28,7 @@ describe("the vibrations summary", () => {
         <GoodAngleRanges result={vibrationsResult()} />
       </>,
     );
-    expect(screen.getAllByText("Avg. Vibration (% of Max)")).toHaveLength(2);
+    expect(screen.getAllByText("Avg. vibration (% of max)")).toHaveLength(2);
     expect(screen.queryByText(/Energy \(% of max\)/)).toBeNull();
   });
 
