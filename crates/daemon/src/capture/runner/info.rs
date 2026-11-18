@@ -1,5 +1,3 @@
-//! What the printer reports about itself for the session's metadata, best effort.
-
 use std::time::Duration;
 
 use serde_json::{Value, json};
