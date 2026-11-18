@@ -76,18 +76,14 @@ fn script(target: [f64; 3], speed: f64) -> String {
     )
 }
 
-async fn query(control: &Rpc, objects: &Value, timeout: Duration) -> Result<Value, PositionError> {
+async fn query(control: &Rpc, objects: Value, timeout: Duration) -> Result<Value, PositionError> {
     control
-        .call(
-            "printer.objects.query",
-            Some(json!({"objects": objects})),
-            timeout,
-        )
+        .query_objects(objects, timeout)
         .await
         .map_err(|e| PositionError::Unknown(e.to_string()))
 }
 
-fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
+pub(crate) fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
     let list = value.as_array()?;
     let mut out = [0.0; N];
     for (slot, v) in out.iter_mut().zip(list) {
@@ -97,10 +93,9 @@ fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
 }
 
 pub(crate) async fn position(control: &Rpc, timeout: Duration) -> Result<[f64; 3], PositionError> {
-    let answer = query(control, &json!({"toolhead": ["position"]}), timeout).await?;
-    answer
-        .get("status")
-        .and_then(|s| s.get("toolhead"))
+    let status = query(control, json!({"toolhead": ["position"]}), timeout).await?;
+    status
+        .get("toolhead")
         .and_then(|t| t.get("position"))
         .and_then(numbers::<3>)
         .ok_or_else(|| PositionError::Unknown("the toolhead position is not reported".to_owned()))
@@ -173,13 +168,13 @@ pub async fn move_to_point(
 }
 
 async fn print_times(control: &Rpc, timeout: Duration) -> Result<(f64, f64), PositionError> {
-    let answer = query(
+    let status = query(
         control,
-        &json!({"toolhead": ["print_time", "estimated_print_time"]}),
+        json!({"toolhead": ["print_time", "estimated_print_time"]}),
         timeout,
     )
     .await?;
-    let toolhead = answer.get("status").and_then(|s| s.get("toolhead"));
+    let toolhead = status.get("toolhead");
     let read = |key: &str| {
         toolhead
             .and_then(|t| t.get(key))

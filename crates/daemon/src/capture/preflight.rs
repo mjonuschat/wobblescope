@@ -50,18 +50,19 @@ pub struct PrinterState {
 /// # Errors
 /// The call's error.
 pub async fn read_printer_state(control: &Rpc) -> Result<PrinterState, RpcError> {
-    let query = json!({"objects": {
-        "print_stats": ["state"],
-        "idle_timeout": ["state"],
-        "toolhead": ["homed_axes"],
-    }});
-    let answer = control
-        .call("printer.objects.query", Some(query), QUERY_TIMEOUT)
+    let status = control
+        .query_objects(
+            json!({
+                "print_stats": ["state"],
+                "idle_timeout": ["state"],
+                "toolhead": ["homed_axes"],
+            }),
+            QUERY_TIMEOUT,
+        )
         .await?;
     let field = |object: &str, key: &str| {
-        answer
-            .get("status")
-            .and_then(|s| s.get(object))
+        status
+            .get(object)
             .and_then(|o| o.get(key))
             .and_then(Value::as_str)
             .map(str::to_owned)
@@ -216,8 +217,19 @@ pub fn quarantine_failure(left: Duration) -> CheckFailure {
 }
 
 /// The `no_test_running` failure for a held slot. When homing holds it, homing already explains a
-/// busy toolhead, so the `toolhead_idle` failure is dropped from `failures`.
+/// busy toolhead, so the `toolhead_idle` failure is dropped from `failures`. A held excitation
+/// (id `hold-<time>`) is named with its start time.
 pub fn busy_failure(slot: &TestSlot, failures: &mut Vec<CheckFailure>) -> CheckFailure {
+    if let Some(since) = slot
+        .current_id()
+        .as_deref()
+        .and_then(|id| id.strip_prefix("hold-"))
+    {
+        return CheckFailure::new(
+            "no_test_running",
+            format!("a hold started {since} is running"),
+        );
+    }
     if slot.is_homing() {
         failures.retain(|f| f.check != "toolhead_idle");
         return CheckFailure::new(

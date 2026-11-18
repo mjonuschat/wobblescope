@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::hold::settings::{CALIBRATION_STATE_NAME, Saved, restore_script_named};
 use crate::moonraker::rpc::{Rpc, RpcError};
@@ -14,20 +14,19 @@ use crate::moonraker::rpc::{Rpc, RpcError};
 /// A message when the query fails or a value the restore needs is not reported. The square
 /// corner velocity counts as needed, because the calibration sets it to 5.
 pub(super) async fn read_saved(control: &Rpc, timeout: Duration) -> Result<Saved, String> {
-    let answer = control
-        .call(
-            "printer.objects.query",
-            Some(json!({"objects": {
+    let status = control
+        .query_objects(
+            json!({
                 "toolhead": [
                     "max_velocity", "max_accel", "minimum_cruise_ratio", "square_corner_velocity",
                 ],
                 "input_shaper": null,
-            }})),
+            }),
             timeout,
         )
         .await
         .map_err(|e| format!("cannot read the toolhead: {e}"))?;
-    let saved = Saved::from_status(answer.get("status").unwrap_or(&Value::Null))?;
+    let saved = Saved::from_status(&status)?;
     if saved.square_corner_velocity.is_none() {
         return Err("the toolhead's square_corner_velocity is not reported".to_owned());
     }
