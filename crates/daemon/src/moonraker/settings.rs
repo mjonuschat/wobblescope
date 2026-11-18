@@ -317,14 +317,13 @@ pub struct Shaping {
 }
 
 #[must_use]
-pub fn parse_shaping(query: &Value) -> Shaping {
-    let status = query.get("status");
+pub fn parse_shaping(status: &Value) -> Shaping {
     let velocity = status
-        .and_then(|s| s.get("toolhead"))
+        .get("toolhead")
         .and_then(|t| t.get("square_corner_velocity"))
         .and_then(number);
     let shaper = status
-        .and_then(|s| s.get("configfile"))
+        .get("configfile")
         .and_then(|c| c.get("settings"))
         .and_then(|s| s.get("input_shaper"));
     let damping = |key: &str| shaper.and_then(|s| s.get(key)).and_then(number);

@@ -39,7 +39,7 @@ async fn read_shaping(control: &Rpc, timeout: Duration) -> Shaping {
         "configfile": ["settings"],
     });
     match control.query_objects(query, timeout).await {
-        Ok(status) => parse_shaping(&json!({"status": status})),
+        Ok(status) => parse_shaping(&status),
         Err(_) => Shaping::default(),
     }
 }
