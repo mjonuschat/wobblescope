@@ -14,7 +14,7 @@ describe("compareAnalyses", () => {
     fresh.worst_case = recommendation(candidate("mzv", 50));
     const { sameAnswer, differences } = compareAnalyses(analysis(), fresh);
     expect(sameAnswer).toBe(false);
-    expect(differences).toContain("worst case: freq 48.2 -> 50");
+    expect(differences).toContain("All chips: freq 48.2 -> 50");
   });
 
   it("names a changed max_accel when name and frequency are the same", () => {
@@ -33,7 +33,7 @@ describe("compareAnalyses", () => {
   it("names a changed dataset_vibrs entry", () => {
     const fresh = analysis();
     fresh.worst_case = recommendation(candidate("mzv", 48.2, { dataset_vibrs: [0.5] }));
-    expect(compareAnalyses(analysis(), fresh).differences).toEqual(["worst case: dataset_vibrs [0.032] -> [0.5]"]);
+    expect(compareAnalyses(analysis(), fresh).differences).toEqual(["All chips: dataset_vibrs [0.032] -> [0.5]"]);
   });
 
   it("names a chip that gained or lost its recommendation", () => {
@@ -46,12 +46,12 @@ describe("compareAnalyses", () => {
     ]);
   });
 
-  it("names a chip present on one side only and a lost worst case", () => {
+  it("names a chip present on one side only and a lost All chips recommendation", () => {
     const fresh = analysis();
     fresh.per_chip.pop();
     fresh.worst_case = null;
     expect(compareAnalyses(analysis(), fresh).differences).toEqual([
-      "worst case: recommendation lost",
+      "All chips: recommendation lost",
       "chip b: missing from the re-analysis",
     ]);
   });

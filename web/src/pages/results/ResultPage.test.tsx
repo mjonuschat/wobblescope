@@ -97,7 +97,7 @@ describe("the result page", () => {
     serve();
     renderRoute("/results/r1");
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("X worst case: max_accel 4500 -> 4200");
+    expect(alert.textContent).toContain("X All chips: max_accel 4500 -> 4200");
     expect(screen.getAllByText(/shaper_type_x: mzv/).length).toBeGreaterThan(0);
     expect(screen.queryByText("fresh snippet")).toBeNull();
   });

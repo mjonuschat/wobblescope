@@ -42,7 +42,7 @@ function compareRecommendation(label: string, saved: Recommendation | null, fres
  * candidate lists.
  */
 export function compareAnalyses(saved: Analysis, fresh: Analysis): { sameAnswer: boolean; differences: string[] } {
-  const differences = compareRecommendation("worst case", saved.worst_case, fresh.worst_case);
+  const differences = compareRecommendation("All chips", saved.worst_case, fresh.worst_case);
   const freshChips = new Map(fresh.per_chip.map((c) => [c.chip, c]));
   for (const chip of saved.per_chip) {
     const other = freshChips.get(chip.chip);

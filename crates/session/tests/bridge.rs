@@ -1063,7 +1063,7 @@ mod vibrations {
             let b = &out.per_chip[1];
             let failure = b.failure.as_deref().unwrap();
             let excluded = b.excluded.as_deref().unwrap();
-            assert!(excluded.contains("left out of the worst case"), "{excluded}");
+            assert!(excluded.contains("left out of All chips"), "{excluded}");
             assert!(excluded.contains(failure), "{excluded}");
             assert!(out.per_chip[0].excluded.is_none());
         }

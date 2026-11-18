@@ -531,7 +531,7 @@ where
             }
         }
         if let (Some(reason), None) = (&failure, &excluded) {
-            excluded = Some(format!("left out of the worst case: {reason}"));
+            excluded = Some(format!("left out of All chips: {reason}"));
         }
         if let (Some(profile), None) = (&result, &excluded) {
             grids.push(Grid {
