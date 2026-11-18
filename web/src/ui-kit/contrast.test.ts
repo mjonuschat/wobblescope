@@ -1,31 +1,7 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const read = (file: string) => readFileSync(path.resolve(import.meta.dirname, file), "utf8");
-const css = `${read("../brand.css")}\n${read("tokens.css")}`;
+import { dark, light, resolve } from "@/test/tokens";
 
-function declarations(selector: ":root" | ".dark"): Record<string, string> {
-  const out: Record<string, string> = {};
-  const blocks = css.matchAll(/(:root|\.dark)\s*\{([^}]*)\}/g);
-  for (const [, sel, body] of blocks) {
-    if (sel !== selector) continue;
-    for (const [, name, value] of body.matchAll(/(--[\w-]+):\s*([^;]+);/g)) out[name] = value.trim();
-  }
-  return out;
-}
-
-const light = declarations(":root");
-const dark = { ...light, ...declarations(".dark") };
-
-function resolve(vars: Record<string, string>, name: string): string {
-  let value = vars[name];
-  for (let i = 0; i < 5 && value?.startsWith("var("); i++) value = vars[value.slice(4, -1)];
-  if (!value) throw new Error(`no value for ${name}`);
-  return value;
-}
-
-/** OKLCH to linear sRGB, clipped to the gamut. */
 function linear(color: string): [number, number, number] {
   const m = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(color);
   if (!m) throw new Error(`not an opaque oklch color: ${color}`);
@@ -60,6 +36,7 @@ describe("contrast helper", () => {
   });
 });
 
+const SERIES = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5"];
 const surfaces = ["--background", "--card", "--popover", "--sidebar"];
 const statuses = ["--destructive", "--success", "--warning", "--info"];
 
@@ -72,6 +49,7 @@ const pairs: [string, string, number][] = [
   ["--primary-foreground", "--primary", 4.5],
   ["--brand-ink", "--background", 4.5],
   ["--brand-ink", "--card", 4.5],
+  ...SERIES.map((n): [string, string, number] => [n, "--card", 3]),
   ...statuses.flatMap((s): [string, string, number][] => [
     [s, "--background", 4.5],
     [s, "--card", 4.5],

@@ -2,7 +2,8 @@
  * Theme tokens shared by every product. A product supplies only --brand, --brand-ink and
  * --brand-foreground (see ../brand.css). Status colors use hues that no brand accent may use:
  * about 22 (danger), 85 (warning), 175 (success) and 240 (info). Each token has a light and a
- * dark value, so a component never needs a raw palette class.
+ * dark value, so a component never needs a raw palette class. --series-1 to --series-5 are the
+ * categorical chart colors, at hues that the accent and the status colors do not use.
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -91,6 +92,11 @@
     --chart-3: oklch(0.6 0.006 260);
     --chart-4: oklch(0.72 0.005 260);
     --chart-5: oklch(0.84 0.004 260);
+    --series-1: oklch(0.52 0.19 295);
+    --series-2: oklch(0.55 0.11 205);
+    --series-3: oklch(0.55 0.2 350);
+    --series-4: oklch(0.56 0.14 125);
+    --series-5: oklch(0.5 0.17 265);
     --radius: 0.625rem;
     --sidebar: oklch(0.965 0.004 260);
     --sidebar-foreground: oklch(0.2 0.005 260);
@@ -131,6 +137,11 @@
     --chart-3: oklch(0.62 0.005 260);
     --chart-4: oklch(0.5 0.005 260);
     --chart-5: oklch(0.38 0.005 260);
+    --series-1: oklch(0.74 0.13 295);
+    --series-2: oklch(0.8 0.11 205);
+    --series-3: oklch(0.74 0.16 350);
+    --series-4: oklch(0.82 0.15 125);
+    --series-5: oklch(0.72 0.14 265);
     --sidebar: oklch(0.185 0.005 260);
     --sidebar-foreground: oklch(0.96 0.003 260);
     --sidebar-accent: oklch(1 0 0 / 7%);

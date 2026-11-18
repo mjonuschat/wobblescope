@@ -1,12 +1,12 @@
 /*
  * Wobblescope's accent. --brand fills buttons, the active nav edge and focus rings, --brand-ink is
  * the darker shade for accent text on a light surface, --brand-foreground is the text on a fill.
- * The logo orange is about #FF5A1F.
+ * The logo orange is #FF5A1F and the logo ink is #10201C.
  */
 :root {
-    --brand: oklch(0.7 0.2 38);
+    --brand: oklch(0.682 0.211 37.7);
     --brand-ink: oklch(0.54 0.19 38);
-    --brand-foreground: oklch(0.2 0.02 175);
+    --brand-foreground: oklch(0.228 0.023 176.5);
 }
 
 .dark {
