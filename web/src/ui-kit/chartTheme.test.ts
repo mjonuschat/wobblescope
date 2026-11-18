@@ -71,7 +71,6 @@ describe("chart colors", () => {
       .filter((file) => !ALLOWED.has(path.relative(src, file)))
       .filter((file) => LITERAL.test(readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")))
       .map((file) => path.relative(src, file));
-    // AxesMapPlot keeps Shake&Tune's three chip axis colors (see shaketune-deviations.md).
-    expect(found.filter((f) => f !== "pages/session/AxesMapPlot.tsx")).toEqual([]);
+    expect(found).toEqual([]);
   });
 });

@@ -3,8 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisMatch } from "@/lib/generated/AxisMatch";
+import { dark, light, resolve } from "@/test/tokens";
+import { chartThemeFrom, DEFAULT_CHART_THEME } from "@/ui-kit/chartTheme";
 
-import { AxesMapPlot, isometric, movementOption, movementZones, orientationArrows } from "./AxesMapPlot";
+import {
+  AxesMapPlot,
+  chipAxisColors,
+  isometric,
+  movementOption,
+  movementZones,
+  orientationArrows,
+} from "./AxesMapPlot";
 
 vi.mock("@/components/charts/EChart", () => ({
   EChart: ({ label }: { label: string }) => <div role="img" aria-label={label} />,
@@ -74,9 +83,9 @@ describe("the movement sequence", () => {
     ]);
     const series = (movementOption(result()) as { series: { name: string; color: string; data: number[][] }[] }).series;
     expect(series.map((s) => [s.name, s.color])).toEqual([
-      ["Chip x", "#70088C"],
-      ["Chip y", "#FF8D32"],
-      ["Chip z", "#F2055C"],
+      ["Chip x", DEFAULT_CHART_THEME.series[0]],
+      ["Chip y", DEFAULT_CHART_THEME.accent],
+      ["Chip z", DEFAULT_CHART_THEME.series[2]],
     ]);
     expect(series[0].data.map(([t]) => t)).toEqual([
       0, 0.1, 0.2, 0.2, 0.30000000000000004, 0.4, 0.4, 0.5, 0.6000000000000001,
@@ -174,9 +183,9 @@ describe("the orientation view", () => {
     const arrows = orientationArrows(result())!;
     expect(arrows.machine.map((a) => a.label)).toEqual(["X", "Y", "Z"]);
     expect(arrows.chip.map((a) => [a.label, a.color])).toEqual([
-      ["X", "#70088C"],
-      ["Y", "#FF8D32"],
-      ["Z", "#F2055C"],
+      ["X", DEFAULT_CHART_THEME.series[0]],
+      ["Y", DEFAULT_CHART_THEME.accent],
+      ["Z", DEFAULT_CHART_THEME.series[2]],
     ]);
     // Column 1 of the rotation is chip y: machine (0, 0, 1). Column 2 is chip z: machine (0, -1, 0).
     const [y1, y2] = isometric([0, 0, 0.9]);
@@ -214,5 +223,21 @@ describe("the orientation view", () => {
     expect(screen.queryByRole("heading", { name: "Chip orientation" })).toBeNull();
     expect(screen.queryByRole("img", { name: /orientation/i })).toBeNull();
     expect(screen.getByRole("heading", { name: "Movement sequence" })).toBeTruthy();
+  });
+});
+
+describe("chipAxisColors", () => {
+  const themes = {
+    light: chartThemeFrom((token) => resolve(light, token)),
+    dark: chartThemeFrom((token) => resolve(dark, token)),
+  };
+
+  it("gives the three chip axes three different colors in each theme", () => {
+    for (const theme of Object.values(themes)) expect(new Set(chipAxisColors(theme)).size).toBe(3);
+  });
+
+  it("follows the theme: the colors of the light theme are not the dark ones", () => {
+    expect(chipAxisColors(themes.light)).not.toEqual(chipAxisColors(themes.dark));
+    expect(movementOption(result(), themes.light)).not.toEqual(movementOption(result(), themes.dark));
   });
 });

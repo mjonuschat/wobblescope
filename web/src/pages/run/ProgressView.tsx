@@ -19,7 +19,8 @@ import type { FinishedTest } from "@/lib/generated/FinishedTest";
 import type { Phase } from "@/lib/generated/Phase";
 import type { TestState } from "@/lib/generated/TestState";
 
-import { CHIP_AXIS_COLORS } from "@/pages/session/AxesMapPlot";
+import { chipAxisColors } from "@/pages/session/AxesMapPlot";
+import { useChartTheme } from "@/ui-kit/chartTheme";
 import { SessionResults } from "@/pages/session/SessionResults";
 
 import { LiveChart } from "./LiveChart";
@@ -89,6 +90,7 @@ const LEVEL_FULL = 1000;
  * follows the current move should rise well above the others.
  */
 function SignalLevels({ test }: { test: TestState }) {
+  const axisColors = chipAxisColors(useChartTheme());
   const shown = test.chips.filter((c) => c.level);
   if (shown.length === 0) return <p className="text-sm text-muted-foreground">Waiting for the chips…</p>;
   return (
@@ -105,7 +107,7 @@ function SignalLevels({ test }: { test: TestState }) {
                     className="block h-full rounded-full"
                     style={{
                       width: `${Math.min(1, Math.sqrt(rms / LEVEL_FULL)) * 100}%`,
-                      backgroundColor: CHIP_AXIS_COLORS[i],
+                      backgroundColor: axisColors[i],
                     }}
                   />
                 </span>

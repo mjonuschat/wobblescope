@@ -10,8 +10,15 @@ import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisMatch } from "@/lib/generated/AxisMatch";
 import type { ChipAxis } from "@/lib/generated/ChipAxis";
 
-/** Shake&Tune's colours for the chip axes x, y and z. */
-export const CHIP_AXIS_COLORS = ["#70088C", "#FF8D32", "#F2055C"] as const;
+/**
+ * The colors of the chip axes x, y and z: violet, the accent and magenta, the hues of Shake&Tune's purple,
+ * orange and pink, taken from the theme so each reads on a light and a dark surface (D47).
+ */
+export const chipAxisColors = (theme: ChartTheme): readonly [string, string, string] => [
+  theme.series[0],
+  theme.accent,
+  theme.series[2],
+];
 
 const MACHINE_AXES = ["X", "Y", "Z"] as const;
 const CHIP_AXIS_INDEX: Record<ChipAxis, number> = { X: 0, Y: 1, Z: 2 };
@@ -67,7 +74,7 @@ export function movementZones(result: AxesMapResult): MovementZone[] {
  */
 export function movementOption(result: AxesMapResult, theme: ChartTheme = DEFAULT_CHART_THEME): EChartsCoreOption {
   const zones = movementZones(result);
-  const series = CHIP_AXIS_COLORS.map((color, k) => {
+  const series = chipAxisColors(theme).map((color, k) => {
     const line: Record<string, unknown> = {
       name: `Chip ${"xyz"[k]}`,
       type: "line",
@@ -84,7 +91,7 @@ export function movementOption(result: AxesMapResult, theme: ChartTheme = DEFAUL
         silent: true,
         symbol: "circle",
         symbolSize: 9,
-        itemStyle: { color, borderColor: "#000", borderWidth: 0.5 },
+        itemStyle: { color, borderColor: theme.surface, borderWidth: 0.5 },
         data: peaks.map((p) => ({
           coord: [p.time, p.value],
           label: {
@@ -197,7 +204,7 @@ export function orientationArrows(
     unit[i] = 1;
     return { label, color: theme.muted, end: scaled(unit, 1.15), labelAt: scaled(unit, 1.3) };
   });
-  const chip = CHIP_AXIS_COLORS.map((color, i) => {
+  const chip = chipAxisColors(theme).map((color, i) => {
     const column = [rotation[0][i], rotation[1][i], rotation[2][i]];
     return {
       label: "XYZ"[i],
@@ -255,7 +262,7 @@ function OrientationView({ result }: { result: AxesMapResult }) {
   const marker = (i: number | "machine") => `${id}-head-${i}`;
   const heads = [
     { key: marker("machine"), color: theme.muted },
-    ...CHIP_AXIS_COLORS.map((color, i) => ({ key: marker(i), color })),
+    ...chipAxisColors(theme).map((color, i) => ({ key: marker(i), color })),
   ];
   return (
     <svg viewBox="-1.5 -1.5 3 3" role="img" aria-label="Chip orientation" className="aspect-square w-full max-w-80">
