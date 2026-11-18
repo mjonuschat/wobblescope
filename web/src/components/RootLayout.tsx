@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -20,16 +20,20 @@ export function RootLayout() {
   useRecoverStorage();
   const { resolved } = useTheme();
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new path is the trigger
-  useEffect(() => {
-    toast.dismiss();
-  }, [path]);
+  const router = useRouter();
+  useEffect(
+    () =>
+      router.subscribe("onResolved", ({ pathChanged }) => {
+        if (pathChanged) toast.dismiss();
+      }),
+    [router],
+  );
   return (
     <TooltipProvider delay={0}>
       <SidebarProvider className="min-h-screen flex-col [--header-height:--spacing(14)]">
         <header className="sticky top-0 z-50 flex h-(--header-height) items-center border-b bg-background text-sm">
           <div className="flex h-full shrink-0 items-center gap-1 px-2 md:w-(--sidebar-width) md:border-r md:px-4">
-            <MobileNav />
+            <MobileNav key={path} />
             <Link to="/" aria-label="Wobblescope">
               <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Wobblescope" className="size-9 sm:hidden" />
               <img
