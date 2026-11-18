@@ -129,6 +129,38 @@ describe("useLive", () => {
     expect(FakeSocket.instances).toHaveLength(3);
   });
 
+  it("opens a new socket at once on retry, closes the old one and starts the wait over", () => {
+    const { result } = setup();
+    // Two drops make the next wait longer than the first one.
+    act(() => FakeSocket.latest.drop());
+    act(() => {
+      vi.advanceTimersByTime(RECONNECT_START_MS);
+    });
+    const waiting = FakeSocket.latest;
+    act(() => waiting.drop());
+    expect(FakeSocket.instances).toHaveLength(2);
+
+    act(() => result.current.retry());
+    expect(FakeSocket.instances).toHaveLength(3);
+    // The pending reconnect was cancelled, so no fourth socket follows.
+    act(() => {
+      vi.advanceTimersByTime(RECONNECT_START_MS * 4);
+    });
+    expect(FakeSocket.instances).toHaveLength(3);
+
+    const open = FakeSocket.latest;
+    act(() => open.open());
+    act(() => result.current.retry());
+    expect(open.closed).toBe(true);
+    expect(FakeSocket.instances).toHaveLength(4);
+    // The wait starts over after a retry.
+    act(() => FakeSocket.latest.drop());
+    act(() => {
+      vi.advanceTimersByTime(RECONNECT_START_MS);
+    });
+    expect(FakeSocket.instances).toHaveLength(5);
+  });
+
   it("refreshes the sessions list and storage when a test finishes, but not for an old result", () => {
     const { invalidate } = setup();
     const socket = FakeSocket.latest;

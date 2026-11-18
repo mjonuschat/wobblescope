@@ -58,10 +58,9 @@ export function useLive(): LiveState & { retry: () => void } {
   const queryClient = useQueryClient();
   const [state, setState] = useState<LiveState>(INITIAL);
   const lastSeen = useRef<string | null | undefined>(undefined);
-  // Raised by `retry` to open a new socket at once instead of waiting out the reconnect delay.
-  const [attempt, setAttempt] = useState(0);
+  // Set by the effect: opens a new socket at once instead of waiting out the reconnect delay.
+  const restart = useRef<(() => void) | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new attempt is the trigger to open a new socket
   useEffect(() => {
     let closed = false;
     let socket: WebSocket | null = null;
@@ -100,12 +99,22 @@ export function useLive(): LiveState & { retry: () => void } {
       };
     };
     connect();
+    restart.current = () => {
+      clearTimeout(timer);
+      wait = RECONNECT_START_MS;
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
+      }
+      connect();
+    };
     return () => {
+      restart.current = null;
       closed = true;
       clearTimeout(timer);
       socket?.close();
     };
-  }, [queryClient, attempt]);
+  }, [queryClient]);
 
-  return { ...state, retry: () => setAttempt((n) => n + 1) };
+  return { ...state, retry: () => restart.current?.() };
 }
