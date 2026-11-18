@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 
 import { parseOklch, type Rgba, readableOn, toCss, withAlpha } from "@/ui-kit/color";
 
@@ -103,6 +103,11 @@ const isDark = () => document.documentElement.classList.contains("dark");
  */
 export function useChartTheme(): ChartTheme {
   const dark = useSyncExternalStore(subscribe, isDark, () => true);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `dark` is the trigger to read the tokens again
-  return useMemo(readFromDocument, [dark]);
+  // The tokens come from the document, not from `dark`, so the theme is kept for the `dark` it was
+  // read under and read again when that changes.
+  const read = useRef<{ dark: boolean; theme: ChartTheme } | null>(null);
+  if (read.current === null || read.current.dark !== dark) {
+    read.current = { dark, theme: readFromDocument() };
+  }
+  return read.current.theme;
 }
