@@ -5,6 +5,7 @@ import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { summedOption } from "@/components/charts/options";
 import type { SummedPsd } from "@/lib/generated/SummedPsd";
+import { useChartTheme } from "@/ui-kit/chartTheme";
 
 interface Props {
   summed: SummedPsd;
@@ -15,7 +16,8 @@ interface Props {
 const LABEL = "All chips added together, vibration strength against frequency";
 
 export function CombinedResult({ summed, maxFreq, switcher }: Props) {
-  const option = summedOption(summed, maxFreq);
+  const theme = useChartTheme();
+  const option = summedOption(summed, maxFreq, theme);
   return (
     <Panel title="Resonance and shapers" label="All chips">
       {switcher}

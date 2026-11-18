@@ -13,6 +13,7 @@ import { useStream } from "@/stream/useStream";
 
 import type { Axis3 } from "./axes";
 import { AxisToggles } from "./AxisToggles";
+import { useChartTheme } from "@/ui-kit/chartTheme";
 import { chipColor } from "./colors";
 import { ChipPicker } from "./ChipPicker";
 import { ConsoleCard } from "./ConsoleCard";
@@ -40,8 +41,8 @@ const DEFAULT_WINDOW_SECONDS = 1;
 /** The Pause button is hidden until the page controls are rearranged. */
 const SHOW_PAUSE = false;
 
-/** The Live view page shows live signals and spectra of up to a few chips, and can hold the printer at a frequency. */
 export function StreamPage({ createWorker }: Props) {
+  const theme = useChartTheme();
   const stream = useStream();
   const hold = useHold();
   const [frequencyOfInterest, setFrequencyOfInterest] = useState<number | null>(null);
@@ -226,7 +227,7 @@ export function StreamPage({ createWorker }: Props) {
         <Panel title="Signals">
           <SignalStrips
             paused={paused}
-            chips={selected.map((chip, i) => ({ chip, color: chipColor(i), signal: shownSignals[chip] }))}
+            chips={selected.map((chip, i) => ({ chip, color: chipColor(i, theme), signal: shownSignals[chip] }))}
           />
         </Panel>
       )}
@@ -272,7 +273,7 @@ export function StreamPage({ createWorker }: Props) {
             <Spectrogram
               key={`${chip}/${scaleKey}`}
               chip={chip}
-              color={chipColor(index)}
+              color={chipColor(index, theme)}
               spectrum={spectrum}
               scale={scale}
             />

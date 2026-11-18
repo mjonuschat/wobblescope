@@ -5,6 +5,7 @@ import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { EChart } from "@/components/charts/EChart";
 import { InfoHint } from "@/components/InfoHint";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CHART_THEME, type ChartTheme, useChartTheme } from "@/ui-kit/chartTheme";
 import type { AxesMapResult } from "@/lib/generated/AxesMapResult";
 import type { AxisMatch } from "@/lib/generated/AxisMatch";
 import type { ChipAxis } from "@/lib/generated/ChipAxis";
@@ -14,12 +15,6 @@ export const CHIP_AXIS_COLORS = ["#70088C", "#FF8D32", "#F2055C"] as const;
 
 const MACHINE_AXES = ["X", "Y", "Z"] as const;
 const CHIP_AXIS_INDEX: Record<ChipAxis, number> = { X: 0, Y: 1, Z: 2 };
-const TEXT = "#d4d4d4";
-const MUTED = "#a3a3a3";
-const GRID = "rgba(255, 255, 255, 0.08)";
-const WATERMARK = "rgba(212, 212, 212, 0.3)";
-const VIRTUAL_ZONE = "rgba(128, 128, 128, 0.15)";
-const VIRTUAL_TEXT = "rgba(160, 160, 160, 0.45)";
 
 /** A chip axis as the map writes it, with its sign: `-z`. */
 export function chipAxisText(match: AxisMatch): string {
@@ -70,7 +65,7 @@ export function movementZones(result: AxesMapResult): MovementZone[] {
  * with a watermark letter and confidence per zone, the zones split by dashed lines and each
  * detected peak marked with its value.
  */
-export function movementOption(result: AxesMapResult): EChartsCoreOption {
+export function movementOption(result: AxesMapResult, theme: ChartTheme = DEFAULT_CHART_THEME): EChartsCoreOption {
   const zones = movementZones(result);
   const series = CHIP_AXIS_COLORS.map((color, k) => {
     const line: Record<string, unknown> = {
@@ -108,7 +103,7 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
     silent: true,
     symbol: "none",
     label: { show: false },
-    lineStyle: { type: "dashed", color: MUTED, width: 2, opacity: 0.6 },
+    lineStyle: { type: "dashed", color: theme.muted, width: 2, opacity: 0.6 },
     data: zones.slice(1).map((z) => ({ xAxis: z.start })),
   };
   series[0].markArea = {
@@ -116,16 +111,20 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
     data: zones.map((z) => [
       {
         xAxis: z.start,
-        itemStyle: { color: z.virtual ? VIRTUAL_ZONE : "transparent" },
+        itemStyle: { color: z.virtual ? theme.alpha(theme.muted, 0.15) : "transparent" },
         label: {
           position: "inside",
           formatter: `{letter|${z.axis}}\n{note|${z.note.replace(" (", "\n(")}}`,
           rich: {
-            letter: { fontSize: 56, fontWeight: "bold", color: z.virtual ? VIRTUAL_TEXT : WATERMARK },
+            letter: {
+              fontSize: 56,
+              fontWeight: "bold",
+              color: z.virtual ? theme.alpha(theme.muted, 0.45) : theme.alpha(theme.text, 0.3),
+            },
             note: {
               fontSize: 11,
               fontWeight: z.virtual ? "normal" : "bold",
-              color: z.virtual ? VIRTUAL_TEXT : WATERMARK,
+              color: z.virtual ? theme.alpha(theme.muted, 0.45) : theme.alpha(theme.text, 0.3),
             },
           },
         },
@@ -136,9 +135,9 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
   const total = zones[zones.length - 1].end;
   return {
     backgroundColor: "transparent",
-    textStyle: { color: TEXT },
+    textStyle: { color: theme.text },
     tooltip: { trigger: "axis", valueFormatter: (v: number) => `${v.toFixed(1)} mm/s` },
-    legend: { data: series.map((s) => s.name as string), top: 0, left: 56, textStyle: { color: TEXT } },
+    legend: { data: series.map((s) => s.name as string), top: 0, left: 56, textStyle: { color: theme.text } },
     grid: { top: 52, left: 76, right: 24, bottom: 40 },
     xAxis: {
       type: "value",
@@ -148,7 +147,7 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
       min: 0,
       max: total,
       axisLabel: { showMaxLabel: false },
-      splitLine: { lineStyle: { color: GRID } },
+      splitLine: { lineStyle: { color: theme.grid } },
     },
     yAxis: {
       type: "value",
@@ -161,7 +160,7 @@ export function movementOption(result: AxesMapResult): EChartsCoreOption {
       max: (extent: { min: number; max: number }) => extent.max + padding(extent),
       // The padded ends are not round numbers, so only the ticks inside the range are labelled.
       axisLabel: { showMinLabel: false, showMaxLabel: false },
-      splitLine: { lineStyle: { color: GRID } },
+      splitLine: { lineStyle: { color: theme.grid } },
     },
     series,
   };
@@ -188,6 +187,7 @@ export interface OrientationArrow {
  */
 export function orientationArrows(
   result: AxesMapResult,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
 ): { machine: OrientationArrow[]; chip: OrientationArrow[] } | null {
   const rotation = result.rotation;
   if (rotation === null) return null;
@@ -195,7 +195,7 @@ export function orientationArrows(
   const machine = MACHINE_AXES.map((label, i) => {
     const unit = [0, 0, 0];
     unit[i] = 1;
-    return { label, color: MUTED, end: scaled(unit, 1.15), labelAt: scaled(unit, 1.3) };
+    return { label, color: theme.muted, end: scaled(unit, 1.15), labelAt: scaled(unit, 1.3) };
   });
   const chip = CHIP_AXIS_COLORS.map((color, i) => {
     const column = [rotation[0][i], rotation[1][i], rotation[2][i]];
@@ -249,11 +249,12 @@ function Arrow({
 
 function OrientationView({ result }: { result: AxesMapResult }) {
   const id = useId();
-  const arrows = orientationArrows(result);
+  const theme = useChartTheme();
+  const arrows = orientationArrows(result, theme);
   if (arrows === null) return null;
   const marker = (i: number | "machine") => `${id}-head-${i}`;
   const heads = [
-    { key: marker("machine"), color: MUTED },
+    { key: marker("machine"), color: theme.muted },
     ...CHIP_AXIS_COLORS.map((color, i) => ({ key: marker(i), color })),
   ];
   return (
@@ -280,7 +281,7 @@ function OrientationView({ result }: { result: AxesMapResult }) {
           <text
             x={a.labelAt[0]}
             y={a.labelAt[1]}
-            fill={MUTED}
+            fill={theme.muted}
             fontSize={0.14}
             fontWeight="bold"
             textAnchor="middle"
@@ -311,7 +312,10 @@ function OrientationView({ result }: { result: AxesMapResult }) {
 }
 
 function MovementChart({ result, height }: { result: AxesMapResult; height?: number | string }) {
-  return <EChart option={movementOption(result)} label={`Movement sequence of ${result.chip}`} height={height} />;
+  const theme = useChartTheme();
+  return (
+    <EChart option={movementOption(result, theme)} label={`Movement sequence of ${result.chip}`} height={height} />
+  );
 }
 
 /** The padding at each end of the velocity axis: 15 % of the data range, or 1 mm/s for a flat recording. */

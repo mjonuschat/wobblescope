@@ -3,6 +3,7 @@ import type { EChartsCoreOption } from "echarts/core";
 import type { ChipLive } from "@/lib/generated/ChipLive";
 import type { Direction } from "@/lib/generated/Direction";
 import type { TestState } from "@/lib/generated/TestState";
+import { type ChartTheme, DEFAULT_CHART_THEME } from "@/ui-kit/chartTheme";
 
 export interface Trace {
   chip: string;
@@ -50,18 +51,18 @@ export function extend(old: Traces, test: TestState): Traces {
   return changed ? { key, series } : old;
 }
 
-const text = "#d4d4d4";
-const GRID = "rgba(255, 255, 255, 0.08)";
-const COLORS = ["#ff5a1f", "#ffb347", "#e0431a", "#ffd699"];
-
-export function liveSignalOption(series: Trace[], range: [number, number]): EChartsCoreOption {
+export function liveSignalOption(
+  series: Trace[],
+  range: [number, number],
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   return {
     backgroundColor: "transparent",
-    textStyle: { color: text },
+    textStyle: { color: theme.text },
     animation: false,
-    color: COLORS,
+    color: [theme.accent, ...theme.series],
     tooltip: { trigger: "axis" },
-    legend: series.length > 1 ? { top: 0, textStyle: { color: text } } : undefined,
+    legend: series.length > 1 ? { top: 0, textStyle: { color: theme.text } } : undefined,
     grid: { top: series.length > 1 ? 36 : 16, left: 64, right: 24, bottom: 36 },
     xAxis: {
       type: "value",
@@ -71,9 +72,9 @@ export function liveSignalOption(series: Trace[], range: [number, number]): ECha
       // The range is known before the sweep starts, so the axis does not rescale as points arrive.
       min: range[0],
       max: range[1],
-      splitLine: { lineStyle: { color: GRID } },
+      splitLine: { lineStyle: { color: theme.grid } },
     },
-    yAxis: { type: "value", name: "mm/s²", splitLine: { lineStyle: { color: GRID } } },
+    yAxis: { type: "value", name: "mm/s²", splitLine: { lineStyle: { color: theme.grid } } },
     series: series.map((s) => ({
       name: s.chip,
       type: "line",

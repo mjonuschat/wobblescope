@@ -10,6 +10,7 @@ import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
 
 import { ScaleDialog } from "./ScaleDialog";
 import { ShaperTable } from "./ShaperTable";
+import { useChartTheme } from "@/ui-kit/chartTheme";
 
 interface Props {
   chip: ChipAnalysis;
@@ -33,6 +34,7 @@ function ChipDetails({
   chartHeight?: number | string;
   corner?: ReactNode;
 }) {
+  const theme = useChartTheme();
   const rec = chip.recommendation;
   const reasons = decisions
     .filter((d) => d.chip === chip.chip)
@@ -41,7 +43,7 @@ function ChipDetails({
     <>
       <div className="relative">
         <EChart
-          option={psdOption({ chip, recommendation: rec, maxFreq, maxScale })}
+          option={psdOption({ chip, recommendation: rec, maxFreq, maxScale, theme })}
           label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
           height={chartHeight}
         />

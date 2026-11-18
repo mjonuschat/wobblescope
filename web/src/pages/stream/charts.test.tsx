@@ -49,7 +49,7 @@ const count = (name: string) => calls.filter(([n]) => n === name).length;
 
 describe("chipColor", () => {
   it("is stable and distinct for four chips", () => {
-    const colors = [0, 1, 2, 3].map(chipColor);
+    const colors = [0, 1, 2, 3].map((i) => chipColor(i));
     expect(new Set(colors).size).toBe(4);
     expect(chipColor(2)).toBe(colors[2]);
   });

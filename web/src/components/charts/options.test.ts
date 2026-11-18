@@ -15,6 +15,9 @@ import {
   spectrogramOption,
   summedOption,
 } from "./options";
+import { DEFAULT_CHART_THEME } from "@/ui-kit/chartTheme";
+
+const T = DEFAULT_CHART_THEME;
 
 type Series = {
   name: string;
@@ -589,18 +592,22 @@ describe("beltOverlayOption", () => {
   it("fills_paired_badges_with_the_belt_colour_and_unpaired_ones_red_with_dark_text", () => {
     const [a, b] = (beltOverlayOption(beltsResult()) as { series: BeltSeries[] }).series;
     const fills = (series: BeltSeries) => series.markPoint?.data.map((m) => m.label.rich.badge.backgroundColor);
-    expect(fills(a)).toEqual(["#ff7a33", "#ff7a33"]);
-    expect(fills(b)).toEqual(["#c792ea", "#c792ea", "#ff6b6b"]);
+    expect(fills(a)).toEqual([T.accent, T.accent]);
+    expect(fills(b)).toEqual([T.series[0], T.series[0], T.danger]);
     for (const mark of [...(a.markPoint?.data ?? []), ...(b.markPoint?.data ?? [])]) {
-      expect(mark.label.rich.badge).toMatchObject({ color: "#171717", fontWeight: "bold", borderRadius: 3 });
+      expect(mark.label.rich.badge).toMatchObject({
+        color: T.onFill(mark.label.rich.badge.backgroundColor),
+        fontWeight: "bold",
+        borderRadius: 3,
+      });
     }
   });
 
   it("colours_the_marker_dots_by_belt_without_an_outline", () => {
     const [a, b] = (beltOverlayOption(beltsResult()) as unknown as { series: { markPoint: { itemStyle: object } }[] })
       .series;
-    expect(a.markPoint.itemStyle).toEqual({ color: "#ff7a33", borderWidth: 0 });
-    expect(b.markPoint.itemStyle).toEqual({ color: "#c792ea", borderWidth: 0 });
+    expect(a.markPoint.itemStyle).toEqual({ color: T.accent, borderWidth: 0 });
+    expect(b.markPoint.itemStyle).toEqual({ color: T.series[0], borderWidth: 0 });
   });
 
   it("the_y_axis_fits_the_data", () => {
@@ -681,8 +688,8 @@ describe("beltScatterOption", () => {
 
   it("fills_the_scatter_badges_by_belt_and_red_for_unpaired_peaks", () => {
     const marks = named("Belts").markPoint?.data ?? [];
-    expect(marks.map((m) => m.label.rich.badge.backgroundColor)).toEqual(["#a3a3a3", "#c792ea", "#ff7a33", "#ff6b6b"]);
-    expect(marks.map((m) => m.itemStyle?.color)).toEqual(["#d4d4d4", "#c792ea", "#ff7a33", "#c792ea"]);
+    expect(marks.map((m) => m.label.rich.badge.backgroundColor)).toEqual([T.muted, T.series[0], T.accent, T.danger]);
+    expect(marks.map((m) => m.itemStyle?.color)).toEqual([T.text, T.series[0], T.accent, T.series[0]]);
   });
 
   it("splits_a_pair_that_is_apart_at_each_belts_own_peak", () => {
@@ -707,8 +714,8 @@ describe("the belt charts' zoom", () => {
     expect(option.toolbox.feature.dataZoom.yAxisIndex).toBe("none");
     expect(option.toolbox.top).toBeLessThan(0);
     expect(option.toolbox.feature.dataZoom.brushStyle).toEqual({
-      color: "rgba(255, 122, 51, 0.15)",
-      borderColor: "#ff7a33",
+      color: T.alpha(T.accent, 0.15),
+      borderColor: T.accent,
       borderWidth: 1,
     });
     expect(option.dataZoom).toEqual([{ type: "inside", xAxisIndex: 0 }]);

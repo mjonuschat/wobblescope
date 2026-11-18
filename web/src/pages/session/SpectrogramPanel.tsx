@@ -8,6 +8,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Axis } from "@/lib/generated/Axis";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
+import { useChartTheme } from "@/ui-kit/chartTheme";
+import { Alert } from "@/ui-kit/Alert";
 
 export interface SpectrogramSource {
   sessionId: string;
@@ -38,6 +40,7 @@ interface Props {
 
 /** The time-frequency map of one chip's recording. It is made when the panel is shown and cached by recording. */
 export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
+  const theme = useChartTheme();
   const points = pointsOf(meta, source.axis, chip.chip);
   const [chosen, setChosen] = useState<number | null>(null);
   const point = chosen !== null && points.includes(chosen) ? chosen : (points[0] ?? null);
@@ -85,14 +88,10 @@ export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
           Making the spectrogram…
         </p>
       )}
-      {query.isError && (
-        <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
-          The spectrogram could not be made: {query.error.message}
-        </p>
-      )}
+      {query.isError && <Alert tone="danger">The spectrogram could not be made: {query.error.message}</Alert>}
       {query.isSuccess && (
         <EChart
-          option={spectrogramOption(query.data, peaks, maxFreq)}
+          option={spectrogramOption(query.data, peaks, maxFreq, theme)}
           label={`Spectrogram of ${chip.chip}${points.length > 1 ? ` at ${pointLabel(point, meta.probe_points)}` : ""}`}
           height={420}
         />

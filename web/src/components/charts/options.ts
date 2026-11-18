@@ -14,6 +14,8 @@ import type { Spectrum } from "@/lib/generated/Spectrum";
 import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { AXIS_LABEL, type Axis3 } from "@/pages/stream/axes";
 import { chipColor } from "@/pages/stream/colors";
+import { DEFAULT_CHART_THEME, type ChartTheme } from "@/ui-kit/chartTheme";
+import { rampColors } from "@/components/charts/colormaps";
 import { RAMP } from "@/stream/spectrogramScale";
 
 import { formatFrequency, formatPsd } from "./format";
@@ -27,25 +29,25 @@ export function pointLabel(index: number, probePoints: ProbePoint[]): string {
 /** Pairs each value with its bin. `xs` may be longer than `ys`: a shaper whose range ends lower has fewer values. */
 const zip = (xs: number[], ys: number[]) => ys.map((y, i) => [xs[i], y]);
 
-const text = "#d4d4d4";
-const MUTED = "#a3a3a3";
-const GRID = "rgba(255, 255, 255, 0.08)";
-const PALETTE = ["#ff7a33", "#4da3ff", "#7ee081", "#ffd166", "#c792ea", "#ef5b7b", "#5eead4", "#f59e0b"];
-const splitLine = { lineStyle: { color: GRID } };
+const splitLine = (theme: ChartTheme) => ({ lineStyle: { color: theme.grid } });
+const palette = (theme: ChartTheme) => [theme.accent, ...theme.series];
 
-function base(title: string | null, maxFreq: number): EChartsCoreOption {
+function base(title: string | null, maxFreq: number, theme: ChartTheme): EChartsCoreOption {
   return {
     backgroundColor: "transparent",
-    textStyle: { color: text },
-    color: PALETTE,
-    title: title ? { text: title, left: 0, textStyle: { color: text, fontSize: 13, fontWeight: 500 } } : undefined,
+    textStyle: { color: theme.text },
+    color: palette(theme),
+    title: title
+      ? { text: title, left: 0, textStyle: { color: theme.text, fontSize: 13, fontWeight: 500 } }
+      : undefined,
     tooltip: { trigger: "axis" },
     grid: { top: title ? 92 : 64, left: 64, right: 64, bottom: 40 },
-    xAxis: { type: "value", name: "Hz", min: 0, max: maxFreq, splitLine },
+    xAxis: { type: "value", name: "Hz", min: 0, max: maxFreq, splitLine: splitLine(theme) },
   };
 }
 
 interface PsdInput {
+  theme?: ChartTheme;
   chip: ChipAnalysis;
   recommendation: Recommendation | null;
   /** The largest frequency the fit considered, in Hz. */
@@ -53,10 +55,6 @@ interface PsdInput {
   /** The left axis ends here. Empty or 0 ends it at 1.05 times the largest total. */
   maxScale?: number | null;
 }
-
-const PEAK_ALERT = "#ff6b6b";
-const RELAX_BAND = "rgba(126, 224, 129, 0.12)";
-const WARNING_BAND = "rgba(255, 209, 102, 0.14)";
 
 /** How far apart, as a fraction of the frequency axis, two peak labels must be to sit on one level. */
 const LABEL_GAP = 0.09;
@@ -98,7 +96,13 @@ function autoscale(chip: ChipAnalysis, maxFreq: number): number | undefined {
  * legend) and every fitted shaper's response on the right axis, with the recommended
  * frequency marked. Every curve is `core`'s array as returned.
  */
-export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput): EChartsCoreOption {
+export function psdOption({
+  chip,
+  recommendation,
+  maxFreq,
+  maxScale,
+  theme = DEFAULT_CHART_THEME,
+}: PsdInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = [];
   const selected: Record<string, boolean> = {};
   const many = chip.datasets.length > 1;
@@ -120,7 +124,7 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
         silent: true,
         symbol: "circle",
         symbolSize: 6,
-        itemStyle: { color: text },
+        itemStyle: { color: theme.text },
         data: found.peaks.map((peak, n) => ({
           coord: [peak.freq, peak.level],
           label: {
@@ -129,14 +133,14 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
             // The label starts at the peak, so half the badge moves left of it and the badge sits on the peak.
             align: "left",
             offset: [-BADGE_HALF, levels[n] === 0 ? 0 : -LABEL_LIFT * levels[n]],
-            color: peak.above_effect ? PEAK_ALERT : text,
+            color: peak.above_effect ? theme.danger : theme.text,
             fontWeight: peak.above_effect ? "bold" : "normal",
             fontSize: 13,
             // The number is a small badge, so it reads apart from the frequency beside it.
             rich: {
               index: {
-                backgroundColor: peak.above_effect ? PEAK_ALERT : MUTED,
-                color: "#171717",
+                backgroundColor: peak.above_effect ? theme.danger : theme.muted,
+                color: theme.onFill(peak.above_effect ? theme.danger : theme.muted),
                 fontWeight: "bold",
                 width: BADGE_WIDTH,
                 align: "center",
@@ -144,7 +148,7 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
                 borderRadius: 3,
               },
               value: {
-                color: peak.above_effect ? PEAK_ALERT : text,
+                color: peak.above_effect ? theme.danger : theme.text,
                 fontWeight: peak.above_effect ? "bold" : "normal",
               },
             },
@@ -154,7 +158,7 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
       if (index === 0) {
         const line = (yAxis: number) => ({
           yAxis,
-          lineStyle: { color: MUTED, type: "dashed", width: 1 },
+          lineStyle: { color: theme.muted, type: "dashed", width: 1 },
           label: { show: false },
         });
         total.markLine = {
@@ -165,8 +169,11 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
         total.markArea = {
           silent: true,
           data: [
-            [{ yAxis: 0, itemStyle: { color: RELAX_BAND } }, { yAxis: found.detect_threshold }],
-            [{ yAxis: found.detect_threshold, itemStyle: { color: WARNING_BAND } }, { yAxis: found.effect_threshold }],
+            [{ yAxis: 0, itemStyle: { color: theme.alpha(theme.success, 0.12) } }, { yAxis: found.detect_threshold }],
+            [
+              { yAxis: found.detect_threshold, itemStyle: { color: theme.alpha(theme.warning, 0.14) } },
+              { yAxis: found.effect_threshold },
+            ],
           ],
         };
       }
@@ -190,7 +197,7 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
       symbol: "none",
       data: [
         ...thresholds,
-        { xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: text } },
+        { xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: theme.text } },
       ],
     };
   }
@@ -211,21 +218,21 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
     type: "text",
     left: 0,
     top: top + 4,
-    style: { text: label, fill: MUTED, fontSize: 12 },
+    style: { text: label, fill: theme.muted, fontSize: 12 },
   });
   return {
-    ...base(null, maxFreq),
+    ...base(null, maxFreq, theme),
     grid: { top: shapers.length > 0 ? 84 : 52, left: 64, right: 64, bottom: 40 },
     legend: [
-      { data: measured, top: 0, left: 56, selected, textStyle: { color: text } },
-      ...(shapers.length > 0 ? [{ data: shapers, top: 28, left: 56, textStyle: { color: text } }] : []),
+      { data: measured, top: 0, left: 56, selected, textStyle: { color: theme.text } },
+      ...(shapers.length > 0 ? [{ data: shapers, top: 28, left: 56, textStyle: { color: theme.text } }] : []),
     ],
     graphic: [rowLabel("Axes", 0), ...(shapers.length > 0 ? [rowLabel("Shapers", 28)] : [])],
     yAxis: [
       {
         type: "value",
         name: "Vibration strength",
-        splitLine,
+        splitLine: splitLine(theme),
         min: 0,
         max: maxScale && maxScale > 0 ? maxScale : autoscale(chip, maxFreq),
         axisLabel: {
@@ -247,7 +254,11 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
   };
 }
 
-export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOption {
+export function summedOption(
+  summed: SummedPsd,
+  maxFreq: number,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   const curves = [
     ["Total", summed.psd],
     ["X", summed.psd_x],
@@ -255,7 +266,7 @@ export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOpt
     ["Z", summed.psd_z],
   ] as const;
   return {
-    ...base(null, maxFreq),
+    ...base(null, maxFreq, theme),
     // One axis, so the plot reaches the right edge. The legend row sits above it.
     grid: { top: 64, left: 64, right: 24, bottom: 40 },
     legend: {
@@ -263,10 +274,10 @@ export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOpt
       top: 0,
       left: 56,
       selected: { X: false, Y: false, Z: false },
-      textStyle: { color: text },
+      textStyle: { color: theme.text },
     },
-    graphic: [{ type: "text", left: 0, top: 4, style: { text: "Axes", fill: MUTED, fontSize: 12 } }],
-    yAxis: { type: "value", name: "Vibration strength", splitLine },
+    graphic: [{ type: "text", left: 0, top: 4, style: { text: "Axes", fill: theme.muted, fontSize: 12 } }],
+    yAxis: { type: "value", name: "Vibration strength", splitLine: splitLine(theme) },
     series: curves.map(([name, values]) => ({
       name,
       type: "line",
@@ -277,6 +288,7 @@ export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOpt
 }
 
 interface LiveSpectrumInput {
+  theme?: ChartTheme;
   /** `colorIndex` is the chip's place in the page's selection, so its colour matches the other charts. */
   chips: { chip: string; colorIndex?: number; spectrum: Spectrum; peaks: Peak[]; peakHold: number[]; axes: Axis3[] }[];
   maxHz: number;
@@ -295,10 +307,15 @@ const SPECTRUM_VALUES = {
  * The live spectra. One line per chip and chosen axis in the chip's colour, a faint peak-hold
  * line per chip (the summed spectrum's hold) and the chip's peaks marked on its first line.
  */
-export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSpectrumInput): EChartsCoreOption {
+export function liveSpectrumOption({
+  chips,
+  maxHz,
+  frequencyOfInterest,
+  theme = DEFAULT_CHART_THEME,
+}: LiveSpectrumInput): EChartsCoreOption {
   const series: Record<string, unknown>[] = [];
   chips.forEach(({ chip, colorIndex, spectrum, peaks, peakHold, axes }, index) => {
-    const color = chipColor(colorIndex ?? index);
+    const color = chipColor(colorIndex ?? index, theme);
     axes.forEach((axis, n) => {
       const line: Record<string, unknown> = {
         name: `${chip} ${AXIS_LABEL[axis]}`,
@@ -320,7 +337,7 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
             label: {
               formatter: `${formatHz(peak.freq)} Hz\n${peak.level.toExponential(1)}`,
               position: "top",
-              color: text,
+              color: theme.text,
               fontSize: 10,
             },
           })),
@@ -330,8 +347,8 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
         line.markLine = {
           silent: true,
           symbol: "none",
-          lineStyle: { color: text, type: "dashed", width: 1 },
-          label: { formatter: `${formatHz(frequencyOfInterest)} Hz`, color: text, fontSize: 10 },
+          lineStyle: { color: theme.text, type: "dashed", width: 1 },
+          label: { formatter: `${formatHz(frequencyOfInterest)} Hz`, color: theme.text, fontSize: 10 },
           data: [{ xAxis: frequencyOfInterest }],
         };
       }
@@ -348,16 +365,15 @@ export function liveSpectrumOption({ chips, maxHz, frequencyOfInterest }: LiveSp
   });
   return {
     animation: false,
-    ...base(null, maxHz),
+    ...base(null, maxHz, theme),
     grid: { top: 64, left: 64, right: 24, bottom: 40 },
-    legend: { type: "scroll", top: 0, left: 56, textStyle: { color: text } },
-    yAxis: { type: "value", name: "PSD", splitLine },
+    legend: { type: "scroll", top: 0, left: 56, textStyle: { color: theme.text } },
+    yAxis: { type: "value", name: "PSD", splitLine: splitLine(theme) },
     series,
   };
 }
 
 const SPECTROGRAM_LABELS = 8;
-const SPECTROGRAM_PEAK_LINE = "#22d3ee";
 /** Peak labels here carry the frequency, so they need more room than the PSD chart's. */
 const SPECTROGRAM_LABEL_GAP = 0.12;
 
@@ -396,6 +412,7 @@ export function spectrogramOption(
   spectrogram: Spectrogram,
   peaks: PsdPeaks | null,
   maxFreq: number,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
 ): EChartsCoreOption {
   const { freq_bins: freqs, times, power, floor, max } = spectrogram;
   const lowest = Math.log10(floor);
@@ -410,9 +427,9 @@ export function spectrogramOption(
   );
   const lifted = Math.max(0, ...levels) * LABEL_LIFT;
   return {
-    ...base(null, maxFreq),
+    ...base(null, maxFreq, theme),
     animation: false,
-    grid: { top: 24 + lifted, left: 64, right: 96, bottom: 48 },
+    grid: { top: 24 + lifted, left: 64, right: 96, bottom: 32 },
     tooltip: {
       formatter: (params: { data: number[] }) => {
         const [bin, row] = params.data;
@@ -446,9 +463,9 @@ export function spectrogramOption(
       orient: "vertical",
       right: 0,
       top: "middle",
-      textStyle: { color: text },
+      textStyle: { color: theme.text },
       formatter: (value: number) => (10 ** value).toExponential(0),
-      inRange: { color: RAMP.map(([r, g, b]) => `rgb(${r}, ${g}, ${b})`) },
+      inRange: { color: rampColors(RAMP) },
     },
     series: [
       {
@@ -460,7 +477,7 @@ export function spectrogramOption(
               markLine: {
                 silent: true,
                 symbol: "none",
-                lineStyle: { color: SPECTROGRAM_PEAK_LINE, type: "dotted", width: 1 },
+                lineStyle: { color: theme.series[1], type: "dotted", width: 1 },
                 data: marked.map((peak, n) => ({
                   xAxis: nearestIndex(freqs, peak.freq),
                   label: {
@@ -471,15 +488,15 @@ export function spectrogramOption(
                     offset: [-BADGE_HALF, levels[n] === 0 ? 0 : -LABEL_LIFT * levels[n]],
                     rich: {
                       index: {
-                        backgroundColor: SPECTROGRAM_PEAK_LINE,
-                        color: "#171717",
+                        backgroundColor: theme.series[1],
+                        color: theme.onFill(theme.series[1]),
                         fontWeight: "bold",
                         width: BADGE_WIDTH,
                         align: "center",
                         padding: [1, BADGE_PADDING],
                         borderRadius: 3,
                       },
-                      value: { color: text },
+                      value: { color: theme.text },
                     },
                   },
                 })),
@@ -494,13 +511,6 @@ export function spectrogramOption(
 /** Shake&Tune's names for paired peaks, in pair order. */
 export const PAIR_LETTERS = "αβγδεζηθικλμνξοπρστυφχψω";
 
-const BELT_A_COLOR = PALETTE[0];
-const ZOOM_BOX_FILL = "rgba(255, 122, 51, 0.15)";
-const BELT_B_COLOR = "#c792ea";
-const BELT_SHADING = "rgba(242, 5, 92, 0.1)";
-const GOOD_ZONE = "rgba(126, 224, 129, 0.15)";
-const IDEAL_LINE = "#ef5b7b";
-
 /** The letter of the pair at `order`; past the alphabet it is the number. */
 export const pairLetter = (order: number) => PAIR_LETTERS[order] ?? String(order + 1);
 
@@ -510,15 +520,15 @@ const scientific = (value: number) => value.toExponential(1);
  * A peak label drawn as the filled badge of the spectrum charts. `fill` is the belt's colour, or
  * the alert colour for an unpaired peak.
  */
-const peakBadge = (label: string, fill: string) => ({
+const peakBadge = (label: string, fill: string, theme: ChartTheme) => ({
   formatter: `{badge|${label}}`,
   position: "top",
-  color: text,
+  color: theme.text,
   fontSize: 13,
   rich: {
     badge: {
       backgroundColor: fill,
-      color: "#171717",
+      color: theme.onFill(fill),
       fontWeight: "bold",
       align: "center",
       padding: [1, BADGE_PADDING],
@@ -527,7 +537,7 @@ const peakBadge = (label: string, fill: string) => ({
   },
 });
 
-const beltColor = (belt: "a" | "b") => (belt === "a" ? BELT_A_COLOR : BELT_B_COLOR);
+const beltColor = (belt: "a" | "b", theme: ChartTheme) => (belt === "a" ? theme.accent : theme.series[0]);
 const beltPrefix = (belt: "a" | "b") => belt.toUpperCase();
 
 /** The label of every unpaired peak is its place in the list of belt A's followed by belt B's. */
@@ -571,7 +581,7 @@ function beltScatterTooltip(params: AxisTooltipItem | AxisTooltipItem[]): string
  * shown but is moved off the canvas where it can be neither seen nor clicked. The x axis alone
  * zooms unless `both`.
  */
-function zoomControls(both: boolean): EChartsCoreOption {
+function zoomControls(both: boolean, theme: ChartTheme): EChartsCoreOption {
   return {
     toolbox: {
       top: -100,
@@ -579,7 +589,7 @@ function zoomControls(both: boolean): EChartsCoreOption {
         dataZoom: {
           ...(both ? {} : { yAxisIndex: "none" }),
           // A flat accent box instead of the default gradient.
-          brushStyle: { color: ZOOM_BOX_FILL, borderColor: PALETTE[0], borderWidth: 1 },
+          brushStyle: { color: theme.alpha(theme.accent, 0.15), borderColor: theme.accent, borderWidth: 1 },
         },
       },
     },
@@ -606,16 +616,19 @@ const highest = (result: BeltsResult) => Math.max(...result.a.psd, ...result.b.p
  * dotted line; unpaired peaks carry a red badge with the belt and a number. The y axis ends at 1.1 times the
  * highest value, as Shake&Tune.
  */
-export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
+export function beltOverlayOption(result: BeltsResult, theme: ChartTheme = DEFAULT_CHART_THEME): EChartsCoreOption {
   const marks = (belt: "a" | "b") => {
     return [
       ...result.pairs.map((pair, order) => ({
         coord: [pair[belt].freq, pair[belt].level],
-        label: peakBadge(`${beltPrefix(belt)} ${pairLetter(order)}`, beltColor(belt)),
+        label: peakBadge(`${beltPrefix(belt)} ${pairLetter(order)}`, beltColor(belt, theme), theme),
       })),
       ...unpairedPoints(result, (curve, index) => [result.freqs[index], curve.psd[index]])
         .filter((point) => point.belt === belt)
-        .map((point) => ({ coord: point.coord, label: peakBadge(`${beltPrefix(belt)} ${point.number}`, PEAK_ALERT) })),
+        .map((point) => ({
+          coord: point.coord,
+          label: peakBadge(`${beltPrefix(belt)} ${point.number}`, theme.danger, theme),
+        })),
     ];
   };
   const curve = (name: string, belt: "a" | "b", color: string) => ({
@@ -638,7 +651,7 @@ export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
           markLine: {
             silent: true,
             symbol: "none",
-            lineStyle: { color: MUTED, type: "dotted", width: 1 },
+            lineStyle: { color: theme.muted, type: "dotted", width: 1 },
             label: { show: false },
             data: result.pairs.map((pair) => [
               { coord: [pair.a.freq, pair.a.level] },
@@ -649,38 +662,42 @@ export function beltOverlayOption(result: BeltsResult): EChartsCoreOption {
       : {}),
   });
   return {
-    ...base(null, result.max_freq),
+    ...base(null, result.max_freq, theme),
     animation: false,
     tooltip: { trigger: "axis", formatter: beltAxisTooltip },
     grid: BELT_GRID,
-    legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: text } },
-    ...zoomControls(false),
+    legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: theme.text } },
+    ...zoomControls(false, theme),
     yAxis: {
       type: "value",
       ...PSD_AXIS_NAME,
-      splitLine,
+      splitLine: splitLine(theme),
       min: 0,
       max: highest(result) * 1.1,
       axisLabel: { formatter: scientific },
     },
-    series: [curve("Belt A", "a", BELT_A_COLOR), curve("Belt B", "b", BELT_B_COLOR)],
+    series: [curve("Belt A", "a", theme.accent), curve("Belt B", "b", theme.series[0])],
   };
 }
 
 /** One belt's PSD alone, for a session where the other belt has no usable recording. */
-export function beltSingleOption(spectrum: BeltSpectrum, label: string): EChartsCoreOption {
+export function beltSingleOption(
+  spectrum: BeltSpectrum,
+  label: string,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   const top = Math.max(...spectrum.psd);
   return {
-    ...base(null, spectrum.freqs.at(-1) ?? 0),
+    ...base(null, spectrum.freqs.at(-1) ?? 0, theme),
     animation: false,
     tooltip: { trigger: "axis", formatter: beltAxisTooltip },
     grid: BELT_GRID,
-    legend: { data: [label], top: 0, left: 56, textStyle: { color: text } },
-    ...zoomControls(false),
+    legend: { data: [label], top: 0, left: 56, textStyle: { color: theme.text } },
+    ...zoomControls(false, theme),
     yAxis: {
       type: "value",
       ...PSD_AXIS_NAME,
-      splitLine,
+      splitLine: splitLine(theme),
       min: 0,
       max: top * 1.1,
       axisLabel: { formatter: scientific },
@@ -691,7 +708,7 @@ export function beltSingleOption(spectrum: BeltSpectrum, label: string): ECharts
         type: "line",
         showSymbol: false,
         symbol: "none",
-        color: beltColor(label.startsWith("A") ? "a" : "b"),
+        color: beltColor(label.startsWith("A") ? "a" : "b", theme),
         data: zip(spectrum.freqs, spectrum.psd),
       },
     ],
@@ -719,7 +736,7 @@ const ZONE_STEPS = 100;
  * Belt A's PSD against belt B's, with the ideal line, the good zone and the paired peaks. Where
  * the two peaks of a pair are within 1 Hz they are one point labelled with the letter alone; otherwise each belt has its own `A α` and `B α` point.
  */
-export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
+export function beltScatterOption(result: BeltsResult, theme: ChartTheme = DEFAULT_CHART_THEME): EChartsCoreOption {
   const max = highest(result);
   const end = max * 1.1;
   const xs = Array.from({ length: ZONE_STEPS + 1 }, (_, i) => (end * i) / ZONE_STEPS);
@@ -729,36 +746,36 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
   const dot = (coord: number[], label: string, color: string, fill = color) => ({
     coord,
     itemStyle: { color, borderWidth: 0 },
-    label: peakBadge(label, fill),
+    label: peakBadge(label, fill, theme),
   });
   const points = [
     ...result.pairs.flatMap((pair, order) => {
       const letter = pairLetter(order);
       if (Math.abs(pair.a.freq - pair.b.freq) < 1) {
-        return [dot([a.psd[pair.a.index], b.psd[pair.b.index]], letter, text, MUTED)];
+        return [dot([a.psd[pair.a.index], b.psd[pair.b.index]], letter, theme.text, theme.muted)];
       }
       return [
-        dot([a.psd[pair.b.index], b.psd[pair.b.index]], `B ${letter}`, BELT_B_COLOR),
-        dot([a.psd[pair.a.index], b.psd[pair.a.index]], `A ${letter}`, BELT_A_COLOR),
+        dot([a.psd[pair.b.index], b.psd[pair.b.index]], `B ${letter}`, theme.series[0]),
+        dot([a.psd[pair.a.index], b.psd[pair.a.index]], `A ${letter}`, theme.accent),
       ];
     }),
     ...unpairedPoints(result, (_, index) => [a.psd[index], b.psd[index]]).map((point) =>
-      dot(point.coord, `${beltPrefix(point.belt)} ${point.number}`, beltColor(point.belt), PEAK_ALERT),
+      dot(point.coord, `${beltPrefix(point.belt)} ${point.number}`, beltColor(point.belt, theme), theme.danger),
     ),
   ];
   return {
-    ...base(null, end),
+    ...base(null, end, theme),
     animation: false,
     tooltip: { trigger: "axis", formatter: beltScatterTooltip },
     grid: { top: 40, left: 72, right: 24, bottom: 56 },
-    legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: text } },
-    ...zoomControls(true),
+    legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: theme.text } },
+    ...zoomControls(true, theme),
     xAxis: {
       ...axisName("Belt A", 30),
       type: "value",
       min: 0,
       max: end,
-      splitLine,
+      splitLine: splitLine(theme),
       axisLabel: { formatter: scientific },
     },
     yAxis: {
@@ -766,7 +783,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
       type: "value",
       min: 0,
       max: end,
-      splitLine,
+      splitLine: splitLine(theme),
       axisLabel: { formatter: scientific },
     },
     series: [
@@ -790,8 +807,8 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         silent: true,
         lineStyle: { opacity: 0 },
         tooltip: { show: false },
-        areaStyle: { color: GOOD_ZONE },
-        itemStyle: { color: GOOD_ZONE },
+        areaStyle: { color: theme.alpha(theme.success, 0.15) },
+        itemStyle: { color: theme.alpha(theme.success, 0.15) },
         data: xs.map((x, i) => [x, goodZoneBoundary(x, max) - lower[i]]),
       },
       {
@@ -801,8 +818,8 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         symbol: "none",
         silent: true,
         tooltip: { show: false },
-        color: IDEAL_LINE,
-        lineStyle: { color: IDEAL_LINE, type: "dashed", width: 2 },
+        color: theme.danger,
+        lineStyle: { color: theme.danger, type: "dashed", width: 2 },
         data: [
           [0, 0],
           [end, end],
@@ -825,7 +842,7 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
               api.coord([0, curve[0][1]]),
             ],
           },
-          style: { fill: BELT_SHADING },
+          style: { fill: theme.alpha(theme.danger, 0.1) },
         }),
       },
       {
@@ -833,8 +850,8 @@ export function beltScatterOption(result: BeltsResult): EChartsCoreOption {
         type: "line",
         showSymbol: false,
         symbol: "none",
-        color: "#8a8a8a",
-        lineStyle: { color: "#8a8a8a", width: 1 },
+        color: theme.muted,
+        lineStyle: { color: theme.muted, width: 1 },
         data: curve,
         markPoint: { silent: true, symbol: "circle", symbolSize: 8, data: points },
       },

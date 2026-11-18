@@ -3,12 +3,12 @@ import { SVGRenderer } from "echarts/renderers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CHART_PARTS } from "@/components/charts/register";
+import { ON_HEATMAP } from "@/components/charts/colormaps";
+import { DEFAULT_CHART_THEME } from "@/ui-kit/chartTheme";
 import { linspaceVibrationsResult, motorResult, vibrationsResult } from "@/test/vibrations";
 
 import {
-  GOOD_COLOR,
   LOW_FREQ_WARNING,
-  PEAK_COLOR,
   niceStep,
   angularProfilesOption,
   heatmapOption,
@@ -18,6 +18,9 @@ import {
   siEnergy,
   speedProfileOption,
 } from "./vibrationsOptions";
+
+const GOOD_COLOR = DEFAULT_CHART_THEME.success;
+const PEAK_COLOR = DEFAULT_CHART_THEME.accent;
 
 // biome-ignore lint/suspicious/noExplicitAny: option objects are inspected loosely
 type Loose = Record<string, any>;
@@ -155,7 +158,7 @@ describe("polarAngleOption", () => {
     // The axis is the faint line, and a tick is a line in the scale's own colour; the rest are the grid.
     const axis = children.find((c) => c.type === "line" && c.style.opacity === 0.6) as Loose;
     const ticks = children.filter(
-      (c) => c.type === "line" && c.style.stroke === "#a3a3a3" && c.style.opacity === undefined,
+      (c) => c.type === "line" && c.style.stroke === DEFAULT_CHART_THEME.muted && c.style.opacity === undefined,
     );
     const labels = children.filter((c) => c.type === "text");
     expect(ticks).toHaveLength(labels.length);
@@ -203,7 +206,7 @@ describe("polarAngleOption", () => {
         [rim, r.angles[index]],
       ]);
       expect(edge.style.lineDash).toBeDefined();
-      expect(edge.style.stroke).toMatch(/^#e/i);
+      expect(edge.style.stroke).toBe(DEFAULT_CHART_THEME.danger);
     }
   });
 
@@ -285,9 +288,9 @@ describe("polarHeatmapOption", () => {
     expect(radii).toEqual([...radii].sort((a, b) => a - b));
     expect(radii[0]).toBeCloseTo(25, 6);
     expect(radii[11]).toBeCloseTo(300, 6);
-    expect(rings[0].style).toMatchObject({ fill: "none", lineWidth: 1, stroke: "rgba(176, 186, 198, 0.9)" });
+    expect(rings[0].style).toMatchObject({ fill: "none", lineWidth: 1, stroke: ON_HEATMAP.gridStrong });
     // White on black, as the bitmap is bright and dark by turns.
-    expect(labels[0].style).toMatchObject({ fill: "#fff", stroke: "#000" });
+    expect(labels[0].style).toMatchObject({ fill: ON_HEATMAP.text, stroke: ON_HEATMAP.outline });
   });
 
   it("draws the grid as Shake&Tune does: a spoke and a label every 15 degrees, in pale lines", () => {
@@ -390,7 +393,7 @@ describe("speedProfileOption", () => {
     expect(label.rich.zone.backgroundColor).toBe(GOOD_COLOR);
   });
 
-  it("colours a bad speed cyan and a good range green, so a number is never ambiguous", () => {
+  it("colours a bad speed with the accent and a good range green, so a number is never ambiguous", () => {
     const r = vibrationsResult();
     const peak = series(speedProfileOption(r))[3].markPoint.data[0].label.rich.index.backgroundColor;
     const zone = series(speedProfileOption(r))[0].markArea.label.rich.zone.backgroundColor;
@@ -450,14 +453,14 @@ describe("heatmapOption", () => {
     expect(pixel(bitmap, 3, 0)).toEqual([252, 255, 164, 255]);
   });
 
-  it("draws a cyan line at the speed of each bad peak, labelled along it with the number and the speed", () => {
+  it("draws an accent line at the speed of each bad peak, labelled along it with the number and the speed", () => {
     const lines = series(heatmapOption(vibrationsResult()))[1].markLine.data as Loose[];
     expect(lines).toHaveLength(2);
     expect(lines.map((l) => l.xAxis)).toEqual([40, 80]);
     expect(lines.map((l) => l.label.formatter)).toEqual(["Peak 1 (40 mm/s)", "Peak 2 (80 mm/s)"]);
     // Along the line, so that ten of them do not overlap.
     expect(lines[0].label.position).toBe("insideEndTop");
-    expect(lines[0].lineStyle.color).toMatch(/cyan|#00/i);
+    expect(lines[0].lineStyle.color).toBe(PEAK_COLOR);
   });
 
   it("reads the speed and angle under the pointer without a tooltip box", () => {

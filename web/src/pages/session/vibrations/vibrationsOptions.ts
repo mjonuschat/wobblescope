@@ -2,48 +2,34 @@ import type { EChartsCoreOption } from "echarts/core";
 
 import type { MotorResult } from "@/lib/generated/MotorResult";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
+import { INFERNO, ON_HEATMAP } from "@/components/charts/colormaps";
+import { DEFAULT_CHART_THEME, type ChartTheme } from "@/ui-kit/chartTheme";
 
-const TEXT = "#d4d4d4";
-const MUTED = "#a3a3a3";
-const GRID = "rgba(255, 255, 255, 0.08)";
-const PALETTE = ["#ff7a33", "#4da3ff", "#7ee081", "#ffd166", "#c792ea", "#ef5b7b"];
-const GOOD_BAND = "rgba(126, 224, 129, 0.18)";
-const GOOD_LINE = "#7ee081";
-const PEAK_LINE = "cyan";
-/** The badge colour of a bad speed on the charts and in the summary: the cyan of its line. */
-export const PEAK_COLOR = PEAK_LINE;
-/** The badge colour of a good range on the charts and in its table: the green of its band. */
-export const GOOD_COLOR = GOOD_LINE;
-const INFERNO = ["#000004", "#420a68", "#932667", "#dd513a", "#fca50a", "#fcffa4"];
-const splitLine = { lineStyle: { color: GRID } };
+const splitLine = (theme: ChartTheme) => ({ lineStyle: { color: theme.grid } });
 
 /** Shown in the motor panel when Shake&Tune's low frequency check trips. */
 export const LOW_FREQ_WARNING =
   "A lot of low frequency vibrations were detected, which can alter the readings. The test was probably run at too high an acceleration.";
 
-/** The grid of the polar heatmap, as Shake&Tune draws it: pale lines, rings and spokes alike. */
-const GRID_LINE = "rgba(176, 186, 198, 0.9)";
-/** The grid of the angular energy plot, paler than the heatmap's as it lies over a filled area. */
-const ANGULAR_GRID_LINE = "rgba(176, 186, 198, 0.45)";
 /** The angle between the spokes and labels of the polar plots, in degrees. */
 const POLAR_SPOKE = 15;
 
 /** The distance between the speed labels of the heatmaps, in mm/s. */
 const SPEED_TICK = 25;
 
-const BADGE = {
-  backgroundColor: PEAK_COLOR,
-  color: "#171717",
+const badge = (theme: ChartTheme, fill: string) => ({
+  backgroundColor: fill,
+  color: theme.onFill(fill),
   fontWeight: "bold",
   fontSize: 11,
   padding: [1, 4],
   borderRadius: 7,
-};
+});
 
-const base = (): EChartsCoreOption => ({
+const base = (theme: ChartTheme): EChartsCoreOption => ({
   backgroundColor: "transparent",
-  textStyle: { color: TEXT },
-  color: PALETTE,
+  textStyle: { color: theme.text },
+  color: [theme.accent, ...theme.series],
 });
 
 export function siEnergy(value: number): string {
@@ -127,7 +113,7 @@ const extremes = (xMin: number, yMin: number, min: number, max: number) => [
 ];
 
 /** Log colour scale. Values are already log10, so the labels show the power of ten. */
-function logVisualMap(min: number, max: number): Record<string, unknown> {
+function logVisualMap(min: number, max: number, theme: ChartTheme): Record<string, unknown> {
   const top = max > min ? max : min + 1;
   return {
     type: "continuous",
@@ -140,15 +126,10 @@ function logVisualMap(min: number, max: number): Record<string, unknown> {
     top: "middle",
     itemHeight: 180,
     inRange: { color: INFERNO },
-    textStyle: { color: TEXT },
+    textStyle: { color: theme.text },
     text: [siEnergy(10 ** top), siEnergy(10 ** min)],
   };
 }
-
-/** The grey badge of the motor resonance, which is neither a bad speed nor a good range. */
-const RESONANCE_BADGE = { ...BADGE, backgroundColor: MUTED };
-
-const GOOD_BADGE = { ...BADGE, backgroundColor: GOOD_COLOR };
 
 /** Where the radial scale of the polar plots runs, as in Shake&Tune: clear of the 0 degree label. */
 const SCALE_ANGLE = 25;
@@ -214,7 +195,7 @@ function polarScale(
       children.push({
         type: "line",
         shape: { x1: x0, y1: y0, x2: x1, y2: y1 },
-        style: { stroke: MUTED, lineWidth: 1, opacity: 0.6 },
+        style: { stroke: text, lineWidth: 1, opacity: 0.6 },
       });
       for (const [index, value] of values.entries()) {
         const [x, y] = api.coord([value, SCALE_ANGLE]);
@@ -223,7 +204,7 @@ function polarScale(
         children.push({
           type: "line",
           shape: { x1: x - sideX * 4, y1: y - sideY * 4, x2: x + sideX * 4, y2: y + sideY * 4 },
-          style: { stroke: MUTED, lineWidth: 1 },
+          style: { stroke: text, lineWidth: 1 },
         });
         children.push({
           type: "text",
@@ -245,10 +226,7 @@ function polarScale(
   };
 }
 
-/** Shake&Tune's red pink, the dotted line at the edges of a good angle range. */
-const ZONE_EDGE = "#ef5b7b";
-
-export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
+export function polarAngleOption(result: VibrationsResult, theme: ChartTheme = DEFAULT_CHART_THEME): EChartsCoreOption {
   const radius = result.angle_energy.length > 0 ? Math.max(...result.angle_energy) : 1;
   const top = radius > 0 ? radius : 1;
   // Shake&Tune keeps the rim above the highest energy, so a good range reads even at the peak.
@@ -278,7 +256,7 @@ export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
       const edge = (i: number) => ({
         type: "polyline",
         shape: { points: [point(result.angle_energy[i], result.angles[i]), point(rim, result.angles[i])] },
-        style: { stroke: ZONE_EDGE, lineWidth: 1.5, lineDash: [2, 3], fill: "none" },
+        style: { stroke: theme.danger, lineWidth: 1.5, lineDash: [2, 3], fill: "none" },
       });
       // The badge of the summary table row, in the middle of the band.
       const middle = Math.round((start + end) / 2);
@@ -286,17 +264,21 @@ export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
       return {
         type: "group",
         children: [
-          { type: "polygon", shape: { points: [...outer, ...inner] }, style: { fill: GOOD_BAND } },
+          {
+            type: "polygon",
+            shape: { points: [...outer, ...inner] },
+            style: { fill: theme.alpha(theme.success, 0.18) },
+          },
           edge(start),
           edge(end),
-          { type: "circle", shape: { cx: x, cy: y, r: 8 }, style: { fill: GOOD_COLOR } },
+          { type: "circle", shape: { cx: x, cy: y, r: 8 }, style: { fill: theme.success } },
           {
             type: "text",
             style: {
               text: `${params.dataIndex + 1}`,
               x,
               y,
-              fill: "#171717",
+              fill: theme.onFill(theme.success),
               fontSize: 10,
               fontWeight: "bold",
               textAlign: "center",
@@ -308,11 +290,11 @@ export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
     },
   };
   return {
-    ...base(),
+    ...base(theme),
     title: {
       text: result.symmetry === null ? "Symmetry: not available" : `Symmetry: ${result.symmetry.toFixed(1)}%`,
       left: "center",
-      textStyle: { color: TEXT, fontSize: 13, fontWeight: 500 },
+      textStyle: { color: theme.text, fontSize: 13, fontWeight: 500 },
     },
     tooltip: { trigger: "item" },
     polar: { radius: "74%", center: ["50%", "55%"] },
@@ -323,7 +305,7 @@ export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
       startAngle: 0,
       clockwise: false,
       interval: POLAR_SPOKE,
-      axisLabel: { color: TEXT, fontSize: 12, formatter: "{value}°" },
+      axisLabel: { color: theme.text, fontSize: 12, formatter: "{value}°" },
       splitLine: { show: false },
     },
     // The rings and spokes are drawn with the scale, above the filled area (see polarScale).
@@ -345,11 +327,11 @@ export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
         coordinateSystem: "polar",
         showSymbol: false,
         data: result.angle_energy.map((energy, i) => [energy, result.angles[i]]),
-        lineStyle: { color: PALETTE[0] },
-        areaStyle: { color: PALETTE[0], opacity: 0.3 },
+        lineStyle: { color: theme.accent },
+        areaStyle: { color: theme.accent, opacity: 0.3 },
       },
-      polarScale(ringValues(rim, energyStep), rim, siEnergy, MUTED, "#171717", {
-        color: ANGULAR_GRID_LINE,
+      polarScale(ringValues(rim, energyStep), rim, siEnergy, theme.muted, theme.surface, {
+        color: ON_HEATMAP.gridSoft,
         spokes: POLAR_SPOKE,
       }),
     ],
@@ -361,7 +343,10 @@ export function polarAngleOption(result: VibrationsResult): EChartsCoreOption {
  * custom series places one bitmap over the polar plot, each pixel taking the value of the grid cell
  * at its radius and angle.
  */
-export function polarHeatmapOption(result: VibrationsResult): EChartsCoreOption {
+export function polarHeatmapOption(
+  result: VibrationsResult,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   const { logs, min, max } = logGrid(result.grid);
   const speeds = result.speeds;
   const speedMin = speeds[0] ?? 0;
@@ -388,16 +373,16 @@ export function polarHeatmapOption(result: VibrationsResult): EChartsCoreOption 
     return bitmap;
   };
   return {
-    ...base(),
+    ...base(theme),
     tooltip: { show: false },
     // The radius axis name would collide with the 0 degree label, so the unit goes below the plot.
     title: {
       text: "Radius: speed (mm/s)",
       left: "42%",
       bottom: 4,
-      textStyle: { color: MUTED, fontSize: 12, fontWeight: 400 },
+      textStyle: { color: theme.muted, fontSize: 12, fontWeight: 400 },
     },
-    visualMap: logVisualMap(min, max),
+    visualMap: logVisualMap(min, max, theme),
     polar: { radius: "74%", center: ["45%", "50%"] },
     angleAxis: {
       type: "value",
@@ -406,7 +391,7 @@ export function polarHeatmapOption(result: VibrationsResult): EChartsCoreOption 
       startAngle: 0,
       clockwise: false,
       interval: POLAR_SPOKE,
-      axisLabel: { color: TEXT, fontSize: 12, formatter: "{value}°" },
+      axisLabel: { color: theme.text, fontSize: 12, formatter: "{value}°" },
       splitLine: { show: false },
     },
     // The scale is drawn on a diagonal, every 25 mm/s from the centre, above the bitmap (see polarScale).
@@ -434,25 +419,37 @@ export function polarHeatmapOption(result: VibrationsResult): EChartsCoreOption 
           return { type: "image", style: { image: draw(), x: cx - r, y: cy - r, width: 2 * r, height: 2 * r } };
         },
       },
-      polarScale(ringValues(speedMax, SPEED_TICK), speedMax, (value) => `${value}`, "#fff", "#000", {
-        color: GRID_LINE,
-        spokes: POLAR_SPOKE,
-      }),
+      polarScale(
+        ringValues(speedMax, SPEED_TICK),
+        speedMax,
+        (value) => `${value}`,
+        ON_HEATMAP.text,
+        ON_HEATMAP.outline,
+        {
+          color: ON_HEATMAP.gridStrong,
+          spokes: POLAR_SPOKE,
+        },
+      ),
     ],
   };
 }
 
-export function speedProfileOption(result: VibrationsResult): EChartsCoreOption {
+export function speedProfileOption(
+  result: VibrationsResult,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   const line = (values: number[]) => values.map((v, i) => [result.speeds[i], v]);
   const metricName = `Vibration metric (${result.peaks.length} bad peaks)`;
   return {
-    ...base(),
+    ...base(theme),
+    // The vibration metric is what the chart is about, so it takes the accent and the rest stay neutral.
+    color: [theme.neutral[2], theme.neutral[0], theme.neutral[1], theme.accent],
     tooltip: { trigger: "axis" },
-    legend: { top: 0, textStyle: { color: TEXT } },
+    legend: { top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
-    xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine },
+    xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine: splitLine(theme) },
     yAxis: [
-      { type: "value", name: "Energy", splitLine },
+      { type: "value", name: "Energy", splitLine: splitLine(theme) },
       { type: "value", show: false, splitLine: { show: false } },
     ],
     series: [
@@ -463,8 +460,8 @@ export function speedProfileOption(result: VibrationsResult): EChartsCoreOption 
         data: line(result.speed_min),
         markArea: {
           silent: true,
-          itemStyle: { color: GOOD_BAND },
-          label: { position: "insideTop", rich: { zone: GOOD_BADGE } },
+          itemStyle: { color: theme.alpha(theme.success, 0.18) },
+          label: { position: "insideTop", rich: { zone: badge(theme, theme.success) } },
           data: result.good_speeds.map((zone, n) => [
             { name: `{zone|${n + 1}}`, xAxis: result.speeds[clampIndex(zone.start, result.speeds.length)] },
             { xAxis: result.speeds[clampIndex(zone.end, result.speeds.length)] },
@@ -485,17 +482,22 @@ export function speedProfileOption(result: VibrationsResult): EChartsCoreOption 
         yAxisIndex: 1,
         showSymbol: false,
         data: line(result.vibration_metric),
-        lineStyle: { color: PEAK_LINE },
-        itemStyle: { color: PEAK_LINE },
+        lineStyle: { color: theme.accent },
+        itemStyle: { color: theme.accent },
         markPoint: {
           silent: true,
           symbol: "circle",
           symbolSize: 6,
-          itemStyle: { color: TEXT },
+          itemStyle: { color: theme.text },
           data: result.peaks.map((peak, n) => ({
             name: `${n + 1}`,
             coord: [result.speeds[peak], result.vibration_metric[peak]],
-            label: { formatter: `{index|${n + 1}}`, position: "top", offset: [0, -2], rich: { index: BADGE } },
+            label: {
+              formatter: `{index|${n + 1}}`,
+              position: "top",
+              offset: [0, -2],
+              rich: { index: badge(theme, theme.accent) },
+            },
           })),
         },
       },
@@ -519,14 +521,20 @@ function nearestRow(angles: number[], angle: number): number {
   return clampIndex(found === -1 ? angles.length - 1 : found, angles.length);
 }
 
-export function angularProfilesOption(result: VibrationsResult, kinematics: string): EChartsCoreOption {
+export function angularProfilesOption(
+  result: VibrationsResult,
+  kinematics: string,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   return {
-    ...base(),
+    ...base(theme),
+    // The four angles carry no lead, so they take the categorical colors.
+    color: [...theme.series],
     tooltip: { trigger: "axis" },
-    legend: { top: 0, textStyle: { color: TEXT } },
+    legend: { top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
-    xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine },
-    yAxis: { type: "value", name: "Energy", splitLine },
+    xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine: splitLine(theme) },
+    yAxis: { type: "value", name: "Energy", splitLine: splitLine(theme) },
     series: angleLabels(kinematics).map(([angle, name]) => ({
       name,
       type: "line",
@@ -536,7 +544,7 @@ export function angularProfilesOption(result: VibrationsResult, kinematics: stri
   };
 }
 
-export function heatmapOption(result: VibrationsResult): EChartsCoreOption {
+export function heatmapOption(result: VibrationsResult, theme: ChartTheme = DEFAULT_CHART_THEME): EChartsCoreOption {
   const { logs, min, max } = logGrid(result.grid);
   const speeds = result.speeds;
   const speedMin = speeds[0] ?? 0;
@@ -549,10 +557,10 @@ export function heatmapOption(result: VibrationsResult): EChartsCoreOption {
     return bitmap;
   };
   return {
-    ...base(),
+    ...base(theme),
     // No content: the cross hair and its axis labels read the speed and angle under the pointer.
     tooltip: { trigger: "axis", showContent: false, axisPointer: { type: "cross", snap: false } },
-    visualMap: logVisualMap(min, max),
+    visualMap: logVisualMap(min, max, theme),
     grid: { top: 32, left: 64, right: 80, bottom: 48 },
     xAxis: {
       type: "value",
@@ -590,14 +598,14 @@ export function heatmapOption(result: VibrationsResult): EChartsCoreOption {
           symbol: "none",
           data: result.peaks.map((peak, n) => ({
             xAxis: result.peak_speeds[n] ?? speeds[peak],
-            lineStyle: { color: PEAK_LINE, type: "solid", width: 1 },
+            lineStyle: { color: theme.accent, type: "solid", width: 1 },
             // Along the line, as Shake&Tune labels it, so ten of them do not overlap.
             label: {
               formatter: `Peak ${n + 1} (${Number((result.peak_speeds[n] ?? speeds[peak]).toFixed(1))} mm/s)`,
               position: "insideEndTop",
-              color: PEAK_COLOR,
+              color: theme.accent,
               fontSize: 11,
-              textBorderColor: "#000",
+              textBorderColor: ON_HEATMAP.outline,
               textBorderWidth: 2,
             },
           })),
@@ -607,17 +615,22 @@ export function heatmapOption(result: VibrationsResult): EChartsCoreOption {
   };
 }
 
-export function motorProfileOption(motor: MotorResult, maxFreq: number, kinematics: string): EChartsCoreOption {
+export function motorProfileOption(
+  motor: MotorResult,
+  maxFreq: number,
+  kinematics: string,
+  theme: ChartTheme = DEFAULT_CHART_THEME,
+): EChartsCoreOption {
   const names = new Map(angleLabels(kinematics));
   const pair = (values: number[]) => values.map((v, i) => [motor.freqs[i], v]);
   const peak = motor.combined[motor.peak_index];
   return {
-    ...base(),
+    ...base(theme),
     tooltip: { trigger: "axis" },
-    legend: { top: 0, textStyle: { color: TEXT } },
+    legend: { top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
-    xAxis: { type: "value", name: "Frequency (Hz)", min: 0, max: maxFreq, splitLine },
-    yAxis: { type: "value", name: "Energy", splitLine },
+    xAxis: { type: "value", name: "Frequency (Hz)", min: 0, max: maxFreq, splitLine: splitLine(theme) },
+    yAxis: { type: "value", name: "Energy", splitLine: splitLine(theme) },
     series: [
       {
         name: "Combined",
@@ -629,12 +642,17 @@ export function motorProfileOption(motor: MotorResult, maxFreq: number, kinemati
           silent: true,
           symbol: "circle",
           symbolSize: 6,
-          itemStyle: { color: TEXT },
+          itemStyle: { color: theme.text },
           data: [
             {
               name: "R",
               coord: [motor.freqs[motor.peak_index], peak],
-              label: { formatter: "{index|R}", position: "top", offset: [0, -2], rich: { index: RESONANCE_BADGE } },
+              label: {
+                formatter: "{index|R}",
+                position: "top",
+                offset: [0, -2],
+                rich: { index: badge(theme, theme.muted) },
+              },
             },
           ],
         },

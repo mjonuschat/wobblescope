@@ -9,6 +9,8 @@ import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
 import { chipLabel } from "@/lib/format";
 
 import { BeltOffsetTable } from "./BeltOffsetTable";
+import { useChartTheme } from "@/ui-kit/chartTheme";
+import { Alert } from "@/ui-kit/Alert";
 
 /** As Shake&Tune names them. */
 const BELT_LABEL = { a: "A (axis 1,-1)", b: "B (axis 1, 1)" } as const;
@@ -21,11 +23,12 @@ function reasonsOf(side: BeltSide): string[] {
 }
 
 function Profile({ analysis }: { analysis: BeltsAnalysis }) {
+  const theme = useChartTheme();
   const { result, chip } = analysis;
   if (!result) return null;
   return (
     <>
-      <EChart option={beltOverlayOption(result)} label={`Belt overlay of ${chip}`} height={380} zoom />
+      <EChart option={beltOverlayOption(result, theme)} label={`Belt overlay of ${chip}`} height={380} zoom />
       {result.offsets.length > 0 && <BeltOffsetTable offsets={result.offsets} />}
     </>
   );
@@ -42,6 +45,7 @@ function SideStatus({
   chip: string;
   onInclude: () => void;
 }) {
+  const theme = useChartTheme();
   const label = BELT_LABEL[belt];
   const name = belt.toUpperCase();
   if (!side.present) {
@@ -49,7 +53,12 @@ function SideStatus({
   }
   if (side.spectrum) {
     return (
-      <EChart option={beltSingleOption(side.spectrum, label)} label={`Belt ${label} of ${chip}`} height={380} zoom />
+      <EChart
+        option={beltSingleOption(side.spectrum, label, theme)}
+        label={`Belt ${label} of ${chip}`}
+        height={380}
+        zoom
+      />
     );
   }
   const reasons = reasonsOf(side);
@@ -86,6 +95,7 @@ export function BeltView({
   query: ReturnType<typeof useBelts>;
   onInclude: () => void;
 }) {
+  const theme = useChartTheme();
   const result = query.data?.result;
   return (
     <>
@@ -93,9 +103,7 @@ export function BeltView({
         {query.isPending ? (
           <Waiting>Comparing the belts of {chip}…</Waiting>
         ) : query.isError ? (
-          <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
-            The belt comparison failed: {query.error.message}
-          </p>
+          <Alert tone="danger">The belt comparison failed: {query.error.message}</Alert>
         ) : (
           <Outcome analysis={query.data} onInclude={onInclude} />
         )}
@@ -103,7 +111,7 @@ export function BeltView({
       {result && (
         <Panel title="Cross-belt comparison" label={`Cross-belt comparison of ${chipLabel(chip)}`}>
           {result.offsets.length === 0 && <p className="text-sm">No peaks were paired across the belts.</p>}
-          <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
+          <EChart option={beltScatterOption(result, theme)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
         </Panel>
       )}
     </>

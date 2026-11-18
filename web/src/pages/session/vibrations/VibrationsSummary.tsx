@@ -2,7 +2,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import type { Zone } from "@/lib/generated/Zone";
 
-import { GOOD_COLOR } from "./vibrationsOptions";
 import { subheadingClass } from "@/ui-kit/CardLabel";
 
 const round1 = (value: number) => Number(value.toFixed(1));
@@ -14,10 +13,7 @@ const heading = subheadingClass;
 
 function Badge({ n }: { n: number }) {
   return (
-    <span
-      className="inline-flex size-5 items-center justify-center rounded-full text-[11px] font-medium text-brand-foreground"
-      style={{ backgroundColor: GOOD_COLOR }}
-    >
+    <span className="inline-flex size-5 items-center justify-center rounded-full bg-success text-[11px] font-medium text-success-foreground">
       {n}
     </span>
   );

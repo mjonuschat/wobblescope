@@ -23,6 +23,7 @@ import {
   speedProfileOption,
 } from "./vibrationsOptions";
 import { Alert } from "@/ui-kit/Alert";
+import { useChartTheme } from "@/ui-kit/chartTheme";
 
 /** The height of the two polar plots, which leaves room for their 15 degree labels. */
 const POLAR_HEIGHT = 440;
@@ -84,16 +85,17 @@ function MotorFigures({ motor }: { motor: MotorResult }) {
 
 /** The charts of one result, made once for it as the heatmaps are large. */
 function Charts({ result, kinematics, name }: { result: VibrationsResult; kinematics: string; name: string }) {
+  const theme = useChartTheme();
   const options = useMemo(
     () => ({
-      polarAngle: polarAngleOption(result),
-      polarHeatmap: polarHeatmapOption(result),
-      speed: speedProfileOption(result),
-      angular: angularProfilesOption(result, kinematics),
-      heatmap: heatmapOption(result),
-      motor: result.motor ? motorProfileOption(result.motor, MAX_FREQ, kinematics) : null,
+      polarAngle: polarAngleOption(result, theme),
+      polarHeatmap: polarHeatmapOption(result, theme),
+      speed: speedProfileOption(result, theme),
+      angular: angularProfilesOption(result, kinematics, theme),
+      heatmap: heatmapOption(result, theme),
+      motor: result.motor ? motorProfileOption(result.motor, MAX_FREQ, kinematics, theme) : null,
     }),
-    [result, kinematics],
+    [result, kinematics, theme],
   );
   return (
     <>

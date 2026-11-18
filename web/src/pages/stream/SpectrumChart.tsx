@@ -3,6 +3,7 @@ import { useCallback, useMemo } from "react";
 import { EChart } from "@/components/charts/EChart";
 import { liveSpectrumOption } from "@/components/charts/options";
 import { pickFrequency } from "@/stream/pickFrequency";
+import { useChartTheme } from "@/ui-kit/chartTheme";
 
 type Chips = Parameters<typeof liveSpectrumOption>[0]["chips"];
 
@@ -17,9 +18,10 @@ interface Props {
 
 /** The live spectra of the chips. */
 export function SpectrumChart({ chips, maxHz, frequencyOfInterest, onPick }: Props) {
+  const theme = useChartTheme();
   const option = useMemo(
-    () => liveSpectrumOption({ chips, maxHz, frequencyOfInterest }),
-    [chips, maxHz, frequencyOfInterest],
+    () => liveSpectrumOption({ chips, maxHz, frequencyOfInterest, theme }),
+    [chips, maxHz, frequencyOfInterest, theme],
   );
   const peaks = useMemo(() => chips.flatMap((c) => c.peaks.map((p) => p.freq)), [chips]);
   const click = useCallback((x: number) => onPick(pickFrequency(x, peaks)), [onPick, peaks]);
