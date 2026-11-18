@@ -158,19 +158,19 @@ export function useRecoverStorage() {
   const queryClient = useQueryClient();
   const { data, dataUpdatedAt } = useStatus();
   const ready = data?.storage.state === "ready";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dataUpdatedAt re-runs the effect once per status answer
   useEffect(() => {
     if (!ready) return;
     // Each failed query is fetched again once per status answer, so a daemon that says "ready"
-    // and still refuses is asked again at the next poll, not in a loop.
-    const tried = new Set<string>();
+    // and still refuses is asked again at the next poll, not in a loop. `tried` holds the answer
+    // (`dataUpdatedAt`) under which each query was last fetched again.
+    const tried = new Map<string, number>();
     const recover = () => {
       const failed = queryClient
         .getQueryCache()
         .findAll({ predicate: isWaitingForStorage })
-        .filter((query) => !tried.has(query.queryHash));
+        .filter((query) => tried.get(query.queryHash) !== dataUpdatedAt);
       for (const query of failed) {
-        tried.add(query.queryHash);
+        tried.set(query.queryHash, dataUpdatedAt);
         void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
       }
     };
