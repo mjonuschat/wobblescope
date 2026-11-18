@@ -207,11 +207,11 @@ fn the_input_shaper_counts_as_configured_when_the_config_has_the_section() {
 #[test]
 fn the_shaping_comes_from_the_toolhead_and_the_input_shaper_section() {
     use wobblescope::moonraker::settings::parse_shaping;
-    let query = json!({"status": {
+    let status = json!({
         "toolhead": {"square_corner_velocity": 8.0},
         "configfile": {"settings": {"input_shaper": {"damping_ratio_x": 0.12, "damping_ratio_y": "0.08"}}},
-    }});
-    let s = parse_shaping(&query);
+    });
+    let s = parse_shaping(&status);
     assert_eq!(s.square_corner_velocity, Some(8.0));
     assert_eq!(s.damping_ratio_x, Some(0.12));
     assert_eq!(s.damping_ratio_y, Some(0.08));
@@ -220,7 +220,7 @@ fn the_shaping_comes_from_the_toolhead_and_the_input_shaper_section() {
 #[test]
 fn shaping_is_unknown_for_what_klipper_did_not_report() {
     use wobblescope::moonraker::settings::{Shaping, parse_shaping};
-    assert_eq!(parse_shaping(&real()), Shaping::default());
+    assert_eq!(parse_shaping(&real()["status"]), Shaping::default());
     assert_eq!(parse_shaping(&json!({})), Shaping::default());
 }
 
