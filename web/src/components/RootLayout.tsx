@@ -13,6 +13,9 @@ import { useRecoverStorage } from "@/lib/api/queries";
 import { ThemeToggle } from "@/ui-kit/ThemeToggle";
 import { useTheme } from "@/ui-kit/ThemeProvider";
 
+/** The History tabs share one mounted layout, so the sessions and results lists count as one page. */
+const pageKey = (path: string) => (/^\/(sessions|results)$/.test(path) ? "history" : path);
+
 export function RootLayout() {
   useRecoverStorage();
   const { resolved } = useTheme();
@@ -46,7 +49,7 @@ export function RootLayout() {
           <AppSidebar />
           <div className="min-w-0 flex-1">
             <StatusBanner />
-            <main className="p-6">
+            <main key={pageKey(path)} className="animate-in p-6 duration-200 fade-in-0 slide-in-from-bottom-1">
               <Outlet />
             </main>
           </div>

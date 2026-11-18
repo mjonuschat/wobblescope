@@ -8,6 +8,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+    --default-transition-duration: 150ms;
+    --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
@@ -147,6 +152,18 @@
     --sidebar-accent: oklch(1 0 0 / 7%);
     --sidebar-accent-foreground: oklch(0.96 0.003 260);
     --sidebar-border: oklch(1 0 0 / 10%);
+}
+
+/* A spinner shows that work is going on, so it keeps turning. Everything else stops moving. */
+@media (prefers-reduced-motion: reduce) {
+    *:not(.animate-spin),
+    *:not(.animate-spin)::before,
+    *:not(.animate-spin)::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 @layer base {
