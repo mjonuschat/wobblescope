@@ -141,6 +141,26 @@ impl Rpc {
             Ok(Ok(result)) => result,
         }
     }
+
+    /// Queries Klipper's printer objects (`objects` maps each object to the fields wanted, or to
+    /// `null` for all of them) and returns the answer's `status` object, `null` when it has none.
+    ///
+    /// # Errors
+    /// As [`Rpc::call`].
+    pub async fn query_objects(
+        &self,
+        objects: Value,
+        timeout: Duration,
+    ) -> Result<Value, RpcError> {
+        let mut answer = self
+            .call(
+                "printer.objects.query",
+                Some(json!({"objects": objects})),
+                timeout,
+            )
+            .await?;
+        Ok(answer.get_mut("status").map_or(Value::Null, Value::take))
+    }
 }
 
 /// Owns the socket: sends calls, routes each response to its call and each notification to the

@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use crate::capture::CheckFailure;
 use crate::capture::iso_utc;
 use crate::capture::position::{TOLERANCE_MM, Timeouts, position};
-use crate::capture::preflight::{check_printer, quarantine_failure};
+use crate::capture::preflight::{busy_failure, check_printer, quarantine_failure};
 use crate::capture::slot::{SlotPermit, TestSlot};
 use crate::hold::pacer::Pacer;
 use crate::hold::pieces::{
@@ -220,15 +220,6 @@ fn failure(check: &str, message: impl Into<String>) -> Refusal {
     Refusal::Checks(vec![CheckFailure::new(check, message)])
 }
 
-fn triple(value: &Value) -> Option<[f64; 3]> {
-    let list = value.as_array()?;
-    Some([
-        list.first()?.as_f64()?,
-        list.get(1)?.as_f64()?,
-        list.get(2)?.as_f64()?,
-    ])
-}
-
 /// Checks the printer, takes the slot and resolves the hold.
 ///
 /// # Errors
@@ -239,21 +230,8 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
     let mut failures = check_printer(deps.moonraker, quarantine.is_some()).await;
     let permit = deps.slot.try_acquire();
     if permit.is_none() {
-        let homing = deps.slot.is_homing();
-        if homing {
-            failures.retain(|f| f.check != "toolhead_idle");
-        }
-        let message = match deps
-            .slot
-            .current_id()
-            .as_deref()
-            .and_then(|id| id.strip_prefix("hold-"))
-        {
-            Some(since) => format!("a hold started {since} is running"),
-            None if homing => "the printer is homing; wait until it finishes".to_owned(),
-            None => "another test is already running".to_owned(),
-        };
-        failures.push(CheckFailure::new("no_test_running", message));
+        let busy = busy_failure(deps.slot, &mut failures);
+        failures.push(busy);
     }
     if let Some(left) = quarantine {
         failures.push(quarantine_failure(left));
@@ -273,27 +251,29 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
         .await
         .map_err(&unreadable)?;
     let status = control
-        .call(
-            "printer.objects.query",
-            Some(json!({"objects": {
+        .query_objects(
+            json!({
                 "toolhead": [
                     "position", "axis_minimum", "axis_maximum",
                     "max_velocity", "max_accel", "minimum_cruise_ratio",
                 ],
                 "input_shaper": null,
-            }})),
+            }),
             deps.timings.timeouts.query,
         )
         .await
         .map_err(|e| unreadable(format!("cannot read the toolhead: {e}")))?;
-    let status = status.get("status").cloned().unwrap_or(Value::Null);
     let toolhead = status.get("toolhead").unwrap_or(&Value::Null);
     let position = toolhead
         .get("position")
-        .and_then(triple)
+        .and_then(crate::capture::position::numbers::<3>)
         .ok_or_else(|| unreadable("the toolhead position is not reported".to_owned()))?;
-    let min = toolhead.get("axis_minimum").and_then(triple);
-    let max = toolhead.get("axis_maximum").and_then(triple);
+    let min = toolhead
+        .get("axis_minimum")
+        .and_then(crate::capture::position::numbers::<3>);
+    let max = toolhead
+        .get("axis_maximum")
+        .and_then(crate::capture::position::numbers::<3>);
     let (Some(min), Some(max)) = (min, max) else {
         return Err(unreadable(
             "the toolhead's travel limits are not reported".to_owned(),
@@ -690,17 +670,16 @@ impl Hold {
     /// the hold's clock (the midpoint of the call).
     async fn print_times(&self, start: Instant) -> Result<(f64, f64, f64), String> {
         let before = Instant::now();
-        let answer = self
+        let status = self
             .control
-            .call(
-                "printer.objects.query",
-                Some(json!({"objects": {"toolhead": ["print_time", "estimated_print_time"]}})),
+            .query_objects(
+                json!({"toolhead": ["print_time", "estimated_print_time"]}),
                 self.timings.timeouts.query,
             )
             .await
             .map_err(|e| e.to_string())?;
         let after = Instant::now();
-        let toolhead = answer.get("status").and_then(|s| s.get("toolhead"));
+        let toolhead = status.get("toolhead");
         let read = |key: &str| toolhead.and_then(|t| t.get(key)).and_then(Value::as_f64);
         let (Some(print_time), Some(estimated)) =
             (read("print_time"), read("estimated_print_time"))
