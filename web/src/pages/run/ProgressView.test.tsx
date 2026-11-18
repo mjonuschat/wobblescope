@@ -226,6 +226,46 @@ describe("a running test", () => {
     expect(screen.queryByRole("img", { name: /Signal against frequency/ })).toBeNull();
   });
 
+  describe("signal bars", () => {
+    /** The widths of the three bars of a chip, in percent. */
+    const widths = (region: HTMLElement) =>
+      [...region.querySelectorAll<HTMLElement>("span[aria-hidden] > span")].map((bar) =>
+        Number.parseFloat(bar.style.width),
+      );
+
+    const withLevel = (level: [number, number, number], id = "t1"): TestState => ({
+      ...running,
+      id,
+      kind: "vibrations",
+      chips: [{ chip: "adxl345", level, warnings: [] }],
+    });
+
+    it("keeps the strongest bar short of the end, so 1900 mm/s² is not a full bar", async () => {
+      await mount({ test: withLevel([1900, 600, 100]), last: null }, "/run/vibrations");
+      const region = await screen.findByRole("region", { name: "Signal level of adxl345" });
+      const [x, y] = widths(region);
+      expect(x).toBeLessThan(100);
+      expect(x).toBeCloseTo(Math.sqrt(1 / 1.25) * 100, 3);
+      expect(y).toBeLessThan(x);
+    });
+
+    it("keeps the scale of the strongest level the run has shown, and starts again for a new test", async () => {
+      await mount({ test: withLevel([1900, 600, 100]), last: null }, "/run/vibrations");
+      const region = await screen.findByRole("region", { name: "Signal level of adxl345" });
+      const before = widths(region)[1];
+      send({ test: withLevel([100, 600, 100]), last: null });
+      expect(widths(region)[1]).toBeCloseTo(before, 3);
+      send({ test: withLevel([100, 600, 100], "t2"), last: null });
+      expect(widths(region)[1]).toBeGreaterThan(before);
+    });
+
+    it("does not shrink a calibration's bars below the 1000 mm/s² scale", async () => {
+      await mount({ test: withLevel([250, 40, 8]), last: null }, "/run/vibrations");
+      const region = await screen.findByRole("region", { name: "Signal level of adxl345" });
+      expect(widths(region)[0]).toBeCloseTo(Math.sqrt(250 / 1000) * 100, 3);
+    });
+  });
+
   describe("chip warnings", () => {
     const warned = (segment = 3): TestState => ({
       ...running,

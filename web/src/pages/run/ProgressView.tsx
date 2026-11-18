@@ -7,7 +7,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Panel } from "@/ui-kit/Panel";
 import { Button } from "@/components/ui/button";
@@ -82,8 +82,14 @@ function useCountdown(active: boolean, onDone: () => void): number | null {
   return active ? Math.max(left, 0) : null;
 }
 
-/** The level at which a signal bar is full, in mm/s². Display only. The bar is on a square-root scale. */
+/**
+ * The level at which a signal bar is full, in mm/s², until a run shows stronger signals. Display
+ * only. The bar is on a square-root scale.
+ */
 const LEVEL_FULL = 1000;
+
+/** The full bar leaves this much room above the strongest level seen, so that level does not sit at the end. */
+const LEVEL_HEADROOM = 1.25;
 
 /**
  * Each chip's vibration on its own axes while a calibration moves. The bar for the axis that
@@ -92,6 +98,12 @@ const LEVEL_FULL = 1000;
 function SignalLevels({ test }: { test: TestState }) {
   const axisColors = chipAxisColors(useChartTheme());
   const shown = test.chips.filter((c) => c.level);
+  // A vibrations run's moves are several times stronger than a calibration's, so the bars scale to
+  // the strongest level this test has shown, and never to less than LEVEL_FULL.
+  const strongest = useRef({ id: test.id, level: 0 });
+  if (strongest.current.id !== test.id) strongest.current = { id: test.id, level: 0 };
+  for (const { level } of shown) strongest.current.level = Math.max(strongest.current.level, ...(level ?? [0]));
+  const full = Math.max(LEVEL_FULL, strongest.current.level * LEVEL_HEADROOM);
   if (shown.length === 0) return <p className="text-sm text-muted-foreground">Waiting for the chips…</p>;
   return (
     <div className="space-y-4">
@@ -106,7 +118,7 @@ function SignalLevels({ test }: { test: TestState }) {
                   <span
                     className="block h-full rounded-full"
                     style={{
-                      width: `${Math.min(1, Math.sqrt(rms / LEVEL_FULL)) * 100}%`,
+                      width: `${Math.min(1, Math.sqrt(rms / full)) * 100}%`,
                       backgroundColor: axisColors[i],
                     }}
                   />

@@ -1,4 +1,5 @@
 import { HouseIcon, LoaderCircleIcon, OctagonAlertIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CONFIRM_WINDOW_MS, useConfirmClick } from "@/lib/confirm";
@@ -10,6 +11,9 @@ export function homedTone(axes: string | null | undefined): "full" | "partial" |
   return ["x", "y", "z"].every((a) => axes.includes(a)) ? "full" : "partial";
 }
 
+/** How long "Stop sent" stays when Klipper is never seen going down, so a stop that did nothing does not leave it up. */
+export const STOP_NOTICE_MS = 15_000;
+
 export function PrinterControls() {
   const status = useStatus();
   const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
@@ -17,6 +21,26 @@ export function PrinterControls() {
   const stop = useStopPrinter();
   const home = useHomePrinter();
   const confirm = useConfirmClick(() => stop.mutate());
+
+  // "Stop sent" is about the shutdown it caused, so it goes when Klipper is back.
+  const { reset: resetStop } = stop;
+  const wentDown = useRef(false);
+  useEffect(() => {
+    if (!stop.isSuccess) {
+      wentDown.current = false;
+      return;
+    }
+    if (!klippyReady) {
+      wentDown.current = true;
+      return;
+    }
+    if (wentDown.current) {
+      resetStop();
+      return;
+    }
+    const timer = setTimeout(resetStop, STOP_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [stop.isSuccess, klippyReady, resetStop]);
 
   const homedAxes = printer.data?.homed_axes ?? "";
   const homedClass = {
