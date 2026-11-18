@@ -1,6 +1,3 @@
-//! How a test ends: the interrupted segment, the failure message, the final state and the
-//! release of the slot.
-
 use std::time::Instant;
 
 use wobblescope_core::eligibility::Coverage;
@@ -132,8 +129,6 @@ impl Run {
         self.end(finished, failure.is_some_and(|f| f.uncertain));
     }
 
-    /// Publishes the end, starts the quarantine after a command of unknown outcome and frees the
-    /// slot.
     pub(super) fn end(self, mut finished: FinishedTest, uncertain: bool) {
         let max = self.r.max_segment_seconds;
         if uncertain {
