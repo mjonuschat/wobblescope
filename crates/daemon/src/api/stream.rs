@@ -179,10 +179,6 @@ impl Drop for Subscriptions {
     }
 }
 
-fn is_printing(state: Option<&str>) -> bool {
-    matches!(state, Some("printing" | "paused"))
-}
-
 async fn serve(mut socket: WebSocket, state: ApiState) {
     let settings = state.settings.clone();
     let timings = state.capture.stream_timings;
@@ -196,7 +192,7 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
     let printing = match moonraker.control() {
         Some(control) => tokio::time::timeout(PRINT_STATE_TIMEOUT, read_printer_state(&control))
             .await
-            .is_ok_and(|read| read.is_ok_and(|state| is_printing(state.print_state.as_deref()))),
+            .is_ok_and(|read| read.is_ok_and(|state| state.printing().is_some())),
         None => false,
     };
     outbox.push(Entry::Reliable(ServerMessage::Hello {

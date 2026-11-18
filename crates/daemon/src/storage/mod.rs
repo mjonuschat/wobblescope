@@ -509,16 +509,18 @@ fn leased(st: &State, id: &str) -> bool {
     st.leases.get(id).is_some_and(|n| *n > 0)
 }
 
-fn reserved_total(st: &State) -> u64 {
-    st.reservations
+fn total(reservations: &HashMap<String, u64>) -> u64 {
+    reservations
         .values()
         .fold(0, |sum, b| sum.saturating_add(*b))
 }
 
+fn reserved_total(st: &State) -> u64 {
+    total(&st.reservations)
+}
+
 fn result_reserved_total(st: &State) -> u64 {
-    st.result_reservations
-        .values()
-        .fold(0, |sum, b| sum.saturating_add(*b))
+    total(&st.result_reservations)
 }
 
 /// Removes a session through the crash-safe path and drops its summary once its directory is
