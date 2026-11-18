@@ -224,7 +224,7 @@ describe("the vibrations view", () => {
       },
     ] as SessionMeta["segments"];
     renderView(meta);
-    expect(screen.getByText("Angle 1 of 2 finished, second angle not started")).toBeTruthy();
+    expect(screen.getByText("Angle 1 of 2 finished, no step of angle 2 finished")).toBeTruthy();
     expect(screen.getByText("Reason: the printer lost power")).toBeTruthy();
     expect(screen.queryAllByRole("img")).toHaveLength(0);
     expect(screen.queryByRole("tab")).toBeNull();

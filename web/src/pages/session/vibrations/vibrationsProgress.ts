@@ -11,7 +11,7 @@ export function vibrationsProgress(meta: SessionMeta): string | null {
   if (!run) return null;
   const perAngle = Math.floor((run.max_speed - run.min_speed) / run.speed_increment) + 1;
   const done = meta.segments.reduce((sum, segment) => sum + segment.steps.length, 0);
-  if (done === perAngle) return `Angle 1 of ${ANGLES} finished, second angle not started`;
+  if (done === perAngle) return `Angle 1 of ${ANGLES} finished, no step of angle 2 finished`;
   const angle = Math.min(ANGLES, Math.floor(done / perAngle) + 1);
   const speed = Math.min(perAngle, done - (angle - 1) * perAngle);
   return `Angle ${angle} of ${ANGLES}, speed ${speed} of ${perAngle}`;

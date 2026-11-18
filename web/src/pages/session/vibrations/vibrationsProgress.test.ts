@@ -34,7 +34,7 @@ describe("vibrationsProgress", () => {
   });
 
   it("says_the_second_angle_is_not_started_when_the_first_is_exactly_finished", () => {
-    expect(vibrationsProgress(metaWith(5))).toBe("Angle 1 of 2 finished, second angle not started");
+    expect(vibrationsProgress(metaWith(5))).toBe("Angle 1 of 2 finished, no step of angle 2 finished");
     expect(vibrationsProgress(metaWith())).toBe("Angle 1 of 2, speed 0 of 5");
   });
 
