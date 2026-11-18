@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIcon,
   AudioLinesIcon,
@@ -134,14 +134,12 @@ export function AppSidebar() {
   );
 }
 
-/** Below `md` the sidebar does not fit beside a page, so its links open from a menu button in the header. */
+/**
+ * Below `md` the sidebar does not fit beside a page, so its links open from a menu button in the header.
+ * The caller keys it by the path, so a new page remounts it closed.
+ */
 export function MobileNav() {
   const [open, setOpen] = useState(false);
-  const path = useRouterState({ select: (state) => state.location.pathname });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new path is the trigger
-  useEffect(() => {
-    setOpen(false);
-  }, [path]);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open menu" className="md:hidden" />}>
