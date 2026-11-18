@@ -73,6 +73,20 @@ export function patternPoints(pattern: PointPattern, limits: AxisLimits, z: numb
  * The progress panel's name for a segment's direction: the belt a diagonal tests, `X Axis` or
  * `Y Axis`, or the vector's own text for any other direction.
  */
+/**
+ * A vibrations angle by its direction in degrees: the two axes of a Cartesian printer, or the two
+ * diagonals the motors drive on a CoreXY. The chips' belt names do not apply to it.
+ */
+export function angleLabel(axis: Direction): string {
+  if (axis === "X") return "X (0 deg)";
+  if (axis === "Y") return "Y (90 deg)";
+  if (typeof axis === "string") return axis;
+  const [x, y, z] = axis.Vector;
+  if (z === 0 && x === 1 && y === 1) return "45 deg";
+  if (z === 0 && x === 1 && y === -1) return "135 deg";
+  return axis.Vector.join(",");
+}
+
 export function segmentLabel(axis: Direction): string {
   if (typeof axis === "string") return `${axis} Axis`;
   const [x, y, z] = axis.Vector;

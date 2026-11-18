@@ -410,6 +410,27 @@ describe("starting a test", () => {
   });
 });
 
+describe("vibrations runs", () => {
+  it("names the angle by its direction and calls the row Angle, not Segment or a belt", async () => {
+    await mount(
+      {
+        test: { ...running, kind: "vibrations", segment: 1, segments: 2, axis: { Vector: [1, 1, 0] } },
+        last: null,
+      },
+      "/run/vibrations",
+    );
+    expect(await screen.findByText("1 of 2: 45 deg")).toBeTruthy();
+    expect(screen.getByText("Angle")).toBeTruthy();
+    expect(screen.queryByText("Segment")).toBeNull();
+    expect(screen.queryByText(/Belt [AB]/)).toBeNull();
+    send({
+      test: { ...running, kind: "vibrations", segment: 2, segments: 2, axis: { Vector: [1, -1, 0] } },
+      last: null,
+    });
+    expect(screen.getByText("2 of 2: 135 deg")).toBeTruthy();
+  });
+});
+
 describe("belt tests", () => {
   const HINT = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
 

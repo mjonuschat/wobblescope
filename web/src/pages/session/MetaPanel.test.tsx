@@ -175,6 +175,30 @@ describe("the session details", () => {
     expect(screen.queryByText(/object Object/)).toBeNull();
   });
 
+  it("names the degraded angles of a vibrations session by their direction in degrees", () => {
+    const meta = twoAxisMeta();
+    meta.vibrations_run = {
+      size: 100,
+      z_height: 20,
+      max_speed: 100,
+      speed_increment: 5,
+      accel: 3000,
+      travel_speed: 120,
+      min_speed: 20,
+      kinematics: "corexy",
+    };
+    meta.segments[0].axis = { Vector: [1, 1, 0] };
+    meta.segments[1].axis = { Vector: [1, -1, 0] };
+    for (const segment of meta.segments) {
+      segment.files[0].health = "Degraded";
+      segment.files[0].health_notes = ["noisy"];
+    }
+    render(<MetaPanel meta={meta} />);
+    expect(screen.getByText(/Angle 1 \(45 deg, .*\)/)).toBeTruthy();
+    expect(screen.getByText(/Angle 2 \(135 deg, .*\)/)).toBeTruthy();
+    expect(screen.queryByText(/Segment 1/)).toBeNull();
+  });
+
   it("lists no degraded segment when every recording was fine", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
     expect(screen.queryByText("Degraded segments")).toBeNull();

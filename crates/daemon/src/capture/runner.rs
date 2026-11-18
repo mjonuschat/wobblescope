@@ -939,7 +939,9 @@ impl Run {
             f.uncertain = (f.uncertain || f.in_flight) && !confirmed_down;
             f
         });
-        let needs_restart = self.restore_settings(confirmed_down).await;
+        // An emergency stop shuts Klipper down, so a restore that fails after one is expected. The
+        // restart the stop already needs brings the settings back, and asking for another one is noise.
+        let needs_restart = self.restore_settings(confirmed_down).await && !stopped;
         self.publish(Phase::Sealing);
         if failure.is_some() {
             self.add_interrupted_segment().await;

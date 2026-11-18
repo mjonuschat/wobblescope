@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { printerSettings } from "@/test/capture";
 
-import { formatPosition, patternPoints, segmentLabel } from "./planning";
+import { angleLabel, formatPosition, patternPoints, segmentLabel } from "./planning";
 
 const limits = { x: { min: 0, max: 300 }, y: { min: 0, max: 200 }, z: { min: 0, max: 300 } };
 
@@ -41,6 +41,16 @@ describe("patternPoints", () => {
     expect(patternPoints("center", axis_limits as NonNullable<typeof axis_limits>, 20)[0].slice(0, 2)).toEqual([
       150.5, 154,
     ]);
+  });
+});
+
+describe("angleLabel", () => {
+  it("names a vibrations angle by its direction, never as a belt", () => {
+    expect(angleLabel("X")).toBe("X (0 deg)");
+    expect(angleLabel("Y")).toBe("Y (90 deg)");
+    expect(angleLabel({ Vector: [1, 1, 0] })).toBe("45 deg");
+    expect(angleLabel({ Vector: [1, -1, 0] })).toBe("135 deg");
+    expect(angleLabel({ Vector: [1, 2, 0] })).toBe("1,2,0");
   });
 });
 

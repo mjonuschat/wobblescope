@@ -1105,6 +1105,32 @@ async fn a_stop_after_the_first_segment_seals_one_segment_and_still_restores() {
 }
 
 #[tokio::test]
+async fn a_restore_that_fails_after_a_stop_does_not_ask_for_a_second_restart() {
+    // An emergency stop shuts Klipper down, so the restore that follows it can fail. The restart the
+    // stop already needs brings the settings back, so the user is not told to send RESTART as well.
+    let rig = calibration_rig(Some(8.0)).await;
+    let slot = rig.slot.clone();
+    let seen = AtomicUsize::new(0);
+    // One hook does both: the stop comes with the first segment, and the restore loses its connection.
+    rig.sim.intercept(move |script| {
+        if is_calibration_restore(script) {
+            return Some(Script::Close);
+        }
+        if is_segment_script(script) && seen.fetch_add(1, Ordering::SeqCst) == 0 {
+            assert!(slot.request_stop_current().is_some());
+        }
+        None
+    });
+    let task = start(&rig, &calibration_plan()).await;
+    let finished = rig.finished().await;
+    task.await.unwrap();
+    assert_eq!(reason(&finished), "emergency stop");
+    assert!(is_calibration_restore(rig.sim.scripts().last().unwrap()));
+    assert!(!finished.needs_restart, "{finished:?}");
+    assert_clean(&rig);
+}
+
+#[tokio::test]
 async fn a_lost_connection_during_restore_sets_needs_restart() {
     let rig = calibration_rig(Some(8.0)).await;
     rig.sim

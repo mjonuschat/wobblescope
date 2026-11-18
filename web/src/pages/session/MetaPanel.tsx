@@ -11,6 +11,7 @@ import type { Outcome } from "@/lib/generated/Outcome";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import { formatMap } from "./axesMapFormat";
+import { angleLabel } from "@/pages/run/planning";
 import { directionLabel } from "./belts/UnsupportedDirections";
 import { effectiveSettings } from "./fit";
 import { subheadingClass } from "@/ui-kit/CardLabel";
@@ -84,7 +85,9 @@ function degradedSegments(meta: SessionMeta) {
       .filter((f) => f.health === "Degraded")
       .map((f) => ({
         key: `${index}-${f.chip}`,
-        where: `Segment ${index + 1} (${directionLabel(segment.axis)}, ${pointLabel(segment.point, meta.probe_points)})`,
+        where: meta.vibrations_run
+          ? `Angle ${index + 1} (${angleLabel(segment.axis)}, ${pointLabel(segment.point, meta.probe_points)})`
+          : `Segment ${index + 1} (${directionLabel(segment.axis)}, ${pointLabel(segment.point, meta.probe_points)})`,
         chip: meta.chips[f.chip]?.name ?? `chip ${f.chip}`,
         notes: f.health_notes,
       })),

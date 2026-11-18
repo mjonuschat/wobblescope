@@ -25,7 +25,7 @@ import { SessionResults } from "@/pages/session/SessionResults";
 
 import { LiveChart } from "./LiveChart";
 import { useWarningToasts } from "./useWarningToasts";
-import { formatDuration, formatPosition, segmentLabel } from "./planning";
+import { angleLabel, formatDuration, formatPosition, segmentLabel } from "./planning";
 import { Alert } from "@/ui-kit/Alert";
 
 const PHASE_WORDS: Record<Phase, string> = {
@@ -56,7 +56,7 @@ export const BELT_MINIMUMS = "Belt tests need Klipper v0.12.0 or newer, or Kalic
 export const AUTO_CONTINUE_SECONDS = 5;
 
 export const RESTART_INSTRUCTION =
-  "The calibration may have left changed acceleration limits or input shaping. Send RESTART from the Klipper console. The printer needs homing afterwards, and any positioning mode or offsets you rely on must be set again.";
+  "The test may have left changed acceleration limits or input shaping. Send RESTART from the Klipper console. The printer needs homing afterwards, and any positioning mode or offsets you rely on must be set again.";
 
 interface ProgressProps {
   test: TestState;
@@ -134,7 +134,14 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
   // Axes-map and vibrations runs have no frequency sweep to draw, only the chips' latest levels.
   const levels = axesMap || test.kind === "vibrations";
   const move = axesMap ? AXES_MAP_MOVES[test.segment - 1] : undefined;
-  const label = move ? `Moving ${move}` : test.axis ? segmentLabel(test.axis) : null;
+  const vibrations = test.kind === "vibrations";
+  const label = move
+    ? `Moving ${move}`
+    : test.axis
+      ? vibrations
+        ? angleLabel(test.axis)
+        : segmentLabel(test.axis)
+      : null;
   // A run that completed has done every segment, whatever the last live snapshot said.
   const segment =
     ended?.outcome === "complete"
@@ -153,7 +160,7 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
           <dt className="text-muted-foreground">Status</dt>
           <dd>{ended ? OUTCOME_WORDS[ended.outcome] : PHASE_WORDS[test.phase]}</dd>
-          <dt className="text-muted-foreground">Segment</dt>
+          <dt className="text-muted-foreground">{vibrations ? "Angle" : "Segment"}</dt>
           <dd>{segment}</dd>
           {test.position && ended === null && (
             <>
