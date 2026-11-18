@@ -2,7 +2,7 @@
 # https://github.com/crate-ci/cargo-release
 #
 # One version for every crate in the workspace, one tag. Pushing the tag starts the Release
-# workflow, which builds the three assets and attaches them to a draft release.
+# workflow, which builds the assets and publishes the release.
 
 allow-branch = ["main"]
 shared-version = true

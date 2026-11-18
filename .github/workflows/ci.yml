@@ -1,7 +1,7 @@
 name: CI
 # One definition of every check and of the three static builds. Pull requests run the checks.
 # A push to main also builds the binaries. release.yml calls this workflow with `dist: true`,
-# so a tag runs the same checks and builds as main before anything is drafted.
+# so a tag runs the same checks and builds as main before anything is published.
 on:
   pull_request:
   push:
@@ -106,7 +106,6 @@ jobs:
       - run: shellcheck installer/installer.sh install.sh
       - run: bats installer/tests
 
-  # cargo-deny covers the RustSec advisories, so cargo-audit would repeat it.
   deny:
     name: Dependency check
     needs: [changes]
@@ -115,6 +114,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  audit:
+    name: Security audit
+    needs: [changes]
+    if: ${{ needs.changes.outputs.dependencies == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
 
   web-check:
     name: Web checks
@@ -149,7 +160,7 @@ jobs:
     name: Dist (${{ matrix.build }})
     # Nothing consumes the binaries of a failed run, so they wait for every check. A skipped
     # need (the release commit on main) skips this job too.
-    needs: [lints, test, deny, installer, web-check, web-build]
+    needs: [lints, test, deny, audit, installer, web-check, web-build]
     if: ${{ inputs.dist || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     strategy:

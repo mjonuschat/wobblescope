@@ -1,16 +1,16 @@
 name: Release
 # `cargo release` bumps the version, commits it, tags v<version> and pushes both. The tag starts
 # this workflow: it checks the tag, runs the same checks and builds as CI (ci.yml, concurrently),
-# and only when all of them pass attaches the assets to a DRAFT release: the three binaries,
-# SHA256SUMS over them, and the installer script with its checksum. Publish the draft by hand
-# once all of them are there: Moonraker falls back to the first asset when none matches
-# `asset_name`, so a published release must never be missing a binary.
+# and only when all of them pass publishes a release with the assets: the three binaries,
+# SHA256SUMS over them, and the installer script with its checksum. The publish job checks that
+# every asset is there first, because Moonraker falls back to the first asset when none matches
+# `asset_name`.
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+-**'  # Pre-release versions
       - 'v[0-9]+.[0-9]+.[0-9]+'     # Release versions
-  # Runs the checks and builds without drafting a release.
+  # Runs the checks and builds without publishing a release.
   workflow_dispatch:
 
 permissions:
@@ -56,8 +56,8 @@ jobs:
       contents: read
       pull-requests: read
 
-  draft:
-    name: Draft release
+  publish:
+    name: Publish release
     needs: [ci]
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
@@ -93,24 +93,23 @@ jobs:
           done
           test "$(find dist -type f | wc -l)" -eq 6
       - name: Generate release notes
+        id: changelog
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           args: --latest --strip header
         env:
           OUTPUT: CHANGES.md
-      - name: Create or update the draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
-          else
-            flags=""
-            case "$TAG" in *-*) flags="--prerelease" ;; esac
-            # Moonraker compares the release title with the version in release_info.json, so the
-            # title must be the bare tag.
-            gh release create "$TAG" dist/* --draft --verify-tag $flags \
-              --title "$TAG" --notes-file CHANGES.md
-          fi
+      - name: Upload the assets to the release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*
+          file_glob: true
+          tag: ${{ github.ref }}
+          # Moonraker compares the release title with the version in release_info.json, so
+          # the title must be the bare tag.
+          release_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite: true
+          body: ${{ steps.changelog.outputs.content }}
