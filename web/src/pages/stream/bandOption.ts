@@ -24,7 +24,8 @@ export function bandOption(
     legend: series.length > 1 ? { type: "scroll", top: 0, textStyle: { color: theme.text } } : undefined,
     grid: { top: series.length > 1 ? 36 : 16, left: 64, right: 24, bottom: 36 },
     xAxis: { type: "value", name: "s", nameLocation: "middle", nameGap: 24, min: -spanSeconds, max: 0, splitLine },
-    yAxis: { type: "value", name: "mm/s² RMS", min: 0, splitLine },
+    // Now is x = 0, the right end, where the y axis would otherwise sit; it stays on the left.
+    yAxis: { type: "value", name: "mm/s² RMS", min: 0, splitLine, axisLine: { onZero: false } },
     series: series.map(({ chip, color, points }) => ({
       name: chip,
       type: "line",
