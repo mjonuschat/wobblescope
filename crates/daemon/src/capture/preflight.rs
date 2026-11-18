@@ -85,11 +85,19 @@ impl PrinterState {
         }
     }
 
+    /// The print state when a print is running or paused.
+    #[must_use]
+    pub fn printing(&self) -> Option<&str> {
+        self.print_state
+            .as_deref()
+            .filter(|state| matches!(*state, "printing" | "paused"))
+    }
+
     /// The failed printer-state checks: `not_printing`, `toolhead_idle` and `homed`.
     #[must_use]
     pub fn failures(&self, quarantined: bool) -> Vec<CheckFailure> {
         let mut out = Vec::new();
-        if let Some(state @ ("printing" | "paused")) = self.print_state.as_deref() {
+        if let Some(state) = self.printing() {
             out.push(CheckFailure::new(
                 CheckId::NotPrinting,
                 format!("a print is {state}; wait for it to end or cancel it"),

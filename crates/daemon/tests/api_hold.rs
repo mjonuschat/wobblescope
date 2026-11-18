@@ -24,6 +24,7 @@ fn app(sim: &HoldSim, silence: Duration, hold: HoldTimings) -> Router {
     capture.hold = HoldSocketTimings {
         keepalive_silence: silence,
         hold,
+        ..HoldSocketTimings::default()
     };
     mount_configured(
         common::cell(None),

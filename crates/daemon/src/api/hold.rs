@@ -24,14 +24,14 @@ use crate::hold::settings::Restore;
 
 /// How long a socket may wait before it sends `start`.
 const START_WAIT: Duration = Duration::from_secs(30);
-/// How long one write to the browser may take before the hold is ended.
-const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The control socket's limits. Clones share nothing.
 #[derive(Debug, Clone)]
 pub struct HoldSocketTimings {
     /// How long the browser may send nothing before the hold ends.
     pub keepalive_silence: Duration,
+    /// How long one write to the browser may take before the hold is ended.
+    pub write_timeout: Duration,
     /// The hold's own limits.
     pub hold: HoldTimings,
 }
@@ -40,6 +40,7 @@ impl Default for HoldSocketTimings {
     fn default() -> Self {
         Self {
             keepalive_silence: Duration::from_millis(1500),
+            write_timeout: super::stream::WRITE_TIMEOUT,
             hold: HoldTimings::default(),
         }
     }
@@ -97,16 +98,16 @@ pub(super) async fn hold(State(state): State<ApiState>, upgrade: WebSocketUpgrad
     upgrade.on_upgrade(move |socket| serve(socket, state))
 }
 
-async fn write(socket: &mut WebSocket, message: &HoldServerMessage) -> bool {
+async fn write(socket: &mut WebSocket, message: &HoldServerMessage, timeout: Duration) -> bool {
     let text = serde_json::to_string(message).expect("hold message serializes");
-    tokio::time::timeout(WRITE_TIMEOUT, socket.send(Message::text(text)))
+    tokio::time::timeout(timeout, socket.send(Message::text(text)))
         .await
         .is_ok_and(|sent| sent.is_ok())
 }
 
 /// Sends a close frame so the browser sees the socket end cleanly.
-async fn close(socket: &mut WebSocket) {
-    let _ = tokio::time::timeout(WRITE_TIMEOUT, socket.send(Message::Close(None))).await;
+async fn close(socket: &mut WebSocket, timeout: Duration) {
+    let _ = tokio::time::timeout(timeout, socket.send(Message::Close(None))).await;
 }
 
 fn to_message(event: HoldEvent) -> HoldServerMessage {
@@ -137,6 +138,7 @@ async fn wait_for_start(socket: &mut WebSocket) -> Option<HoldRequest> {
 
 async fn serve(mut socket: WebSocket, state: ApiState) {
     let timings = state.capture.hold.clone();
+    let write_timeout = timings.write_timeout;
     let Some(request) = wait_for_start(&mut socket).await else {
         return;
     };
@@ -152,8 +154,13 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
                 Refusal::Checks(failures) => failures,
                 Refusal::Invalid(message) => vec![CheckFailure::new(CheckId::Request, message)],
             };
-            write(&mut socket, &HoldServerMessage::Refused { failures }).await;
-            close(&mut socket).await;
+            write(
+                &mut socket,
+                &HoldServerMessage::Refused { failures },
+                write_timeout,
+            )
+            .await;
+            close(&mut socket, write_timeout).await;
             return;
         }
     };
@@ -166,7 +173,7 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
     let ended = loop {
         tokio::select! {
             Some(event) = events.recv() => {
-                if !write(&mut socket, &to_message(event)).await && !lost {
+                if !write(&mut socket, &to_message(event), write_timeout).await && !lost {
                     lost = true;
                     let _ = commands.send(Command::ConnectionLost);
                 }
@@ -208,8 +215,8 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
         }
     };
     while let Ok(event) = events.try_recv() {
-        write(&mut socket, &to_message(event)).await;
+        write(&mut socket, &to_message(event), write_timeout).await;
     }
-    write(&mut socket, &HoldServerMessage::Ended(ended)).await;
-    close(&mut socket).await;
+    write(&mut socket, &HoldServerMessage::Ended(ended), write_timeout).await;
+    close(&mut socket, write_timeout).await;
 }
