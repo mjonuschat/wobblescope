@@ -53,7 +53,7 @@ const done: FinishedTest = {
 };
 
 async function enabledRun() {
-  const button = (await screen.findByRole("button", { name: "Run Test" })) as HTMLButtonElement;
+  const button = (await screen.findByRole("button", { name: "Run test" })) as HTMLButtonElement;
   await waitFor(() => expect(button.disabled).toBe(false));
   return button;
 }
@@ -102,7 +102,7 @@ describe("a running test", () => {
     await mount({ test: running, last: null });
     expect(await screen.findByText("Progress")).toBeTruthy();
     expect(currentStep()).toContain("Measuring");
-    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run test" })).toBeNull();
   });
 
   it("shows the shutdown notice when the test ended with an emergency stop", async () => {
@@ -352,7 +352,7 @@ describe("a finished test", () => {
     send({ test: null, last: done });
     expect(screen.getByText("session results for test-1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New test" }));
-    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Run test" })).toBeTruthy();
     expect(screen.queryByText("The test finished.")).toBeNull();
     expect(currentStep()).toContain("Setup");
   });
@@ -360,7 +360,7 @@ describe("a finished test", () => {
   it("goes back to setup when the Setup step is clicked on the results", async () => {
     await mount({ test: null, last: done });
     fireEvent.click(await screen.findByRole("button", { name: /Setup/ }));
-    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Run test" })).toBeTruthy();
   });
 
   it("does not let the Setup step be clicked while the printer may still be moving", async () => {
@@ -376,7 +376,7 @@ describe("a page opened without a live socket", () => {
     api();
     renderRoute("/run/shaper");
     expect(await screen.findByText("Connecting to the live view…")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run test" })).toBeNull();
     const before = FakeSocket.instances.length;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(FakeSocket.instances.length).toBe(before + 1));
@@ -402,7 +402,7 @@ describe("starting a test", () => {
     send({ test: null, last: null });
     fireEvent.click(await enabledRun());
     expect(await screen.findByText("Starting…")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run test" })).toBeNull();
 
     send({ test: running, last: null });
     expect(await screen.findByText("Progress")).toBeTruthy();

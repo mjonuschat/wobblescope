@@ -29,7 +29,7 @@ export function ChipPicker({ chips, selected, maxChips, onToggle, badge }: Props
           <TableHead>Chip</TableHead>
           <TableHead>Type</TableHead>
           <TableHead>Rate</TableHead>
-          <TableHead>Max Frequency</TableHead>
+          <TableHead>Max frequency</TableHead>
           <TableHead>Status</TableHead>
         </TableRow>
       </TableHeader>

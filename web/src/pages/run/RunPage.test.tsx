@@ -48,7 +48,7 @@ function api({
   });
 }
 
-const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ }) as HTMLButtonElement;
+const startButton = () => screen.getByRole("button", { name: /Run test|Checking printer/ }) as HTMLButtonElement;
 const thumb = (index: number) => document.querySelectorAll<HTMLInputElement>('input[type="range"]')[index];
 const mode = () => screen.getByRole("combobox", { name: "Mode" }).textContent;
 async function chooseMode(name: "Pulse" | "Sweep") {
@@ -65,7 +65,7 @@ const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && 
 async function open(options?: Options) {
   const calls = api(options);
   renderRoute("/run/shaper");
-  await screen.findByRole("button", { name: "Run Test" });
+  await screen.findByRole("button", { name: "Run test" });
   await waitFor(() => expect(screen.queryByText(/Checking whether the printer is homed/)).toBeNull());
   return calls;
 }
@@ -271,7 +271,7 @@ describe("the run screen", () => {
       }),
     );
     renderRoute("/run/shaper");
-    const run = (await screen.findByRole("button", { name: "Run Test" })) as HTMLButtonElement;
+    const run = (await screen.findByRole("button", { name: "Run test" })) as HTMLButtonElement;
     await waitFor(() => expect(run.disabled).toBe(false));
     fireEvent.click(run);
     const busy = await screen.findByRole("button", { name: "Checking printer…" });
@@ -404,11 +404,11 @@ describe("the run screen", () => {
     );
     const { client } = renderRoute("/run/shaper");
     expect(await screen.findByText("the daemon is not connected to Moonraker")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run test" })).toBeNull();
 
     ready = true;
     await client.invalidateQueries({ queryKey: queryKeys.status });
-    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Run test" })).toBeTruthy();
     expect(isOn("lis2dw ebb36")).toBe(true);
   });
 });
@@ -417,7 +417,7 @@ describe("the run test routes", () => {
   it("sends /run to the input shaper page", async () => {
     api();
     const { router } = renderRoute("/run");
-    await screen.findByRole("heading", { name: "Input Shaper" });
+    await screen.findByRole("heading", { name: "Input shaper" });
     expect(router.state.location.pathname).toBe("/run/shaper");
   });
 });
@@ -439,7 +439,7 @@ describe("the belts form", () => {
   async function openBelts(settings: PrinterSettings = withMachine("corexy")) {
     const calls = api({ settings });
     renderRoute("/run/belts");
-    await screen.findByRole("button", { name: "Run Test" });
+    await screen.findByRole("button", { name: "Run test" });
     await waitFor(() => expect(screen.queryByText(/Checking whether the printer is homed/)).toBeNull());
     return calls;
   }
@@ -449,7 +449,7 @@ describe("the belts form", () => {
       api({ settings: withMachine(kinematics) });
       renderRoute("/run/belts");
       expect(await screen.findByText("Belt tests need a CoreXY printer.")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: /Run Test/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Run test/ })).toBeNull();
       cleanup();
     }
   });
@@ -534,7 +534,7 @@ describe("the run parameters card", () => {
     cleanup();
     api({ settings: { ...printerSettings(), machine: { ...printerSettings().machine, kinematics: "corexy" } } });
     renderRoute("/run/belts");
-    await screen.findByRole("button", { name: "Run Test" });
+    await screen.findByRole("button", { name: "Run test" });
     expect(screen.queryByText(EXPLANATION)).toBeNull();
   });
 
@@ -602,12 +602,12 @@ describe("a test of the other kind", () => {
 
   it.each([
     ["/run/shaper", "belts", "A Belts test is running.", "/run/belts"],
-    ["/run/belts", "axes", "A Input Shaper test is running.", "/run/shaper"],
+    ["/run/belts", "axes", "A Input shaper test is running.", "/run/shaper"],
   ] as const)("on %s a running %s test is a notice with a link and the form", async (path, other, text, to) => {
     await openWith(path, { test: running(other), last: null });
     expect(await screen.findByText(text)).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
-    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByLabelText("Segment progress")).toBeNull();
   });
 
@@ -626,7 +626,7 @@ describe("a test of the other kind", () => {
     ["/run/belts", "axes"],
   ] as const)("on %s a finished %s test shows the form, not the result", async (path, other) => {
     await openWith(path, { test: null, last: ended(other) });
-    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByText("Result")).toBeNull();
     expect(screen.queryByText("boom")).toBeNull();
   });
@@ -637,7 +637,7 @@ describe("a test of the other kind", () => {
   ] as const)("on %s a finished %s test shows its result", async (path, own) => {
     await openWith(path, { test: null, last: ended(own) });
     expect(await screen.findByText("Result")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Run Test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run test" })).toBeNull();
   });
 
   it.each([

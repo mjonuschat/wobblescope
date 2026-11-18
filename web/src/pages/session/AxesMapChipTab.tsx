@@ -160,7 +160,7 @@ export function AxesMapChipTab({ outcome, chip }: { outcome: AxesMapChip; chip: 
   // Sessions from before mountings were recorded are analysed as toolhead chips.
   const mounting = chip?.mounting ?? "toolhead";
   return (
-    <Panel title="Axes Map" label={`Chip ${outcome.chip}`}>
+    <Panel title="Axes map" label={`Chip ${outcome.chip}`}>
       <Fields className="lg:grid-cols-5">
         <Field label="Mounted on">{mountingLabel(mounting)}</Field>
         {chip?.chip_type && <Field label="Type">{chip.chip_type}</Field>}

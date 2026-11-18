@@ -17,12 +17,12 @@ const LABEL = "All chips added together, vibration strength against frequency";
 export function CombinedResult({ summed, maxFreq, switcher }: Props) {
   const option = summedOption(summed, maxFreq);
   return (
-    <Panel title="Resonance and Shapers" label="All chips">
+    <Panel title="Resonance and shapers" label="All chips">
       {switcher}
       <div className="relative">
         <EChart option={option} label={LABEL} />
         <div className="absolute top-0 right-0">
-          <ExpandDialog title="Resonance and Shapers: All Chips">
+          <ExpandDialog title="Resonance and shapers: All chips">
             <EChart option={option} label={LABEL} height={EXPANDED_CHART_HEIGHT} />
           </ExpandDialog>
         </div>

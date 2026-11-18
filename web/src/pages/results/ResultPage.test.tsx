@@ -50,7 +50,7 @@ describe("the result page", () => {
     serve();
     renderRoute("/results/r1");
     expect((await screen.findAllByText(/shaper_type_x: mzv/)).length).toBeGreaterThan(0);
-    expect(screen.getByRole("region", { name: "Recommended Input Shaper" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recommended input shaper" })).toBeTruthy();
     expect(screen.getByText("after belts")).toBeTruthy();
     expect(screen.queryByText(/same answer/)).toBeNull();
     expect(screen.queryByText("fresh snippet")).toBeNull();

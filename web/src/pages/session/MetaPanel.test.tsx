@@ -42,7 +42,7 @@ describe("the session details", () => {
     render(<MetaPanel meta={meta} />);
     const cell = (label: string) => screen.getByText(label).parentElement as HTMLElement;
     expect(cell("Klipper").className).toContain("lg:col-span-3");
-    expect(cell("Probe Points").className).toContain("col-span-full");
+    expect(cell("Probe points").className).toContain("col-span-full");
     expect(cell("Printer").className).not.toContain("col-span");
   });
 
@@ -59,7 +59,7 @@ describe("the session details", () => {
     render(<MetaPanel meta={meta} />);
     const labelsOf = (name: string) =>
       Array.from(screen.getByLabelText(name).querySelectorAll("dt")).map((dt) => dt.textContent);
-    expect(labelsOf("The recording")).toEqual(["Source", "Created", "Mode", "Outcome", "Probe Points"]);
+    expect(labelsOf("The recording")).toEqual(["Source", "Created", "Mode", "Outcome", "Probe points"]);
     expect(labelsOf("The printer")).toEqual([
       "Printer",
       "Klipper",
@@ -121,7 +121,7 @@ describe("the session details", () => {
   it("names a test's source Wobblescope and shows no file name", () => {
     render(<MetaPanel meta={twoAxisMeta()} />);
     expect(screen.getByText("Wobblescope")).toBeTruthy();
-    expect(screen.queryByText("File Name")).toBeNull();
+    expect(screen.queryByText("File name")).toBeNull();
   });
 
   it("names an import's source CSV and shows the file it came from", () => {
@@ -129,7 +129,7 @@ describe("the session details", () => {
     meta.source = { CsvImport: { original_file_name: "ws_x_adxl345.csv", original_file_names: ["ws_x_adxl345.csv"] } };
     render(<MetaPanel meta={meta} />);
     expect(screen.getByText("CSV")).toBeTruthy();
-    expect(screen.getByText("File Name")).toBeTruthy();
+    expect(screen.getByText("File name")).toBeTruthy();
     expect(screen.getByText("ws_x_adxl345.csv")).toBeTruthy();
   });
 
@@ -138,7 +138,7 @@ describe("the session details", () => {
     meta.source = { CsvImport: { original_file_name: null, original_file_names: [] } };
     render(<MetaPanel meta={meta} />);
     expect(screen.getByText("CSV")).toBeTruthy();
-    expect(screen.queryByText("File Name")).toBeNull();
+    expect(screen.queryByText("File name")).toBeNull();
   });
 
   it("names an axes-map calibration instead of a test mode", () => {
@@ -224,7 +224,7 @@ describe("the session details", () => {
       (dt) => dt.textContent,
     );
     expect(labels.slice(0, 4)).toEqual(["Source", "Created", "Mode", "Outcome"]);
-    expect(labels[labels.length - 1]).toBe("Probe Points");
+    expect(labels[labels.length - 1]).toBe("Probe points");
   });
 
   it("shows_the_vibrations_run_parameters", () => {
@@ -244,11 +244,11 @@ describe("the session details", () => {
     const value = (label: string) => within(group).getByText(label).nextElementSibling?.textContent;
     expect(value("Size")).toBe("100 mm");
     expect(value("Z Height")).toBe("20 mm");
-    expect(value("Min Speed")).toBe("20 mm/s");
-    expect(value("Max Speed")).toBe("100 mm/s");
-    expect(value("Speed Increment")).toBe("5 mm/s");
+    expect(value("Min speed")).toBe("20 mm/s");
+    expect(value("Max speed")).toBe("100 mm/s");
+    expect(value("Speed increment")).toBe("5 mm/s");
     expect(value("Acceleration")).toBe("3000 mm/s²");
-    expect(value("Travel Speed")).toBe("120 mm/s");
+    expect(value("Travel speed")).toBe("120 mm/s");
     expect(value("Kinematics")).toBe("corexy");
     expect(screen.getByText("Vibrations profile")).toBeTruthy();
   });

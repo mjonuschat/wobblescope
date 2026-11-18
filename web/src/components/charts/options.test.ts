@@ -154,7 +154,7 @@ describe("summedOption", () => {
 
   it("has no heading of its own and a plain axis name", () => {
     expect((option as { title?: unknown }).title).toBeUndefined();
-    expect((option as { yAxis: { name: string } }).yAxis.name).toBe("Vibration Strength");
+    expect((option as { yAxis: { name: string } }).yAxis.name).toBe("Vibration strength");
   });
 
   it("draws the total and the three directions, with the directions hidden in the legend", () => {

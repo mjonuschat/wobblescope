@@ -115,11 +115,11 @@ describe("the belt view", () => {
     renderView();
     const profile = await screen.findByRole("region", { name: "Belt frequency profile of ADXL345" });
     const cross = await screen.findByRole("region", { name: "Cross-belt comparison of ADXL345" });
-    expect(within(profile).getByText("Belt Frequency Profile")).toBeTruthy();
+    expect(within(profile).getByText("Belt frequency profile")).toBeTruthy();
     expect(within(profile).queryByRole("tab")).toBeNull();
     expect(within(profile).getByRole("img", { name: "Belt overlay of adxl345" })).toBeTruthy();
     expect(within(profile).queryByRole("img", { name: /scatter/ })).toBeNull();
-    expect(within(cross).getByText("Cross-belt Comparison")).toBeTruthy();
+    expect(within(cross).getByText("Cross-belt comparison")).toBeTruthy();
     expect(within(cross).getByRole("img", { name: "Cross-belt scatter of adxl345" })).toBeTruthy();
     const top = screen.getByRole("region", { name: "Test result" });
     expect(within(top).getByRole("tab", { name: "ADXL345" })).toBeTruthy();
@@ -143,7 +143,7 @@ describe("the belt view", () => {
     renderView();
     await screen.findByText("Belt B was not recorded.");
     expect(screen.getByRole("region", { name: "Belt frequency profile of ADXL345" })).toBeTruthy();
-    expect(screen.queryByText("Cross-belt Comparison")).toBeNull();
+    expect(screen.queryByText("Cross-belt comparison")).toBeNull();
     expect(screen.queryByRole("region", { name: /Cross-belt/ })).toBeNull();
   });
 

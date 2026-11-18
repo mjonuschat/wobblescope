@@ -60,23 +60,23 @@ export function ColumnFilter({ column, filters, onChange, all }: Props & { colum
   let change: (value: string) => void;
   if (column === "chip") {
     label = "Chip";
-    everything = "All Chips";
+    everything = "All chips";
     value = filters.chip ?? ALL;
     options = same([...new Set(all.flatMap((s) => s.chips))].sort());
     change = (next) => onChange({ ...filters, chip: next === ALL ? undefined : next });
   } else if (column === "printer") {
     label = "Printer";
-    everything = "All Printers";
+    everything = "All printers";
     value = filters.printer ?? ALL;
     options = same([...new Set(all.flatMap((s) => (s.printer ? [s.printer] : [])))].sort());
     change = (next) => onChange({ ...filters, printer: next === ALL ? undefined : next });
   } else {
     label = "Pinned";
-    everything = "All Sessions";
+    everything = "All sessions";
     value = filters.pinned === undefined ? ALL : String(filters.pinned);
     options = [
-      { value: "true", label: "Pinned Only" },
-      { value: "false", label: "Unpinned Only" },
+      { value: "true", label: "Pinned only" },
+      { value: "false", label: "Unpinned only" },
     ];
     change = (next) => onChange({ ...filters, pinned: next === ALL ? undefined : next === "true" });
   }

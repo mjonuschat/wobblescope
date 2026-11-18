@@ -471,7 +471,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
               ) : (
                 <>
                   <PlayIcon data-icon="inline-start" />
-                  Run Test
+                  Run test
                 </>
               )}
             </Button>

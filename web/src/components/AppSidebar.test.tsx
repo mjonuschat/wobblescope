@@ -28,7 +28,7 @@ describe("the sidebar", () => {
           : { status: 404, body: { error: "not_found", message: "no" } },
       );
       renderRoute("/");
-      await screen.findByRole("link", { name: "Input Shaper" });
+      await screen.findByRole("link", { name: "Input shaper" });
       if (offered) {
         expect(await screen.findByRole("link", { name: "Belts" })).toBeTruthy();
       } else {
@@ -55,7 +55,7 @@ describe("the sidebar", () => {
           : { status: 404, body: { error: "not_found", message: "no" } },
       );
       renderRoute("/");
-      await screen.findByRole("link", { name: "Input Shaper" });
+      await screen.findByRole("link", { name: "Input shaper" });
       if (offered) {
         expect(await screen.findByRole("link", { name: "Vibrations profile" })).toBeTruthy();
       } else {
@@ -68,7 +68,7 @@ describe("the sidebar", () => {
   it("hides_the_belts_page_while_settings_are_not_available", async () => {
     stubApiWithStatus(() => ({ status: 404, body: { error: "not_found", message: "no" } }));
     renderRoute("/");
-    await screen.findByRole("link", { name: "Input Shaper" });
+    await screen.findByRole("link", { name: "Input shaper" });
     expect(screen.queryByRole("link", { name: "Belts" })).toBeNull();
   });
 });

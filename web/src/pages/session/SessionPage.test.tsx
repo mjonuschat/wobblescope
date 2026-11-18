@@ -79,7 +79,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     expect((await screen.findAllByText(/shaper_type_x: mzv/)).length).toBeGreaterThan(0);
-    const worst = screen.getByRole("region", { name: "Recommended Input Shaper" });
+    const worst = screen.getByRole("region", { name: "Recommended input shaper" });
     fireEvent.click(within(worst).getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SNIPPET));
     expect(await screen.findByText("Copied")).toBeTruthy();
@@ -93,7 +93,7 @@ describe("the session view", () => {
     clipboard(value);
     serve();
     renderRoute("/sessions/s1");
-    const worst = await screen.findByRole("region", { name: "Recommended Input Shaper" });
+    const worst = await screen.findByRole("region", { name: "Recommended input shaper" });
     fireEvent.click(within(worst).getByRole("button", { name: "Copy" }));
     expect(await screen.findByText(/Copy failed/)).toBeTruthy();
     expect(worst.textContent).toContain("shaper_type_x: mzv");
@@ -108,7 +108,7 @@ describe("the session view", () => {
     const degraded = await chipCard("b");
     expect(degraded.textContent).toContain("No recommendation for this chip: degraded capture health");
     expect(degraded.querySelector('[role="img"]')).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Recommended Input Shaper" }).textContent).toContain("mzv at 48.2 Hz");
+    expect(screen.getByRole("region", { name: "Recommended input shaper" }).textContent).toContain("mzv at 48.2 Hz");
   });
 
   it("lists the chips of the data quality panel on one line, separated by a mid dot", async () => {
@@ -117,14 +117,14 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    const panel = await screen.findByRole("region", { name: "Data Quality" });
+    const panel = await screen.findByRole("region", { name: "Data quality" });
     const list = panel.querySelector("ul") as HTMLElement;
     expect(list.className).toContain("flex-wrap");
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(list.textContent?.match(/·/g)).toHaveLength(1);
   });
 
-  it("shows the spectrogram panel under the chip panel with its map, hides it on All Chips and makes each chip its own map", async () => {
+  it("shows the spectrogram panel under the chip panel with its map, hides it on All chips and makes each chip its own map", async () => {
     const a = analysis();
     a.per_chip = [
       { ...a.per_chip[0], chip: "adxl345" },
@@ -144,7 +144,7 @@ describe("the session view", () => {
     expect(await within(other).findByRole("img", { name: "Spectrogram of lis2dw ebb36" })).toBeTruthy();
     expect(fake.spectrogram.mock.calls.map((c) => c[0].chip)).toEqual(["adxl345", "lis2dw ebb36"]);
 
-    fireEvent.click(screen.getByRole("tab", { name: "All Chips" }));
+    fireEvent.click(screen.getByRole("tab", { name: "All chips" }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Spectrogram" })).toBeNull());
   });
 
@@ -174,7 +174,7 @@ describe("the session view", () => {
     fireEvent.click(scale);
     const again = await screen.findByRole("dialog");
     expect((within(again).getByLabelText("Maximum") as HTMLInputElement).value).toBe("10");
-    fireEvent.click(within(again).getByRole("button", { name: "Restore Auto" }));
+    fireEvent.click(within(again).getByRole("button", { name: "Restore auto" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(Number(chart().dataset.ymax)).toBeCloseTo(5.25, 6);
   });
@@ -250,12 +250,12 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    const panel = await screen.findByRole("region", { name: "Data Quality" });
+    const panel = await screen.findByRole("region", { name: "Data quality" });
     expect(panel.textContent).toContain("Could not be analysed: timestamps are not finite and strictly increasing");
     expect((await chipCard("b")).textContent).toContain(
       "No recommendation for this chip: timestamps are not finite and strictly increasing",
     );
-    expect(screen.getByRole("region", { name: "Recommended Input Shaper" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recommended input shaper" })).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: /Include b anyway/ })).toBeNull();
   });
 
@@ -285,7 +285,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
-    expect(screen.getByRole("region", { name: "Data Quality" }).textContent).toContain("395 Hz");
+    expect(screen.getByRole("region", { name: "Data quality" }).textContent).toContain("395 Hz");
     fireEvent.click(box);
     await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
     expect(fake.analyze.mock.calls[1][0].overrides).toEqual(["b"]);
@@ -309,7 +309,7 @@ describe("the session view", () => {
     renderRoute("/sessions/s1");
     fireEvent.click(await screen.findByRole("checkbox", { name: /Include b anyway/ }));
     await waitFor(() =>
-      expect(screen.getByRole("region", { name: "Data Quality" }).textContent).toContain(
+      expect(screen.getByRole("region", { name: "Data quality" }).textContent).toContain(
         "Could not be analysed: flat signal",
       ),
     );
@@ -334,7 +334,7 @@ describe("the session view", () => {
     meta.chips = meta.chips.map((c) => ({ ...c, health: "Degraded" }));
     serve(meta);
     renderRoute("/sessions/s1");
-    const quality = await screen.findByRole("region", { name: "Data Quality" });
+    const quality = await screen.findByRole("region", { name: "Data quality" });
     expect(quality.textContent).toContain("Good data");
     expect(quality.textContent).not.toContain("Left out");
   });
@@ -370,19 +370,19 @@ describe("the session view", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(within(card).getByRole("button", { name: "Expand the chart and table" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Resonance and Shapers: a/)).toBeTruthy();
+    expect(within(dialog).getByText(/Resonance and shapers: a/)).toBeTruthy();
     expect(within(dialog).getByRole("img", { name: /PSD of a/ })).toBeTruthy();
     expect(within(dialog).getAllByRole("row").length).toBeGreaterThan(1);
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("has an All Chips tab, last, when there are several chips, and it explains what it shows", async () => {
+  it("has an All chips tab, last, when there are several chips, and it explains what it shows", async () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, SNIPPET]));
     serve();
     renderRoute("/sessions/s1");
-    const tabs = await screen.findAllByRole("tab", { name: /^(A|B|All Chips)$/ });
-    expect(tabs.map((t) => t.textContent)).toEqual(["A", "B", "All Chips"]);
+    const tabs = await screen.findAllByRole("tab", { name: /^(A|B|All chips)$/ });
+    expect(tabs.map((t) => t.textContent)).toEqual(["A", "B", "All chips"]);
     fireEvent.click(tabs[2]);
     const all = await screen.findByRole("region", { name: "All chips" });
     expect(all.textContent).toContain("adds the chips together");
@@ -392,7 +392,7 @@ describe("the session view", () => {
     expect(await screen.findByRole("region", { name: "Chip a" })).toBeTruthy();
   });
 
-  it("has no All Chips tab for a single chip", async () => {
+  it("has no All chips tab for a single chip", async () => {
     const a = analysis();
     a.per_chip = [{ ...a.per_chip[0], chip: "adxl345" }];
     a.eligibility.decisions = [decision("adxl345", "Included")];
@@ -400,7 +400,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Chip adxl345" });
-    expect(screen.queryByRole("tab", { name: "All Chips" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "All chips" })).toBeNull();
   });
 
   it("analyses with the printer's recorded corner velocity and an estimated damping ratio, until the user applies others", async () => {
@@ -416,9 +416,9 @@ describe("the session view", () => {
     };
     serve(meta);
     renderRoute("/sessions/s1");
-    await screen.findByRole("region", { name: "Recommended Input Shaper" });
+    await screen.findByRole("region", { name: "Recommended input shaper" });
     expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: null });
-    fireEvent.change(screen.getByLabelText(/Square Corner Velocity/), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText(/Square corner velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze.mock.calls.at(-1)?.[0].params).toMatchObject({ scv: 3 }));
   });
@@ -453,8 +453,8 @@ describe("the session view", () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    await screen.findByRole("region", { name: "Recommended Input Shaper" });
-    fireEvent.change(screen.getByLabelText(/Maximum Corner Rounding/), { target: { value: "0.1" } });
+    await screen.findByRole("region", { name: "Recommended input shaper" });
+    fireEvent.change(screen.getByLabelText(/Maximum corner rounding/), { target: { value: "0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
     expect(fake.analyze.mock.calls[1][0].params.max_smoothing).toBe(0.1);
@@ -467,7 +467,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const details = await screen.findByRole("region", { name: "Session details" });
-    await waitFor(() => expect(details.textContent).toContain("Analysis Version"));
+    await waitFor(() => expect(details.textContent).toContain("Analysis version"));
     expect(details.textContent).toContain("0.1.0");
     expect(details.textContent).not.toContain("Shapers Tried");
     expect(details.textContent).toContain("200 Hz");
@@ -593,7 +593,7 @@ describe("the session view", () => {
 
     it("re-enables Save when the fit params change", async () => {
       await saveOnce();
-      fireEvent.change(screen.getByLabelText(/Maximum Corner Rounding/), { target: { value: "0.1" } });
+      fireEvent.change(screen.getByLabelText(/Maximum corner rounding/), { target: { value: "0.1" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));
       await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(saveButton().disabled).toBe(false));

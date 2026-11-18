@@ -40,7 +40,7 @@ const DEFAULT_WINDOW_SECONDS = 1;
 /** The Pause button is hidden until the page controls are rearranged. */
 const SHOW_PAUSE = false;
 
-/** The Live View page shows live signals and spectra of up to a few chips, and can hold the printer at a frequency. */
+/** The Live view page shows live signals and spectra of up to a few chips, and can hold the printer at a frequency. */
 export function StreamPage({ createWorker }: Props) {
   const stream = useStream();
   const hold = useHold();
@@ -150,7 +150,7 @@ export function StreamPage({ createWorker }: Props) {
   if (!stream.state.connected) {
     return (
       <section className="mx-auto max-w-5xl space-y-4">
-        <PageHeader title="Live View" />
+        <PageHeader title="Live view" />
         <p className="text-sm text-muted-foreground">Not connected to the daemon. The stream starts when it is.</p>
       </section>
     );
@@ -158,7 +158,7 @@ export function StreamPage({ createWorker }: Props) {
 
   return (
     <section className="mx-auto max-w-5xl space-y-4">
-      <PageHeader title="Live View" />
+      <PageHeader title="Live view" />
       {hello?.printing && (
         <Alert tone="warning" variant="inline">
           A print is running: showing a lower update rate
@@ -210,12 +210,12 @@ export function StreamPage({ createWorker }: Props) {
                 <EmptyMedia variant="icon">
                   <AudioLinesIcon />
                 </EmptyMedia>
-                <EmptyTitle>No Sources Enabled</EmptyTitle>
+                <EmptyTitle>No sources enabled</EmptyTitle>
                 <EmptyDescription>Please enable at least one chip to stream data from.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button type="button" variant="outline" onClick={enableAll}>
-                  Enable All
+                  Enable all
                 </Button>
               </EmptyContent>
             </Empty>
@@ -232,12 +232,12 @@ export function StreamPage({ createWorker }: Props) {
       )}
       {shown.length > 0 && (
         <Panel
-          title="Live Spectrum"
+          title="Live spectrum"
           action={
             <div className="flex items-center gap-2">
               <AxisToggles axes={axes} onAxes={setAxes} />
               <Button type="button" variant="outline" size="sm" onClick={() => resetPeakHold()}>
-                Reset Peak Hold
+                Reset peak hold
               </Button>
             </div>
           }

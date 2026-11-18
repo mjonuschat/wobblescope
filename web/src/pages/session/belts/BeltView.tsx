@@ -89,7 +89,7 @@ export function BeltView({
   const result = query.data?.result;
   return (
     <>
-      <Panel title="Belt Frequency Profile" label={`Belt frequency profile of ${chipLabel(chip)}`}>
+      <Panel title="Belt frequency profile" label={`Belt frequency profile of ${chipLabel(chip)}`}>
         {query.isPending ? (
           <Waiting>Comparing the belts of {chip}…</Waiting>
         ) : query.isError ? (
@@ -101,7 +101,7 @@ export function BeltView({
         )}
       </Panel>
       {result && (
-        <Panel title="Cross-belt Comparison" label={`Cross-belt comparison of ${chipLabel(chip)}`}>
+        <Panel title="Cross-belt comparison" label={`Cross-belt comparison of ${chipLabel(chip)}`}>
           {result.offsets.length === 0 && <p className="text-sm">No peaks were paired across the belts.</p>}
           <EChart option={beltScatterOption(result)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
         </Panel>

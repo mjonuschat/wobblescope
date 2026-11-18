@@ -69,7 +69,7 @@ describe("the sessions page", () => {
     await screen.findAllByRole("row");
     fireEvent.click(screen.getByRole("button", { name: "Filter Pinned" }));
     fireEvent.click(await screen.findByRole("combobox", { name: "Pinned" }));
-    const option = await screen.findByRole("option", { name: "Pinned Only" });
+    const option = await screen.findByRole("option", { name: "Pinned only" });
     fireEvent.pointerDown(option);
     fireEvent.pointerUp(option);
     fireEvent.click(option);
@@ -119,9 +119,9 @@ describe("the sessions page", () => {
     renderRoute("/sessions");
     await screen.findByText("s1");
     fireEvent.click(screen.getByRole("button", { name: "Filter Pinned" }));
-    const option = await screen.findByRole("option", { name: "Pinned Only" }, { timeout: 100 }).catch(async () => {
+    const option = await screen.findByRole("option", { name: "Pinned only" }, { timeout: 100 }).catch(async () => {
       fireEvent.click(await screen.findByRole("combobox", { name: "Pinned" }));
-      return screen.findByRole("option", { name: "Pinned Only" });
+      return screen.findByRole("option", { name: "Pinned only" });
     });
     fireEvent.pointerDown(option);
     fireEvent.pointerUp(option);
@@ -291,7 +291,7 @@ describe("the sessions page", () => {
     api();
     renderRoute("/sessions");
     const region = await screen.findByRole("region", { name: "Storage use" });
-    for (const label of ["Stored", "Reserved", "Pinned", "Free Disk"]) {
+    for (const label of ["Stored", "Reserved", "Pinned", "Free disk"]) {
       expect(within(region).getByText(label)).toBeTruthy();
     }
   });

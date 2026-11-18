@@ -226,7 +226,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
               ) : (
                 <>
                   <PlayIcon data-icon="inline-start" />
-                  Run Test
+                  Run test
                 </>
               )}
             </Button>

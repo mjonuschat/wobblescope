@@ -165,7 +165,7 @@ export function HoldPanel({ hold, frequencyOfInterest, streaming }: Props) {
             onChange={(e) => setAccel(e.target.value)}
           />
         </Row>
-        <Row label="Start Point" htmlFor="hold-point">
+        <Row label="Start point" htmlFor="hold-point">
           <Select
             value={custom ? "custom" : "test"}
             onValueChange={(v) => setCustom(v === "custom")}

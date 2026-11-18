@@ -39,12 +39,12 @@ function api(start: Reply = { status: 202, body: { id: "run-1" } }, busy: string
 
 const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && apiPath(c) === "axes-map");
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
-const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ }) as HTMLButtonElement;
+const startButton = () => screen.getByRole("button", { name: /Run test|Checking printer/ }) as HTMLButtonElement;
 
 async function open(start?: Reply) {
   const calls = api(start);
   renderRoute("/run/axes-map");
-  await screen.findByRole("button", { name: "Run Test" });
+  await screen.findByRole("button", { name: "Run test" });
   await waitFor(() => expect(startButton().disabled).toBe(false));
   return calls;
 }
@@ -243,19 +243,19 @@ describe("a test of another kind on the axes-map run page", () => {
   }
 
   it.each([
-    ["axes", "A Input Shaper test is running.", "/run/shaper"],
+    ["axes", "A Input shaper test is running.", "/run/shaper"],
     ["belts", "A Belts test is running.", "/run/belts"],
   ] as const)("a running %s test is a notice with a link and the form", async (other, text, to) => {
     await openWith({ test: running(other), last: null });
     expect(await screen.findByText(text)).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
-    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByLabelText("Segment progress")).toBeNull();
   });
 
   it("a finished test of another kind shows the form, not the result", async () => {
     await openWith({ test: null, last: finished({ kind: "belts", outcome: "failed", reason: "boom" }) });
-    expect(await screen.findByRole("button", { name: /Run Test|Checking printer/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByText("boom")).toBeNull();
   });
 });

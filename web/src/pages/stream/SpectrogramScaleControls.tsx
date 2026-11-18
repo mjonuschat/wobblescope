@@ -24,7 +24,7 @@ export function SpectrogramScaleControls({ auto, onAuto, min, max, onMin, onMax,
     <div className="flex flex-wrap items-center gap-4">
       <div className="flex items-center gap-2">
         <Switch id="spectrogram-auto-scale" checked={auto} onCheckedChange={onAuto} />
-        <Label htmlFor="spectrogram-auto-scale">Auto Scale</Label>
+        <Label htmlFor="spectrogram-auto-scale">Auto scale</Label>
       </div>
       <UnitInput
         unit="PSD"

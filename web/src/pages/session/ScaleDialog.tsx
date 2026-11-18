@@ -83,7 +83,7 @@ export function ScaleDialog({ value, onChange }: Props) {
               onChange={(event) => setText(event.target.value)}
             />
             {parsed === undefined && (
-              <p className="text-sm text-destructive">Enter a positive number, or use Restore Auto.</p>
+              <p className="text-sm text-destructive">Enter a positive number, or use Restore auto.</p>
             )}
           </div>
           <DialogFooter>
@@ -95,7 +95,7 @@ export function ScaleDialog({ value, onChange }: Props) {
                 setOpen(false);
               }}
             >
-              Restore Auto
+              Restore auto
             </Button>
             <Button type="submit" disabled={parsed === undefined}>
               Apply

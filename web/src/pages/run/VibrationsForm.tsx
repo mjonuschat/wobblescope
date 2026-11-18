@@ -22,10 +22,10 @@ type ParameterKey = "size" | "z_height" | "max_speed" | "speed_increment" | "acc
 const PARAMETERS: { key: ParameterKey; label: string; unit: string; fallback: number; min: number | null }[] = [
   { key: "size", label: "Size", unit: "mm", fallback: 100, min: 50 },
   { key: "z_height", label: "Z Height", unit: "mm", fallback: 20, min: null },
-  { key: "max_speed", label: "Max Speed", unit: "mm/s", fallback: 200, min: 10 },
-  { key: "speed_increment", label: "Speed Increment", unit: "mm/s", fallback: 2, min: 1 },
+  { key: "max_speed", label: "Max speed", unit: "mm/s", fallback: 200, min: 10 },
+  { key: "speed_increment", label: "Speed increment", unit: "mm/s", fallback: 2, min: 1 },
   { key: "accel", label: "Acceleration", unit: "mm/s²", fallback: 3000, min: 100 },
-  { key: "travel_speed", label: "Travel Speed", unit: "mm/s", fallback: 120, min: 20 },
+  { key: "travel_speed", label: "Travel speed", unit: "mm/s", fallback: 120, min: 20 },
 ];
 
 interface Props {
@@ -169,7 +169,7 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
               ) : (
                 <>
                   <PlayIcon data-icon="inline-start" />
-                  Run Test
+                  Run test
                 </>
               )}
             </Button>

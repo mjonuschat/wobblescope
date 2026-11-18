@@ -34,7 +34,7 @@ export function StorageUsage({ usage }: { usage: Usage }) {
         <Field label="Stored">{formatBytes(usage.used_bytes)}</Field>
         <Field label="Reserved">{formatBytes(usage.reserved_bytes)}</Field>
         <Field label="Pinned">{formatBytes(usage.pinned_bytes)}</Field>
-        <Field label="Free Disk">{formatBytes(usage.free_bytes)}</Field>
+        <Field label="Free disk">{formatBytes(usage.free_bytes)}</Field>
       </Fields>
     </Panel>
   );

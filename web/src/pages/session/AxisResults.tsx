@@ -52,7 +52,7 @@ export function AxisResults({ result, meta, overrides, source, onOverridesChange
         ))}
         {showAllTab && (
           <TabsTrigger value={ALL_CHIPS} className="after:bg-primary">
-            All Chips
+            All chips
           </TabsTrigger>
         )}
       </TabsList>
@@ -62,7 +62,7 @@ export function AxisResults({ result, meta, overrides, source, onOverridesChange
     <div className="space-y-4">
       {analysis.worst_case ? (
         <RecommendationCard
-          title="Recommended Input Shaper"
+          title="Recommended input shaper"
           recommendation={analysis.worst_case}
           snippet={snippets.worstCase}
           performanceSnippet={snippets.worstCasePerformance}

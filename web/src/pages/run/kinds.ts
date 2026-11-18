@@ -18,7 +18,7 @@ export const offersVibrations = (kinematics: string | null | undefined) =>
   VIBRATIONS_KINEMATICS.includes(kinematics ?? "");
 
 export const KIND_TITLES: Record<TestKind, string> = {
-  axes: "Input Shaper",
+  axes: "Input shaper",
   belts: "Belts",
   axes_map: "Axes map calibration",
   vibrations: "Vibrations profile",

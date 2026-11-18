@@ -30,12 +30,12 @@ function api(settings: PrinterSettings = printerSettings(), busy: string | null 
 
 const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && apiPath(c) === "vibrations");
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
-const startButton = () => screen.getByRole("button", { name: /Run Test|Checking printer/ }) as HTMLButtonElement;
+const startButton = () => screen.getByRole("button", { name: /Run test|Checking printer/ }) as HTMLButtonElement;
 
 async function open(settings?: PrinterSettings) {
   const calls = api(settings);
   renderRoute("/run/vibrations");
-  await screen.findByRole("button", { name: "Run Test" });
+  await screen.findByRole("button", { name: "Run test" });
   await waitFor(() => expect(startButton().disabled).toBe(false));
   return calls;
 }
@@ -48,20 +48,20 @@ describe("the vibrations run page", () => {
     expect(screen.getByRole("heading", { name: "Vibrations profile" })).toBeTruthy();
     expect(field(/^Size/).value).toBe("100");
     expect(field(/^Z Height/).value).toBe("20");
-    expect(field(/^Max Speed/).value).toBe("200");
-    expect(field(/^Speed Increment/).value).toBe("2");
+    expect(field(/^Max speed/).value).toBe("200");
+    expect(field(/^Speed increment/).value).toBe("2");
     expect(field(/^Acceleration/).value).toBe("3000");
-    expect(field(/^Travel Speed/).value).toBe("120");
+    expect(field(/^Travel speed/).value).toBe("120");
   });
 
   it("refuses_a_value_under_its_minimum", async () => {
     const calls = await open();
     const cases: [RegExp, string, string][] = [
       [/^Size/, "49", "Size must be at least 50 mm."],
-      [/^Max Speed/, "9", "Max Speed must be at least 10 mm/s."],
-      [/^Speed Increment/, "0.5", "Speed Increment must be at least 1 mm/s."],
+      [/^Max speed/, "9", "Max speed must be at least 10 mm/s."],
+      [/^Speed increment/, "0.5", "Speed increment must be at least 1 mm/s."],
       [/^Acceleration/, "99", "Acceleration must be at least 100 mm/s\u00b2."],
-      [/^Travel Speed/, "19", "Travel Speed must be at least 20 mm/s."],
+      [/^Travel speed/, "19", "Travel speed must be at least 20 mm/s."],
     ];
     for (const [label, value, message] of cases) {
       fireEvent.change(field(label), { target: { value } });
@@ -118,7 +118,7 @@ describe("the vibrations run page", () => {
       api(withKinematics(kinematics));
       renderRoute("/run/vibrations");
       expect(await screen.findByText("A vibrations profile needs a Cartesian, CoreXY or CoreXZ printer.")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: /Run Test/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Run test/ })).toBeNull();
       cleanup();
     }
   });
@@ -157,7 +157,7 @@ describe("the vibrations run page", () => {
     expect(await screen.findByText("Starting…")).toBeTruthy();
     // The daemon restarted, so its next snapshot has neither the run nor a finished one.
     act(() => FakeSocket.latest.send({ test: null, last: null }));
-    expect(await screen.findByRole("button", { name: "Run Test" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Run test" })).toBeTruthy();
     expect(screen.queryByText("Starting…")).toBeNull();
   });
 });

@@ -61,7 +61,7 @@ export function EligibilityPanel({
   if (decisions.length === 0 && analysis.failures.length === 0) return null;
   const manyPoints = new Set(decisions.map((d) => d.point)).size > 1;
   return (
-    <Panel title="Data Quality">
+    <Panel title="Data quality">
       <ul className="flex flex-wrap items-start gap-x-3 gap-y-3">
         {decisions.map((d, index) => {
           const { tone, headline, detail } = verdict(d);

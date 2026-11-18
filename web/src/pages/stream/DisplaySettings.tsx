@@ -13,7 +13,7 @@ const WINDOWS = [
   { seconds: 0.5, name: "Fast" },
   { seconds: 1, name: "Balanced" },
   { seconds: 2, name: "Detailed" },
-  { seconds: 4, name: "Very Detailed" },
+  { seconds: 4, name: "Very detailed" },
 ];
 const RANGES_HZ = [100, 200, 400, 800];
 const RATES = [1, 2, 5, 10, 20];
@@ -79,7 +79,7 @@ export function DisplaySettings(props: Props) {
   return (
     <div className="flex flex-wrap items-end gap-4">
       <Choice
-        label="Refresh Rate"
+        label="Refresh rate"
         value={String(props.updatesPerSecond)}
         text={rateText(props.updatesPerSecond)}
         onChange={(value) => props.onUpdatesPerSecond(Number(value))}
@@ -91,7 +91,7 @@ export function DisplaySettings(props: Props) {
         ))}
       </Choice>
       <Choice
-        label="Frequency Range"
+        label="Frequency range"
         value={String(props.range)}
         text={rangeText(props.range)}
         onChange={(value) => props.onRange(value === "max" ? "max" : Number(value))}
@@ -104,7 +104,7 @@ export function DisplaySettings(props: Props) {
         <SelectItem value="max">{rangeText("max")}</SelectItem>
       </Choice>
       <Choice
-        label="Averaging Time"
+        label="Averaging time"
         value={String(props.windowSeconds)}
         text={windowText(props.windowSeconds)}
         onChange={(value) => props.onWindowSeconds(Number(value))}

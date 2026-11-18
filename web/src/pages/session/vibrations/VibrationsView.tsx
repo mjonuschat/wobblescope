@@ -70,8 +70,8 @@ function MotorFigures({ motor }: { motor: MotorResult }) {
   return (
     <div className="space-y-3">
       <Fields aria-label="Motor resonance">
-        <Field label="Resonant Frequency">{`${motor.fr.toFixed(1)} Hz`}</Field>
-        <Field label="Damping Ratio">{motor.zeta === null ? "Not available" : motor.zeta.toFixed(3)}</Field>
+        <Field label="Resonant frequency">{`${motor.fr.toFixed(1)} Hz`}</Field>
+        <Field label="Damping ratio">{motor.zeta === null ? "Not available" : motor.zeta.toFixed(3)}</Field>
       </Fields>
       {motor.low_freq_warning && (
         <Alert tone="warning" variant="inline">
@@ -99,25 +99,25 @@ function Charts({ result, kinematics, name }: { result: VibrationsResult; kinema
     <>
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartPanel
-          title="Angular Energy"
+          title="Angular energy"
           option={options.polarAngle}
           label={`Angular energy of ${name}`}
           height={POLAR_HEIGHT}
           below={<GoodAngleRanges result={result} />}
         />
         <ChartPanel
-          title="Polar Energy Heatmap"
+          title="Polar energy heatmap"
           option={options.polarHeatmap}
           label={`Polar energy heatmap of ${name}`}
           height={POLAR_HEIGHT}
         />
       </div>
-      <ChartPanel title="Speed Energy Profile" option={options.speed} label={`Speed energy profile of ${name}`} />
-      <ChartPanel title="Angular Speed Profiles" option={options.angular} label={`Angular speed profiles of ${name}`} />
-      <ChartPanel title="Energy Heatmap" option={options.heatmap} label={`Energy heatmap of ${name}`} height={420} />
+      <ChartPanel title="Speed energy profile" option={options.speed} label={`Speed energy profile of ${name}`} />
+      <ChartPanel title="Angular speed profiles" option={options.angular} label={`Angular speed profiles of ${name}`} />
+      <ChartPanel title="Energy heatmap" option={options.heatmap} label={`Energy heatmap of ${name}`} height={420} />
       {options.motor && result.motor && (
         <ChartPanel
-          title="Motor Resonance Profile"
+          title="Motor resonance profile"
           option={options.motor}
           label={`Motor resonance profile of ${name}`}
           intro={<MotorFigures motor={result.motor} />}
@@ -131,16 +131,16 @@ function DataQuality({ chips, onInclude }: { chips: ChipVibrations[]; onInclude:
   const problems = chips.filter((c) => c.excluded !== null || c.failure !== null);
   if (problems.length === 0) return null;
   return (
-    <Panel title="Data Quality">
+    <Panel title="Data quality">
       <ul className="space-y-1 text-sm">
         {problems.map((c) => (
           <li key={c.chip}>
             <span className="font-mono font-medium">{c.chip}</span>
             {c.failure !== null && (
-              <span className="text-destructive">{`: could not be analysed: ${c.failure}. It is not included in All Chips.`}</span>
+              <span className="text-destructive">{`: could not be analysed: ${c.failure}. It is not included in All chips.`}</span>
             )}
             {c.failure === null && c.excluded !== null && (
-              <span>{`: left out of All Chips. ${explainReason(c.excluded)}`}</span>
+              <span>{`: left out of All chips. ${explainReason(c.excluded)}`}</span>
             )}
           </li>
         ))}
@@ -176,7 +176,7 @@ export function VibrationsView({
           <Charts result={combined} kinematics={kinematics} name="all chips" />
         ) : (
           <p role="status" className="text-sm">
-            No chip qualifies for All Chips.
+            No chip qualifies for All chips.
           </p>
         )}
       </>

@@ -63,12 +63,12 @@ export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Pro
   const [maxScale, setMaxScale] = useState<number | null>(null);
   const details = { chip, snippets, maxFreq, decisions, maxScale };
   const expand = (
-    <ExpandDialog title={`Resonance and Shapers: ${chip.chip}`}>
+    <ExpandDialog title={`Resonance and shapers: ${chip.chip}`}>
       <ChipDetails {...details} chartHeight={EXPANDED_CHART_HEIGHT} />
     </ExpandDialog>
   );
   return (
-    <Panel title="Resonance and Shapers" label={`Chip ${chip.chip}`}>
+    <Panel title="Resonance and shapers" label={`Chip ${chip.chip}`}>
       {switcher}
       <ChipDetails
         {...details}

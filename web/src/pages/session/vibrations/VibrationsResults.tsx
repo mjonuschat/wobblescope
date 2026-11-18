@@ -24,7 +24,7 @@ function IncompleteRun({ meta }: { meta: SessionMeta }) {
         : meta.outcome.Failed.reason;
   const progress = vibrationsProgress(meta);
   return (
-    <Panel title="Vibrations Profile">
+    <Panel title="Vibrations profile">
       <p role="status" className="text-sm">
         The run did not finish, so there is no profile to show.
       </p>
@@ -62,7 +62,7 @@ export function VibrationsResults({ id, meta, header }: { id: string; meta: Sess
       <Tabs value={tab} onValueChange={setSelected}>
         <TabsList variant="line">
           <TabsTrigger value={ALL_CHIPS} className="after:bg-primary">
-            All Chips
+            All chips
           </TabsTrigger>
           {chips.map((name) => (
             <TabsTrigger key={name} value={name} className="after:bg-primary">

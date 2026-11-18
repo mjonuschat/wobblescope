@@ -189,7 +189,7 @@ describe("the stream page", () => {
     expect(min.disabled).toBe(true);
     expect(max.disabled).toBe(true);
     expect(screen.getByRole("img", { name: /colour scale from/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole("switch", { name: "Auto Scale" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Auto scale" }));
     expect(min.disabled).toBe(false);
     expect(min.value).toBe("1");
     expect(max.value).toBe("10");
@@ -272,7 +272,7 @@ describe("the stream page", () => {
   it("lists each chip in a table with its rate and the highest frequency it can show", async () => {
     open();
     await connect();
-    for (const name of ["Chip", "Type", "Rate", "Max Frequency", "Status"]) {
+    for (const name of ["Chip", "Type", "Rate", "Max frequency", "Status"]) {
       expect(screen.getByRole("columnheader", { name })).toBeTruthy();
     }
     expect(screen.getAllByText("3200 Hz").length).toBeGreaterThan(0);
@@ -280,24 +280,24 @@ describe("the stream page", () => {
     expect(screen.queryByText("unchecked")).toBeNull();
   });
 
-  it("shows an empty state with Enable All while no chip is on", async () => {
+  it("shows an empty state with Enable all while no chip is on", async () => {
     open();
     await connect();
-    expect(screen.getByText("No Sources Enabled")).toBeTruthy();
+    expect(screen.getByText("No sources enabled")).toBeTruthy();
     expect(screen.getByText("Please enable at least one chip to stream data from.")).toBeTruthy();
     pick("a1");
-    expect(screen.queryByText("No Sources Enabled")).toBeNull();
+    expect(screen.queryByText("No sources enabled")).toBeNull();
     pick("a1");
-    expect(screen.getByText("No Sources Enabled")).toBeTruthy();
+    expect(screen.getByText("No sources enabled")).toBeTruthy();
   });
 
-  it("turns every chip on with Enable All, up to the most that can stream", async () => {
+  it("turns every chip on with Enable all, up to the most that can stream", async () => {
     open(5);
     await connect();
-    fireEvent.click(screen.getByRole("button", { name: "Enable All" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enable all" }));
     expect(sent().map((m) => m.chip)).toEqual(["a1", "a2", "a3", "a4"]);
     expect(sent()[0]).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 10 });
-    expect(screen.queryByText("No Sources Enabled")).toBeNull();
+    expect(screen.queryByText("No sources enabled")).toBeNull();
     expect(screen.getByRole("switch", { name: "Stream a4" }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("switch", { name: "Stream a5" }).getAttribute("aria-checked")).toBe("false");
   });
@@ -339,7 +339,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Frequency Range", "400 Hz");
+    await choose("Frequency range", "400 Hz");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 400, updates_per_second: 10 });
   });
 
@@ -347,7 +347,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Refresh Rate", "5 Hz");
+    await choose("Refresh rate", "5 Hz");
     expect(sent().at(-1)).toEqual({ type: "subscribe", chip: "a1", max_hz: 200, updates_per_second: 5 });
   });
 
@@ -355,7 +355,7 @@ describe("the stream page", () => {
     open();
     await connect();
     pick("a1");
-    await choose("Frequency Range", "Max");
+    await choose("Frequency range", "Max");
     expect(sent().at(-1).max_hz).toBe(800);
   });
 
@@ -367,7 +367,7 @@ describe("the stream page", () => {
     act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(9), peaks: [] }));
     act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(2), peaks: [] }));
     expect(chartProps().chips[0].peakHold).toEqual([9, 9, 9]);
-    fireEvent.click(screen.getByRole("button", { name: "Reset Peak Hold" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset peak hold" }));
     act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(2), peaks: [] }));
     expect(chartProps().chips[0].peakHold).toEqual([2, 2, 2]);
   });
@@ -393,7 +393,7 @@ describe("the stream page", () => {
     server(streamHeader("a1", 0));
     const configure = worker.posted.find((m) => (m as { type: string }).type === "configure");
     expect(configure).toMatchObject({ chip: "a1", windowSeconds: 1 });
-    expect(screen.getByRole("combobox", { name: "Averaging Time" }).textContent).toContain("Balanced");
+    expect(screen.getByRole("combobox", { name: "Averaging time" }).textContent).toContain("Balanced");
   });
 
   it.skip("stops feeding the worker while paused and keeps the socket", async () => {
@@ -446,7 +446,7 @@ describe("the stream page", () => {
   it("offers 100, 200, 400, 800 and Max", async () => {
     open();
     await connect();
-    fireEvent.click(screen.getByRole("combobox", { name: "Frequency Range" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Frequency range" }));
     const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(names).toEqual(expect.arrayContaining(["100 Hz", "200 Hz", "400 Hz", "800 Hz", "Max"]));
   });
@@ -538,10 +538,10 @@ describe("the stream page", () => {
     expect(screen.getByText("!! Move out of range").className).toContain("text-destructive");
   });
 
-  it("has a Live View link under Measure in the sidebar", async () => {
+  it("has a Live view link under Measure in the sidebar", async () => {
     stubApiWithStatus(() => ({ status: 404, body: { error: "not_found", message: "no" } }));
     renderRoute("/sessions");
-    const link = await screen.findByRole("link", { name: "Live View" });
+    const link = await screen.findByRole("link", { name: "Live view" });
     expect(link.getAttribute("href")).toBe("/stream");
   });
 });

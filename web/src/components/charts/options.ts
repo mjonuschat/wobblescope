@@ -224,7 +224,7 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
     yAxis: [
       {
         type: "value",
-        name: "Vibration Strength",
+        name: "Vibration strength",
         splitLine,
         min: 0,
         max: maxScale && maxScale > 0 ? maxScale : autoscale(chip, maxFreq),
@@ -235,7 +235,7 @@ export function psdOption({ chip, recommendation, maxFreq, maxScale }: PsdInput)
       },
       {
         type: "value",
-        name: "Remaining Vibration",
+        name: "Remaining vibration",
         min: 0,
         max: 1,
         splitLine: { show: false },
@@ -266,7 +266,7 @@ export function summedOption(summed: SummedPsd, maxFreq: number): EChartsCoreOpt
       textStyle: { color: text },
     },
     graphic: [{ type: "text", left: 0, top: 4, style: { text: "Axes", fill: MUTED, fontSize: 12 } }],
-    yAxis: { type: "value", name: "Vibration Strength", splitLine },
+    yAxis: { type: "value", name: "Vibration strength", splitLine },
     series: curves.map(([name, values]) => ({
       name,
       type: "line",

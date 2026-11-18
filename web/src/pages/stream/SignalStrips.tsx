@@ -130,7 +130,7 @@ export function SignalStrips({ chips, paused }: Props) {
                     }))
                   }
                 />
-                <Label htmlFor={`${chip}-auto-scale`}>Auto Scale</Label>
+                <Label htmlFor={`${chip}-auto-scale`}>Auto scale</Label>
               </div>
               <UnitInput
                 unit="mm/s²"

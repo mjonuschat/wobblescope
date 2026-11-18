@@ -100,7 +100,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
     <Panel title="Session" label="Session details">
       <Fields aria-label="The recording">
         {row("Source", sourceText(meta))}
-        {fileName(meta) !== null && row("File Name", fileName(meta))}
+        {fileName(meta) !== null && row("File name", fileName(meta))}
         {row("Created", formatTime(meta.created_at))}
         {row(
           "Mode",
@@ -111,7 +111,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
               : (meta.mode ?? "Not recorded"),
         )}
         {row("Outcome", outcomeText(meta.outcome))}
-        <Field label="Probe Points" className="col-span-full">
+        <Field label="Probe points" className="col-span-full">
           <ProbePoints points={meta.probe_points} />
         </Field>
       </Fields>
@@ -140,11 +140,11 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
         <Fields aria-label="Vibrations settings">
           {row("Size", `${meta.vibrations_run.size} mm`)}
           {row("Z Height", `${meta.vibrations_run.z_height} mm`)}
-          {row("Min Speed", `${meta.vibrations_run.min_speed} mm/s`)}
-          {row("Max Speed", `${meta.vibrations_run.max_speed} mm/s`)}
-          {row("Speed Increment", `${meta.vibrations_run.speed_increment} mm/s`)}
+          {row("Min speed", `${meta.vibrations_run.min_speed} mm/s`)}
+          {row("Max speed", `${meta.vibrations_run.max_speed} mm/s`)}
+          {row("Speed increment", `${meta.vibrations_run.speed_increment} mm/s`)}
           {row("Acceleration", `${meta.vibrations_run.accel} mm/s²`)}
-          {row("Travel Speed", `${meta.vibrations_run.travel_speed} mm/s`)}
+          {row("Travel speed", `${meta.vibrations_run.travel_speed} mm/s`)}
           {row("Kinematics", meta.vibrations_run.kinematics)}
         </Fields>
       )}
@@ -159,8 +159,8 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
       )}
       {analysis && (
         <Fields aria-label="How it was analysed">
-          {fit && row("Analysed Up To", `${fit.max_freq} Hz`)}
-          {row("Analysis Version", analysis.core_version)}
+          {fit && row("Analysed up to", `${fit.max_freq} Hz`)}
+          {row("Analysis version", analysis.core_version)}
         </Fields>
       )}
       {meta.notes.length > 0 && (
