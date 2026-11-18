@@ -3,7 +3,7 @@ import { Panel } from "@/ui-kit/Panel";
 import { Waiting } from "@/components/Waiting";
 import { EChart } from "@/components/charts/EChart";
 import { WIDE_CHART } from "@/components/charts/size";
-import { beltOverlayOption, beltScatterOption, beltSingleOption } from "@/components/charts/options";
+import { beltOverlayOption, beltScatterOption, beltSingleOption } from "@/components/charts/beltOptions";
 import { Button } from "@/components/ui/button";
 import type { BeltSide } from "@/lib/generated/BeltSide";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
