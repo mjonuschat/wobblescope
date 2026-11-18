@@ -27,6 +27,7 @@ import { formatMm, parseNumber } from "@/lib/parse";
 
 import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
+import { Alert } from "@/ui-kit/Alert";
 
 const isModeField = (key: OverrideKey) => key === "sweeping_accel" || key === "sweeping_period";
 
@@ -264,7 +265,9 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
       <FormCard title="Setup">
         <div className="space-y-5">
           {belts && settings.version_support === "too_old" && (
-            <p className="text-sm text-amber-400">{OLD_SOFTWARE_WARNING}</p>
+            <Alert tone="warning" variant="inline">
+              {OLD_SOFTWARE_WARNING}
+            </Alert>
           )}
           <ChoiceRow label="Chips" error={<FieldError name="chips" text={errorFor("chips")} />}>
             {chipList.chips.length === 0 ? (

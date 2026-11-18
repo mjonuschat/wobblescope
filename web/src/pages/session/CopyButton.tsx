@@ -38,7 +38,7 @@ export function CopyButton({ text }: { text: string }) {
         <TooltipTrigger
           render={<Button type="button" variant="outline" size="icon" aria-label="Copy" onClick={() => void copy()} />}
         >
-          {state === "copied" ? <CheckIcon className="text-emerald-400" /> : <CopyIcon />}
+          {state === "copied" ? <CheckIcon className="text-success" /> : <CopyIcon />}
         </TooltipTrigger>
         <TooltipContent side="top">Copy to clipboard</TooltipContent>
       </Tooltip>

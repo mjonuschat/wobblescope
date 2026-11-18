@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { DownloadIcon, PinIcon, PinOffIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,9 @@ const PIN_HINTS = {
 };
 
 const OUTCOME_CLASS: Record<OutcomeKind, string> = {
-  Complete: "border-emerald-500/50 text-emerald-400",
-  Incomplete: "border-amber-500/50 text-amber-400",
-  Failed: "border-red-500/50 text-red-400",
+  Complete: "border-success/50 text-success",
+  Incomplete: "border-warning/50 text-warning",
+  Failed: "border-destructive/50 text-destructive",
 };
 
 function IconAction({
@@ -114,7 +114,7 @@ export function SessionsPage() {
       </div>
     );
   } else {
-    const head = "h-9 text-xs font-medium uppercase tracking-wide text-muted-foreground";
+    const head = "h-9 text-xs font-medium text-muted-foreground";
     const filter = (column: FilterColumn) => (
       <ColumnFilter column={column} filters={filters} onChange={setFilters} all={all.data?.sessions ?? []} />
     );

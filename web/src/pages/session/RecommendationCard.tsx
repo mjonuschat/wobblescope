@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Field, Fields } from "@/components/Fields";
-import { Panel } from "@/components/Panel";
+import { Field, Fields } from "@/ui-kit/Fields";
+import { Panel } from "@/ui-kit/Panel";
 import { pointLabel } from "@/components/charts/options";
 import { formatAccel, formatHz } from "@/lib/format";
 import type { CalibrationResult } from "@/lib/generated/CalibrationResult";
@@ -10,6 +10,7 @@ import type { ProbePoint } from "@/lib/generated/ProbePoint";
 import type { Recommendation } from "@/lib/generated/Recommendation";
 
 import { CopyButton } from "./CopyButton";
+import { subheadingClass } from "@/ui-kit/CardLabel";
 
 const MAX_ACCEL_HINT =
   "Above this acceleration the shaper rounds corners more than you may want. It is a suggestion, not a limit of your printer.";
@@ -54,7 +55,7 @@ interface ShaperProps {
 function Shaper({ result, snippet, heading, damping, dampingHint, byChip }: ShaperProps) {
   return (
     <section aria-label={heading} className={heading ? "min-w-0 space-y-3 rounded-lg border p-4" : "space-y-3"}>
-      {heading && <h3 className="text-xs uppercase tracking-wide text-muted-foreground">{heading}</h3>}
+      {heading && <h3 className={subheadingClass}>{heading}</h3>}
       <p className="text-xl font-semibold">
         {result.name} at {formatHz(result.freq)} Hz
       </p>

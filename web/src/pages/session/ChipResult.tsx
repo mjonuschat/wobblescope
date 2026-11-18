@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { psdOption } from "@/components/charts/options";
 import { formatHz } from "@/lib/format";

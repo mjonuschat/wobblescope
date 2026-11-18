@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Field, Fields } from "@/components/Fields";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, Fields } from "@/ui-kit/Fields";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ApiClientError } from "@/lib/api/client";
 import { useCheckChips, useChips, useSettings, useStatus } from "@/lib/api/queries";
 import type { AxisLimits } from "@/lib/generated/AxisLimits";
@@ -9,6 +9,8 @@ import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { Setting } from "@/lib/generated/Setting";
 
 import { AccelerometersCard } from "./AccelerometersCard";
+import { CardLabel } from "@/ui-kit/CardLabel";
+import { PageHeader } from "@/ui-kit/PageHeader";
 
 const UNKNOWN = "unknown";
 
@@ -22,7 +24,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
+        <CardLabel>{title}</CardLabel>
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -130,7 +132,7 @@ export function PrinterPage() {
   const ready = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-xl font-semibold">Printer</h1>
+      <PageHeader title="Printer" />
       {settings.isPending && <p className="text-sm text-muted-foreground">Reading the printer's settings…</p>}
       {settings.isError && (
         <p role="alert" className="text-sm text-destructive">

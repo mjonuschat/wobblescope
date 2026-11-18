@@ -1,6 +1,9 @@
 import type { KlippyState } from "@/lib/generated/KlippyState";
 import { useStatus } from "@/lib/api/queries";
 import { BUILD_VERSION } from "@/lib/version";
+import { Button } from "@/components/ui/button";
+import type { Tone } from "@/ui-kit/tone";
+import { Alert } from "@/ui-kit/Alert";
 
 const KLIPPY_WORDS: Record<KlippyState, string> = {
   unknown: "Klipper's state is unknown",
@@ -12,6 +15,7 @@ const KLIPPY_WORDS: Record<KlippyState, string> = {
 };
 
 interface Notice {
+  tone: Tone;
   /** `alert` for a failure the user may have to act on, `status` for a wait. */
   role: "alert" | "status";
   text: string;
@@ -22,11 +26,12 @@ interface Notice {
 
 /** The banner's content, by the precedence of the status request, Moonraker, then Klipper. */
 function notice(status: ReturnType<typeof useStatus>): Notice | null {
-  if (status.isError) return { role: "alert", text: status.error.message };
+  if (status.isError) return { tone: "danger", role: "alert", text: status.error.message };
   if (!status.data) return null;
   const { moonraker, klippy } = status.data;
   if (status.data.version !== BUILD_VERSION) {
     return {
+      tone: "info",
       role: "alert",
       text: "Wobblescope was updated since this page loaded",
       detail: "Reload to use the new version.",
@@ -34,16 +39,22 @@ function notice(status: ReturnType<typeof useStatus>): Notice | null {
     };
   }
   if (moonraker.state === "connecting") {
-    return { role: "status", text: "Connecting to Moonraker" };
+    return { tone: "warning", role: "status", text: "Connecting to Moonraker" };
   }
   if (moonraker.state !== "connected") {
     return {
+      tone: "danger",
       role: "alert",
       text: moonraker.message ?? `Moonraker is ${moonraker.state}`,
     };
   }
   if (klippy.state !== "ready") {
-    return { role: "status", text: KLIPPY_WORDS[klippy.state], detail: klippy.message };
+    return {
+      tone: klippy.state === "error" || klippy.state === "shutdown" ? "danger" : "warning",
+      role: "status",
+      text: KLIPPY_WORDS[klippy.state],
+      detail: klippy.message,
+    };
   }
   return null;
 }
@@ -53,18 +64,20 @@ export function StatusBanner() {
   const content = notice(useStatus());
   if (!content) return null;
   return (
-    <div role={content.role} className="border-b border-amber-800 bg-amber-950 px-6 py-2 text-sm text-amber-100">
+    <Alert
+      tone={content.tone}
+      variant="banner"
+      role={content.role}
+      action={
+        content.reload ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        ) : undefined
+      }
+    >
       <span className="font-medium">{content.text}</span>
-      {content.detail ? <span className="ml-2 opacity-80">{content.detail}</span> : null}
-      {content.reload ? (
-        <button
-          type="button"
-          className="ml-3 rounded border border-amber-600 px-2 py-0.5 hover:bg-amber-900"
-          onClick={() => window.location.reload()}
-        >
-          Reload
-        </button>
-      ) : null}
-    </div>
+      {content.detail ? <span className="ml-2 text-muted-foreground">{content.detail}</span> : null}
+    </Alert>
   );
 }

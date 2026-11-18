@@ -13,6 +13,7 @@ import { KIND_PAGES, KIND_TITLES } from "./kinds";
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { useLive } from "./useLive";
 import { useStartedRun } from "./useStartedRun";
+import { PageHeader } from "@/ui-kit/PageHeader";
 
 const STEPS = [
   { id: "setup", label: "Setup" },
@@ -123,7 +124,7 @@ export function AxesMapPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-xl font-semibold">Axes map calibration</h1>
+      <PageHeader title="Axes map calibration" />
       <Steps
         steps={STEPS}
         current={step}

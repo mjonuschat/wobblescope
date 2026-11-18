@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { chipLabel } from "@/lib/format";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";

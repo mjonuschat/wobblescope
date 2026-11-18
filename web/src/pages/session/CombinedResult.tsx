@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { summedOption } from "@/components/charts/options";
 import type { SummedPsd } from "@/lib/generated/SummedPsd";

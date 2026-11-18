@@ -13,6 +13,7 @@ import { KIND_PAGES, KIND_TITLES, offersBelts } from "./kinds";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 import { useStartedRun } from "./useStartedRun";
+import { PageHeader } from "@/ui-kit/PageHeader";
 
 const STEPS = [
   { id: "setup", label: "Setup" },
@@ -158,7 +159,7 @@ export function RunPage({ kind }: { kind: TestKind }) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-xl font-semibold">{KIND_TITLES[kind]}</h1>
+      <PageHeader title={KIND_TITLES[kind]} />
       <Steps
         steps={STEPS}
         current={step}

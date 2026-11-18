@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -25,6 +25,7 @@ import { SessionResults } from "@/pages/session/SessionResults";
 import { LiveChart } from "./LiveChart";
 import { useWarningToasts } from "./useWarningToasts";
 import { formatDuration, formatPosition, segmentLabel } from "./planning";
+import { Alert } from "@/ui-kit/Alert";
 
 const PHASE_WORDS: Record<Phase, string> = {
   positioning: "Moving to the test point",
@@ -142,9 +143,9 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
   return (
     <div className="space-y-4">
       {!connected && (
-        <p role="status" className="text-sm text-amber-400">
+        <Alert tone="warning" variant="inline">
           Connection lost, this may be out of date.
-        </p>
+        </Alert>
       )}
       <Panel title="Progress">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -189,13 +190,7 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
         <p role="status" className="text-sm text-muted-foreground">
           {left !== null ? `Continuing to the results in ${left} s` : ""}
         </p>
-        <Button
-          type="button"
-          size="lg"
-          className="ml-auto bg-neutral-300 px-5 text-neutral-900 hover:bg-neutral-200"
-          disabled={ended === null}
-          onClick={onNext}
-        >
+        <Button type="button" size="lg" className="ml-auto px-5" disabled={ended === null} onClick={onNext}>
           Next
           <ArrowRightIcon data-icon="inline-end" />
         </Button>
@@ -218,9 +213,9 @@ export function StartingView({ connected }: StartingProps) {
           Starting…
         </p>
         {!connected && (
-          <p className="text-sm text-amber-400">
+          <Alert tone="warning" variant="inline">
             The live view is not connected. The test is running, but its progress cannot be shown.
-          </p>
+          </Alert>
         )}
       </Panel>
     </div>
@@ -233,10 +228,10 @@ interface ResultProps {
 }
 
 export const OUTCOME_ICON: Record<FinishedOutcome, { Icon: LucideIcon; className: string }> = {
-  complete: { Icon: CircleCheckIcon, className: "text-emerald-400" },
-  incomplete: { Icon: TriangleAlertIcon, className: "text-amber-400" },
-  failed: { Icon: OctagonXIcon, className: "text-red-400" },
-  no_session: { Icon: OctagonXIcon, className: "text-red-400" },
+  complete: { Icon: CircleCheckIcon, className: "text-success" },
+  incomplete: { Icon: TriangleAlertIcon, className: "text-warning" },
+  failed: { Icon: OctagonXIcon, className: "text-destructive" },
+  no_session: { Icon: OctagonXIcon, className: "text-destructive" },
 };
 
 /**
@@ -294,15 +289,15 @@ export function ResultView({ last, onNewTest }: ResultProps) {
       {details}
       {summary}
       {last.needs_restart && (
-        <p role="alert" className="text-sm text-amber-400">
+        <Alert tone="warning" variant="inline" role="alert">
           {RESTART_INSTRUCTION}
-        </p>
+        </Alert>
       )}
       {last.motion_uncertain && (
         <div className="space-y-1">
-          <p role="alert" className="text-sm text-amber-400">
+          <Alert tone="warning" variant="inline" role="alert">
             The printer may still be moving.
-          </p>
+          </Alert>
           <p className="text-sm text-muted-foreground">Use the stop button at the top right to stop it.</p>
         </div>
       )}

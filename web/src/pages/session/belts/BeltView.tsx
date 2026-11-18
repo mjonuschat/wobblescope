@@ -1,5 +1,5 @@
 import type { useBelts } from "@/analysis/useBelts";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { Waiting } from "@/components/Waiting";
 import { EChart } from "@/components/charts/EChart";
 import { beltOverlayOption, beltScatterOption, beltSingleOption } from "@/components/charts/options";

@@ -1,10 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Availability } from "@/lib/generated/Availability";
 import type { Chip } from "@/lib/generated/Chip";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
+import { CardLabel } from "@/ui-kit/CardLabel";
 
 interface Props {
   chips: ChipsSnapshot;
@@ -40,9 +41,7 @@ export function AccelerometersCard({ chips, onCheck, checking, checkBlocked }: P
   return (
     <Card>
       <CardHeader className="flex items-center justify-between gap-4">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Accelerometers
-        </CardTitle>
+        <CardLabel>Accelerometers</CardLabel>
         <Button
           type="button"
           variant="outline"

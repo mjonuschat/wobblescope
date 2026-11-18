@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { useSpectrogram } from "@/analysis/useSpectrogram";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { pointLabel, spectrogramOption } from "@/components/charts/options";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";

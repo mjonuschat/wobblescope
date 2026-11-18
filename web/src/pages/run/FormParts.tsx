@@ -4,9 +4,10 @@ import type { ReactNode } from "react";
 
 import { homedTone } from "@/components/PrinterControls";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { homeMutationKey, usePrinterState } from "@/lib/api/queries";
+import { CardLabel } from "@/ui-kit/CardLabel";
 
 /** The inline error under a field; `name` is what the field's `aria-describedby` points at. */
 export function FieldError({ name, text }: { name: string; text: string | undefined }) {
@@ -22,7 +23,7 @@ export function FormCard({ title, action, children }: { title: string; action?: 
   return (
     <Card>
       <CardHeader className="flex items-center justify-between gap-4">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
+        <CardLabel>{title}</CardLabel>
         {action}
       </CardHeader>
       <CardContent>{children}</CardContent>

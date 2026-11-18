@@ -119,10 +119,8 @@ export function DisplaySettings(props: Props) {
   );
 }
 
-export const PAUSE_COLOURS =
-  "border-orange-500/40 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300";
-export const RESUME_COLOURS =
-  "border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300";
+export const PAUSE_COLOURS = "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20 hover:text-warning";
+export const RESUME_COLOURS = "border-success/40 bg-success/10 text-success hover:bg-success/20 hover:text-success";
 
 /** Freezes the charts, or lets them run again. The connection stays open either way. */
 export function PauseButton({ paused, onPaused }: { paused: boolean; onPaused: (value: boolean) => void }) {

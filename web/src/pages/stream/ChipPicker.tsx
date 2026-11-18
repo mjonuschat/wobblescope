@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Chip } from "@/lib/generated/Chip";
+import { Alert } from "@/ui-kit/Alert";
 
 interface Props {
   chips: Chip[];
@@ -57,7 +58,11 @@ export function ChipPicker({ chips, selected, maxChips, onToggle, badge }: Props
                 {!on && chip.availability.state === "unavailable" && (
                   <span className="text-sm text-destructive">unavailable: {chip.availability.reason}</span>
                 )}
-                {blocked && <span className="text-sm text-amber-400">at most {maxChips} chips at once</span>}
+                {blocked && (
+                  <Alert tone="warning" variant="inline" className="inline-flex">
+                    at most {maxChips} chips at once
+                  </Alert>
+                )}
               </TableCell>
             </TableRow>
           );

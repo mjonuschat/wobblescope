@@ -1,7 +1,7 @@
 import { PlayIcon, SquareIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { UnitInput } from "@/components/UnitInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import type { HoldState } from "@/lib/generated/HoldState";
 
 import { PAUSE_COLOURS, RESUME_COLOURS } from "./DisplaySettings";
 import type { HoldApi } from "./useHold";
+import { Alert } from "@/ui-kit/Alert";
 
 const MIN_HZ = 5;
 const MAX_HZ = 200;
@@ -197,9 +198,13 @@ export function HoldPanel({ hold, frequencyOfInterest, streaming }: Props) {
         </div>
       )}
       {state && running && PHASES[state.phase] && <p className="text-sm">{PHASES[state.phase]}</p>}
-      {hold.rejected && <p className="text-sm text-amber-400">{hold.rejected}</p>}
+      {hold.rejected && (
+        <Alert tone="warning" variant="inline">
+          {hold.rejected}
+        </Alert>
+      )}
       {hold.failures.length > 0 && (
-        <ul className="list-disc space-y-1 pl-5 text-sm text-amber-400">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-warning">
           {hold.failures.map((f) => (
             <li key={f.check}>
               {f.message}
@@ -208,12 +213,16 @@ export function HoldPanel({ hold, frequencyOfInterest, streaming }: Props) {
           ))}
         </ul>
       )}
-      {hold.error && <p className="text-sm text-red-400">{hold.error}</p>}
+      {hold.error && (
+        <Alert tone="danger" variant="inline">
+          {hold.error}
+        </Alert>
+      )}
       {hold.ended && (
         <div className="space-y-2 text-sm">
           {typeof hold.ended.reason === "object" && <p>The hold failed: {hold.ended.reason.failed.message}</p>}
           {typeof hold.ended.restore === "object" && (
-            <div className="space-y-2 text-red-400">
+            <div className="space-y-2 text-destructive">
               <p>The printer's settings could not be put back. Still changed:</p>
               <ul className="list-disc pl-5">
                 {hold.ended.restore.failed.left_changed.map((item) => (

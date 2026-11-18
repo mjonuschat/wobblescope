@@ -2,8 +2,8 @@ import type { EChartsCoreOption } from "echarts/core";
 import { type ReactNode, useMemo } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
-import { Field, Fields } from "@/components/Fields";
-import { Panel } from "@/components/Panel";
+import { Field, Fields } from "@/ui-kit/Fields";
+import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { Button } from "@/components/ui/button";
 import { chipLabel } from "@/lib/format";
@@ -22,6 +22,7 @@ import {
   polarHeatmapOption,
   speedProfileOption,
 } from "./vibrationsOptions";
+import { Alert } from "@/ui-kit/Alert";
 
 /** The height of the two polar plots, which leaves room for their 15 degree labels. */
 const POLAR_HEIGHT = 440;
@@ -72,7 +73,11 @@ function MotorFigures({ motor }: { motor: MotorResult }) {
         <Field label="Resonant Frequency">{`${motor.fr.toFixed(1)} Hz`}</Field>
         <Field label="Damping Ratio">{motor.zeta === null ? "Not available" : motor.zeta.toFixed(3)}</Field>
       </Fields>
-      {motor.low_freq_warning && <p className="text-sm text-amber-400">{LOW_FREQ_WARNING}</p>}
+      {motor.low_freq_warning && (
+        <Alert tone="warning" variant="inline">
+          {LOW_FREQ_WARNING}
+        </Alert>
+      )}
     </div>
   );
 }

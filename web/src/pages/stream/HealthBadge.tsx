@@ -9,8 +9,8 @@ interface Props {
 }
 
 const DOTS = {
-  ok: "bg-green-500",
-  warning: "bg-amber-500",
+  ok: "bg-success",
+  warning: "bg-warning",
   error: "bg-destructive",
 } as const;
 

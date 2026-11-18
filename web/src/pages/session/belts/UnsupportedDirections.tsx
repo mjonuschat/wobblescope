@@ -1,4 +1,4 @@
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { pointLabel } from "@/components/charts/options";
 import type { Direction } from "@/lib/generated/Direction";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";

@@ -1,6 +1,7 @@
 import type { StatusResponse } from "@/lib/generated/StatusResponse";
 import { useStatus } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
+import { toneDot } from "@/ui-kit/tone";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type Tone = "ok" | "warn" | "error" | "off";
@@ -51,9 +52,9 @@ export function connections(status: StatusResponse | undefined): Connection[] {
 
 export function Dot({ tone }: { tone: Tone }) {
   const color = {
-    ok: "bg-emerald-400",
-    warn: "bg-amber-400",
-    error: "bg-red-400",
+    ok: toneDot.success,
+    warn: toneDot.warning,
+    error: toneDot.danger,
     off: "bg-muted-foreground/50",
   }[tone];
   return <span aria-hidden="true" className={cn("inline-block size-2 rounded-full", color)} />;

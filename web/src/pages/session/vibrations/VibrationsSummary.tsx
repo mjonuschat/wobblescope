@@ -3,18 +3,19 @@ import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import type { Zone } from "@/lib/generated/Zone";
 
 import { GOOD_COLOR } from "./vibrationsOptions";
+import { subheadingClass } from "@/ui-kit/CardLabel";
 
 const round1 = (value: number) => Number(value.toFixed(1));
 
 /** The index of a zone's end can point one past the grid. Keep it on it. */
 const at = (values: number[], index: number) => values[Math.max(0, Math.min(index, values.length - 1))];
 
-const heading = "text-xs uppercase tracking-wide text-muted-foreground";
+const heading = subheadingClass;
 
 function Badge({ n }: { n: number }) {
   return (
     <span
-      className="inline-flex size-5 items-center justify-center rounded-full text-[11px] font-bold text-black"
+      className="inline-flex size-5 items-center justify-center rounded-full text-[11px] font-medium text-brand-foreground"
       style={{ backgroundColor: GOOD_COLOR }}
     >
       {n}

@@ -14,7 +14,7 @@ interface FieldProps {
 export function Field({ label, hint, className, children }: FieldProps) {
   return (
     <div className={className}>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs text-muted-foreground">
         {hint ? (
           <Tooltip>
             <TooltipTrigger
@@ -22,14 +22,14 @@ export function Field({ label, hint, className, children }: FieldProps) {
                 <button
                   type="button"
                   aria-label={`About ${label.toLowerCase()}`}
-                  className="-m-1 flex cursor-help items-center gap-1 rounded p-1 uppercase tracking-wide hover:text-foreground focus-visible:text-foreground"
+                  className="-m-1 flex cursor-help items-center gap-1 rounded p-1 hover:text-foreground focus-visible:text-foreground"
                 />
               }
             >
               {label}
               <InfoIcon aria-hidden="true" className="size-3.5" />
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-64 normal-case tracking-normal">
+            <TooltipContent side="top" className="max-w-64">
               {hint}
             </TooltipContent>
           </Tooltip>

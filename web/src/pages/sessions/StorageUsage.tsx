@@ -1,5 +1,5 @@
-import { Field, Fields } from "@/components/Fields";
-import { Panel } from "@/components/Panel";
+import { Field, Fields } from "@/ui-kit/Fields";
+import { Panel } from "@/ui-kit/Panel";
 import { formatBytes } from "@/lib/format";
 import type { Usage } from "@/lib/generated/Usage";
 

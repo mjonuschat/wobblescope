@@ -44,14 +44,14 @@ describe("the printer controls in the header", () => {
     api("xyz");
     renderRoute("/");
     const button = await screen.findByRole("button", { name: "Home" });
-    await waitFor(() => expect(button.className).toContain("text-emerald-400"));
+    await waitFor(() => expect(button.className).toContain("text-success"));
   });
 
-  it("shows a partly homed printer in amber", async () => {
+  it("shows a partly homed printer in the warning color", async () => {
     api("xy");
     renderRoute("/");
     const button = await screen.findByRole("button", { name: "Home" });
-    await waitFor(() => expect(button.className).toContain("text-amber-400"));
+    await waitFor(() => expect(button.className).toContain("text-warning"));
   });
 
   it("needs two presses to stop the printer", async () => {

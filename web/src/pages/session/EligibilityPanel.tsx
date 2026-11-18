@@ -1,12 +1,13 @@
 import { CircleCheckIcon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
 
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { pointLabel } from "@/components/charts/options";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { DatasetDecision } from "@/lib/generated/DatasetDecision";
 import type { ProbePoint } from "@/lib/generated/ProbePoint";
+import { Alert } from "@/ui-kit/Alert";
 
 /** The chips with a dataset that health or coverage excludes, or that an override includes. */
 function overridable(analysis: Analysis) {
@@ -38,9 +39,9 @@ export function verdict(d: DatasetDecision): { tone: Tone; headline: string; det
 }
 
 const TONES = {
-  good: { Icon: CircleCheckIcon, className: "text-emerald-400" },
-  warn: { Icon: TriangleAlertIcon, className: "text-amber-400" },
-  bad: { Icon: OctagonXIcon, className: "text-red-400" },
+  good: { Icon: CircleCheckIcon, className: "text-success" },
+  warn: { Icon: TriangleAlertIcon, className: "text-warning" },
+  bad: { Icon: OctagonXIcon, className: "text-destructive" },
 } as const;
 
 export function EligibilityPanel({
@@ -82,7 +83,11 @@ export function EligibilityPanel({
                   : {headline}
                 </p>
                 {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
-                {d.dropped !== null && <p className="text-sm text-amber-400">Could not be analysed: {d.dropped}</p>}
+                {d.dropped !== null && (
+                  <Alert tone="warning" variant="inline">
+                    Could not be analysed: {d.dropped}
+                  </Alert>
+                )}
               </div>
             </li>
           );

@@ -2,7 +2,7 @@ import { RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
 import { HintLabel } from "@/components/HintLabel";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { UnitInput } from "@/components/UnitInput";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

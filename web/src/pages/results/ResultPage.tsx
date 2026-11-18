@@ -17,6 +17,8 @@ import type { ResultDetail } from "@/lib/generated/ResultDetail";
 import { AxisResults } from "../session/AxisResults";
 import { MetaPanel } from "../session/MetaPanel";
 import { compareAnalyses } from "./compare";
+import { Alert } from "@/ui-kit/Alert";
+import { PageHeader } from "@/ui-kit/PageHeader";
 
 type AxisSnapshot = ResultDetail["record"]["axes"][number];
 
@@ -59,18 +61,17 @@ function Comparison({ rid, detail, axis }: { rid: string; detail: ResultDetail; 
   return (
     <div className="space-y-2">
       {versionDiffers && (
-        <p role="status" className="rounded-lg border border-amber-500 p-3 text-sm text-amber-400">
+        <Alert tone="warning">
           This result was saved with core {record.core_version} and re-analysed with core{" "}
           {fresh.data.analysis.core_version}. Differences below may come from the version.
-        </p>
+        </Alert>
       )}
       {sameAnswer ? (
         <p className="text-sm text-muted-foreground">
           The saved data is intact: a fresh analysis gives the same answer.
         </p>
       ) : (
-        <div role="alert" className="space-y-1 rounded-lg border border-amber-500 p-3 text-sm">
-          <p className="text-amber-400">A fresh analysis of the saved data gives a different answer:</p>
+        <Alert tone="warning" role="alert" title="A fresh analysis of the saved data gives a different answer:">
           <ul className="list-disc pl-5">
             {differences.map((d) => (
               <li key={d}>
@@ -78,7 +79,7 @@ function Comparison({ rid, detail, axis }: { rid: string; detail: ResultDetail; 
               </li>
             ))}
           </ul>
-        </div>
+        </Alert>
       )}
     </div>
   );
@@ -133,12 +134,14 @@ export function ResultPage({ rid }: { rid: string }) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Button render={<Link to="/results" />} variant="outline" size="icon" aria-label="Back to results">
-          <ArrowLeftIcon />
-        </Button>
-        <h1 className="text-xl font-semibold">{record.label ?? record.id}</h1>
-      </div>
+      <PageHeader
+        title={record.label ?? record.id}
+        leading={
+          <Button render={<Link to="/results" />} variant="outline" size="icon" aria-label="Back to results">
+            <ArrowLeftIcon />
+          </Button>
+        }
+      />
       <p className="text-sm text-muted-foreground">
         Saved {formatTime(record.created_at)} from session{" "}
         <Link to="/sessions/$id" params={{ id: record.session_id }} className="underline">

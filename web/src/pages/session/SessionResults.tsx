@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/api/queries";

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AudioLinesIcon } from "lucide-react";
 
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -26,6 +26,8 @@ import { SpectrumChart } from "./SpectrumChart";
 import { SharedAutoScale, fixedScale } from "@/stream/spectrogramScale";
 import { useHold } from "./useHold";
 import { useSignalBuffers } from "./useSignalBuffers";
+import { Alert } from "@/ui-kit/Alert";
+import { PageHeader } from "@/ui-kit/PageHeader";
 
 interface Props {
   /** Tests pass a fake spectrum worker. */
@@ -148,7 +150,7 @@ export function StreamPage({ createWorker }: Props) {
   if (!stream.state.connected) {
     return (
       <section className="mx-auto max-w-5xl space-y-4">
-        <h1 className="text-xl font-semibold">Live View</h1>
+        <PageHeader title="Live View" />
         <p className="text-sm text-muted-foreground">Not connected to the daemon. The stream starts when it is.</p>
       </section>
     );
@@ -156,8 +158,12 @@ export function StreamPage({ createWorker }: Props) {
 
   return (
     <section className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-xl font-semibold">Live View</h1>
-      {hello?.printing && <p className="text-sm text-amber-400">A print is running: showing a lower update rate</p>}
+      <PageHeader title="Live View" />
+      {hello?.printing && (
+        <Alert tone="warning" variant="inline">
+          A print is running: showing a lower update rate
+        </Alert>
+      )}
       {hello && (
         <Panel title="Settings" action={SHOW_PAUSE ? <PauseButton paused={paused} onPaused={pause} /> : undefined}>
           <DisplaySettings

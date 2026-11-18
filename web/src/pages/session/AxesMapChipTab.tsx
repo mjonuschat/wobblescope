@@ -1,6 +1,6 @@
-import { Callout } from "@/components/Callout";
-import { Field, Fields } from "@/components/Fields";
-import { Panel } from "@/components/Panel";
+import { Alert } from "@/ui-kit/Alert";
+import { Field, Fields } from "@/ui-kit/Fields";
+import { Panel } from "@/ui-kit/Panel";
 import { Dot, type Tone } from "@/components/StatusDots";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AxesMapChip } from "@/lib/generated/AxesMapChip";
@@ -125,13 +125,13 @@ export function AxesMapSummary({
         </div>
       )}
       {(state !== null || result.quality.status !== "Ok") && (
-        <Callout
-          tone={result.quality.status === "Error" ? "error" : "warn"}
+        <Alert
+          tone={result.quality.status === "Error" ? "danger" : "warning"}
           title={`Detection quality: ${QUALITY_WORDS[result.quality.status].word}`}
         >
           {state && <p>{state}</p>}
           {result.quality.status !== "Ok" && result.quality.messages.map((m) => <p key={m}>{m}</p>)}
-        </Callout>
+        </Alert>
       )}
     </div>
   );

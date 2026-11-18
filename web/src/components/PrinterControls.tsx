@@ -20,8 +20,8 @@ export function PrinterControls() {
 
   const homedAxes = printer.data?.homed_axes ?? "";
   const homedClass = {
-    full: "text-emerald-400",
-    partial: "text-amber-400",
+    full: "text-success",
+    partial: "text-warning",
     none: "",
   }[homedTone(homedAxes)];
   const stopping = stop.isPending;
@@ -29,9 +29,9 @@ export function PrinterControls() {
 
   return (
     <div className="ml-auto flex items-center gap-3">
-      {home.isError && <span className="text-amber-400">{home.error.message}</span>}
-      {stop.isError && <span className="text-red-400">{stop.error.message}</span>}
-      {stop.isSuccess && <span className="font-mono text-red-400">Stop sent</span>}
+      {home.isError && <span className="text-warning">{home.error.message}</span>}
+      {stop.isError && <span className="text-destructive">{stop.error.message}</span>}
+      {stop.isSuccess && <span className="font-mono text-destructive">Stop sent</span>}
       <Tooltip>
         <TooltipTrigger
           render={
@@ -44,8 +44,8 @@ export function PrinterControls() {
               className={cn(
                 "flex h-9 items-center rounded-md border px-2 transition-colors focus-visible:outline-2 disabled:opacity-50",
                 confirm.armed
-                  ? "border-red-500 bg-red-600 text-white hover:bg-red-500"
-                  : "text-red-400 hover:bg-accent",
+                  ? "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : "text-destructive hover:bg-accent",
               )}
             />
           }

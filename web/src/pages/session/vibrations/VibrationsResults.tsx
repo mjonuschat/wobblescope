@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { useVibrations } from "@/analysis/useVibrations";
-import { Panel } from "@/components/Panel";
+import { Panel } from "@/ui-kit/Panel";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { chipLabel } from "@/lib/format";

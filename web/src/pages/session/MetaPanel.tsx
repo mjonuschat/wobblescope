@@ -1,8 +1,8 @@
 import { ChevronDownIcon } from "lucide-react";
 import { useState } from "react";
 
-import { Field, Fields } from "@/components/Fields";
-import { Panel } from "@/components/Panel";
+import { Field, Fields } from "@/ui-kit/Fields";
+import { Panel } from "@/ui-kit/Panel";
 import { pointLabel } from "@/components/charts/options";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatTime } from "@/lib/format";
@@ -13,6 +13,7 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { formatMap } from "./axesMapFormat";
 import { directionLabel } from "./belts/UnsupportedDirections";
 import { effectiveSettings } from "./fit";
+import { subheadingClass } from "@/ui-kit/CardLabel";
 
 function outcomeText(outcome: Outcome): string {
   if (outcome === "Complete") return "Complete";
@@ -201,7 +202,7 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
       </Table>
       {degraded.length > 0 && (
         <div className="space-y-1 text-sm">
-          <h3 className="text-xs uppercase tracking-wide text-muted-foreground">Degraded segments</h3>
+          <h3 className={subheadingClass}>Degraded segments</h3>
           <ul className="list-disc pl-5 text-muted-foreground">
             {degraded.map((d) => (
               <li key={d.key}>
