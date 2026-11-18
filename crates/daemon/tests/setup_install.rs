@@ -215,18 +215,17 @@ async fn a_first_install_writes_the_unit_the_config_and_the_service_list_entry_a
     assert_eq!(systemd.count("enable wobblescope"), 1);
     assert_eq!(systemd.count("restart wobblescope"), 1);
     assert_eq!(rig.printer.restarts(), 0);
-    assert!(!rig.install_dir().join(".pending-service-restart").exists());
     let (check, report) = rig.run(Mode::Check, None).await;
     assert_eq!(check, Ok(true), "{report}");
 }
 
 #[tokio::test]
-async fn a_second_run_finds_everything_current_and_restarts_nothing() {
+async fn a_second_run_finds_the_files_current_and_restarts_the_service_onto_the_installed_binary() {
     let rig = Rig::new().await;
     rig.install().await.0.unwrap();
     let (result, out) = rig.install().await;
     assert_eq!(result, Ok(true), "{out}");
-    assert_eq!(rig.systemd.count("restart wobblescope"), 1);
+    assert_eq!(rig.systemd.count("restart wobblescope"), 2);
     assert_eq!(rig.systemd.count("enable wobblescope"), 1);
     assert_eq!(rig.printer.restarts(), 0);
     assert!(
@@ -321,15 +320,13 @@ async fn remove_takes_out_the_service_and_its_list_entry_and_keeps_the_rest() {
 }
 
 #[tokio::test]
-async fn a_failed_service_restart_leaves_a_marker_that_the_next_run_acts_on() {
+async fn a_failed_service_restart_stops_the_run_and_a_rerun_restarts_it() {
     let rig = Rig::new().await;
     rig.systemd.0.lock().unwrap().fail_on = Some("restart wobblescope".to_owned());
     assert!(rig.install().await.0.is_err());
-    assert!(rig.install_dir().join(".pending-service-restart").exists());
     let (result, out) = rig.install().await;
     assert_eq!(result, Ok(true), "{out}");
     assert_eq!(rig.systemd.count("restart wobblescope"), 2);
-    assert!(!rig.install_dir().join(".pending-service-restart").exists());
 }
 
 #[tokio::test]

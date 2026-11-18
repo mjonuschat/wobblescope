@@ -13,10 +13,6 @@ use super::render::{self, SERVICE};
 use super::{Options, SetupError};
 use crate::config::DEFAULT_MOONRAKER_URL;
 
-/// Left beside the binary before a change the service only sees after a restart, and deleted
-/// once that restart happened.
-const SERVICE_MARKER: &str = ".pending-service-restart";
-
 /// What a step found and did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {
@@ -61,10 +57,6 @@ impl Paths {
             asvc: disc.data_path.clone().map(|p| p.join("moonraker.asvc")),
             install_dir,
         }
-    }
-
-    fn marker(&self, name: &str) -> PathBuf {
-        self.install_dir.join(name)
     }
 }
 
@@ -117,19 +109,6 @@ fn put(path: &Path, text: &str, mode: u32, owner: Option<(u32, u32)>) -> Result<
     })
 }
 
-/// Creates the empty marker `path` when it is not there yet.
-fn mark(path: &Path, owner: Option<(u32, u32)>) -> Result<(), SetupError> {
-    if !path.exists() {
-        write_atomic(path, b"", Some(0o644), owner)
-            .map_err(io_err(format!("cannot write {}", path.display())))?;
-    }
-    Ok(())
-}
-
-fn clear(path: &Path) {
-    let _ = fs::remove_file(path);
-}
-
 /// Rewrites a Moonraker-owned file, keeping its owner and mode.
 fn edit_moonraker_file(path: &Path, text: &str) -> Result<(), SetupError> {
     write_atomic(path, text.as_bytes(), None, None)
@@ -163,7 +142,7 @@ async fn stays_active(host: &Host) -> Result<bool, SetupError> {
 }
 
 /// Installs or repairs the unit, the config file and the service-list entry, then restarts the
-/// service when something it reads changed.
+/// service.
 ///
 /// # Errors
 /// [`SetupError`] for a failure that stops the run; steps already done stay done and were
@@ -181,17 +160,10 @@ pub async fn install(
     let mut ok = true;
     warn_logins(&mut say, &disc);
 
-    let service_marker = paths.marker(SERVICE_MARKER);
-    let mut service_changed = false;
-
     // The unit, then the file it points at.
     let unit_text = render::unit(&host.invoker.name, &paths.binary, &paths.config);
-    if read(&paths.unit)?.as_deref() != Some(unit_text.as_str()) {
-        mark(&service_marker, owner)?;
-    }
     let step = put(&paths.unit, &unit_text, 0o644, None)?;
     if step.changed() {
-        service_changed = true;
         host.systemctl_ok(&["daemon-reload"])?;
     }
     say.step("service unit", step.text());
@@ -205,10 +177,8 @@ pub async fn install(
 
     match read(&paths.config)? {
         None => {
-            mark(&service_marker, owner)?;
             let (text, mode) = render::config_file(wanted_url(opts), opts.api_key.as_deref());
             put(&paths.config, &text, mode, owner)?;
-            service_changed = true;
             say.step("wobblescope.toml", "installed");
         }
         Some(existing) => {
@@ -244,25 +214,19 @@ pub async fn install(
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
 
-    let active = host.systemctl(&["is-active", SERVICE])?;
-    let active = active.success && active.stdout == "active";
-    if service_changed || service_marker.exists() || !active {
-        mark(&service_marker, owner)?;
-        host.systemctl_ok(&["restart", SERVICE])?;
-        if stays_active(host).await? {
-            clear(&service_marker);
-            say.step("service", "restarted and running");
-        } else {
-            ok = false;
-            say.step("service", "FAILED to stay running");
-            say.note(&format!(
-                "see: journalctl -u {SERVICE} -n 50. Likely causes: the listen port 7140 is \
-                 already in use, or {} is not valid.",
-                paths.config.display()
-            ));
-        }
+    // Restart rather than start: the installer may have replaced the binary under a running
+    // service, and only a restart runs the new one.
+    host.systemctl_ok(&["restart", SERVICE])?;
+    if stays_active(host).await? {
+        say.step("service", "restarted and running");
     } else {
-        say.step("service", "already current");
+        ok = false;
+        say.step("service", "FAILED to stay running");
+        say.note(&format!(
+            "see: journalctl -u {SERVICE} -n 50. Likely causes: the listen port 7140 is \
+             already in use, or {} is not valid.",
+            paths.config.display()
+        ));
     }
     Ok(ok)
 }
@@ -330,9 +294,6 @@ pub async fn check(
         }
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
-    if paths.marker(SERVICE_MARKER).exists() {
-        report(&mut say, "pending restart", false, "the service");
-    }
     Ok(ok)
 }
 
@@ -360,7 +321,6 @@ pub async fn remove(
     } else {
         say.step("service", "not installed");
     }
-    clear(&paths.marker(SERVICE_MARKER));
 
     match &paths.asvc {
         Ok(asvc) => match read(asvc)?.and_then(|t| render::without_service(&t, SERVICE)) {
