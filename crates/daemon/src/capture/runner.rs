@@ -7,40 +7,42 @@
 
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use wobblescope_core::RawSamples;
 use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::{Coverage, Health};
 use wobblescope_session::meta::{
-    PrinterInfo, SegmentMeta, SessionMeta, StepMeta, TimeWindow, undersampled_note,
+    SegmentMeta, SessionMeta, StepMeta, TimeWindow, undersampled_note,
 };
 
 use super::CheckId;
 use super::availability::OpenChip;
 use super::calibration;
-use super::live::{ChipLive, FailureCode, FinishedTest, LiveHub, Phase, TestState};
+use super::live::{ChipLive, FailureCode, LiveHub, Phase, TestState};
 use super::meta::{ChipFacts, initial};
 use super::position::{
     PositionError, Timeouts, move_to_point, window_end, window_start, window_start_plain,
 };
-use super::preflight::{Started, check_printer, quarantine_duration};
+use super::preflight::{Started, check_printer};
 use super::recorder::{Level, Missing, Recorder, Taken};
 use super::request::{Segment, TestPlan, diagonal_refusal};
-use super::seal::{Sealing, abandon, seal};
 use super::slot::{SlotPermit, TestSlot};
 use super::vibrations::slowest_step_seconds;
 use crate::hold::settings::{Saved, calibration_setup};
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::{Rpc, RpcError};
-use crate::moonraker::settings::{Shaping, parse_shaping};
 use crate::moonraker::status::{KlippyState, Status};
 use crate::storage::Reservation;
 use crate::storage::capture::Capture;
 use crate::storage::{Storage, StorageError, run_blocking};
 
+mod finish;
+mod info;
 mod vibrations_run;
+
+use info::printer_info;
 
 /// The seconds added to `max_segment_seconds` for the sweep call's own timeout.
 const SWEEP_TIMEOUT_MARGIN_SECONDS: u64 = 60;
@@ -855,149 +857,6 @@ impl Run {
     fn segments_stored(&self) -> usize {
         self.stored.as_ref().map_or(0, |s| s.meta.segments.len())
     }
-
-    // ---- the end ----
-
-    /// Adds the segment that was running when the test failed, as incomplete, when at least one
-    /// chip delivered a sample at or after its window start.
-    async fn add_interrupted_segment(&mut self) {
-        if self.plan.vibrations.is_some() {
-            self.add_interrupted_angle().await;
-            return;
-        }
-        let Some(current) = &self.current else { return };
-        let Some(start) = current.start else { return };
-        let index = current.index;
-        let end = self
-            .recorders
-            .iter()
-            .filter_map(Recorder::last_timestamp)
-            .fold(f64::NEG_INFINITY, f64::max);
-        if !end.is_finite() || end <= start {
-            return;
-        }
-        let mut outcome = SegmentOutcome::default();
-        for (chip, rec) in self.recorders.iter().enumerate() {
-            let taken = rec.take(start, end);
-            if taken.samples.t.iter().any(|t| *t >= start) {
-                let coverage = Coverage::Incomplete {
-                    missing: "the test was interrupted".to_owned(),
-                };
-                outcome.add(chip, taken, coverage);
-            }
-        }
-        if outcome.recordings.is_empty() {
-            return;
-        }
-        let segment = self.plan.segments[index];
-        let at = self.segments_stored();
-        self.incomplete
-            .push(format!("segment {} was interrupted", at + 1));
-        // A failure to write it leaves the finished segments, which are already journaled.
-        let _ = self
-            .store_segment(&segment, at, outcome, TimeWindow { start, end }, vec![])
-            .await;
-    }
-
-    /// Klipper's state changes before its message arrives. Waits a little for the message so the
-    /// session says why Klipper stopped.
-    async fn refresh_klipper_message(&mut self, failure: &mut Failure) {
-        let deadline = Instant::now() + self.r.timings.shutdown_grace;
-        loop {
-            if let Some(message) = self.status.borrow().klippy.message.clone() {
-                failure.reason = message;
-                return;
-            }
-            if Instant::now() >= deadline {
-                return;
-            }
-            tokio::select! {
-                _ = self.status.changed() => {}
-                () = tokio::time::sleep(self.r.timings.idle_poll) => {}
-            }
-        }
-    }
-
-    async fn finish(mut self, result: Result<(), Failure>) {
-        let stopped = self.permit.stop_requested();
-        let mut result = result;
-        if let Err(f) = &mut result
-            && f.from_klipper
-            && !stopped
-        {
-            self.refresh_klipper_message(f).await;
-        }
-        // Only Klipper's own shutdown proves nothing is moving. A stop that was requested but
-        // not confirmed, or a command that never answered, leaves the motion uncertain.
-        let confirmed_down = matches!(
-            self.status.borrow().klippy.state,
-            KlippyState::Shutdown | KlippyState::Error
-        );
-        let failure = result.err().map(|mut f| {
-            if stopped {
-                f.reason = "emergency stop".to_owned();
-            }
-            f.uncertain = (f.uncertain || f.in_flight) && !confirmed_down;
-            f
-        });
-        // An emergency stop shuts Klipper down, so a restore that fails after one is expected. The
-        // restart the stop already needs brings the settings back, and asking for another one is noise.
-        let needs_restart = self.restore_settings(confirmed_down).await && !stopped;
-        self.publish(Phase::Sealing);
-        if failure.is_some() {
-            self.add_interrupted_segment().await;
-        }
-        let summaries: Vec<_> = self.recorders.iter().map(Recorder::summary).collect();
-        // Closing the bridges comes before sealing, so the chips stop streaming at once.
-        self.recorders.clear();
-
-        let reason = failure.as_ref().map(|f| f.reason.clone());
-        let code = failure.as_ref().and_then(|f| f.code);
-        let segments = self.segments_stored();
-        let mut finished = match self.stored.take() {
-            Some(Stored { capture, meta }) if segments > 0 => {
-                let sealing = Sealing {
-                    id: self.id.clone(),
-                    kind: self.plan.kind,
-                    meta,
-                    summaries,
-                    reason,
-                    incomplete: std::mem::take(&mut self.incomplete),
-                };
-                seal(&self.r.storage, capture, sealing).await
-            }
-            other => {
-                let capture = other.and_then(|stored| stored.capture);
-                abandon(&self.r.storage, &self.id, self.plan.kind, capture, reason).await
-            }
-        };
-        finished.code = code;
-        finished.needs_restart = needs_restart;
-        self.end(finished, failure.is_some_and(|f| f.uncertain));
-    }
-
-    /// Publishes the end, starts the quarantine after a command of unknown outcome and frees the
-    /// slot.
-    fn end(self, mut finished: FinishedTest, uncertain: bool) {
-        let max = self.r.max_segment_seconds;
-        if uncertain {
-            self.r.slot.start_quarantine(quarantine_duration(max));
-            self.r.slot.set_motion_uncertain(&finished.id);
-            finished.motion_uncertain = true;
-            watch_idle(
-                self.r.moonraker.clone(),
-                self.r.slot.clone(),
-                self.r.hub.clone(),
-                self.r.timings,
-                finished.id.clone(),
-            );
-        }
-        self.r.hub.update(|s| {
-            s.test = None;
-            s.last = Some(finished);
-        });
-        // The permit drops with `self`, after the hub shows the end.
-    }
 }
 
 /// Clears the motion-uncertain marker once the toolhead is seen idle twice, or after the cap.
@@ -1034,67 +893,6 @@ pub fn watch_idle(
             }
         });
     });
-}
-
-/// The printer's host name, Klipper version and the firmware of the MCUs `mcus` names (plus the
-/// main MCU), best effort. A failed call leaves what it would have added empty.
-async fn printer_info(
-    control: &Rpc,
-    mcus: &mut Vec<String>,
-    timeout: Duration,
-) -> Option<PrinterInfo> {
-    let info: Value = control.call("printer.info", None, timeout).await.ok()?;
-    let text = |key: &str| info.get(key).and_then(Value::as_str).map(str::to_owned);
-    mcus.push("mcu".to_owned());
-    mcus.sort();
-    mcus.dedup();
-    let shaping = read_shaping(control, timeout).await;
-    Some(PrinterInfo {
-        name: text("hostname"),
-        klipper_version: text("software_version"),
-        mcu_firmware: mcu_firmware(control, mcus, timeout).await,
-        square_corner_velocity: shaping.square_corner_velocity,
-        damping_ratio_x: shaping.damping_ratio_x,
-        damping_ratio_y: shaping.damping_ratio_y,
-    })
-}
-
-/// The printer's square corner velocity and configured damping ratios, best effort: a failed
-/// call leaves them unknown.
-async fn read_shaping(control: &Rpc, timeout: Duration) -> Shaping {
-    let query = json!({
-        "toolhead": ["square_corner_velocity"],
-        "configfile": ["settings"],
-    });
-    match control.query_objects(query, timeout).await {
-        Ok(status) => parse_shaping(&json!({"status": status})),
-        Err(_) => Shaping::default(),
-    }
-}
-
-/// `<mcu>: <version>` for each of `mcus`, as Klipper reports it. The main MCU is `mcu`, another
-/// is `mcu <name>`. An MCU Klipper does not list is left out.
-async fn mcu_firmware(control: &Rpc, mcus: &[String], timeout: Duration) -> Vec<String> {
-    let key = |name: &str| {
-        if name == "mcu" {
-            name.to_owned()
-        } else {
-            format!("mcu {name}")
-        }
-    };
-    let objects: serde_json::Map<String, Value> = mcus
-        .iter()
-        .map(|name| (key(name), json!(["mcu_version"])))
-        .collect();
-    let Ok(status) = control.query_objects(Value::Object(objects), timeout).await else {
-        return Vec::new();
-    };
-    mcus.iter()
-        .filter_map(|name| {
-            let version = status.get(key(name))?.get("mcu_version")?.as_str()?;
-            Some(format!("{name}: {version}"))
-        })
-        .collect()
 }
 
 #[cfg(test)]
