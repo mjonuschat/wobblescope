@@ -21,6 +21,7 @@ use crate::hold::settings::{Restore, STATE_NAME, Saved, accel_line, restore_scri
 use crate::hold::travel::segments;
 use crate::moonraker::Moonraker;
 use crate::moonraker::rpc::Rpc;
+use crate::moonraker::settings::PrinterSettings;
 
 /// How long "until stopped" lasts at most, in seconds.
 pub const UNTIL_STOPPED_CAP_SECONDS: f64 = 600.0;
@@ -246,10 +247,40 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
             "the daemon is not connected to Moonraker",
         )
     })?;
-    let unreadable = |message: String| failure(CheckId::MoonrakerConnected, message);
     let settings = crate::moonraker::settings::read(&control)
         .await
-        .map_err(&unreadable)?;
+        .map_err(unreadable)?;
+    let toolhead = read_toolhead(&control, deps.timings.timeouts.query).await?;
+    let plan = resolve_plan(
+        request,
+        &settings,
+        toolhead,
+        deps.timings.until_stopped_cap_seconds,
+    )?;
+    let id = format!("hold-{}", iso_utc(OffsetDateTime::now_utc()));
+    permit.begin(&id);
+    Ok(Hold {
+        permit,
+        id,
+        control,
+        timings: deps.timings.clone(),
+        plan,
+    })
+}
+
+fn unreadable(message: String) -> Refusal {
+    failure(CheckId::MoonrakerConnected, message)
+}
+
+/// What the toolhead reports before a hold.
+struct Toolhead {
+    position: [f64; 3],
+    min: [f64; 3],
+    max: [f64; 3],
+    saved: Saved,
+}
+
+async fn read_toolhead(control: &Rpc, timeout: Duration) -> Result<Toolhead, Refusal> {
     let status = control
         .query_objects(
             json!({
@@ -259,7 +290,7 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
                 ],
                 "input_shaper": null,
             }),
-            deps.timings.timeouts.query,
+            timeout,
         )
         .await
         .map_err(|e| unreadable(format!("cannot read the toolhead: {e}")))?;
@@ -279,7 +310,28 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
             "the toolhead's travel limits are not reported".to_owned(),
         ));
     };
-    let saved = Saved::from_status(&status).map_err(&unreadable)?;
+    let saved = Saved::from_status(&status).map_err(unreadable)?;
+    Ok(Toolhead {
+        position,
+        min,
+        max,
+        saved,
+    })
+}
+
+/// Checks `request` against what the printer reports and fills in what it left out.
+fn resolve_plan(
+    request: HoldRequest,
+    settings: &PrinterSettings,
+    toolhead: Toolhead,
+    duration_cap: f64,
+) -> Result<Plan, Refusal> {
+    let Toolhead {
+        position,
+        min,
+        max,
+        saved,
+    } = toolhead;
     let accel_per_hz = request
         .accel_per_hz
         .or(settings.settings.accel_per_hz.value)
@@ -310,31 +362,23 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
         .check_room(point, min, max)
         .map_err(Refusal::Invalid)?;
     let duration = match request.duration_seconds {
-        None => deps.timings.until_stopped_cap_seconds,
-        Some(d) if d.is_finite() && d > 0.0 => d.min(deps.timings.until_stopped_cap_seconds),
+        None => duration_cap,
+        Some(d) if d.is_finite() && d > 0.0 => d.min(duration_cap),
         Some(d) => {
             return Err(Refusal::Invalid(format!(
                 "the duration must be positive, not {d}"
             )));
         }
     };
-    let id = format!("hold-{}", iso_utc(OffsetDateTime::now_utc()));
-    permit.begin(&id);
-    Ok(Hold {
-        permit,
-        id,
-        control,
-        timings: deps.timings.clone(),
-        plan: Plan {
-            drive,
-            duration,
-            point,
-            speed,
-            min,
-            max,
-            max_velocity: saved.max_velocity,
-            saved,
-        },
+    Ok(Plan {
+        drive,
+        duration,
+        point,
+        speed,
+        min,
+        max,
+        max_velocity: saved.max_velocity,
+        saved,
     })
 }
 
