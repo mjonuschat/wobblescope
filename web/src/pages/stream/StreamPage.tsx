@@ -75,12 +75,13 @@ export function StreamPage({ createWorker }: Props) {
   const low = Number(scaleMin);
   const high = Number(scaleMax);
   const fixedLimits = !scaleAuto && low > 0 && high > low ? { low, high } : null;
+  const fixedLow = fixedLimits?.low;
+  const fixedHigh = fixedLimits?.high;
   // A new scale starts the spectrograms over, since columns keep the colours they were drawn with.
   const scaleKey = fixedLimits ? `${fixedLimits.low}/${fixedLimits.high}` : "auto";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key stands for the limits.
   const scale = useMemo(
-    () => (fixedLimits ? fixedScale(fixedLimits.low, fixedLimits.high) : new SharedAutoScale()),
-    [scaleKey],
+    () => (fixedLow === undefined || fixedHigh === undefined ? new SharedAutoScale() : fixedScale(fixedLow, fixedHigh)),
+    [fixedLow, fixedHigh],
   );
 
   function changeScaleAuto(auto: boolean) {
