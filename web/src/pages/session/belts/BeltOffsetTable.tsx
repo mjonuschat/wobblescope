@@ -1,4 +1,4 @@
-import { pairLetter } from "@/components/charts/options";
+import { pairLetter } from "@/components/charts/beltOptions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { PeakOffset } from "@/lib/generated/PeakOffset";
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { beltsResult } from "@/test/fixtures";
 
-import { beltOverlayOption, beltScatterOption, beltSingleOption } from "./options";
+import { beltOverlayOption, beltScatterOption, beltSingleOption } from "./beltOptions";
 import { CHART_PARTS } from "./register";
 
 // The component tests mock EChart, so only a real setOption shows a series type that is not registered.
