@@ -1,9 +1,10 @@
 name: Release
 # `cargo release` bumps the version, commits it, tags v<version> and pushes both. The tag starts
 # this workflow: it checks the tag, runs the same checks and builds as CI (ci.yml, concurrently),
-# and only when all of them pass attaches the three assets to a DRAFT release. Publish the draft
-# by hand once all three assets are there: Moonraker falls back to the first asset when none
-# matches `asset_name`, so a published release must never be missing one.
+# and only when all of them pass attaches the assets to a DRAFT release: the three binaries,
+# SHA256SUMS over them, and the installer script with its checksum. Publish the draft by hand
+# once all of them are there: Moonraker falls back to the first asset when none matches
+# `asset_name`, so a published release must never be missing a binary.
 on:
   push:
     tags:
@@ -71,13 +72,26 @@ jobs:
           pattern: asset-*
           merge-multiple: true
           path: dist
-      - name: Check that all three assets are there
+      - name: Check that all three binaries are there
         run: |
           find dist -type f -ls
           for asset in wobblescope-aarch64 wobblescope-armv7 wobblescope-x86_64; do
             test -s "dist/$asset" || { echo "missing asset $asset"; exit 1; }
           done
           test "$(find dist -type f | wc -l)" -eq 3
+      - name: Checksum the binaries
+        run: cd dist && sha256sum wobblescope-aarch64 wobblescope-armv7 wobblescope-x86_64 > SHA256SUMS
+      - name: Build the installer
+        run: |
+          make installer
+          cp build/wobblescope-installer.sh build/wobblescope-installer.sh.sha256 dist/
+      - name: Check the assets
+        run: |
+          for asset in wobblescope-aarch64 wobblescope-armv7 wobblescope-x86_64 SHA256SUMS \
+            wobblescope-installer.sh wobblescope-installer.sh.sha256; do
+            test -s "dist/$asset" || { echo "missing asset $asset"; exit 1; }
+          done
+          test "$(find dist -type f | wc -l)" -eq 6
       - name: Generate release notes
         uses: orhun/git-cliff-action@v4
         with:
@@ -95,6 +109,8 @@ jobs:
           else
             flags=""
             case "$TAG" in *-*) flags="--prerelease" ;; esac
+            # Moonraker compares the release title with the version in release_info.json, so the
+            # title must be the bare tag.
             gh release create "$TAG" dist/* --draft --verify-tag $flags \
-              --title "wobblescope $TAG" --notes-file CHANGES.md
+              --title "$TAG" --notes-file CHANGES.md
           fi

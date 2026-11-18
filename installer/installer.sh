@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+
+wobblescope_map_arch() {
+  case "$1" in
+    aarch64) echo aarch64 ;;
+    armv7l) echo armv7 ;;
+    x86_64) echo x86_64 ;;
+    *)
+      echo "Unsupported architecture '$1': wobblescope supports aarch64, armv7l and x86_64." >&2
+      return 1
+      ;;
+  esac
+}
+
+_wobblescope_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+
+wobblescope_verify_checksum() {
+  local sums_file="$1" asset="$2" file="$3"
+  local lines expected actual
+  lines="$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1 }' "$sums_file")" || return 1
+  [ -n "$lines" ] || return 1
+  [ "$(printf '%s\n' "$lines" | wc -l | tr -d ' ')" = "1" ] || return 1
+  expected="$lines"
+  actual="$(_wobblescope_sha256 "$file")" || return 1
+  [ "$expected" = "$actual" ]
+}
+
+_wobblescope_json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
+
+wobblescope_install_files() {
+  local dir="$1" asset="$2" downloaded="$3" tag="$4" owner="$5" project="$6"
+  mkdir -p "$dir" || return 1
+  cp "$downloaded" "$dir/.$asset.new" || return 1
+  chmod 0755 "$dir/.$asset.new" || return 1
+  mv -f "$dir/.$asset.new" "$dir/$asset" || return 1
+  ln -sfn "$asset" "$dir/.wobblescope.new" || return 1
+  mv -fh "$dir/.wobblescope.new" "$dir/wobblescope" 2>/dev/null ||
+    mv -fT "$dir/.wobblescope.new" "$dir/wobblescope" || return 1
+  printf '{\n  "project_name": "%s",\n  "project_owner": "%s",\n  "version": "%s",\n  "asset_name": "%s"\n}\n' \
+    "$(_wobblescope_json_escape "$project")" "$(_wobblescope_json_escape "$owner")" \
+    "$(_wobblescope_json_escape "$tag")" "$(_wobblescope_json_escape "$asset")" >"$dir/release_info.json.new" || return 1
+  mv -f "$dir/release_info.json.new" "$dir/release_info.json"
+}
+
+WOBBLESCOPE_RELEASE_API="${WOBBLESCOPE_RELEASE_API:-https://api.github.com/repos/mjonuschat/wobblescope/releases/latest}"
+WOBBLESCOPE_DOWNLOAD_BASE="${WOBBLESCOPE_DOWNLOAD_BASE:-https://github.com/mjonuschat/wobblescope/releases/download}"
+WOBBLESCOPE_OWNER="mjonuschat"
+WOBBLESCOPE_PROJECT="wobblescope"
+WOBBLESCOPE_BLOCK_NAME="wobblescope"
+
+wobblescope_usage() {
+  cat <<'USAGE'
+Usage: wobblescope-installer.sh [--help]
+
+Installs the latest wobblescope release into ~/wobblescope, runs `sudo wobblescope setup`,
+and registers wobblescope with Moonraker's update manager. Run as the normal user.
+USAGE
+}
+
+_wobblescope_unmanaged_section() {
+  local conf="$1"
+  [ -f "$conf" ] || return 1
+  awk -v start="# --- $WOBBLESCOPE_BLOCK_NAME ---" -v end="# --- /$WOBBLESCOPE_BLOCK_NAME ---" '
+    $0 == start { in_block = 1; next }
+    $0 == end { in_block = 0; next }
+    !in_block && $0 ~ /^\[update_manager[ \t]+wobblescope\][ \t]*$/ { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$conf"
+}
+
+_wobblescope_require_idle() {
+  if ! check_no_active_print; then
+    log "A print is active or the printer state could not be determined; re-run when idle." >&2
+    return 1
+  fi
+}
+
+_wobblescope_download() {
+  local tmp="$1" asset="$2" body
+  body="$(curl -fsSL "$WOBBLESCOPE_RELEASE_API")" || { log "Could not query the latest release." >&2; return 1; }
+  WOBBLESCOPE_TAG="$(printf '%s' "$body" | json_get tag_name)" || WOBBLESCOPE_TAG=""
+  if [ -z "$WOBBLESCOPE_TAG" ]; then
+    log "The release API response had no tag_name." >&2
+    return 1
+  fi
+  curl -fsSL -o "$tmp/$asset" "$WOBBLESCOPE_DOWNLOAD_BASE/$WOBBLESCOPE_TAG/$asset" ||
+    { log "Download failed for $asset ($WOBBLESCOPE_TAG)." >&2; return 1; }
+  curl -fsSL -o "$tmp/SHA256SUMS" "$WOBBLESCOPE_DOWNLOAD_BASE/$WOBBLESCOPE_TAG/SHA256SUMS" ||
+    { log "Download failed for SHA256SUMS ($WOBBLESCOPE_TAG)." >&2; return 1; }
+  if ! wobblescope_verify_checksum "$tmp/SHA256SUMS" "$asset" "$tmp/$asset"; then
+    log "Checksum verification failed for $asset; nothing was installed." >&2
+    return 1
+  fi
+}
+
+wobblescope_main() {
+  if [ $# -gt 0 ]; then
+    case "$1" in
+      -h | --help) wobblescope_usage; return 0 ;;
+      *) log "Unknown argument: $1" >&2; return 1 ;;
+    esac
+  fi
+
+  discover_klipper_env
+  require_not_root
+
+  if _wobblescope_unmanaged_section "$MOONRAKER_CONFIG"; then
+    log "$MOONRAKER_CONFIG already has an [update_manager wobblescope] section that this" >&2
+    log "installer does not manage. Remove or rename it, then re-run; nothing was changed." >&2
+    return 1
+  fi
+
+  _wobblescope_require_idle || return 1
+
+  local arch asset dir="$HOME/wobblescope" tmp
+  arch="$(wobblescope_map_arch "$(uname -m)")" || return 1
+  asset="wobblescope-$arch"
+
+  tmp="$(mktemp -d)" || return 1
+  if ! _wobblescope_download "$tmp" "$asset"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+
+  if ! wobblescope_install_files "$dir" "$asset" "$tmp/$asset" "$WOBBLESCOPE_TAG" "$WOBBLESCOPE_OWNER" "$WOBBLESCOPE_PROJECT"; then
+    rm -rf "$tmp"
+    log "Could not install files into $dir." >&2
+    return 1
+  fi
+  rm -rf "$tmp"
+
+  _wobblescope_require_idle || return 1
+
+  if ! sudo "$dir/wobblescope" setup; then
+    log "wobblescope setup failed. The files are in place; retry with:" >&2
+    log "  sudo $dir/wobblescope setup" >&2
+    log "If Moonraker refused as unauthorized, add --api-key <key> (or --api-key - to read it from stdin)." >&2
+    return 1
+  fi
+
+  local block
+  block="type: executable
+channel: stable
+repo: mjonuschat/wobblescope
+path: ~/wobblescope
+managed_services: wobblescope"
+  # The subshell keeps kpi's die() from ending the installer; it inherits the caller's EXIT
+  # trap, which kpi's atomic file writer would re-arm and fire a second time.
+  if ! (
+    trap - EXIT
+    config_block_ensure "$MOONRAKER_CONFIG" "$WOBBLESCOPE_BLOCK_NAME" "[update_manager wobblescope]
+$block"
+  ); then
+    log "Could not write the update manager block. wobblescope itself is installed." >&2
+    log "Add this to $MOONRAKER_CONFIG and restart Moonraker:" >&2
+    log "[update_manager wobblescope]" >&2
+    log "$block" >&2
+    return 1
+  fi
+
+  _wobblescope_require_idle || {
+    log "Restart Moonraker when idle: sudo systemctl restart moonraker" >&2
+    return 1
+  }
+  if ! (trap - EXIT; service_restart_if moonraker); then
+    log "Restart Moonraker manually: sudo systemctl restart moonraker" >&2
+    return 1
+  fi
+
+  log "wobblescope is installed. Future releases appear in the update panel of Mainsail and Fluidd." >&2
+}

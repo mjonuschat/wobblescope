@@ -94,6 +94,18 @@ jobs:
       # nextest does not run doctests.
       - run: cargo test --workspace --doc --locked
 
+  # The shell installer that `install.sh` downloads from a release.
+  installer:
+    name: Installer
+    needs: [changes]
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y bats shellcheck
+      - run: shellcheck installer/installer.sh install.sh
+      - run: bats installer/tests
+
   # cargo-deny covers the RustSec advisories, so cargo-audit would repeat it.
   deny:
     name: Dependency check
@@ -137,7 +149,7 @@ jobs:
     name: Dist (${{ matrix.build }})
     # Nothing consumes the binaries of a failed run, so they wait for every check. A skipped
     # need (the release commit on main) skips this job too.
-    needs: [lints, test, deny, web-check, web-build]
+    needs: [lints, test, deny, installer, web-check, web-build]
     if: ${{ inputs.dist || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     strategy:
@@ -145,8 +157,8 @@ jobs:
       matrix:
         build: [x86_64-linux, aarch64-linux, armv7l-linux]
         include:
-          # `asset` is the exact name Moonraker's release_info.json asks for. `wobblescope setup`
-          # derives it from the binary's own architecture, so these three names must not change.
+          # `asset` is the exact name Moonraker's release_info.json asks for. The installer maps
+          # `uname -m` to these names, so they must not change.
           - build: x86_64-linux
             target: x86_64-unknown-linux-musl
             asset: wobblescope-x86_64
