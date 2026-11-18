@@ -64,13 +64,13 @@ export function StatusDots() {
   const status = useStatus();
   const items = connections(status.data);
   return (
-    <ul aria-label="Connections" className="flex items-center gap-x-4">
+    <ul aria-label="Connections" className="flex items-center gap-x-3 sm:gap-x-4">
       {items.map(({ label, tone, details }) => (
         <li key={label}>
           <Tooltip>
             <TooltipTrigger render={<div tabIndex={0} className="flex items-center gap-2" />}>
               <Dot tone={tone} />
-              <span>{label}</span>
+              <span className="max-sm:sr-only">{label}</span>
               <span className="sr-only">{details[0]}</span>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start">

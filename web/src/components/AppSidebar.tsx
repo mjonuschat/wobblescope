@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIcon,
   AudioLinesIcon,
@@ -6,11 +7,14 @@ import {
   CompassIcon,
   FlaskConicalIcon,
   FolderClockIcon,
+  MenuIcon,
   PrinterIcon,
   WavesIcon,
   type LucideIcon,
 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   Sidebar,
   SidebarContent,
@@ -60,17 +64,14 @@ const pages: Page[] = [
   { to: "/sessions", label: "History", icon: FolderClockIcon },
 ];
 
-export function AppSidebar() {
+function NavContent() {
   const version = useStatus().data?.version;
   const kinematics = useSettings().data?.machine.kinematics;
   const beltsOffered = offersBelts(kinematics);
   const vibrationsOffered = offersVibrations(kinematics);
   const path = useRouterState({ select: (state) => state.location.pathname });
   return (
-    <Sidebar
-      collapsible="none"
-      className="sticky top-(--header-height) h-[calc(100svh-var(--header-height))] shrink-0 border-r"
-    >
+    <>
       <SidebarContent>
         <SidebarGroup>
           <nav aria-label="Pages">
@@ -117,6 +118,39 @@ export function AppSidebar() {
       <SidebarFooter>
         <p className="p-2 font-mono text-sm text-muted-foreground">Version {version ?? "unknown"}</p>
       </SidebarFooter>
+    </>
+  );
+}
+
+/** The page links, in a column beside the page from the `md` breakpoint up. */
+export function AppSidebar() {
+  return (
+    <Sidebar
+      collapsible="none"
+      className="sticky top-(--header-height) hidden h-[calc(100svh-var(--header-height))] shrink-0 border-r md:flex"
+    >
+      <NavContent />
     </Sidebar>
+  );
+}
+
+/** Below `md` the sidebar does not fit beside a page, so its links open from a menu button in the header. */
+export function MobileNav() {
+  const [open, setOpen] = useState(false);
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new path is the trigger
+  useEffect(() => {
+    setOpen(false);
+  }, [path]);
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open menu" className="md:hidden" />}>
+        <MenuIcon />
+      </SheetTrigger>
+      <SheetContent side="left" showCloseButton={false} className="w-72 bg-sidebar p-0 text-sidebar-foreground">
+        <SheetTitle className="sr-only">Pages</SheetTitle>
+        <NavContent />
+      </SheetContent>
+    </Sheet>
   );
 }

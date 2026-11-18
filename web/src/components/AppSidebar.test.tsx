@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
@@ -70,5 +70,17 @@ describe("the sidebar", () => {
     renderRoute("/");
     await screen.findByRole("link", { name: "Input shaper" });
     expect(screen.queryByRole("link", { name: "Belts" })).toBeNull();
+  });
+
+  it("opens_the_page_links_from_a_menu_button_and_closes_them_on_navigation", async () => {
+    stubApiWithStatus(() => ({ status: 404, body: { error: "not_found", message: "no" } }));
+    renderRoute("/");
+    await screen.findByRole("link", { name: "Input shaper" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("link", { name: "Input shaper" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("link", { name: "History" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

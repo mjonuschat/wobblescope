@@ -137,7 +137,7 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
       </FormCard>
 
       <FormCard title="Parameters" action={<ResetButton disabled={!anyOverride} onClick={() => setTexts({})} />}>
-        <div className="grid grid-cols-3 gap-4">{PARAMETERS.map((p) => parameterField(p))}</div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">{PARAMETERS.map((p) => parameterField(p))}</div>
       </FormCard>
 
       <Separator />

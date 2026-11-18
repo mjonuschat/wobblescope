@@ -10,6 +10,8 @@ interface Props {
   /** What the chart shows, for people who cannot see the canvas. */
   label: string;
   height?: number | string;
+  /** The chart keeps at least this width, in pixels, and scrolls sideways in a narrower container. */
+  minWidth?: number;
   /** Called with the x value (the frequency) of a click on the plot. */
   onClickX?: (x: number) => void;
   /** Adds zoom buttons at the top right. The option must set up the zoom (see the belt options). */
@@ -17,7 +19,7 @@ interface Props {
 }
 
 /** A chart that fills its container's width and follows its size. */
-export function EChart({ option, label, height = 340, onClickX, zoom }: Props) {
+export function EChart({ option, label, height = 340, minWidth, onClickX, zoom }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
@@ -70,11 +72,12 @@ export function EChart({ option, label, height = 340, onClickX, zoom }: Props) {
     return () => zr.off("click", handler);
   }, [clickable]);
 
-  const canvas = <div ref={element} role="img" aria-label={label} style={{ height }} />;
-  if (!zoom) return canvas;
+  const canvas = <div ref={element} role="img" aria-label={label} style={{ height, minWidth }} />;
+  const body = minWidth ? <div className="overflow-x-auto">{canvas}</div> : canvas;
+  if (!zoom) return body;
   return (
     <div className="relative">
-      {canvas}
+      {body}
       <ChartZoomControls chart={chart} />
     </div>
   );

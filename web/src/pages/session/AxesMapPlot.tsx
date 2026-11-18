@@ -3,6 +3,7 @@ import { useId } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { InfoHint } from "@/components/InfoHint";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CHART_THEME, type ChartTheme, useChartTheme } from "@/ui-kit/chartTheme";
@@ -144,7 +145,13 @@ export function movementOption(result: AxesMapResult, theme: ChartTheme = DEFAUL
     backgroundColor: "transparent",
     textStyle: { color: theme.text },
     tooltip: { trigger: "axis", valueFormatter: (v: number) => `${v.toFixed(1)} mm/s` },
-    legend: { data: series.map((s) => s.name as string), top: 0, left: 56, textStyle: { color: theme.text } },
+    legend: {
+      type: "scroll",
+      data: series.map((s) => s.name as string),
+      top: 0,
+      left: 56,
+      textStyle: { color: theme.text },
+    },
     grid: { top: 52, left: 76, right: 24, bottom: 40 },
     xAxis: {
       type: "value",
@@ -321,7 +328,12 @@ function OrientationView({ result }: { result: AxesMapResult }) {
 function MovementChart({ result, height }: { result: AxesMapResult; height?: number | string }) {
   const theme = useChartTheme();
   return (
-    <EChart option={movementOption(result, theme)} label={`Movement sequence of ${result.chip}`} height={height} />
+    <EChart
+      option={movementOption(result, theme)}
+      label={`Movement sequence of ${result.chip}`}
+      height={height}
+      minWidth={WIDE_CHART}
+    />
   );
 }
 

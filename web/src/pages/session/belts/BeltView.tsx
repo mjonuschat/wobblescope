@@ -2,6 +2,7 @@ import type { useBelts } from "@/analysis/useBelts";
 import { Panel } from "@/ui-kit/Panel";
 import { Waiting } from "@/components/Waiting";
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { beltOverlayOption, beltScatterOption, beltSingleOption } from "@/components/charts/options";
 import { Button } from "@/components/ui/button";
 import type { BeltSide } from "@/lib/generated/BeltSide";
@@ -28,7 +29,13 @@ function Profile({ analysis }: { analysis: BeltsAnalysis }) {
   if (!result) return null;
   return (
     <>
-      <EChart option={beltOverlayOption(result, theme)} label={`Belt overlay of ${chip}`} height={380} zoom />
+      <EChart
+        option={beltOverlayOption(result, theme)}
+        label={`Belt overlay of ${chip}`}
+        height={380}
+        minWidth={WIDE_CHART}
+        zoom
+      />
       {result.offsets.length > 0 && <BeltOffsetTable offsets={result.offsets} />}
     </>
   );
@@ -111,7 +118,13 @@ export function BeltView({
       {result && (
         <Panel title="Cross-belt comparison" label={`Cross-belt comparison of ${chipLabel(chip)}`}>
           {result.offsets.length === 0 && <p className="text-sm">No peaks were paired across the belts.</p>}
-          <EChart option={beltScatterOption(result, theme)} label={`Cross-belt scatter of ${chip}`} height={380} zoom />
+          <EChart
+            option={beltScatterOption(result, theme)}
+            label={`Cross-belt scatter of ${chip}`}
+            height={380}
+            minWidth={WIDE_CHART}
+            zoom
+          />
         </Panel>
       )}
     </>

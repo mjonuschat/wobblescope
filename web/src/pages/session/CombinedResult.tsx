@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { summedOption } from "@/components/charts/options";
 import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { useChartTheme } from "@/ui-kit/chartTheme";
@@ -22,7 +23,7 @@ export function CombinedResult({ summed, maxFreq, switcher }: Props) {
     <Panel title="Resonance and shapers" label="All chips">
       {switcher}
       <div className="relative">
-        <EChart option={option} label={LABEL} />
+        <EChart option={option} label={LABEL} minWidth={WIDE_CHART} />
         <div className="absolute top-0 right-0">
           <ExpandDialog title="Resonance and shapers: All chips">
             <EChart option={option} label={LABEL} height={EXPANDED_CHART_HEIGHT} />

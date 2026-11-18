@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import type { TestState } from "@/lib/generated/TestState";
 import { useChartTheme } from "@/ui-kit/chartTheme";
 
@@ -14,5 +15,5 @@ export function LiveChart({ test }: { test: TestState }) {
   const [low, high] = test.frequency_range;
   const theme = useChartTheme();
   const option = useMemo(() => liveSignalOption(traces.series, [low, high], theme), [traces, low, high, theme]);
-  return <EChart option={option} label="Signal against frequency for each chip" height={260} />;
+  return <EChart option={option} label="Signal against frequency for each chip" height={260} minWidth={WIDE_CHART} />;
 }

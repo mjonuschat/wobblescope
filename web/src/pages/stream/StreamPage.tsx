@@ -235,7 +235,7 @@ export function StreamPage({ createWorker }: Props) {
         <Panel
           title="Live spectrum"
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <AxisToggles axes={axes} onAxes={setAxes} />
               <Button type="button" variant="outline" size="sm" onClick={() => resetPeakHold()}>
                 Reset peak hold

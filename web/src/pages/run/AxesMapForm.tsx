@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnitInput } from "@/components/UnitInput";
 import { ApiClientError } from "@/lib/api/client";
@@ -94,7 +95,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
   const anyOverride = PARAMETERS.some(({ key }) => (texts[key] ?? "") !== "");
 
   const parameterField = ({ key, label, unit, fallback }: (typeof PARAMETERS)[number], className?: string) => (
-    <div key={key} className="space-y-1">
+    <div key={key} className={cn("space-y-1", className && "min-w-0 flex-1 sm:flex-none")}>
       <Label htmlFor={`axes-map-${key}`}>{key === "z_height" ? "Z" : label}</Label>
       <UnitInput
         id={`axes-map-${key}`}
@@ -118,7 +119,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
             {chipList.chips.length === 0 ? (
               <p className="text-sm">Klipper's config lists no supported accelerometer.</p>
             ) : (
-              <div className="grid grid-cols-[13rem_10rem] items-center gap-x-4 gap-y-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)] items-center sm:grid-cols-[13rem_10rem] gap-x-4 gap-y-3">
                 <p className="text-sm font-medium">Chips</p>
                 <p className="text-sm font-medium">Mounting</p>
                 {chipList.chips.map((chip, index) => {
@@ -151,7 +152,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
                         onValueChange={(value) => setMounting((old) => ({ ...old, [chip.section]: value as Mounting }))}
                         disabled={!on}
                       >
-                        <SelectTrigger className="w-40" aria-label={`Mounted on ${chip.section}`}>
+                        <SelectTrigger className="w-full sm:w-40" aria-label={`Mounted on ${chip.section}`}>
                           <SelectValue>
                             {MOUNTINGS.find((m) => m.value === (mounting[chip.section] ?? "toolhead"))?.text}
                           </SelectValue>
@@ -173,12 +174,12 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
           <ChoiceRow label="Test point">
             <div className="flex items-end gap-2">
               {(["x", "y"] as const).map((axis) => (
-                <div key={axis} className="space-y-1">
+                <div key={axis} className="min-w-0 flex-1 space-y-1 sm:flex-none">
                   <Label htmlFor={`axes-map-point-${axis}`}>{axis.toUpperCase()}</Label>
                   <UnitInput
                     id={`axes-map-point-${axis}`}
                     unit="mm"
-                    className="w-32"
+                    className="w-full sm:w-32"
                     readOnly
                     placeholder="unknown"
                     title="Fixed: the middle of the travel, less 15 mm"
@@ -186,14 +187,14 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
                   />
                 </div>
               ))}
-              {parameterField(PARAMETERS[0], "w-32")}
+              {parameterField(PARAMETERS[0], "w-full sm:w-32")}
             </div>
           </ChoiceRow>
         </div>
       </FormCard>
 
       <FormCard title="Parameters" action={<ResetButton disabled={!anyOverride} onClick={() => setTexts({})} />}>
-        <div className="grid grid-cols-3 gap-4">{PARAMETERS.slice(1).map((p) => parameterField(p))}</div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">{PARAMETERS.slice(1).map((p) => parameterField(p))}</div>
       </FormCard>
 
       <Separator />

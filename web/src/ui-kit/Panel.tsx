@@ -13,8 +13,8 @@ interface Props {
 export function Panel({ title, label, action, children }: Props) {
   return (
     <Card role="region" aria-label={label ?? title}>
-      <CardHeader className="flex items-center justify-between gap-4">
-        <CardLabel>{title}</CardLabel>
+      <CardHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <CardLabel className="whitespace-nowrap">{title}</CardLabel>
         {action}
       </CardHeader>
       <CardContent className="space-y-4">{children}</CardContent>

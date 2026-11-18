@@ -5,6 +5,7 @@ import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Field, Fields } from "@/ui-kit/Fields";
 import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { Button } from "@/components/ui/button";
 import { chipLabel } from "@/lib/format";
 import type { ChipVibrations } from "@/lib/generated/ChipVibrations";
@@ -28,6 +29,9 @@ import { useChartTheme } from "@/ui-kit/chartTheme";
 /** The height of the two polar plots, which leaves room for their 15 degree labels. */
 const POLAR_HEIGHT = 440;
 
+/** The heatmap and its colour bar side by side need this much, or the bar covers the 330 degree labels. */
+const POLAR_HEATMAP_MIN_WIDTH = 460;
+
 /** The highest frequency of the motor profile in Hz. The analysis keeps the frequencies up to it. */
 export const MAX_FREQ = 1000;
 
@@ -36,6 +40,7 @@ function ChartPanel({
   option,
   label,
   height = 380,
+  minWidth,
   intro,
   below,
 }: {
@@ -43,6 +48,8 @@ function ChartPanel({
   option: EChartsCoreOption;
   label: string;
   height?: number;
+  /** Keep the chart this wide and scroll it sideways on a narrow screen. */
+  minWidth?: number;
   intro?: ReactNode;
   /** What the chart's numbers refer to, shown under it and in the expanded view. */
   below?: ReactNode;
@@ -60,7 +67,7 @@ function ChartPanel({
       }
     >
       {intro}
-      <EChart option={option} label={label} height={height} />
+      <EChart option={option} label={label} height={height} minWidth={minWidth} />
       {below}
     </Panel>
   );
@@ -108,17 +115,35 @@ function Charts({ result, kinematics, name }: { result: VibrationsResult; kinema
           below={<GoodAngleRanges result={result} />}
         />
         <ChartPanel
+          minWidth={POLAR_HEATMAP_MIN_WIDTH}
           title="Polar energy heatmap"
           option={options.polarHeatmap}
           label={`Polar energy heatmap of ${name}`}
           height={POLAR_HEIGHT}
         />
       </div>
-      <ChartPanel title="Speed energy profile" option={options.speed} label={`Speed energy profile of ${name}`} />
-      <ChartPanel title="Angular speed profiles" option={options.angular} label={`Angular speed profiles of ${name}`} />
-      <ChartPanel title="Energy heatmap" option={options.heatmap} label={`Energy heatmap of ${name}`} height={420} />
+      <ChartPanel
+        minWidth={WIDE_CHART}
+        title="Speed energy profile"
+        option={options.speed}
+        label={`Speed energy profile of ${name}`}
+      />
+      <ChartPanel
+        minWidth={WIDE_CHART}
+        title="Angular speed profiles"
+        option={options.angular}
+        label={`Angular speed profiles of ${name}`}
+      />
+      <ChartPanel
+        minWidth={WIDE_CHART}
+        title="Energy heatmap"
+        option={options.heatmap}
+        label={`Energy heatmap of ${name}`}
+        height={420}
+      />
       {options.motor && result.motor && (
         <ChartPanel
+          minWidth={WIDE_CHART}
           title="Motor resonance profile"
           option={options.motor}
           label={`Motor resonance profile of ${name}`}

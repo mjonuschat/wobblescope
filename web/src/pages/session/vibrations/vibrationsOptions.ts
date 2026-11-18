@@ -445,7 +445,7 @@ export function speedProfileOption(
     // The vibration metric is what the chart is about, so it takes the accent and the rest stay neutral.
     color: [theme.neutral[2], theme.neutral[0], theme.neutral[1], theme.accent],
     tooltip: { trigger: "axis" },
-    legend: { top: 0, textStyle: { color: theme.text } },
+    legend: { type: "scroll", top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
     xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine: splitLine(theme) },
     yAxis: [
@@ -531,7 +531,7 @@ export function angularProfilesOption(
     // The four angles carry no lead, so they take the categorical colors.
     color: [...theme.series],
     tooltip: { trigger: "axis" },
-    legend: { top: 0, textStyle: { color: theme.text } },
+    legend: { type: "scroll", top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
     xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine: splitLine(theme) },
     yAxis: { type: "value", name: "Energy", splitLine: splitLine(theme) },
@@ -627,7 +627,7 @@ export function motorProfileOption(
   return {
     ...base(theme),
     tooltip: { trigger: "axis" },
-    legend: { top: 0, textStyle: { color: theme.text } },
+    legend: { type: "scroll", top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
     xAxis: { type: "value", name: "Frequency (Hz)", min: 0, max: maxFreq, splitLine: splitLine(theme) },
     yAxis: { type: "value", name: "Energy", splitLine: splitLine(theme) },

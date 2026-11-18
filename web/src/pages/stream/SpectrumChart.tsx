@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { liveSpectrumOption } from "@/components/charts/options";
 import { pickFrequency } from "@/stream/pickFrequency";
 import { useChartTheme } from "@/ui-kit/chartTheme";
@@ -25,5 +26,13 @@ export function SpectrumChart({ chips, maxHz, frequencyOfInterest, onPick }: Pro
   );
   const peaks = useMemo(() => chips.flatMap((c) => c.peaks.map((p) => p.freq)), [chips]);
   const click = useCallback((x: number) => onPick(pickFrequency(x, peaks)), [onPick, peaks]);
-  return <EChart option={option} label="Live spectrum of the streamed chips" height={420} onClickX={click} />;
+  return (
+    <EChart
+      option={option}
+      label="Live spectrum of the streamed chips"
+      height={420}
+      minWidth={WIDE_CHART}
+      onClickX={click}
+    />
+  );
 }

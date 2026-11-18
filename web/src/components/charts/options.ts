@@ -224,8 +224,10 @@ export function psdOption({
     ...base(null, maxFreq, theme),
     grid: { top: shapers.length > 0 ? 84 : 52, left: 64, right: 64, bottom: 40 },
     legend: [
-      { data: measured, top: 0, left: 56, selected, textStyle: { color: theme.text } },
-      ...(shapers.length > 0 ? [{ data: shapers, top: 28, left: 56, textStyle: { color: theme.text } }] : []),
+      { type: "scroll", data: measured, top: 0, left: 56, selected, textStyle: { color: theme.text } },
+      ...(shapers.length > 0
+        ? [{ type: "scroll", data: shapers, top: 28, left: 56, textStyle: { color: theme.text } }]
+        : []),
     ],
     graphic: [rowLabel("Axes", 0), ...(shapers.length > 0 ? [rowLabel("Shapers", 28)] : [])],
     yAxis: [
@@ -270,6 +272,7 @@ export function summedOption(
     // One axis, so the plot reaches the right edge. The legend row sits above it.
     grid: { top: 64, left: 64, right: 24, bottom: 40 },
     legend: {
+      type: "scroll",
       data: curves.map(([name]) => name),
       top: 0,
       left: 56,
@@ -666,7 +669,7 @@ export function beltOverlayOption(result: BeltsResult, theme: ChartTheme = DEFAU
     animation: false,
     tooltip: { trigger: "axis", formatter: beltAxisTooltip },
     grid: BELT_GRID,
-    legend: { data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: theme.text } },
+    legend: { type: "scroll", data: ["Belt A", "Belt B"], top: 0, left: 56, textStyle: { color: theme.text } },
     ...zoomControls(false, theme),
     yAxis: {
       type: "value",
@@ -692,7 +695,7 @@ export function beltSingleOption(
     animation: false,
     tooltip: { trigger: "axis", formatter: beltAxisTooltip },
     grid: BELT_GRID,
-    legend: { data: [label], top: 0, left: 56, textStyle: { color: theme.text } },
+    legend: { type: "scroll", data: [label], top: 0, left: 56, textStyle: { color: theme.text } },
     ...zoomControls(false, theme),
     yAxis: {
       type: "value",
@@ -768,7 +771,7 @@ export function beltScatterOption(result: BeltsResult, theme: ChartTheme = DEFAU
     animation: false,
     tooltip: { trigger: "axis", formatter: beltScatterTooltip },
     grid: { top: 40, left: 72, right: 24, bottom: 56 },
-    legend: { data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: theme.text } },
+    legend: { type: "scroll", data: ["Ideal line", "Good zone"], top: 0, left: 56, textStyle: { color: theme.text } },
     ...zoomControls(true, theme),
     xAxis: {
       ...axisName("Belt A", 30),

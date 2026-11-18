@@ -2,7 +2,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-import { AppSidebar } from "@/components/AppSidebar";
+import { AppSidebar, MobileNav } from "@/components/AppSidebar";
 import { PrinterControls } from "@/components/PrinterControls";
 import { StatusBanner } from "@/components/StatusBanner";
 import { StatusDots } from "@/components/StatusDots";
@@ -28,16 +28,18 @@ export function RootLayout() {
     <TooltipProvider delay={0}>
       <SidebarProvider className="min-h-screen flex-col [--header-height:--spacing(14)]">
         <header className="sticky top-0 z-50 flex h-(--header-height) items-center border-b bg-background text-sm">
-          <div className="flex h-full w-(--sidebar-width) shrink-0 items-center border-r px-4">
+          <div className="flex h-full shrink-0 items-center gap-1 px-2 md:w-(--sidebar-width) md:border-r md:px-4">
+            <MobileNav />
             <Link to="/" aria-label="Wobblescope">
+              <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Wobblescope" className="size-9 sm:hidden" />
               <img
                 src={`${import.meta.env.BASE_URL}${resolved === "dark" ? "logo-dark" : "logo-light"}.svg`}
-                alt="Wobblescope"
-                className="h-11 w-auto"
+                alt=""
+                className="hidden h-9 w-auto sm:block md:h-11"
               />
             </Link>
           </div>
-          <div className="flex flex-1 items-center px-4">
+          <div className="flex min-w-0 flex-1 items-center px-3 md:px-4">
             <StatusDots />
             <PrinterControls />
             <div className="ml-3">
@@ -49,7 +51,7 @@ export function RootLayout() {
           <AppSidebar />
           <div className="min-w-0 flex-1">
             <StatusBanner />
-            <main key={pageKey(path)} className="animate-in p-6 duration-200 fade-in-0 slide-in-from-bottom-1">
+            <main key={pageKey(path)} className="animate-in p-4 duration-200 md:p-6 fade-in-0 slide-in-from-bottom-1">
               <Outlet />
             </main>
           </div>

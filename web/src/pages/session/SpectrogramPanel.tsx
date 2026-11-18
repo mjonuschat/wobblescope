@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useSpectrogram } from "@/analysis/useSpectrogram";
 import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { pointLabel, spectrogramOption } from "@/components/charts/options";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Axis } from "@/lib/generated/Axis";
@@ -94,6 +95,7 @@ export function SpectrogramPanel({ chip, meta, source, maxFreq }: Props) {
           option={spectrogramOption(query.data, peaks, maxFreq, theme)}
           label={`Spectrogram of ${chip.chip}${points.length > 1 ? ` at ${pointLabel(point, meta.probe_points)}` : ""}`}
           height={420}
+          minWidth={WIDE_CHART}
         />
       )}
     </Panel>

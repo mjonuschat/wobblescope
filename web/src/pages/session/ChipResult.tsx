@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
+import { WIDE_CHART } from "@/components/charts/size";
 import { psdOption } from "@/components/charts/options";
 import { formatHz } from "@/lib/format";
 import type { ChipAnalysis } from "@/lib/generated/ChipAnalysis";
@@ -46,6 +47,7 @@ function ChipDetails({
           option={psdOption({ chip, recommendation: rec, maxFreq, maxScale, theme })}
           label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
           height={chartHeight}
+          minWidth={WIDE_CHART}
         />
         {corner && <div className="absolute top-0 right-0">{corner}</div>}
       </div>

@@ -62,7 +62,7 @@ export function liveSignalOption(
     animation: false,
     color: [theme.accent, ...theme.series],
     tooltip: { trigger: "axis" },
-    legend: series.length > 1 ? { top: 0, textStyle: { color: theme.text } } : undefined,
+    legend: series.length > 1 ? { type: "scroll", top: 0, textStyle: { color: theme.text } } : undefined,
     grid: { top: series.length > 1 ? 36 : 16, left: 64, right: 24, bottom: 36 },
     xAxis: {
       type: "value",

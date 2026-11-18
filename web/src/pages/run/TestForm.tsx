@@ -92,7 +92,7 @@ function PointInputs({
   return (
     <>
       {(["x", "y", "z"] as const).map((axis) => (
-        <div key={axis} className="space-y-1">
+        <div key={axis} className="min-w-0 flex-1 space-y-1 sm:flex-none">
           <Label htmlFor={`point-${index}-${axis}`} className={labelled ? undefined : "sr-only"}>
             {axis.toUpperCase()}
           </Label>
@@ -101,7 +101,7 @@ function PointInputs({
             aria-label={`Point ${index + 1} ${axis.toUpperCase()}`}
             unit="mm"
             step={1}
-            className="w-32"
+            className="w-full sm:w-32"
             value={row[axis]}
             onChange={(e) => onChange(axis, e.target.value)}
           />
@@ -325,7 +325,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
               </div>
             </ChoiceRow>
           )}
-          <div className="grid grid-cols-3 items-start gap-4">
+          <div className="grid grid-cols-2 items-start gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="mode">Mode</Label>
               <Select
