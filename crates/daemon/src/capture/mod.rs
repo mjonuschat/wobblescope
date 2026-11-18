@@ -56,7 +56,6 @@ pub enum CheckId {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct CheckFailure {
-    /// The check that failed.
     pub check: CheckId,
     /// What is wrong and how to fix it.
     pub message: String,

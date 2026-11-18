@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::capture::iso_utc;
-use crate::capture::position::{TOLERANCE_MM, Timeouts, position};
+use crate::capture::position::{TOLERANCE_MM, Timeouts, numbers, position};
 use crate::capture::preflight::{busy_failure, check_printer, quarantine_failure};
 use crate::capture::slot::{SlotPermit, TestSlot};
 use crate::capture::{CheckFailure, CheckId};
@@ -272,7 +272,6 @@ fn unreadable(message: String) -> Refusal {
     failure(CheckId::MoonrakerConnected, message)
 }
 
-/// What the toolhead reports before a hold.
 struct Toolhead {
     position: [f64; 3],
     min: [f64; 3],
@@ -297,14 +296,10 @@ async fn read_toolhead(control: &Rpc, timeout: Duration) -> Result<Toolhead, Ref
     let toolhead = status.get("toolhead").unwrap_or(&Value::Null);
     let position = toolhead
         .get("position")
-        .and_then(crate::capture::position::numbers::<3>)
+        .and_then(numbers::<3>)
         .ok_or_else(|| unreadable("the toolhead position is not reported".to_owned()))?;
-    let min = toolhead
-        .get("axis_minimum")
-        .and_then(crate::capture::position::numbers::<3>);
-    let max = toolhead
-        .get("axis_maximum")
-        .and_then(crate::capture::position::numbers::<3>);
+    let min = toolhead.get("axis_minimum").and_then(numbers::<3>);
+    let max = toolhead.get("axis_maximum").and_then(numbers::<3>);
     let (Some(min), Some(max)) = (min, max) else {
         return Err(unreadable(
             "the toolhead's travel limits are not reported".to_owned(),
@@ -319,7 +314,6 @@ async fn read_toolhead(control: &Rpc, timeout: Duration) -> Result<Toolhead, Ref
     })
 }
 
-/// Checks `request` against what the printer reports and fills in what it left out.
 fn resolve_plan(
     request: HoldRequest,
     settings: &PrinterSettings,

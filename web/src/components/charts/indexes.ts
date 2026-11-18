@@ -1,4 +1,3 @@
-/** `index` limited to the valid indexes of an array of `length` items. */
 export const clampIndex = (index: number, length: number) => Math.max(0, Math.min(index, length - 1));
 
 /** The index of the value in `values` closest to `target`; 0 for an empty list. */
