@@ -9,6 +9,7 @@ use time::OffsetDateTime;
 
 use super::{ApiError, ApiState};
 use crate::capture::availability::{AVAILABILITY_TIMEOUT, availability_of, open_chips};
+use crate::capture::slot::CHIP_CHECK_ID;
 use crate::capture::{CheckFailure, CheckId};
 use crate::moonraker::ChipsSnapshot;
 use crate::moonraker::status::{KlippyState, KlippyStatus, MoonrakerState, MoonrakerStatus};
@@ -73,11 +74,15 @@ pub(super) async fn check_chips(
 ) -> Result<Json<ChipsSnapshot>, ApiError> {
     let status = state.moonraker.status();
     let mut failures = Vec::new();
-    if state.capture.slot.is_held() {
-        failures.push(CheckFailure::new(
-            CheckId::NoTestRunning,
-            "a test is running; chips are in use until it ends",
-        ));
+    // The slot stays taken until the connections are closed, so no test opens the chips meanwhile.
+    let permit = state.capture.slot.try_acquire_as(CHIP_CHECK_ID);
+    if permit.is_none() {
+        let message = if state.capture.slot.current_id().as_deref() == Some(CHIP_CHECK_ID) {
+            "the chips are already being checked"
+        } else {
+            "a test is running; chips are in use until it ends"
+        };
+        failures.push(CheckFailure::new(CheckId::NoTestRunning, message));
     }
     if status.moonraker.state != MoonrakerState::Connected {
         failures.push(CheckFailure::new(
@@ -113,5 +118,6 @@ pub(super) async fn check_chips(
     // The connections close when `outcomes` drops, after the results are recorded.
     state.moonraker.set_availability(results);
     drop(outcomes);
+    drop(permit);
     Ok(Json(state.moonraker.chips()))
 }

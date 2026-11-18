@@ -10,7 +10,7 @@ use super::{ApiError, ApiState};
 use crate::capture::preflight::quarantine_duration;
 use crate::capture::preflight::read_printer_state;
 use crate::capture::runner::watch_idle;
-use crate::capture::slot::HOMING_ID;
+use crate::capture::slot::{CHIP_CHECK_ID, HOMING_ID};
 use crate::capture::{CheckFailure, CheckId};
 use crate::moonraker::rpc::RpcError;
 
@@ -60,6 +60,7 @@ pub(super) async fn printer(State(state): State<ApiState>) -> Result<Json<Printe
     let quarantined = slot.quarantine_remaining().is_some();
     let busy = match slot.current_id() {
         Some(id) if id == HOMING_ID => Some("The printer is homing."),
+        Some(id) if id == CHIP_CHECK_ID => Some("The chips are being checked."),
         Some(id) if id.starts_with("hold-") => Some("A hold is running."),
         Some(_) => Some("A test is running."),
         None if slot.is_held() => Some("A test is running."),

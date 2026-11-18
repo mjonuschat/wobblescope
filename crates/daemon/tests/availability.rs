@@ -225,3 +225,45 @@ async fn a_check_while_klipper_is_shut_down_is_refused_and_opens_no_bridge() {
     assert_eq!(body["failures"][0]["check"], "klipper_ready");
     assert_eq!(rig.fake.bridge().subscribes(), 0);
 }
+
+#[tokio::test]
+async fn a_chip_check_holds_the_test_slot_until_its_connections_close() {
+    use wobblescope::api::{CaptureState, ImportGate, mount_configured};
+
+    let rig = rig().await;
+    for chip in ["adxl345", "ebb36"] {
+        rig.fake.bridge().answer_for(chip, Subscribe::Silent);
+    }
+    let capture = CaptureState::new(600);
+    let slot = capture.slot.clone();
+    let app = mount_configured(
+        cell(None),
+        rig.moonraker.clone(),
+        ImportGate::default(),
+        capture,
+        Settings::default(),
+    );
+    let first = tokio::spawn({
+        let app = app.clone();
+        async move { json_post(&app, "/api/chips/check").await }
+    });
+    eventually("the check to take the slot", DEADLINE, || slot.is_held()).await;
+
+    assert!(
+        slot.try_acquire().is_none(),
+        "a test cannot start meanwhile"
+    );
+    let (status, body) = json_post(&app, "/api/chips/check").await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["failures"][0]["check"], "no_test_running");
+    assert!(
+        body["failures"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("already being checked")
+    );
+
+    let (status, _) = first.await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert!(!slot.is_held(), "the slot is free once the check is over");
+}

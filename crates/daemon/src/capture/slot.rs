@@ -23,6 +23,9 @@ struct State {
 /// The id the slot carries while the printer homes, so a refusal can say so.
 pub const HOMING_ID: &str = "homing";
 
+/// The id the slot carries while the chips are checked, so a refusal can say so.
+pub const CHIP_CHECK_ID: &str = "chip-check";
+
 /// The slot. Clones share it.
 #[derive(Clone, Default)]
 pub struct TestSlot {

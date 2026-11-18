@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 use super::availability::{AVAILABILITY_TIMEOUT, OpenChip, open_chips};
 use super::request::TestPlan;
 use super::session_id::{base_id, first_free_id};
-use super::slot::TestSlot;
+use super::slot::{CHIP_CHECK_ID, TestSlot};
 use super::{CheckFailure, CheckId};
 use crate::capture::iso_utc;
 use crate::moonraker::Moonraker;
@@ -236,6 +236,12 @@ pub fn busy_failure(slot: &TestSlot, failures: &mut Vec<CheckFailure>) -> CheckF
         return CheckFailure::new(
             CheckId::NoTestRunning,
             format!("a hold started {since} is running"),
+        );
+    }
+    if slot.current_id().as_deref() == Some(CHIP_CHECK_ID) {
+        return CheckFailure::new(
+            CheckId::NoTestRunning,
+            "the chips are being checked; wait until it finishes",
         );
     }
     if slot.is_homing() {
