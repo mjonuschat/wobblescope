@@ -15,6 +15,7 @@ import type { Axis3 } from "./axes";
 import { AxisToggles } from "./AxisToggles";
 import { useChartTheme } from "@/ui-kit/chartTheme";
 import { chipColor } from "./colors";
+import { DEFAULT_BAND_HALF_WIDTH, EnergyStrip } from "./EnergyStrip";
 import { ChipPicker } from "./ChipPicker";
 import { ConsoleCard } from "./ConsoleCard";
 import { DisplaySettings, PauseButton, type Range } from "./DisplaySettings";
@@ -46,6 +47,7 @@ export function StreamPage({ createWorker }: Props) {
   const stream = useStream();
   const hold = useHold();
   const [frequencyOfInterest, setFrequencyOfInterest] = useState<number | null>(null);
+  const [bandHalfWidth, setBandHalfWidth] = useState(DEFAULT_BAND_HALF_WIDTH);
   const chipList = useChips().data;
   const { hello, chips: streams } = stream.state;
 
@@ -257,6 +259,14 @@ export function StreamPage({ createWorker }: Props) {
             }))}
           />
         </Panel>
+      )}
+      {shown.length > 0 && frequencyOfInterest !== null && (
+        <EnergyStrip
+          centerHz={frequencyOfInterest}
+          halfWidthHz={bandHalfWidth}
+          onHalfWidth={setBandHalfWidth}
+          chips={shown.map(({ chip, index, spectrum }) => ({ chip, color: chipColor(index, theme), spectrum }))}
+        />
       )}
       {shown.length > 0 && (
         <Panel title="Spectrogram">

@@ -32,6 +32,16 @@ vi.mock("./SpectrumChart", () => ({
     </div>
   ),
 }));
+// The vibration strip's chart is a canvas too, so the test reads the options the page gives it.
+type BandChart = { option: { series: { name: string; data: [number, number][] }[] } };
+let bandChart: BandChart | undefined;
+const band = () => bandChart as BandChart;
+vi.mock("@/components/charts/EChart", () => ({
+  EChart: (props: BandChart) => {
+    bandChart = props;
+    return <div data-testid="band-chart" />;
+  },
+}));
 vi.mock("./SignalStrips", () => ({ SignalStrips: () => <div data-testid="strips" /> }));
 vi.mock("./Spectrogram", () => ({
   Spectrogram: (props: { scale: { current: () => { low: number; range: number } } }) => (
@@ -210,6 +220,36 @@ describe("the stream page", () => {
     fireEvent.click(screen.getByRole("button", { name: "pick a peak" }));
     expect(chartProps().frequencyOfInterest).toBeNull();
     expect((screen.getByLabelText("Frequency") as HTMLInputElement).value).toBe("52.4");
+  });
+
+  it("shows the vibration around a picked frequency, per chip, once a frequency is picked", async () => {
+    open();
+    await connect();
+    pick("a1");
+    server(streamHeader("a1", 0));
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    expect(screen.queryByRole("region", { name: "Vibration around the frequency of interest" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "pick a peak" }));
+    expect(screen.getByRole("region", { name: "Vibration around the frequency of interest" })).toBeTruthy();
+    expect(screen.getByText("Vibration around 52.4 Hz")).toBeTruthy();
+    expect(band().option.series.map((s) => s.name)).toEqual(["a1"]);
+    // Every new spectrum adds a point.
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(2), peaks: [] }));
+    expect(band().option.series[0].data.length).toBeGreaterThan(1);
+  });
+
+  it("measures a wider band when the band width is changed", async () => {
+    open();
+    await connect();
+    pick("a1");
+    server(streamHeader("a1", 0));
+    act(() => worker.emit({ type: "spectrum", chip: "a1", spectrum: spectrum(1), peaks: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "pick a peak" }));
+    const toggle = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
+    expect(toggle("Plus or minus 2 Hz").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle("Plus or minus 5 Hz"));
+    expect(toggle("Plus or minus 5 Hz").getAttribute("aria-pressed")).toBe("true");
+    expect(toggle("Plus or minus 2 Hz").getAttribute("aria-pressed")).toBe("false");
   });
 
   it("draws the line at a running hold's frequency, ramps included, and removes it when the hold ends", async () => {
