@@ -7,11 +7,11 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::capture::CheckFailure;
 use crate::capture::iso_utc;
 use crate::capture::position::{TOLERANCE_MM, Timeouts, position};
 use crate::capture::preflight::{busy_failure, check_printer, quarantine_failure};
 use crate::capture::slot::{SlotPermit, TestSlot};
+use crate::capture::{CheckFailure, CheckId};
 use crate::hold::pacer::Pacer;
 use crate::hold::pieces::{
     CALIBRATION_MM, DEFAULT_PIECE_SECONDS, Drive, HoldAxis, pairs_for, piece_duration,
@@ -216,7 +216,7 @@ struct Plan {
     saved: Saved,
 }
 
-fn failure(check: &str, message: impl Into<String>) -> Refusal {
+fn failure(check: CheckId, message: impl Into<String>) -> Refusal {
     Refusal::Checks(vec![CheckFailure::new(check, message)])
 }
 
@@ -242,11 +242,11 @@ pub async fn begin(deps: &HoldDeps<'_>, request: HoldRequest) -> Result<Hold, Re
     };
     let control = deps.moonraker.control().ok_or_else(|| {
         failure(
-            "moonraker_connected",
+            CheckId::MoonrakerConnected,
             "the daemon is not connected to Moonraker",
         )
     })?;
-    let unreadable = |message: String| failure("moonraker_connected", message);
+    let unreadable = |message: String| failure(CheckId::MoonrakerConnected, message);
     let settings = crate::moonraker::settings::read(&control)
         .await
         .map_err(&unreadable)?;

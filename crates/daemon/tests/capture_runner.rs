@@ -7,6 +7,7 @@ use common::fake_moonraker::{Gate, Script};
 use common::sim_printer::{Move, Rig, Sweep, When, fast_runner, rig, rig_with};
 use common::{belt_plan, open, test_plan};
 use serde_json::json;
+use wobblescope::capture::CheckId;
 use wobblescope::capture::axes_map::{AxesMapRequest, ChipChoice, plan_axes_map};
 use wobblescope::capture::live::{FailureCode, FinishedOutcome, FinishedTest, Phase};
 use wobblescope::capture::preflight::Refusal;
@@ -581,7 +582,7 @@ async fn a_sweep_call_that_times_out_fails_the_test_and_a_new_one_is_refused_by_
     match rig.start(&plan).await {
         Err(Refusal::Checks(failures)) => {
             assert!(
-                failures.iter().any(|f| f.check == "quarantine"),
+                failures.iter().any(|f| f.check == CheckId::Quarantine),
                 "{failures:?}"
             );
         }

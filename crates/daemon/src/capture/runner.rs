@@ -17,6 +17,7 @@ use wobblescope_session::meta::{
     PrinterInfo, SegmentMeta, SessionMeta, StepMeta, TimeWindow, undersampled_note,
 };
 
+use super::CheckId;
 use super::availability::OpenChip;
 use super::calibration;
 use super::live::{ChipLive, FailureCode, FinishedTest, LiveHub, Phase, TestState};
@@ -594,7 +595,7 @@ impl Run {
             if failures.is_empty() {
                 return Ok(());
             }
-            let only_idle = failures.iter().all(|f| f.check == "toolhead_idle");
+            let only_idle = failures.iter().all(|f| f.check == CheckId::ToolheadIdle);
             if only_idle && waited.elapsed() < self.r.timings.idle_wait {
                 tokio::time::sleep(self.r.timings.idle_poll).await;
                 continue;

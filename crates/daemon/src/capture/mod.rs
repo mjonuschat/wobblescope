@@ -33,12 +33,31 @@ pub fn iso_utc(now: OffsetDateTime) -> String {
     )
 }
 
+/// The stable name of a pre-flight check. It goes over the wire in snake case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum CheckId {
+    NotPrinting,
+    Homed,
+    MoonrakerConnected,
+    KlipperReady,
+    Quarantine,
+    NoTestRunning,
+    StorageOpen,
+    DiskSpace,
+    NoUncertainMotion,
+    ToolheadIdle,
+    Request,
+    ChipsAvailable,
+}
+
 /// One pre-flight check that failed: a stable name and a message for a person.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct CheckFailure {
-    /// The check's stable name, for example `klipper_ready`.
-    pub check: String,
+    /// The check that failed.
+    pub check: CheckId,
     /// What is wrong and how to fix it.
     pub message: String,
 }
@@ -46,9 +65,9 @@ pub struct CheckFailure {
 impl CheckFailure {
     /// A failure of `check` with `message`.
     #[must_use]
-    pub fn new(check: &str, message: impl Into<String>) -> Self {
+    pub fn new(check: CheckId, message: impl Into<String>) -> Self {
         Self {
-            check: check.to_owned(),
+            check,
             message: message.into(),
         }
     }

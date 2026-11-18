@@ -14,7 +14,7 @@ use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::Instant;
 
 use super::ApiState;
-use crate::capture::CheckFailure;
+use crate::capture::{CheckFailure, CheckId};
 use crate::hold::pieces::HoldAxis;
 use crate::hold::runner::{
     Command, EndReason, HoldDeps, HoldEnded, HoldEvent, HoldRequest, HoldState, HoldTimings,
@@ -150,7 +150,7 @@ async fn serve(mut socket: WebSocket, state: ApiState) {
         Err(refusal) => {
             let failures = match refusal {
                 Refusal::Checks(failures) => failures,
-                Refusal::Invalid(message) => vec![CheckFailure::new("request", message)],
+                Refusal::Invalid(message) => vec![CheckFailure::new(CheckId::Request, message)],
             };
             write(&mut socket, &HoldServerMessage::Refused { failures }).await;
             close(&mut socket).await;
