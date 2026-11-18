@@ -58,14 +58,13 @@ function logGrid(rows: number[][]): { logs: number[][]; min: number; max: number
   return { logs, min: floor, max };
 }
 
-const INFERNO_STOPS = INFERNO.map((hex) => [1, 3, 5].map((k) => Number.parseInt(hex.slice(k, k + 2), 16)));
+const STOPS = INFERNO.map((hex) => [1, 3, 5].map((k) => Number.parseInt(hex.slice(k, k + 2), 16)));
 
 function inferno(t: number): [number, number, number] {
-  const stops = INFERNO_STOPS;
-  const at = Math.max(0, Math.min(1, t)) * (stops.length - 1);
-  const low = Math.min(Math.floor(at), stops.length - 2);
+  const at = Math.max(0, Math.min(1, t)) * (STOPS.length - 1);
+  const low = Math.min(Math.floor(at), STOPS.length - 2);
   const mix = at - low;
-  return [0, 1, 2].map((c) => Math.round(stops[low][c] * (1 - mix) + stops[low + 1][c] * mix)) as [
+  return [0, 1, 2].map((c) => Math.round(STOPS[low][c] * (1 - mix) + STOPS[low + 1][c] * mix)) as [
     number,
     number,
     number,
