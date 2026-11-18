@@ -69,6 +69,12 @@ impl Drop for Bridge {
 }
 
 impl Bridge {
+    /// Closes the socket and returns once its task has ended, which dropping does not wait for.
+    pub async fn close(mut self) {
+        self.task.abort();
+        let _ = (&mut self.task).await;
+    }
+
     /// Connects to `url`, verifying a `wss` server as `tls` says, subscribes to `endpoint` (with
     /// `sensor` when the chip has one) and waits up to `timeout` for Klipper's answer.
     ///

@@ -115,9 +115,13 @@ pub(super) async fn check_chips(
         .iter()
         .map(|(chip, outcome)| (chip.section.clone(), availability_of(outcome, now)))
         .collect();
-    // The connections close when `outcomes` drops, after the results are recorded.
+    // The connections close after the results are recorded, and the slot is freed after that.
     state.moonraker.set_availability(results);
-    drop(outcomes);
+    for (_, outcome) in outcomes {
+        if let Ok(open) = outcome {
+            open.bridge.close().await;
+        }
+    }
     drop(permit);
     Ok(Json(state.moonraker.chips()))
 }
