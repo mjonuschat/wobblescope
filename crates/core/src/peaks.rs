@@ -2,9 +2,9 @@
 //! shaper graph, at the commit pinned in `docs/specs/shaketune-deviations.md`).
 //!
 //! The detector is kept exactly as Shake&Tune writes it, including its quirks. Peaks closer
-//! than the smoothing window merge, the last two bins are never examined, and two peaks can be
-//! refined to the same bin. Deliberate differences: a peak refined to a negative index is kept
-//! near the start instead of wrapping to the end of the array.
+//! than the smoothing window merge and the last two bins are never examined. Deliberate
+//! differences: a peak refined to a negative index is kept near the start instead of wrapping
+//! to the end of the array, and a bin that two peaks refine to is reported once.
 
 use serde::{Deserialize, Serialize};
 
@@ -108,7 +108,11 @@ fn detect_peaks_filtered(
             });
             // Shake&Tune computes `p + offset - vicinity`, which is negative for a peak
             // within `vicinity` bins of the start and wraps to the end of the array.
-            peaks.push(start + offset);
+            let index = start + offset;
+            // Shake&Tune reports a bin once for every smoothed peak that refines to it.
+            if !peaks.contains(&index) {
+                peaks.push(index);
+            }
         }
     }
     peaks
@@ -177,6 +181,22 @@ mod tests {
         let got = detect_peaks_with(&psd, 0.05, 3, 5);
         assert!(got.contains(&4), "{got:?}");
         assert!(got.iter().all(|i| *i < psd.len() - 3), "{got:?}");
+    }
+
+    #[test]
+    fn two_peaks_that_refine_to_the_same_bin_are_reported_once() {
+        let mut psd = vec![0.0; 30];
+        psd[9..12].copy_from_slice(&[0.2, 1.0, 0.2]);
+        psd[13..16].copy_from_slice(&[0.2, 0.9, 0.2]);
+        assert_eq!(detect_peaks_with(&psd, 0.05, 3, 5), vec![10]);
+    }
+
+    #[test]
+    fn peaks_that_refine_to_different_bins_are_all_reported() {
+        let mut psd = vec![0.0; 40];
+        psd[9..12].copy_from_slice(&[0.2, 1.0, 0.2]);
+        psd[29..32].copy_from_slice(&[0.2, 0.9, 0.2]);
+        assert_eq!(detect_peaks_with(&psd, 0.05, 3, 5), vec![10, 30]);
     }
 
     fn data(psd_sum: Vec<f64>) -> CalibrationData {

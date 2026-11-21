@@ -22,7 +22,6 @@ parity_test! {
             assert_close(&format!("{name} freqs"), &got.freqs, &want.freqs);
             assert_close(&format!("{name} psd a"), &got.a.psd, &want.psd_a);
             assert_close(&format!("{name} psd b"), &got.b.psd, &want.psd_b);
-            assert_eq!(got.a.peaks, want.peaks_a, "{name}: peaks a");
             // The first peak of `anticorrelated` b is refined from bin 7 to its largest
             // value at bin 8; the rest match. It is also the first unpaired one.
             let (mut peaks_b, mut unpaired_b) = (want.peaks_b.clone(), want.unpaired_b.clone());
@@ -30,8 +29,26 @@ parity_test! {
                 assert_eq!((peaks_b[0], unpaired_b[0]), (7, 7));
                 (peaks_b[0], unpaired_b[0]) = (8, 8);
             }
+            // A bin that several peaks refine to is listed once. Shake&Tune leaves the other
+            // copies of a matched bin behind as unpaired, so those drop out of the list too.
+            let once = |list: &[usize], matched: &[usize]| {
+                let mut out: Vec<usize> = Vec::new();
+                for &i in list {
+                    if !out.contains(&i) && !matched.contains(&i) {
+                        out.push(i);
+                    }
+                }
+                out
+            };
+            let matched_a: Vec<usize> = want.pairs.iter().map(|p| p.0).collect();
+            let matched_b: Vec<usize> = want.pairs.iter().map(|p| p.1).collect();
+            let peaks_a = once(&want.peaks_a, &[]);
+            let peaks_b = once(&peaks_b, &[]);
+            let unpaired_a = once(&want.unpaired_a, &matched_a);
+            let unpaired_b = once(&unpaired_b, &matched_b);
+            assert_eq!(got.a.peaks, peaks_a, "{name}: peaks a");
             assert_eq!(got.b.peaks, peaks_b, "{name}: peaks b");
-            assert_eq!(got.a.unpaired, want.unpaired_a, "{name}: unpaired a");
+            assert_eq!(got.a.unpaired, unpaired_a, "{name}: unpaired a");
             assert_eq!(got.b.unpaired, unpaired_b, "{name}: unpaired b");
             let pairs: Vec<(usize, usize)> =
                 got.pairs.iter().map(|p| (p.a.index, p.b.index)).collect();
