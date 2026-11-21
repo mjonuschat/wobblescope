@@ -6,6 +6,8 @@
 //! crash, [`recover_unsealed`] turns a leftover tmp directory with a journal into a sealed
 //! session whose outcome is failed.
 
+#![allow(clippy::disallowed_types, clippy::disallowed_methods)]
+
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;

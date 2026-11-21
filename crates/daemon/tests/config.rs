@@ -388,3 +388,12 @@ fn stream_settings_out_of_range_are_refused_by_name() {
         }
     }
 }
+
+#[test]
+fn the_documented_defaults_hold() {
+    let s = load_text("").unwrap();
+    assert_eq!(s.listen.to_string(), "0.0.0.0:7140");
+    assert_eq!(s.moonraker_url.to_string(), "http://127.0.0.1:7125/");
+    assert_eq!(s.max_segment_seconds, 600);
+    assert!(!s.check_host_header);
+}

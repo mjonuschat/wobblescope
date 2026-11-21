@@ -4,6 +4,8 @@
 //! A session is `<root>/<id>/` holding `meta.json` and one sample file per recording. It is
 //! sealed exactly when that directory exists and holds `meta.json`.
 
+#![allow(clippy::disallowed_types, clippy::disallowed_methods)]
+
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};

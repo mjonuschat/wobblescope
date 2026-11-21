@@ -1,0 +1,15 @@
+# Directory I/O belongs in the `fs` feature modules (fs.rs, writer.rs), which allow these lints.
+# The codec modules also build to wasm32 and stay free of it.
+disallowed-types = [
+    { path = "std::fs::File", reason = "directory I/O is native-only; keep it in the `fs` feature modules" },
+]
+disallowed-methods = [
+    { path = "std::fs::read", reason = "directory I/O is native-only" },
+    { path = "std::fs::read_to_string", reason = "directory I/O is native-only" },
+    { path = "std::fs::write", reason = "directory I/O is native-only" },
+    { path = "std::fs::read_dir", reason = "directory I/O is native-only" },
+    { path = "std::fs::create_dir_all", reason = "directory I/O is native-only" },
+    { path = "std::fs::rename", reason = "directory I/O is native-only" },
+    { path = "std::fs::remove_file", reason = "directory I/O is native-only" },
+    { path = "std::fs::remove_dir_all", reason = "directory I/O is native-only" },
+]

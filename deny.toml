@@ -21,6 +21,11 @@ allow = [
 [bans]
 multiple-versions = "warn"
 wildcards = "allow"
+# Only the wasm crate may bind to the browser (AGENTS.md).
+deny = [
+    { crate = "wasm-bindgen", wrappers = ["wobblescope-wasm", "serde-wasm-bindgen", "js-sys", "getrandom", "wasm-bindgen-futures", "wasm-bindgen-test"] },
+    { crate = "js-sys", wrappers = ["wobblescope-wasm", "serde-wasm-bindgen", "getrandom", "wasm-bindgen-futures", "wasm-bindgen-test"] },
+]
 
 [sources]
 unknown-registry = "warn"

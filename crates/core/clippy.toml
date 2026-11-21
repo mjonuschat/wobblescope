@@ -1,0 +1,16 @@
+# wobblescope-core is pure DSP with no I/O (AGENTS.md).
+disallowed-types = [
+    { path = "std::fs::File", reason = "core does no I/O" },
+    { path = "std::net::TcpStream", reason = "core does no I/O" },
+    { path = "std::net::TcpListener", reason = "core does no I/O" },
+    { path = "std::net::UdpSocket", reason = "core does no I/O" },
+    { path = "std::process::Command", reason = "core does no I/O" },
+]
+disallowed-methods = [
+    { path = "std::fs::read", reason = "core does no I/O" },
+    { path = "std::fs::read_to_string", reason = "core does no I/O" },
+    { path = "std::fs::write", reason = "core does no I/O" },
+    { path = "std::fs::read_dir", reason = "core does no I/O" },
+    { path = "std::fs::create_dir_all", reason = "core does no I/O" },
+    { path = "std::fs::remove_file", reason = "core does no I/O" },
+]

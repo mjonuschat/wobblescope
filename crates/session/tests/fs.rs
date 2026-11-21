@@ -1,4 +1,5 @@
 #![cfg(all(feature = "fs", not(target_arch = "wasm32")))]
+#![allow(clippy::disallowed_types, clippy::disallowed_methods)]
 
 use std::fs;
 use std::path::Path;
