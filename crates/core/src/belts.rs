@@ -18,8 +18,9 @@ pub const PEAK_THRESHOLD: f64 = 0.1;
 pub const PEAK_WINDOW: usize = 20;
 /// Reach of the peak refinement, in grid points, not Hz.
 pub const PEAK_VICINITY: usize = 15;
-/// Cap on the pairing cutoff in Hz. The comparison is `distance < cutoff + 1`, so the real
-/// limit is one Hz more.
+/// Cap on the pairing cutoff in Hz, compared as written: a pair is accepted at
+/// `distance <= cutoff`. Shake&Tune compares `distance < cutoff + 1`, which makes the
+/// real cap 11 Hz.
 pub const PAIR_CAP_HZ: f64 = 10.0;
 /// Number of paired peaks above which the health score is scaled down.
 pub const MAX_PEAKS: usize = 2;
@@ -201,12 +202,12 @@ fn pair_peaks(
     let mut left_a = peaks_a.to_vec();
     let mut left_b = peaks_b.to_vec();
     while !left_a.is_empty() && !left_b.is_empty() {
-        let mut min_distance = threshold + 1.0;
+        let mut min_distance = f64::INFINITY;
         let mut best = None;
         for &p in &left_a {
             for &q in &left_b {
                 let distance = (grid[p] - grid[q]).abs();
-                if distance < min_distance {
+                if distance <= threshold && distance < min_distance {
                     min_distance = distance;
                     best = Some((p, q));
                 }
@@ -436,10 +437,11 @@ mod tests {
     }
 
     #[test]
-    fn the_pairing_cutoff_is_eleven_hz_not_ten() {
-        let near = compare(&[(40.0, 1.0)], &[(50.5, 1.0)], MAX_FREQ);
-        assert_eq!(near.pairs.len(), 1);
-        let far = compare(&[(40.0, 1.0)], &[(51.5, 1.0)], MAX_FREQ);
+    fn the_pairing_cap_is_ten_hz_as_written() {
+        // Shake&Tune pairs up to 11 Hz apart; we stop at the stated 10.
+        let edge = compare(&[(40.0, 1.0)], &[(50.0, 1.0)], MAX_FREQ);
+        assert_eq!(edge.pairs.len(), 1);
+        let far = compare(&[(40.0, 1.0)], &[(50.5, 1.0)], MAX_FREQ);
         assert!(far.pairs.is_empty());
     }
 
