@@ -3,7 +3,7 @@ mod common;
 
 use common::{assert_close, close, shaketune};
 use wobblescope_core::belts::{
-    GRID_POINTS, MAX_PEAKS, PAIR_CAP_HZ, PEAK_THRESHOLD, PEAK_VICINITY, PEAK_WINDOW,
+    GRID_POINTS, MAX_PEAKS, PAIR_CAP_HZ, PEAK_THRESHOLD, PEAK_VICINITY_HZ, PEAK_WINDOW_HZ,
     UNPAIRED_PENALTY, compare_psds,
 };
 
@@ -97,8 +97,9 @@ parity_test! {
 fn the_constants_are_shaketunes() {
     assert_eq!(GRID_POINTS, 500);
     assert_eq!(PEAK_THRESHOLD, 0.1);
-    assert_eq!(PEAK_WINDOW, 20);
-    assert_eq!(PEAK_VICINITY, 15);
+    // Shake&Tune's 20 and 15 grid points, as the Hz they are at a `max_freq` of 200.
+    assert_eq!(PEAK_WINDOW_HZ, 8.0);
+    assert_eq!(PEAK_VICINITY_HZ, 6.0);
     assert_eq!(PAIR_CAP_HZ, 10.0);
     assert_eq!(MAX_PEAKS, 2);
     assert_eq!(UNPAIRED_PENALTY, 30.0);

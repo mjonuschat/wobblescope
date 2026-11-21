@@ -14,10 +14,11 @@ use crate::peaks::detect_peaks_whole;
 pub const GRID_POINTS: usize = 500;
 /// A peak must rise above this fraction of its own curve's maximum.
 pub const PEAK_THRESHOLD: f64 = 0.1;
-/// Width of the moving average, in grid points, not Hz.
-pub const PEAK_WINDOW: usize = 20;
-/// Reach of the peak refinement, in grid points, not Hz.
-pub const PEAK_VICINITY: usize = 15;
+/// Width of the moving average in Hz. Shake&Tune uses 20 grid points, which is 8 Hz only
+/// at its default `max_freq` of 200; here the width is the same at any `max_freq`.
+pub const PEAK_WINDOW_HZ: f64 = 8.0;
+/// Reach of the peak refinement in Hz; 15 grid points at a `max_freq` of 200.
+pub const PEAK_VICINITY_HZ: f64 = 6.0;
 /// Cap on the pairing cutoff in Hz, compared as written: a pair is accepted at
 /// `distance <= cutoff`. Shake&Tune compares `distance < cutoff + 1`, which makes the
 /// real cap 11 Hz.
@@ -199,7 +200,14 @@ fn resample_and_find_peaks(
         .unzip();
     let resampled = interp(grid, &cut_freqs, &cut_psd);
     let threshold = PEAK_THRESHOLD * nan_max(f64::NEG_INFINITY, &resampled);
-    let peaks = detect_peaks_whole(&resampled, threshold, PEAK_WINDOW, PEAK_VICINITY);
+    let step = (grid[grid.len() - 1] - grid[0]) / (grid.len() - 1) as f64;
+    let bins = |hz: f64| ((hz / step).round() as usize).max(1);
+    let peaks = detect_peaks_whole(
+        &resampled,
+        threshold,
+        bins(PEAK_WINDOW_HZ),
+        bins(PEAK_VICINITY_HZ),
+    );
     (resampled, peaks)
 }
 
@@ -462,6 +470,16 @@ mod tests {
     }
 
     #[test]
+    fn the_peak_count_does_not_depend_on_max_freq() {
+        // Modes 7 Hz apart. Shake&Tune's 20-point window is 4 Hz wide at 100 Hz and 8 Hz
+        // wide at 200 Hz, so it finds two peaks at 100 and one at 200.
+        let both = [(50.0, 1.0), (57.0, 1.0)];
+        let at = |max_freq| compare(&both, &both, max_freq).a.peaks.len();
+        assert_eq!(at(100.0), at(200.0));
+        assert_eq!(at(200.0), 1);
+    }
+
+    #[test]
     fn the_pairing_cap_is_ten_hz_as_written() {
         // Shake&Tune pairs up to 11 Hz apart; we stop at the stated 10.
         let edge = compare(&[(40.0, 1.0)], &[(50.0, 1.0)], MAX_FREQ);
@@ -524,13 +542,6 @@ mod tests {
         assert_eq!(forward.b.peaks, swapped.a.peaks);
         assert_eq!(forward.a.unpaired, swapped.b.unpaired);
         assert_eq!(forward.b.unpaired, swapped.a.unpaired);
-    }
-
-    #[test]
-    fn the_peak_count_depends_on_max_freq() {
-        let both = [(50.0, 1.0), (57.0, 1.0)];
-        assert_eq!(compare(&both, &both, 100.0).a.peaks.len(), 2);
-        assert_eq!(compare(&both, &both, 200.0).a.peaks.len(), 1);
     }
 
     #[test]
