@@ -244,7 +244,8 @@ fn mechanical_health(
     health_text(score.clamp(0.0, 100.0))
 }
 
-/// Bands are open at the bottom, so exactly 0 matches none (D12).
+/// Bands are open at the bottom, except the last, which includes 0: Shake&Tune's open
+/// bottom leaves a score of exactly 0 matching no band, so the worst result read "Unknown".
 fn health_text(score: f64) -> String {
     let text = if score > 70.0 {
         "Excellent mechanical health"
@@ -256,7 +257,7 @@ fn health_text(score: f64) -> String {
         "Potential signs of a mechanical issue"
     } else if score > 15.0 {
         "Likely a mechanical issue"
-    } else if score > 0.0 {
+    } else if score >= 0.0 {
         "Mechanical issue detected"
     } else {
         "Unknown mechanical health"
@@ -437,10 +438,10 @@ mod tests {
     }
 
     #[test]
-    fn an_anticorrelated_pair_reads_unknown_not_issue() {
+    fn an_anticorrelated_pair_reads_as_an_issue_not_unknown() {
         let got = compare(&[(30.0, 1.0)], &[(80.0, 1.0)], MAX_FREQ);
         assert_eq!(got.similarity, 0.0);
-        assert_eq!(got.health, "Unknown mechanical health");
+        assert_eq!(got.health, "Mechanical issue detected");
     }
 
     #[test]
@@ -464,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn every_health_band_is_open_at_the_bottom_and_closed_at_the_top() {
+    fn every_health_band_is_open_at_the_bottom_and_closed_at_the_top_but_the_last_includes_zero() {
         let cases = [
             (100.0, "Excellent mechanical health"),
             (70.5, "Excellent mechanical health"),
@@ -478,7 +479,7 @@ mod tests {
             (15.5, "Likely a mechanical issue"),
             (15.0, "Mechanical issue detected"),
             (0.5, "Mechanical issue detected"),
-            (0.0, "Unknown mechanical health"),
+            (0.0, "Mechanical issue detected"),
             (f64::NAN, "Unknown mechanical health"),
         ];
         for (score, text) in cases {
@@ -519,7 +520,7 @@ mod tests {
         );
         assert_eq!(
             mechanical_health(50.0, &a, &both, 0, 1.0),
-            "Unknown mechanical health"
+            "Mechanical issue detected"
         );
     }
 

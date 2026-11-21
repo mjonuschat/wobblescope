@@ -78,7 +78,13 @@ parity_test! {
                 // A flat curve scores 0 where Shake&Tune has NaN.
                 None => assert_eq!(got.similarity, 0.0, "{name}: similarity"),
             }
-            assert_eq!(got.health, want.health, "{name}: health");
+            // A score of exactly 0 reads as an issue where Shake&Tune has "Unknown". Both
+            // golden cases that read Unknown (`anticorrelated`, `flat_b`) score 0.
+            let health = match want.health.as_str() {
+                "Unknown mechanical health" => "Mechanical issue detected",
+                other => other,
+            };
+            assert_eq!(got.health, health, "{name}: health");
             assert_eq!(got.max_freq, case.max_freq);
         }
     }
