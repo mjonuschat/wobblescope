@@ -2,9 +2,9 @@
 //! shaper graph, at the commit pinned in `docs/specs/shaketune-deviations.md`).
 //!
 //! The detector is kept exactly as Shake&Tune writes it, including its quirks. Peaks closer
-//! than the smoothing window merge, the last two bins are never examined, two peaks can be
-//! refined to the same bin, and a peak refined to a negative index wraps to the end of the
-//! array, as Python indexes. Each deliberate difference is a row in the deviations file.
+//! than the smoothing window merge, the last two bins are never examined, and two peaks can be
+//! refined to the same bin. Deliberate differences: a peak refined to a negative index is kept
+//! near the start instead of wrapping to the end of the array.
 
 use serde::{Deserialize, Serialize};
 
@@ -106,12 +106,9 @@ fn detect_peaks_filtered(
             let offset = psd[start..end].iter().enumerate().fold(0, |best, (k, v)| {
                 if *v > psd[start + best] { k } else { best }
             });
-            let index = p as isize + offset as isize - vicinity as isize;
-            peaks.push(if index < 0 {
-                (index + n as isize) as usize
-            } else {
-                index as usize
-            });
+            // Shake&Tune computes `p + offset - vicinity`, which is negative for a peak
+            // within `vicinity` bins of the start and wraps to the end of the array.
+            peaks.push(start + offset);
         }
     }
     peaks
@@ -158,6 +155,28 @@ mod tests {
         psd[20..23].copy_from_slice(&[14.0, 20.0, 14.0]);
         assert_eq!(detect_peaks_with(&psd, 1.0, 3, 3).len(), 2);
         assert_eq!(detect_peaks_relative(&psd, 1.0, 0.04, 3, 3), vec![21]);
+    }
+
+    /// A smoothed peak at bin 2 whose largest raw value is also at bin 2, with `vicinity` 5.
+    fn peak_near_the_start() -> Vec<f64> {
+        let mut psd = vec![0.0; 30];
+        psd[1..4].copy_from_slice(&[0.1, 1.0, 0.3]);
+        psd
+    }
+
+    #[test]
+    fn a_peak_near_the_start_is_not_wrapped_to_the_end() {
+        let got = detect_peaks_with(&peak_near_the_start(), 0.05, 3, 5);
+        assert_eq!(got, vec![2]);
+    }
+
+    #[test]
+    fn a_peak_near_the_start_is_found_at_its_largest_raw_bin() {
+        let mut psd = peak_near_the_start();
+        psd[4] = 1.5;
+        let got = detect_peaks_with(&psd, 0.05, 3, 5);
+        assert!(got.contains(&4), "{got:?}");
+        assert!(got.iter().all(|i| *i < psd.len() - 3), "{got:?}");
     }
 
     fn data(psd_sum: Vec<f64>) -> CalibrationData {
