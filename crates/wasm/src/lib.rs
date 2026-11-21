@@ -144,7 +144,17 @@ impl Session {
         for input in a.iter_mut().chain(b.iter_mut()) {
             input.include_override = include_excluded;
         }
-        Ok(analyze_belts(chip, point, a.as_ref(), b.as_ref(), max_freq))
+        Ok(analyze_belts(
+            chip,
+            point,
+            a.as_ref(),
+            b.as_ref(),
+            max_freq,
+            self.meta
+                .settings
+                .as_ref()
+                .map(|s| (s.freq_start, s.freq_end)),
+        ))
     }
 
     /// The vibrations profile of every chip of a vibrations session and their worst case, up to

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
-use crate::belts::{BeltsResult, compare_psds};
+use crate::belts::{BeltsResult, compare_psds_in_band};
 use crate::eligibility::{DatasetDecision, DatasetInput, select_eligible};
 use crate::error::CoreError;
 use crate::multichip::windowed_samples;
@@ -93,7 +93,9 @@ fn side(input: Option<&DatasetInput>, max_freq: f64) -> BeltSide {
     }
 }
 
-/// Compares the belt A and belt B recordings of `chip` at `point` up to `max_freq`.
+/// Compares the belt A and belt B recordings of `chip` at `point` up to `max_freq`. `sweep` is
+/// the `(FREQ_START, FREQ_END)` the test ran with, when known; the similarity is read over that
+/// band only.
 ///
 /// Each recording is cut to its time window and judged by the same eligibility rules as an axis
 /// recording. Its summed PSD, not normalised, goes to [`compare_psds`] only when both belts are
@@ -105,12 +107,13 @@ pub fn analyze_belts(
     a: Option<&DatasetInput>,
     b: Option<&DatasetInput>,
     max_freq: f64,
+    sweep: Option<(f64, f64)>,
 ) -> BeltsAnalysis {
     let belt_a = side(a, max_freq);
     let belt_b = side(b, max_freq);
     let result = match (&belt_a.spectrum, &belt_b.spectrum) {
-        (Some(sa), Some(sb)) => Some(compare_psds(
-            &sa.freqs, &sa.psd, &sb.freqs, &sb.psd, max_freq,
+        (Some(sa), Some(sb)) => Some(compare_psds_in_band(
+            &sa.freqs, &sa.psd, &sb.freqs, &sb.psd, max_freq, sweep,
         )),
         _ => None,
     };

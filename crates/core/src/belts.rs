@@ -77,7 +77,8 @@ pub struct BeltsResult {
     /// table and the scatter label them in this order.
     pub pairs: Vec<BeltPair>,
     pub offsets: Vec<PeakOffset>,
-    /// Pearson correlation of the two curves times 100, clipped to 0..100. 0 when a curve is
+    /// Pearson correlation of the two curves times 100, clipped to 0..100, over the swept band
+    /// when the session recorded it and over the whole grid otherwise. 0 when a curve is
     /// flat.
     pub similarity: f64,
     /// Shake&Tune's mechanical health text.
@@ -93,6 +94,20 @@ pub fn compare_psds(
     freqs_b: &[f64],
     psd_b: &[f64],
     max_freq: f64,
+) -> BeltsResult {
+    compare_psds_in_band(freqs_a, psd_a, freqs_b, psd_b, max_freq, None)
+}
+
+/// As [`compare_psds`], with the similarity taken only over the grid points inside `sweep`, the
+/// `(FREQ_START, FREQ_END)` of the test, ends included. `None` uses the whole grid, which
+/// is all Shake&Tune does and what a session without recorded sweep settings can offer.
+pub fn compare_psds_in_band(
+    freqs_a: &[f64],
+    psd_a: &[f64],
+    freqs_b: &[f64],
+    psd_b: &[f64],
+    max_freq: f64,
+    sweep: Option<(f64, f64)>,
 ) -> BeltsResult {
     let grid = linspace(0.0, max_freq, GRID_POINTS);
     let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq);
@@ -131,7 +146,17 @@ pub fn compare_psds(
 
     // A constant curve has no variance, so the correlation is NaN, which Shake&Tune's clip
     // keeps. A dead or saturated chip scores 0.
-    let r = correlation(&psd_a, &psd_b);
+    let in_band: Vec<usize> = (0..grid.len())
+        .filter(|&i| sweep.is_none_or(|(lo, hi)| grid[i] >= lo && grid[i] <= hi))
+        .collect();
+    let band_a: Vec<f64> = in_band.iter().map(|&i| psd_a[i]).collect();
+    let band_b: Vec<f64> = in_band.iter().map(|&i| psd_b[i]).collect();
+    // Outside the sweep nothing excites the machine, so those points are noise.
+    let r = if in_band.len() < 2 {
+        f64::NAN
+    } else {
+        correlation(&band_a, &band_b)
+    };
     let similarity = if r.is_nan() {
         0.0
     } else {
@@ -443,6 +468,25 @@ mod tests {
         assert_eq!(edge.pairs.len(), 1);
         let far = compare(&[(40.0, 1.0)], &[(50.5, 1.0)], MAX_FREQ);
         assert!(far.pairs.is_empty());
+    }
+
+    #[test]
+    fn similarity_reads_the_swept_band_only() {
+        // The curves agree between 20 and 120 Hz and differ above it.
+        let (fa, pa) = modes(&[(50.0, 1.0), (90.0, 0.5)]);
+        let (fb, pb) = modes(&[(50.0, 1.0), (90.0, 0.5), (170.0, 3.0)]);
+        let whole = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, None);
+        let band = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, Some((20.0, 120.0)));
+        assert!(whole.similarity < 80.0, "{}", whole.similarity);
+        assert!(band.similarity > 99.0, "{}", band.similarity);
+        assert_eq!(band.freqs, whole.freqs, "only the figure changes");
+    }
+
+    #[test]
+    fn a_band_with_no_grid_point_scores_zero() {
+        let (fa, pa) = modes(&[(50.0, 1.0)]);
+        let got = compare_psds_in_band(&fa, &pa, &fa, &pa, MAX_FREQ, Some((300.0, 400.0)));
+        assert_eq!(got.similarity, 0.0);
     }
 
     #[test]

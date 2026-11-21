@@ -18,7 +18,7 @@ use wobblescope_session::bridge::AxesMapChip;
 use wobblescope_session::codec::encode_samples;
 use wobblescope_session::meta::{
     AXES_MAP_DIRECTIONS, AxesMapRun, ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta,
-    SessionMeta, Source, TimeDomain, TimeWindow, sample_file_name,
+    SessionMeta, Source, SweepSettings, TimeDomain, TimeWindow, sample_file_name,
 };
 use wobblescope_wasm::{AnalyzeError, Session, config_snippet};
 
@@ -393,7 +393,32 @@ fn belt_direct(w: &Win) -> BeltsAnalysis {
         Some(&input(&w.adxl)),
         Some(&input(&w.ebb)),
         200.0,
+        None,
     )
+}
+
+parity_test! {
+    fn belts_read_the_similarity_over_the_recorded_sweep_band() {
+        // The band comes from the session's settings.
+        let w = win();
+        let mut meta = belt_meta(&w, true);
+        meta.settings = Some(SweepSettings {
+            freq_start: 20.0,
+            freq_end: 60.0,
+            hz_per_sec: 1.0,
+            accel_per_hz: 60.0,
+            sweeping_accel: None,
+            sweeping_period: None,
+        });
+        let mut s = Session::new(meta).unwrap();
+        s.add_file("c0-s0.zst", encode_samples(&w.adxl).unwrap());
+        s.add_file("c0-s1.zst", encode_samples(&w.ebb).unwrap());
+        let got = s.belts("adxl345", 200.0, false).unwrap();
+        let whole = belt_direct(&w).result.unwrap();
+        let result = got.result.unwrap();
+        assert_ne!(result.similarity, whole.similarity);
+        assert_eq!(result.freqs, whole.freqs);
+    }
 }
 
 parity_test! {

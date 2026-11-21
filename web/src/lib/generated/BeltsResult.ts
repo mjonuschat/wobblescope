@@ -9,13 +9,14 @@ export type BeltsResult = {
  */
 freqs: Array<number>, a: BeltCurve, b: BeltCurve, 
 /**
- * Peaks matched across the belts, in the order the greedy match found them (D16).
+ * Peaks matched across the belts, by rising frequency of belt A's peak. The offset
+ * table and the scatter label them in this order.
  */
 pairs: Array<BeltPair>, offsets: Array<PeakOffset>, 
 /**
- * Pearson correlation of the two curves times 100, clipped to 0..100. NaN when a curve is
- * flat (D11), as in Shake&Tune. serde_json writes NaN as `null`, which it cannot read back
- * into an `f64`.
+ * Pearson correlation of the two curves times 100, clipped to 0..100, over the swept band
+ * when the session recorded it and over the whole grid otherwise. 0 when a curve is
+ * flat.
  */
 similarity: number, 
 /**
