@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::numeric::{interp, linspace, median_sorted as median, percentile_sorted as percentile};
-use crate::peaks::detect_peaks_with;
+use crate::peaks::detect_peaks_whole;
 
 pub const GRID_POINTS: usize = 500;
 /// A peak must rise above this fraction of its own curve's maximum.
@@ -162,7 +162,7 @@ fn resample_and_find_peaks(
         .unzip();
     let resampled = interp(grid, &cut_freqs, &cut_psd);
     let threshold = PEAK_THRESHOLD * nan_max(f64::NEG_INFINITY, &resampled);
-    let peaks = detect_peaks_with(&resampled, threshold, PEAK_WINDOW, PEAK_VICINITY);
+    let peaks = detect_peaks_whole(&resampled, threshold, PEAK_WINDOW, PEAK_VICINITY);
     (resampled, peaks)
 }
 

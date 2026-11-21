@@ -89,10 +89,74 @@ fn detect_peaks_filtered(
         psd.windows(window)
             .map(|w| w.iter().fold(0.0, |acc, v| v.mul_add(kernel, acc))),
     );
+    peaks_of_smoothed(psd, &smoothed, threshold, relative_height, vicinity, false)
+}
+
+/// [`detect_peaks_with`] for a curve whose whole length matters, as the belt comparison needs.
+///
+/// Shake&Tune's moving average starts `window / 2` bins in, never reaches the last half
+/// window, and for an even window sits half a bin off the bin it is assigned to, so a peak in the
+/// first or last bins is missed and a symmetric peak on a bin ties with its neighbour and is
+/// missed too. Here the average is centred on each bin (an even window gives its two end bins half
+/// weight) and the curve is padded with its end values, so every bin has a smoothed value. A peak
+/// whose top is two or more equal smoothed values is reported at the first of them: a symmetric
+/// peak between two bins gives exactly that, and a strict comparison would find no peak.
+pub fn detect_peaks_whole(
+    psd: &[f64],
+    threshold: f64,
+    window: usize,
+    vicinity: usize,
+) -> Vec<usize> {
+    if psd.len() < 3 {
+        return Vec::new();
+    }
+    let smoothed = smooth_centred(psd, window.max(1));
+    peaks_of_smoothed(psd, &smoothed, threshold, None, vicinity, true)
+}
+
+/// Moving average over `window` bins centred on each bin, the curve extended by its end values.
+fn smooth_centred(psd: &[f64], window: usize) -> Vec<f64> {
+    let half = window / 2;
+    let last = psd.len() - 1;
+    let end_weight = if window.is_multiple_of(2) { 0.5 } else { 1.0 };
+    (0..psd.len())
+        .map(|i| {
+            let sum: f64 = (0..=2 * half)
+                .map(|k| {
+                    let at = (i + k).saturating_sub(half).min(last);
+                    let weight = if k == 0 || k == 2 * half {
+                        end_weight
+                    } else {
+                        1.0
+                    };
+                    weight * psd[at]
+                })
+                .sum();
+            sum / window as f64
+        })
+        .collect()
+}
+
+/// Local maxima of `smoothed` above `threshold`, each moved to the largest raw value within
+/// `vicinity` bins, counted from the start of that window and listed once.
+fn peaks_of_smoothed(
+    psd: &[f64],
+    smoothed: &[f64],
+    threshold: f64,
+    relative_height: Option<f64>,
+    vicinity: usize,
+    first_of_plateau: bool,
+) -> Vec<usize> {
+    let n = psd.len();
     let mut peaks = Vec::new();
-    for j in 0..smoothed.len() - 2 {
+    for j in 0..smoothed.len().saturating_sub(2) {
         let p = j + 1;
-        if smoothed[j] < smoothed[p] && smoothed[p] > smoothed[j + 2] && smoothed[p] > threshold {
+        let falls = if first_of_plateau {
+            smoothed[p] >= smoothed[j + 2]
+        } else {
+            smoothed[p] > smoothed[j + 2]
+        };
+        if smoothed[j] < smoothed[p] && falls && smoothed[p] > threshold {
             if let Some(relative) = relative_height {
                 let around =
                     &smoothed[p.saturating_sub(vicinity)..(p + vicinity + 1).min(smoothed.len())];
@@ -197,6 +261,65 @@ mod tests {
         psd[9..12].copy_from_slice(&[0.2, 1.0, 0.2]);
         psd[29..32].copy_from_slice(&[0.2, 0.9, 0.2]);
         assert_eq!(detect_peaks_with(&psd, 0.05, 3, 5), vec![10, 30]);
+    }
+
+    /// A triangle of half-width 15 on 200 bins, the shape the belt parameters (window 20,
+    /// vicinity 15) see.
+    fn triangle(centre: f64) -> Vec<f64> {
+        (0..200)
+            .map(|i| (1.0 - (i as f64 - centre).abs() / 15.0).max(0.0))
+            .collect()
+    }
+
+    #[test]
+    fn a_peak_near_the_start_is_refined_to_its_raw_maximum_for_belt_parameters() {
+        assert_eq!(detect_peaks_with(&triangle(10.3), 0.05, 20, 15), vec![10]);
+    }
+
+    #[test]
+    fn the_whole_curve_detector_finds_a_peak_in_the_last_half_window() {
+        let psd = triangle(190.3);
+        assert!(detect_peaks_with(&psd, 0.05, 20, 15).is_empty());
+        assert_eq!(detect_peaks_whole(&psd, 0.05, 20, 15), vec![190]);
+    }
+
+    #[test]
+    fn the_whole_curve_detector_finds_a_peak_in_the_first_bins() {
+        let psd = triangle(7.3);
+        assert!(detect_peaks_with(&psd, 0.05, 20, 15).is_empty());
+        assert_eq!(detect_peaks_whole(&psd, 0.05, 20, 15), vec![7]);
+    }
+
+    #[test]
+    fn the_whole_curve_detector_finds_a_symmetric_peak_on_a_bin() {
+        let psd = triangle(100.0);
+        assert!(detect_peaks_with(&psd, 0.05, 20, 15).is_empty());
+        assert_eq!(detect_peaks_whole(&psd, 0.05, 20, 15), vec![100]);
+    }
+
+    #[test]
+    fn the_whole_curve_detector_reports_a_two_bin_plateau_once() {
+        let psd = triangle(100.5);
+        assert_eq!(detect_peaks_whole(&psd, 0.05, 20, 15), vec![100]);
+    }
+
+    #[test]
+    fn the_whole_curve_detector_finds_the_same_middle_peak_as_the_shaketune_one() {
+        let psd = triangle(100.3);
+        assert_eq!(
+            detect_peaks_whole(&psd, 0.05, 20, 15),
+            detect_peaks_with(&psd, 0.05, 20, 15)
+        );
+    }
+
+    #[test]
+    fn the_whole_curve_detector_handles_short_curves_and_odd_windows() {
+        assert!(detect_peaks_whole(&[1.0, 2.0], 0.0, 20, 15).is_empty());
+        assert_eq!(
+            detect_peaks_whole(&triangle(100.3), 0.05, 21, 15),
+            vec![100]
+        );
+        assert!(detect_peaks_whole(&triangle(100.3), 0.05, 0, 15).len() <= 1);
     }
 
     fn data(psd_sum: Vec<f64>) -> CalibrationData {
