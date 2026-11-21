@@ -72,7 +72,8 @@ pub struct BeltsResult {
     pub freqs: Vec<f64>,
     pub a: BeltCurve,
     pub b: BeltCurve,
-    /// Peaks matched across the belts, in the order the greedy match found them (D16).
+    /// Peaks matched across the belts, by rising frequency of belt A's peak. The offset
+    /// table and the scatter label them in this order.
     pub pairs: Vec<BeltPair>,
     pub offsets: Vec<PeakOffset>,
     /// Pearson correlation of the two curves times 100, clipped to 0..100. 0 when a curve is
@@ -96,7 +97,10 @@ pub fn compare_psds(
     let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq);
     let (psd_b, peaks_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq);
 
-    let (index_pairs, unpaired_a, unpaired_b) = pair_peaks(&peaks_a, &peaks_b, &grid);
+    let (mut index_pairs, unpaired_a, unpaired_b) = pair_peaks(&peaks_a, &peaks_b, &grid);
+    // Shake&Tune numbers the pairs in the order the greedy match found them (closest
+    // first), so the first label is not the lowest peak. Grid indices rise with frequency.
+    index_pairs.sort_unstable();
     let highest = nan_max(nan_max(f64::NEG_INFINITY, &psd_a), &psd_b);
 
     let pairs: Vec<BeltPair> = index_pairs
@@ -410,6 +414,25 @@ mod tests {
         // Shake&Tune's figure, belt A at both peaks, is another number.
         let from_a = ((got.a.psd[j] - got.a.psd[i]) / highest * 100.0).abs();
         assert!((got.offsets[0].amplitude_delta_percent - from_a).abs() > 1.0);
+    }
+
+    #[test]
+    fn pairs_and_offsets_are_listed_by_rising_frequency() {
+        // The 80 Hz pair matches exactly, so the greedy match finds it first; the 50 Hz pair,
+        // 2 Hz apart, second.
+        let got = compare(
+            &[(50.0, 1.0), (80.0, 1.0)],
+            &[(52.0, 1.0), (80.0, 1.0)],
+            MAX_FREQ,
+        );
+        assert_eq!(got.pairs.len(), 2);
+        assert!(got.pairs[0].a.freq < got.pairs[1].a.freq);
+        assert!(got.pairs[0].b.freq < got.pairs[1].b.freq);
+        assert!(
+            got.offsets[0].freq_delta > 1.0,
+            "the 50 Hz pair comes first"
+        );
+        assert!(got.offsets[1].freq_delta < 1.0);
     }
 
     #[test]

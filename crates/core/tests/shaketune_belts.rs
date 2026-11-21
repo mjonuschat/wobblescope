@@ -56,7 +56,10 @@ parity_test! {
             assert_eq!(got.b.unpaired, unpaired_b, "{name}: unpaired b");
             let pairs: Vec<(usize, usize)> =
                 got.pairs.iter().map(|p| (p.a.index, p.b.index)).collect();
-            assert_eq!(pairs, want.pairs, "{name}: pairs");
+            // Our pairs rise with frequency; Shake&Tune lists them in the order found.
+            let mut want_pairs = want.pairs.clone();
+            want_pairs.sort_unstable();
+            assert_eq!(pairs, want_pairs, "{name}: pairs");
             assert_eq!(got.offsets.len(), got.pairs.len(), "{name}: one offset per pair");
             let highest = got.a.psd.iter().chain(&got.b.psd).fold(f64::MIN, |m, &v| m.max(v));
             for (pair, offset) in got.pairs.iter().zip(&got.offsets) {
