@@ -114,7 +114,6 @@ pub fn detect_peaks_whole(
     peaks_of_smoothed(psd, &smoothed, threshold, None, vicinity, true)
 }
 
-/// Moving average over `window` bins centred on each bin, the curve extended by its end values.
 fn smooth_centred(psd: &[f64], window: usize) -> Vec<f64> {
     let half = window / 2;
     let last = psd.len() - 1;

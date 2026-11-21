@@ -562,7 +562,6 @@ mod tests {
 
     #[test]
     fn similarity_reads_the_swept_band_only() {
-        // The curves agree between 20 and 120 Hz and differ above it.
         let (fa, pa) = modes(&[(50.0, 1.0), (90.0, 0.5)]);
         let (fb, pb) = modes(&[(50.0, 1.0), (90.0, 0.5), (170.0, 3.0)]);
         let whole = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, None);

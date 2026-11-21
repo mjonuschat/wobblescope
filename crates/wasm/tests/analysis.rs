@@ -399,7 +399,6 @@ fn belt_direct(w: &Win) -> BeltsAnalysis {
 
 parity_test! {
     fn belts_read_the_similarity_over_the_recorded_sweep_band() {
-        // The band comes from the session's settings.
         let w = win();
         let mut meta = belt_meta(&w, true);
         meta.settings = Some(SweepSettings {

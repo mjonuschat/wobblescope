@@ -22,8 +22,6 @@ parity_test! {
             assert_close(&format!("{name} freqs"), &got.freqs, &want.freqs);
             assert_close(&format!("{name} psd a"), &got.a.psd, &want.psd_a);
             assert_close(&format!("{name} psd b"), &got.b.psd, &want.psd_b);
-            // The first peak of `anticorrelated` b is refined from bin 7 to its largest
-            // value at bin 8; the rest match. It is also the first unpaired one.
             let (mut peaks_b, mut unpaired_b) = (want.peaks_b.clone(), want.unpaired_b.clone());
             // The window is five PSD bins, 19 grid points here against Shake&Tune's 20. On
             // this noise-only curve one peak refines to 168 instead of 169 and the bump at 344
@@ -35,6 +33,8 @@ parity_test! {
                 unpaired_b[at] = 168;
             }
             if name == "anticorrelated" {
+                // The first peak of belt B is refined from bin 7 to its largest value at bin 8;
+                // it is also the first unpaired one.
                 assert_eq!((peaks_b[0], unpaired_b[0]), (7, 7));
                 (peaks_b[0], unpaired_b[0]) = (8, 8);
                 // A noise bump at 289 is a peak under the five-bin window.
@@ -55,10 +55,9 @@ parity_test! {
                 out
             };
             let matched_a: Vec<usize> = want.pairs.iter().map(|p| p.0).collect();
-            let matched_b: Vec<usize> = want.pairs.iter().map(|p| p.1).collect();
+            let mut matched_b: Vec<usize> = want.pairs.iter().map(|p| p.1).collect();
             // The centred, whole-curve smoothing drops these noise peaks of a curve.
             let dropped_b: &[usize] = if name == "weak_noisy_b" { &[409] } else { &[] };
-            let mut matched_b = matched_b;
             matched_b.extend_from_slice(dropped_b);
             let peaks_a = once(&want.peaks_a, &[]);
             let peaks_b = once(&peaks_b, dropped_b);
