@@ -2,10 +2,9 @@
 //! (`belts_computation.py` and the offset table of `belts_plotter.py`, at the commit pinned in
 //! `docs/specs/shaketune-deviations.md`).
 //!
-//! The port keeps the defects D8 to D17 of that file on purpose, because it reproduces the
-//! figures Shake&Tune prints. A test covers each one and none is fixed here. They include
-//! duplicate indices in the peak lists, which come from the peak detector's wrap of negative
-//! indices.
+//! The port reproduces Shake&Tune's figures, quirks included, and a test covers each
+//! behaviour. Where a result is a defect the port departs from it, and a test pins the
+//! departure.
 
 use serde::{Deserialize, Serialize};
 
@@ -61,8 +60,8 @@ pub struct BeltCurve {
 pub struct PeakOffset {
     /// Distance in Hz between the two peaks of the pair.
     pub freq_delta: f64,
-    /// Difference of belt A's curve at the two peaks, as a percentage of the highest value of
-    /// either curve. Always 0 when both peaks share a bin (D8).
+    /// Difference between belt B's value at its peak and belt A's value at its peak, as a
+    /// percentage of the highest value of either curve.
     pub amplitude_delta_percent: f64,
 }
 
@@ -120,7 +119,9 @@ pub fn compare_psds(
         .iter()
         .map(|&(i, j)| PeakOffset {
             freq_delta: (grid[j] - grid[i]).abs(),
-            amplitude_delta_percent: ((psd_a[j] - psd_a[i]) / highest).abs() * 100.0,
+            // Shake&Tune reads belt A's curve at both peaks, so two peaks in one bin always
+            // give 0. The amplitude of belt B's peak is read from belt B.
+            amplitude_delta_percent: ((psd_b[j] - psd_a[i]) / highest).abs() * 100.0,
         })
         .collect();
 
@@ -372,16 +373,17 @@ mod tests {
     }
 
     #[test]
-    fn the_amplitude_delta_of_peaks_in_one_bin_is_zero() {
+    fn the_amplitude_delta_of_peaks_in_one_bin_reads_both_belts() {
+        // Both peaks at 50 Hz, belt B five times as tall: |5 - 1| / 5 is 80%.
         let got = compare(&[(50.0, 1.0)], &[(50.0, 5.0)], MAX_FREQ);
         assert_eq!(got.offsets.len(), 1);
-        assert_eq!(got.offsets[0].amplitude_delta_percent, 0.0);
+        assert!((got.offsets[0].amplitude_delta_percent - 80.0).abs() < 1e-6);
     }
 
     #[test]
-    fn the_offsets_read_belt_a_at_both_peaks_of_a_pair() {
+    fn the_amplitude_delta_reads_belt_b_at_its_peak_and_belt_a_at_its_own() {
         // Belt A has a tall peak at 50 Hz and a short one at 56 Hz, which belt B merges into
-        // one peak at 56 Hz. The pair's offsets come from belt A's curve at 50 and 56 Hz.
+        // one peak at 56 Hz. The pair is A's peak at 50 Hz with B's at 56 Hz.
         let got = compare(&[(50.0, 1.0), (56.0, 0.4)], &[(56.0, 3.0)], MAX_FREQ);
         assert_eq!(got.pairs.len(), 1);
         let pair = &got.pairs[0];
@@ -394,17 +396,14 @@ mod tests {
             .chain(&got.b.psd)
             .copied()
             .fold(f64::NEG_INFINITY, f64::max);
-        // belts_plotter.py `_add_offset_table`: abs((psd[peak2] - psd[peak1]) / highest * 100)
-        // with psd and freqs taken from belt A (signal1).
-        let want_amplitude = ((got.a.psd[j] - got.a.psd[i]) / highest * 100.0).abs();
+        let want_amplitude = ((got.b.psd[j] - got.a.psd[i]) / highest * 100.0).abs();
         let want_freq = (got.freqs[j] - got.freqs[i]).abs();
         assert!(want_amplitude > 1.0);
         assert!((got.offsets[0].freq_delta - want_freq).abs() < 1e-12);
         assert!((got.offsets[0].amplitude_delta_percent - want_amplitude).abs() < 1e-9);
-        assert!(got.offsets[0].freq_delta > 0.0);
-        // Belt B's own curve would give another number, so this reads belt A.
-        let from_b = ((got.b.psd[j] - got.b.psd[i]) / highest * 100.0).abs();
-        assert!((got.offsets[0].amplitude_delta_percent - from_b).abs() > 1.0);
+        // Shake&Tune's figure, belt A at both peaks, is another number.
+        let from_a = ((got.a.psd[j] - got.a.psd[i]) / highest * 100.0).abs();
+        assert!((got.offsets[0].amplitude_delta_percent - from_a).abs() > 1.0);
     }
 
     #[test]

@@ -65,7 +65,8 @@ parity_test! {
                     offset.freq_delta,
                     (pair.b.freq - pair.a.freq).abs(),
                 );
-                let rise = (got.a.psd[pair.b.index] - got.a.psd[pair.a.index]).abs();
+                // Belt B is read at its own peak; Shake&Tune reads belt A at both.
+                let rise = (got.b.psd[pair.b.index] - got.a.psd[pair.a.index]).abs();
                 close(
                     &format!("{name} amplitude delta"),
                     offset.amplitude_delta_percent,

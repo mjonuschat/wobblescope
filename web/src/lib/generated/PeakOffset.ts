@@ -9,7 +9,7 @@ export type PeakOffset = {
  */
 freq_delta: number, 
 /**
- * Difference of belt A's curve at the two peaks, as a percentage of the highest value of
- * either curve. Always 0 when both peaks share a bin (D8).
+ * Difference between belt B's value at its peak and belt A's value at its peak, as a
+ * percentage of the highest value of either curve.
  */
 amplitude_delta_percent: number, };
