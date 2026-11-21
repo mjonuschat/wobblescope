@@ -65,7 +65,7 @@ pub struct PeakOffset {
     /// Distance in Hz between the two peaks of the pair.
     pub freq_delta: f64,
     /// Difference between belt B's value at its peak and belt A's value at its peak, as a
-    /// percentage of the highest value of either curve.
+    /// percentage of the highest value of either curve inside the swept band, or anywhere without one.
     pub amplitude_delta_percent: f64,
 }
 
@@ -101,9 +101,9 @@ pub fn compare_psds(
     compare_psds_in_band(freqs_a, psd_a, freqs_b, psd_b, max_freq, None)
 }
 
-/// As [`compare_psds`], with the similarity taken only over the grid points inside `sweep`, the
-/// `(FREQ_START, FREQ_END)` of the test, ends included. `None` uses the whole grid, which
-/// is all Shake&Tune does and what a session without recorded sweep settings can offer.
+/// As [`compare_psds`], with the similarity and the peaks taken only inside `sweep`, the
+/// `(FREQ_START, FREQ_END)` of the test, ends included. `None` uses the whole grid, which is
+/// all Shake&Tune does and what a session without recorded sweep settings can offer.
 pub fn compare_psds_in_band(
     freqs_a: &[f64],
     psd_a: &[f64],
@@ -115,14 +115,24 @@ pub fn compare_psds_in_band(
     let grid = linspace(0.0, max_freq, GRID_POINTS);
     // Both curves are smoothed over the same width in Hz, that of the coarser PSD.
     let bin = bin_spacing(freqs_a).max(bin_spacing(freqs_b));
-    let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq, bin);
-    let (psd_b, peaks_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq, bin);
+    let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq, bin, sweep);
+    let (psd_b, peaks_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq, bin, sweep);
 
     let (mut index_pairs, unpaired_a, unpaired_b) = pair_peaks(&peaks_a, &peaks_b, &grid);
     // Shake&Tune numbers the pairs in the order the greedy match found them (closest
     // first), so the first label is not the lowest peak. Grid indices rise with frequency.
     index_pairs.sort_unstable();
-    let highest = nan_max(nan_max(f64::NEG_INFINITY, &psd_a), &psd_b);
+    // Out-of-band values would shrink every offset and penalty that is a share of this.
+    let band_max = |psd: &[f64]| {
+        let values: Vec<f64> = grid
+            .iter()
+            .zip(psd)
+            .filter(|(f, _)| sweep.is_none_or(|(lo, hi)| **f >= lo && **f <= hi))
+            .map(|(_, v)| *v)
+            .collect();
+        nan_max(f64::NEG_INFINITY, &values)
+    };
+    let highest = nan_max(band_max(&psd_a), &[band_max(&psd_b)]);
 
     let pairs: Vec<BeltPair> = index_pairs
         .iter()
@@ -196,6 +206,7 @@ fn resample_and_find_peaks(
     psd: &[f64],
     max_freq: f64,
     bin: f64,
+    sweep: Option<(f64, f64)>,
 ) -> (Vec<f64>, Vec<usize>) {
     let (cut_freqs, cut_psd): (Vec<f64>, Vec<f64>) = freqs
         .iter()
@@ -204,15 +215,27 @@ fn resample_and_find_peaks(
         .map(|(f, p)| (*f, *p))
         .unzip();
     let resampled = interp(grid, &cut_freqs, &cut_psd);
-    let threshold = PEAK_THRESHOLD * nan_max(f64::NEG_INFINITY, &resampled);
+    // A peak outside the sweep is noise: it would become an unpaired peak and cost health points
+    // that the similarity, read over the band, never sees. Its height must not set the
+    // threshold either, or a tall one hides the real peaks inside the band.
+    let in_band = |f: f64| sweep.is_none_or(|(lo, hi)| f >= lo && f <= hi);
+    let band: Vec<f64> = grid
+        .iter()
+        .zip(&resampled)
+        .filter(|(f, _)| in_band(**f))
+        .map(|(_, v)| *v)
+        .collect();
+    let band_max = nan_max(f64::NEG_INFINITY, &band);
+    let threshold = PEAK_THRESHOLD * band_max;
     let step = (grid[grid.len() - 1] - grid[0]) / (grid.len() - 1) as f64;
     let points = |bins: f64| ((bins * bin / step).round() as usize).max(1);
-    let peaks = detect_peaks_whole(
+    let mut peaks = detect_peaks_whole(
         &resampled,
         threshold,
         points(PEAK_WINDOW_BINS),
         points(PEAK_VICINITY_BINS),
     );
+    peaks.retain(|&i| in_band(grid[i]));
     (resampled, peaks)
 }
 
@@ -547,6 +570,60 @@ mod tests {
         assert!(whole.similarity < 80.0, "{}", whole.similarity);
         assert!(band.similarity > 99.0, "{}", band.similarity);
         assert_eq!(band.freqs, whole.freqs, "only the figure changes");
+    }
+
+    #[test]
+    fn peaks_outside_the_swept_band_are_not_counted() {
+        // Belt B has a mode at 170 Hz that the sweep to 120 Hz never excited.
+        let (fa, pa) = modes(&[(50.0, 1.0)]);
+        let (fb, pb) = modes(&[(50.0, 1.0), (170.0, 1.0)]);
+        let whole = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, None);
+        assert_eq!(whole.b.unpaired.len(), 1);
+        let band = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, Some((20.0, 120.0)));
+        assert_eq!(band.b.peaks.len(), 1);
+        assert!(band.b.unpaired.is_empty());
+        assert_eq!(band.pairs.len(), 1);
+        assert_ne!(whole.health, "Excellent mechanical health");
+        assert_eq!(band.health, "Excellent mechanical health");
+    }
+
+    #[test]
+    fn a_tall_peak_outside_the_band_does_not_hide_one_inside() {
+        let (fa, pa) = modes(&[(50.0, 1.0)]);
+        let (fb, pb) = modes(&[(50.0, 1.0), (170.0, 20.0)]);
+        let got = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, Some((20.0, 120.0)));
+        assert_eq!(got.b.peaks.len(), 1);
+        assert_eq!(got.pairs.len(), 1);
+    }
+
+    #[test]
+    fn a_tall_peak_outside_the_band_does_not_shrink_the_offsets_and_penalty() {
+        let (fa, pa) = modes(&[(50.0, 1.0)]);
+        let (fb, pb) = modes(&[(50.0, 0.5), (170.0, 20.0)]);
+        let band = Some((20.0, 120.0));
+        let got = compare_psds_in_band(&fa, &pa, &fb, &pb, 200.0, band);
+        let delta = got.offsets[0].amplitude_delta_percent;
+        assert!((delta - 50.0).abs() < 1.0, "{delta}");
+        // The unpaired peak costs the same with or without the out-of-band mode.
+        let (fc, pc) = modes(&[(50.0, 1.0), (100.0, 1.0)]);
+        let (fd, pd) = modes(&[(50.0, 1.0), (170.0, 20.0)]);
+        let (fe, pe) = modes(&[(50.0, 1.0)]);
+        let tall = compare_psds_in_band(&fc, &pc, &fd, &pd, 200.0, band);
+        let clean = compare_psds_in_band(&fc, &pc, &fe, &pe, 200.0, band);
+        assert_eq!(tall.a.unpaired.len(), 1);
+        assert_eq!(tall.health, clean.health);
+    }
+
+    #[test]
+    fn a_peak_on_the_band_edge_is_kept() {
+        let (fa, pa) = modes(&[(60.0, 1.0)]);
+        let at = compare_psds_in_band(&fa, &pa, &fa, &pa, 200.0, None).pairs[0]
+            .a
+            .freq;
+        let kept = compare_psds_in_band(&fa, &pa, &fa, &pa, 200.0, Some((at, 120.0)));
+        assert_eq!(kept.pairs.len(), 1);
+        let dropped = compare_psds_in_band(&fa, &pa, &fa, &pa, 200.0, Some((at + 0.01, 120.0)));
+        assert!(dropped.pairs.is_empty());
     }
 
     #[test]

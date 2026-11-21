@@ -10,6 +10,6 @@ export type PeakOffset = {
 freq_delta: number, 
 /**
  * Difference between belt B's value at its peak and belt A's value at its peak, as a
- * percentage of the highest value of either curve.
+ * percentage of the highest value of either curve inside the swept band, or anywhere without one.
  */
 amplitude_delta_percent: number, };
