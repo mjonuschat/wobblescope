@@ -434,7 +434,7 @@ parity_test! {
 }
 
 parity_test! {
-    fn flat_belts_reach_the_caller_with_a_nan_similarity() {
+    fn flat_belts_reach_the_caller_with_a_zero_similarity() {
         let w = win();
         let flat = |len: usize| {
             let mut s = RawSamples::default();
@@ -454,7 +454,7 @@ parity_test! {
         s.add_file("c0-s0.zst", encode_samples(&a).unwrap());
         s.add_file("c0-s1.zst", encode_samples(&b).unwrap());
         let got = s.belts("adxl345", 200.0, false).unwrap();
-        assert!(got.result.unwrap().similarity.is_nan());
+        assert_eq!(got.result.unwrap().similarity, 0.0);
     }
 }
 

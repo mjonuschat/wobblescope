@@ -75,9 +75,8 @@ pub struct BeltsResult {
     /// Peaks matched across the belts, in the order the greedy match found them (D16).
     pub pairs: Vec<BeltPair>,
     pub offsets: Vec<PeakOffset>,
-    /// Pearson correlation of the two curves times 100, clipped to 0..100. NaN when a curve is
-    /// flat (D11), as in Shake&Tune. serde_json writes NaN as `null`, which it cannot read back
-    /// into an `f64`.
+    /// Pearson correlation of the two curves times 100, clipped to 0..100. 0 when a curve is
+    /// flat.
     pub similarity: f64,
     /// Shake&Tune's mechanical health text.
     pub health: String,
@@ -125,7 +124,14 @@ pub fn compare_psds(
         })
         .collect();
 
-    let similarity = (correlation(&psd_a, &psd_b) * 100.0).clamp(0.0, 100.0);
+    // A constant curve has no variance, so the correlation is NaN, which Shake&Tune's clip
+    // keeps. A dead or saturated chip scores 0.
+    let r = correlation(&psd_a, &psd_b);
+    let similarity = if r.is_nan() {
+        0.0
+    } else {
+        (r * 100.0).clamp(0.0, 100.0)
+    };
     let a = BeltCurve {
         psd: psd_a,
         peaks: peaks_a,
@@ -216,8 +222,7 @@ fn remove_first(list: &mut Vec<usize>, value: usize) {
     }
 }
 
-/// `_compute_mhi` and `_mhi_lut`. A NaN similarity stays NaN through the score and reads as
-/// unknown.
+/// `_compute_mhi` and `_mhi_lut`. A NaN score reads as unknown.
 fn mechanical_health(
     similarity: f64,
     a: &BeltCurve,
@@ -415,13 +420,20 @@ mod tests {
     }
 
     #[test]
-    fn a_flat_curve_gives_nan_and_unknown_health() {
+    fn a_flat_curve_scores_zero_similarity() {
         let freqs: Vec<f64> = (0..=400).map(|i| i as f64 * 0.25).collect();
         let flat = vec![1.0; freqs.len()];
         let (fb, pb) = modes(&[(50.0, 1.0)]);
         let got = compare_psds(&freqs, &flat, &fb, &pb, MAX_FREQ);
-        assert!(got.similarity.is_nan());
-        assert_eq!(got.health, "Unknown mechanical health");
+        assert_eq!(got.similarity, 0.0);
+    }
+
+    #[test]
+    fn two_flat_curves_score_zero_similarity() {
+        let freqs: Vec<f64> = (0..=400).map(|i| i as f64 * 0.25).collect();
+        let flat = vec![1.0; freqs.len()];
+        let got = compare_psds(&freqs, &flat, &freqs, &flat, MAX_FREQ);
+        assert_eq!(got.similarity, 0.0);
     }
 
     #[test]
@@ -529,11 +541,11 @@ mod tests {
     }
 
     #[test]
-    fn a_nan_similarity_serialises_as_null() {
+    fn a_flat_curve_serialises_a_zero_similarity() {
         let (f, p) = modes(&[(50.0, 1.0)]);
         let flat = vec![1.0; f.len()];
         let got = compare_psds(&f, &flat, &f, &p, MAX_FREQ);
         let json = serde_json::to_value(&got).expect("serialises");
-        assert!(json["similarity"].is_null());
+        assert_eq!(json["similarity"], 0.0);
     }
 }

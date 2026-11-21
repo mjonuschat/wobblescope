@@ -75,7 +75,8 @@ parity_test! {
             }
             match want.similarity {
                 Some(s) => close(&format!("{name} similarity"), got.similarity, s),
-                None => assert!(got.similarity.is_nan(), "{name}: similarity is NaN"),
+                // A flat curve scores 0 where Shake&Tune has NaN.
+                None => assert_eq!(got.similarity, 0.0, "{name}: similarity"),
             }
             assert_eq!(got.health, want.health, "{name}: health");
             assert_eq!(got.max_freq, case.max_freq);

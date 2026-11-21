@@ -137,7 +137,7 @@ fn the_segment_window_is_applied() {
 }
 
 #[test]
-fn flat_curves_give_a_nan_similarity_not_an_error() {
+fn flat_curves_give_a_zero_similarity_not_an_error() {
     let flat = |start: f64| {
         let mut s = RawSamples::default();
         for k in 0..16_000 {
@@ -149,5 +149,5 @@ fn flat_curves_give_a_nan_similarity_not_an_error() {
         input(s)
     };
     let got = analyze_belts("adxl", 0, Some(&flat(0.0)), Some(&flat(0.0)), 200.0);
-    assert!(got.result.unwrap().similarity.is_nan());
+    assert_eq!(got.result.unwrap().similarity, 0.0);
 }
