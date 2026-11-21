@@ -3,7 +3,7 @@ mod common;
 
 use common::{assert_close, close, shaketune};
 use wobblescope_core::belts::{
-    GRID_POINTS, MAX_PEAKS, PAIR_CAP_HZ, PEAK_THRESHOLD, PEAK_VICINITY_HZ, PEAK_WINDOW_HZ,
+    GRID_POINTS, MAX_PEAKS, PAIR_CAP_HZ, PEAK_THRESHOLD, PEAK_VICINITY_BINS, PEAK_WINDOW_BINS,
     UNPAIRED_PENALTY, compare_psds,
 };
 
@@ -25,9 +25,23 @@ parity_test! {
             // The first peak of `anticorrelated` b is refined from bin 7 to its largest
             // value at bin 8; the rest match. It is also the first unpaired one.
             let (mut peaks_b, mut unpaired_b) = (want.peaks_b.clone(), want.unpaired_b.clone());
+            // The window is five PSD bins, 19 grid points here against Shake&Tune's 20. On
+            // this noise-only curve one peak refines to 168 instead of 169 and the bump at 344
+            // survives the smoothing.
+            if name == "weak_noisy_b" {
+                let at = peaks_b.iter().position(|&i| i == 169).unwrap();
+                peaks_b[at] = 168;
+                let at = unpaired_b.iter().position(|&i| i == 169).unwrap();
+                unpaired_b[at] = 168;
+            }
             if name == "anticorrelated" {
                 assert_eq!((peaks_b[0], unpaired_b[0]), (7, 7));
                 (peaks_b[0], unpaired_b[0]) = (8, 8);
+                // A noise bump at 289 is a peak under the five-bin window.
+                for list in [&mut peaks_b, &mut unpaired_b] {
+                    let at = list.iter().position(|&i| i == 316).unwrap();
+                    list.insert(at, 289);
+                }
             }
             // A bin that several peaks refine to is listed once. Shake&Tune leaves the other
             // copies of a matched bin behind as unpaired, so those drop out of the list too.
@@ -43,7 +57,7 @@ parity_test! {
             let matched_a: Vec<usize> = want.pairs.iter().map(|p| p.0).collect();
             let matched_b: Vec<usize> = want.pairs.iter().map(|p| p.1).collect();
             // The centred, whole-curve smoothing drops these noise peaks of a curve.
-            let dropped_b: &[usize] = if name == "weak_noisy_b" { &[344, 409] } else { &[] };
+            let dropped_b: &[usize] = if name == "weak_noisy_b" { &[409] } else { &[] };
             let mut matched_b = matched_b;
             matched_b.extend_from_slice(dropped_b);
             let peaks_a = once(&want.peaks_a, &[]);
@@ -97,9 +111,9 @@ parity_test! {
 fn the_constants_are_shaketunes() {
     assert_eq!(GRID_POINTS, 500);
     assert_eq!(PEAK_THRESHOLD, 0.1);
-    // Shake&Tune's 20 and 15 grid points, as the Hz they are at a `max_freq` of 200.
-    assert_eq!(PEAK_WINDOW_HZ, 8.0);
-    assert_eq!(PEAK_VICINITY_HZ, 6.0);
+    // Shake&Tune's 20 and 15 grid points, as PSD bins at Klipper's 1.56 Hz.
+    assert_eq!(PEAK_WINDOW_BINS, 5.0);
+    assert_eq!(PEAK_VICINITY_BINS, 4.0);
     assert_eq!(PAIR_CAP_HZ, 10.0);
     assert_eq!(MAX_PEAKS, 2);
     assert_eq!(UNPAIRED_PENALTY, 30.0);

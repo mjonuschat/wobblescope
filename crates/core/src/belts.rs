@@ -14,11 +14,13 @@ use crate::peaks::detect_peaks_whole;
 pub const GRID_POINTS: usize = 500;
 /// A peak must rise above this fraction of its own curve's maximum.
 pub const PEAK_THRESHOLD: f64 = 0.1;
-/// Width of the moving average in Hz. Shake&Tune uses 20 grid points, which is 8 Hz only
-/// at its default `max_freq` of 200; here the width is the same at any `max_freq`.
-pub const PEAK_WINDOW_HZ: f64 = 8.0;
-/// Reach of the peak refinement in Hz; 15 grid points at a `max_freq` of 200.
-pub const PEAK_VICINITY_HZ: f64 = 6.0;
+/// Width of the moving average in PSD bins. A Hann window's main lobe is four bins wide,
+/// so features closer than that are one in the data already; Shake&Tune's 20 grid points are
+/// 8 Hz at `max_freq` 200 and a bin of Klipper's PSD is about 1.56 Hz, which is five bins.
+pub const PEAK_WINDOW_BINS: f64 = 5.0;
+/// Reach of the peak refinement in PSD bins; the same 3:4 ratio to the window as
+/// Shake&Tune's 15 to 20.
+pub const PEAK_VICINITY_BINS: f64 = 4.0;
 /// Cap on the pairing cutoff in Hz, compared as written: a pair is accepted at
 /// `distance <= cutoff`. Shake&Tune compares `distance < cutoff + 1`, which makes the
 /// real cap 11 Hz.
@@ -111,8 +113,10 @@ pub fn compare_psds_in_band(
     sweep: Option<(f64, f64)>,
 ) -> BeltsResult {
     let grid = linspace(0.0, max_freq, GRID_POINTS);
-    let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq);
-    let (psd_b, peaks_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq);
+    // Both curves are smoothed over the same width in Hz, that of the coarser PSD.
+    let bin = bin_spacing(freqs_a).max(bin_spacing(freqs_b));
+    let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq, bin);
+    let (psd_b, peaks_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq, bin);
 
     let (mut index_pairs, unpaired_a, unpaired_b) = pair_peaks(&peaks_a, &peaks_b, &grid);
     // Shake&Tune numbers the pairs in the order the greedy match found them (closest
@@ -191,6 +195,7 @@ fn resample_and_find_peaks(
     freqs: &[f64],
     psd: &[f64],
     max_freq: f64,
+    bin: f64,
 ) -> (Vec<f64>, Vec<usize>) {
     let (cut_freqs, cut_psd): (Vec<f64>, Vec<f64>) = freqs
         .iter()
@@ -201,14 +206,21 @@ fn resample_and_find_peaks(
     let resampled = interp(grid, &cut_freqs, &cut_psd);
     let threshold = PEAK_THRESHOLD * nan_max(f64::NEG_INFINITY, &resampled);
     let step = (grid[grid.len() - 1] - grid[0]) / (grid.len() - 1) as f64;
-    let bins = |hz: f64| ((hz / step).round() as usize).max(1);
+    let points = |bins: f64| ((bins * bin / step).round() as usize).max(1);
     let peaks = detect_peaks_whole(
         &resampled,
         threshold,
-        bins(PEAK_WINDOW_HZ),
-        bins(PEAK_VICINITY_HZ),
+        points(PEAK_WINDOW_BINS),
+        points(PEAK_VICINITY_BINS),
     );
     (resampled, peaks)
+}
+
+/// Median gap between neighbouring bins in Hz; 0 when there are fewer than two.
+fn bin_spacing(freqs: &[f64]) -> f64 {
+    let mut gaps: Vec<f64> = freqs.windows(2).map(|w| w[1] - w[0]).collect();
+    gaps.sort_by(f64::total_cmp);
+    if gaps.is_empty() { 0.0 } else { median(&gaps) }
 }
 
 /// Greedy pairing, closest first, as `_pair_peaks`: matched index pairs, then the leftover
@@ -361,9 +373,16 @@ mod tests {
 
     const MAX_FREQ: f64 = 100.0;
 
-    /// A PSD on 0..=200 Hz at 0.25 Hz with a Gaussian of 2 Hz width at each `(freq, height)`.
+    /// A PSD on 0..=250 Hz at Klipper's 1.5625 Hz bins with a Gaussian of 2 Hz width at each
+    /// `(freq, height)`.
     fn modes(modes: &[(f64, f64)]) -> (Vec<f64>, Vec<f64>) {
-        let freqs: Vec<f64> = (0..=800).map(|i| i as f64 * 0.25).collect();
+        modes_at(1.5625, modes)
+    }
+
+    fn modes_at(step: f64, modes: &[(f64, f64)]) -> (Vec<f64>, Vec<f64>) {
+        let freqs: Vec<f64> = (0..=(250.0 / step) as usize)
+            .map(|i| i as f64 * step)
+            .collect();
         let psd = freqs
             .iter()
             .map(|f| {
@@ -480,12 +499,42 @@ mod tests {
     }
 
     #[test]
+    fn the_peak_window_follows_the_psd_bin_spacing() {
+        // The same two modes 7 Hz apart. At 1.56 Hz bins the window is 7.8 Hz and they
+        // merge; at 0.5 Hz bins it is 2.5 Hz and they stay apart.
+        let psd = |step: f64| {
+            let freqs: Vec<f64> = (0..)
+                .map(|i| i as f64 * step)
+                .take_while(|f| *f <= 250.0)
+                .collect();
+            let values = freqs
+                .iter()
+                .map(|f| {
+                    (-((f - 50.0) / 1.0).powi(2) / 2.0).exp()
+                        + (-((f - 57.0) / 1.0).powi(2) / 2.0).exp()
+                })
+                .collect::<Vec<f64>>();
+            (freqs, values)
+        };
+        let count = |step| {
+            let (f, p) = psd(step);
+            compare_psds(&f, &p, &f, &p, 200.0).a.peaks.len()
+        };
+        assert_eq!(count(1.5625), 1);
+        assert_eq!(count(0.5), 2);
+    }
+
+    #[test]
     fn the_pairing_cap_is_ten_hz_as_written() {
         // Shake&Tune pairs up to 11 Hz apart; we stop at the stated 10.
-        let edge = compare(&[(40.0, 1.0)], &[(50.0, 1.0)], MAX_FREQ);
-        assert_eq!(edge.pairs.len(), 1);
-        let far = compare(&[(40.0, 1.0)], &[(50.5, 1.0)], MAX_FREQ);
-        assert!(far.pairs.is_empty());
+        // Fine bins, so that the peaks sit where the modes are.
+        let at = |other: f64| {
+            let (fa, pa) = modes_at(0.25, &[(40.0, 1.0)]);
+            let (fb, pb) = modes_at(0.25, &[(other, 1.0)]);
+            compare_psds(&fa, &pa, &fb, &pb, MAX_FREQ).pairs.len()
+        };
+        assert_eq!(at(50.0), 1);
+        assert_eq!(at(50.5), 0);
     }
 
     #[test]
