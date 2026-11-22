@@ -83,4 +83,18 @@ describe("the sidebar", () => {
     fireEvent.click(within(dialog).getByRole("link", { name: "History" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
+
+  it("lists_the_measure_pages_with_the_axes_map_first_and_live_view_last", async () => {
+    stubApiWithStatus((call) =>
+      apiPath(call) === "settings"
+        ? { body: withKinematics("corexy") }
+        : { status: 404, body: { error: "not_found", message: "no" } },
+    );
+    renderRoute("/");
+    await screen.findByRole("link", { name: "Belts" });
+    const labels = ["Axes map calibration", "Belts", "Input shaper", "Vibrations profile", "Live view"];
+    await screen.findByRole("link", { name: "Vibrations profile" });
+    const links = screen.getAllByRole("link").filter((a) => labels.includes(a.textContent ?? ""));
+    expect(links.map((a) => a.textContent)).toEqual(labels);
+  });
 });

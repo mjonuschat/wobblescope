@@ -54,9 +54,9 @@ const pages: Page[] = [
     label: "Measure",
     icon: FlaskConicalIcon,
     children: [
-      { to: "/run/shaper", label: "Input shaper", icon: ActivityIcon },
-      { to: "/run/belts", label: "Belts", icon: ChevronsLeftRightIcon, needsBelts: true },
       { to: "/run/axes-map", label: "Axes map calibration", icon: CompassIcon },
+      { to: "/run/belts", label: "Belts", icon: ChevronsLeftRightIcon, needsBelts: true },
+      { to: "/run/shaper", label: "Input shaper", icon: ActivityIcon },
       { to: "/run/vibrations", label: "Vibrations profile", icon: WavesIcon, needsVibrations: true },
       { to: "/stream", label: "Live view", icon: AudioLinesIcon },
     ],
