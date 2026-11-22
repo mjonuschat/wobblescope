@@ -99,14 +99,22 @@ fn setting(field: &str, value: Option<f64>, default: f64, min: f64) -> Result<f6
     Ok(value)
 }
 
-/// The speeds of one angle. The count is Shake&Tune's `int((max - 2) / increment + 1)`, so the
-/// last speed can be below `max_speed` (D33).
+/// The speeds of one angle: the start speed and every step above it while below the end speed,
+/// then the end speed itself. Shake&Tune stops at the last step below the end speed, so a run
+/// never measures the end speed.
 fn speed_list(min_speed: f64, max_speed: f64, speed_increment: f64) -> Vec<f64> {
-    // The count truncates toward zero as Python's int() does.
-    let count = ((max_speed - min_speed) / speed_increment + 1.0) as usize;
-    (0..count)
-        .map(|i| min_speed + i as f64 * speed_increment)
-        .collect()
+    let mut speeds = Vec::new();
+    let mut i = 0.0;
+    loop {
+        let speed = min_speed + i * speed_increment;
+        if speed >= max_speed {
+            break;
+        }
+        speeds.push(speed);
+        i += 1.0;
+    }
+    speeds.push(max_speed);
+    speeds
 }
 
 /// The factor on the segment length at `speed`. Shake&Tune shortens the segments below 100 mm/s
@@ -206,17 +214,8 @@ pub fn plan_vibrations(
              max_speed",
         );
     }
-    // The analysis needs at least two speeds, so a run with one would record for minutes and
-    // then be unanalysable.
-    if speed_list(min_speed, max_speed, speed_increment).len() < 2 {
-        return refuse(
-            "speed_increment",
-            format!(
-                "the speed range {min_speed} to {max_speed} mm/s with this step has fewer than two \
-                 speeds; lower speed_increment or raise max_speed"
-            ),
-        );
-    }
+    // The analysis needs at least two speeds. The start is below the end, and the end speed
+    // is always listed, so every accepted range has two.
     let Some(kinematics) = printer.machine.kinematics.clone() else {
         return refuse(
             "kinematics",
@@ -560,11 +559,25 @@ mod tests {
     }
 
     #[test]
-    fn speed_list_matches_shaketune_count() {
+    fn the_last_speed_is_the_end_speed() {
         let speeds = speed_list(2.0, 200.0, 5.0);
-        assert_eq!(speeds.len(), 40);
+        assert_eq!(speeds.len(), 41);
         assert_eq!(&speeds[..3], &[2.0, 7.0, 12.0]);
-        assert_eq!(speeds[39], 197.0);
+        assert_eq!(&speeds[39..], &[197.0, 200.0]);
+    }
+
+    #[test]
+    fn an_end_speed_on_a_step_is_listed_once() {
+        let speeds = speed_list(2.0, 200.0, 2.0);
+        assert_eq!(speeds.len(), 100);
+        assert_eq!(&speeds[97..], &[196.0, 198.0, 200.0]);
+    }
+
+    #[test]
+    fn a_planned_run_ends_at_the_end_speed() {
+        let mut r = request();
+        r.speed_increment = Some(5.0);
+        assert_eq!(vibrations(&r).speeds.last(), Some(&200.0));
     }
 
     #[test]
@@ -593,13 +606,11 @@ mod tests {
     }
 
     #[test]
-    fn fewer_than_two_speeds_is_refused() {
+    fn a_step_wider_than_the_range_still_gives_two_speeds() {
         let mut r = request();
         r.max_speed = Some(10.0);
-        r.speed_increment = Some(9.0);
-        assert_eq!(refused(&r).field, "speed_increment");
-        r.speed_increment = Some(8.0);
-        assert_eq!(vibrations(&r).speeds.len(), 2);
+        r.speed_increment = Some(50.0);
+        assert_eq!(vibrations(&r).speeds, vec![2.0, 10.0]);
     }
 
     #[test]
