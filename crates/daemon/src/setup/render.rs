@@ -137,7 +137,6 @@ fn block(indent: &str) -> String {
     format!("{indent}{BEGIN_MARK}\n{indent}include {SNIPPET_INCLUDE_PATH};\n{indent}{END_MARK}\n")
 }
 
-/// The line ranges (start of the BEGIN line, end of the END line) of our blocks in `text`.
 fn marked_blocks(text: &str) -> Result<Vec<(usize, usize)>, String> {
     let mut found = Vec::new();
     let mut begin = None;
@@ -198,10 +197,6 @@ pub fn with_include_block(
     )))
 }
 
-/// `text` without any of our include blocks, or `None` when there are none.
-///
-/// # Errors
-/// A message when the markers are unbalanced.
 pub fn without_include_blocks(text: &str) -> Result<Option<String>, String> {
     let blocks = marked_blocks(text)?;
     if blocks.is_empty() {
@@ -217,14 +212,13 @@ pub fn without_include_blocks(text: &str) -> Result<Option<String>, String> {
     Ok(Some(kept))
 }
 
-/// The addresses a reverse proxy on this machine connects from.
 const LOOPBACK: [IpAddr; 2] = [
     IpAddr::V4(Ipv4Addr::LOCALHOST),
     IpAddr::V6(Ipv6Addr::LOCALHOST),
 ];
 
 /// The config text with `trusted_proxies` listing both loopback addresses, or `None` when it
-/// already does. A missing key is added before the first table header or at the end; an
+/// already does. A missing key is added before the first table header or at the end. An
 /// existing array is rewritten on one line with the loopback addresses it lacks added. The
 /// rest of the file is kept as written.
 ///
@@ -295,8 +289,6 @@ pub fn with_trusted_proxies(text: &str) -> Result<Option<String>, String> {
     Ok(Some(out))
 }
 
-/// Byte range of the `[...]` after a top-level `trusted_proxies =`, skipping strings and
-/// comments inside it.
 fn array_span(text: &str) -> Option<(usize, usize)> {
     let mut at = 0;
     for line in text.split_inclusive('\n') {

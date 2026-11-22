@@ -144,7 +144,6 @@ async fn stays_active(host: &Host) -> Result<bool, SetupError> {
     Ok(outcome.success && outcome.stdout == "active")
 }
 
-/// The port the daemon's Moonraker URL names.
 fn moonraker_port(settings: &Settings) -> u16 {
     let uri = &settings.moonraker_url;
     uri.port_u16()
@@ -155,8 +154,6 @@ fn moonraker_port(settings: &Settings) -> u16 {
         })
 }
 
-/// The settings `--check` judges nginx by: the config file's, or the defaults when it is
-/// missing.
 fn nginx_settings(say: &mut Say, config: &Path) -> Option<Settings> {
     if !config.exists() {
         return Some(Settings::default());

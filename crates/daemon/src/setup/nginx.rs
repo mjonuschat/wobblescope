@@ -8,14 +8,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The nginx directory the paths in `nginx.conf` refer to.
 pub const NGINX_DIR: &str = "/etc/nginx";
 
 /// Suffix of the backup setup keeps beside a file it edits. Includes of that name are not
 /// followed, so a backup in a globbed directory is never read as a second site.
 pub const BACKUP_SUFFIX: &str = ".before-wobblescope";
 
-/// One directive: its name, arguments and, for a block, the block's contents.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Node {
     name: String,
@@ -181,28 +179,19 @@ fn parse(text: &str) -> Result<Vec<Node>, String> {
     parse_nodes(&tokens, &mut 0, false)
 }
 
-/// A `server` block, as far as setup needs it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Server {
     /// The file the block is in, as nginx reached it (possibly a symlink).
     pub file: PathBuf,
-    /// Offset of the `{` that opens the block.
     pub open: usize,
-    /// Offset of the `}` that closes the block.
     pub close: usize,
-    /// Offset of the first `location` directive directly inside the block.
     pub first_location: Option<usize>,
-    /// The first `listen` argument.
     pub listen: Option<String>,
-    /// The `root` directive.
     pub root: Option<String>,
-    /// The proxy targets (`apiserver`, `127.0.0.1:7125`) of the locations that look like
-    /// Moonraker's.
     moonraker_targets: Vec<String>,
 }
 
 impl Server {
-    /// A name for messages: the file name and the listen argument.
     #[must_use]
     pub fn label(&self) -> String {
         let name = self
@@ -215,7 +204,6 @@ impl Server {
         }
     }
 
-    /// Whether the root directory is a Mainsail install.
     #[must_use]
     pub fn is_mainsail(&self) -> bool {
         self.root
@@ -279,28 +267,20 @@ fn read_server(file: &Path, node: &Node) -> Option<Server> {
     Some(server)
 }
 
-/// What reading the nginx configuration found.
 #[derive(Debug, Default)]
 pub struct Layout {
-    /// Every file reached, including those that could not be understood.
     pub files: Vec<PathBuf>,
-    /// Files that were skipped, with the reason.
     pub skipped: Vec<(PathBuf, String)>,
-    /// Every `server` block in the `http` context.
     pub servers: Vec<Server>,
     upstreams: BTreeMap<String, String>,
 }
 
-/// The servers that proxy Moonraker, split by whether they proxy the instance setup targets.
 #[derive(Debug, Default)]
 pub struct Plan {
-    /// Servers whose Moonraker port is the one asked for.
     pub mapped: Vec<Server>,
-    /// Servers that proxy Moonraker somewhere else, with why they are left alone.
     pub left_alone: Vec<(Server, String)>,
 }
 
-/// Whether `name` matches `pattern`, where `*` is any run of characters and `?` one.
 fn wild(pattern: &[u8], name: &[u8]) -> bool {
     match pattern.split_first() {
         None => name.is_empty(),
@@ -310,7 +290,6 @@ fn wild(pattern: &[u8], name: &[u8]) -> bool {
     }
 }
 
-/// The existing files `pattern` names, in name order.
 fn expand(pattern: &Path) -> Vec<PathBuf> {
     let mut found = vec![PathBuf::new()];
     for part in pattern.components() {
@@ -406,7 +385,6 @@ impl Reader<'_> {
     }
 }
 
-/// The port of `host:port`, `[::1]:port`, or the upstream `name`'s first server.
 fn port_of(target: &str, upstreams: &BTreeMap<String, String>) -> Result<u16, String> {
     let address = upstreams.get(target).map_or(target, String::as_str);
     if address.starts_with("unix:") {
@@ -419,7 +397,6 @@ fn port_of(target: &str, upstreams: &BTreeMap<String, String>) -> Result<u16, St
 }
 
 impl Layout {
-    /// Reads `dir/nginx.conf` and what it includes. `None` when there is no `nginx.conf`.
     #[must_use]
     pub fn read(dir: &Path) -> Option<Self> {
         let main = dir.join("nginx.conf");

@@ -37,7 +37,7 @@ If nginx serves your Mainsail or Fluidd, `setup` also publishes Wobblescope on t
 
 - `/etc/nginx/snippets/wobblescope.conf`, a file `setup` owns.
 - One line in each Mainsail or Fluidd site file that proxies your Moonraker, `include /etc/nginx/snippets/wobblescope.conf;` between `# BEGIN wobblescope` and `# END wobblescope` comments. A copy of the file as it was is kept as `<file>.before-wobblescope`.
-- A "Wobblescope" button in Mainsail's sidebar, in `.theme/navi.json` next to `moonraker.conf`. An existing `navi.json` keeps its other entries; if it is not a JSON array, `setup` leaves it alone and says so.
+- A "Wobblescope" button in Mainsail's sidebar, in `.theme/navi.json` next to `moonraker.conf`. An existing `navi.json` keeps its other entries. If it is not a JSON array, `setup` leaves it alone and says so.
 - `trusted_proxies` in `wobblescope.toml`, which gets `127.0.0.1` and `::1` so the daemon sees your real clients behind nginx.
 
 `setup` runs `nginx -t` first, puts everything back if nginx rejects the change, and then reloads nginx. It handles one Moonraker instance, the one in `wobblescope.toml`; sites that proxy another instance are left alone. Add `--no-nginx` to skip all of this. `setup --check` reports each of these pieces. `setup --remove` takes the include lines, the snippet and the sidebar entry out and leaves `wobblescope.toml` as it is.

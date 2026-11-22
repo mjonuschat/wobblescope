@@ -1,4 +1,4 @@
-//! The nginx step of setup: a snippet that serves the daemon under `/wobblescope/`, and one
+//! The nginx step of setup. It writes a snippet that serves the daemon under `/wobblescope/`, and one
 //! marked include line in each site that proxies this machine's Moonraker.
 //!
 //! The snippet is a root-owned regular file, never a symlink, because a root nginx must not
@@ -14,7 +14,6 @@ use super::install::{Say, io_err, read};
 use super::nginx::{BACKUP_SUFFIX, Layout, Plan, Server};
 use super::render;
 
-/// Where the snippet lives under the nginx directory.
 const SNIPPET: &str = "snippets/wobblescope.conf";
 
 /// Prints the one-line reasons nothing can be done, and returns the plan otherwise.
@@ -48,31 +47,23 @@ pub(super) fn find(host: &Host, say: &mut Say, moonraker_port: u16) -> Option<Pl
     Some(plan)
 }
 
-/// The snippet's path.
 #[must_use]
 pub(super) fn snippet_path(host: &Host) -> PathBuf {
     host.nginx_dir.join(SNIPPET)
 }
 
-fn target_of(path: &Path) -> PathBuf {
+pub(super) fn target_of(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
 }
 
-/// What the snippet file is now.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum SnippetState {
-    /// Not there.
     Missing,
-    /// A regular file with the wanted text and the wanted mode and owner.
     Current,
     /// There, but differs, is a symlink, or has the wrong mode or owner.
     Stale,
 }
 
-/// Compares the snippet at `path` with `wanted`.
-///
-/// # Errors
-/// [`SetupError`] when the file cannot be read.
 pub fn snippet_state(host: &Host, path: &Path, wanted: &str) -> Result<SnippetState, SetupError> {
     use std::os::unix::fs::MetadataExt;
     let Ok(meta) = fs::symlink_metadata(path) else {
@@ -140,7 +131,6 @@ pub(super) fn back_up(target: &Path, text: &str) -> Result<Option<PathBuf>, Setu
     Ok(Some(backup))
 }
 
-/// What to put back when nginx rejects the change.
 #[derive(Default)]
 struct Undo {
     snippet: Option<(PathBuf, Option<String>)>,
@@ -198,7 +188,7 @@ pub(super) fn reload(host: &Host) -> bool {
 }
 
 /// Writes the snippet and the include blocks, then tests and reloads nginx. Returns whether
-/// the step worked; a rejected configuration is put back and reported, not raised.
+/// the step worked. A rejected configuration is put back and reported, not raised.
 ///
 /// # Errors
 /// [`SetupError`] when a file cannot be read or written. Whatever was changed before the
@@ -222,24 +212,7 @@ pub(super) fn install(
         say.step("nginx", "already current");
         return Ok(true);
     }
-    if let Some(printed) = test_config(host)? {
-        undo.run();
-        say.step("nginx", "FAILED: nginx -t rejected the change; put back");
-        for line in printed.lines() {
-            say.note(line);
-        }
-        return Ok(false);
-    }
-    if reload(host) {
-        say.step("nginx", "reloaded");
-        Ok(true)
-    } else {
-        say.step(
-            "nginx",
-            "FAILED to reload; run: sudo systemctl reload nginx",
-        );
-        Ok(false)
-    }
+    verify_and_reload(host, say, undo)
 }
 
 fn write_all(
@@ -383,7 +356,7 @@ pub(super) fn check(
 /// our header, then tests and reloads nginx. A rejected configuration is put back.
 ///
 /// # Errors
-/// [`SetupError`] when a file cannot be read or written; what was changed is put back.
+/// [`SetupError`] when a file cannot be read or written. What was changed is put back.
 pub(super) fn remove(host: &Host, say: &mut Say) -> Result<bool, SetupError> {
     if host.runner.run("nginx", &["-v"]).is_err() {
         say.step("nginx", "not installed, nothing to remove");
@@ -406,24 +379,7 @@ pub(super) fn remove(host: &Host, say: &mut Say) -> Result<bool, SetupError> {
         say.step("nginx", "no link to remove");
         return Ok(true);
     }
-    if let Some(printed) = test_config(host)? {
-        undo.run();
-        say.step("nginx", "FAILED: nginx -t rejected the change; put back");
-        for line in printed.lines() {
-            say.note(line);
-        }
-        return Ok(false);
-    }
-    if reload(host) {
-        say.step("nginx", "reloaded");
-        Ok(true)
-    } else {
-        say.step(
-            "nginx",
-            "FAILED to reload; run: sudo systemctl reload nginx",
-        );
-        Ok(false)
-    }
+    verify_and_reload(host, say, undo)
 }
 
 fn remove_all(
@@ -469,4 +425,27 @@ fn remove_all(
         None => {}
     }
     Ok(changed)
+}
+
+/// Tests the new configuration and reloads nginx. A rejected configuration is put back with
+/// `undo` and what nginx printed is shown.
+fn verify_and_reload(host: &Host, say: &mut Say, undo: Undo) -> Result<bool, SetupError> {
+    if let Some(printed) = test_config(host)? {
+        undo.run();
+        say.step("nginx", "FAILED: nginx -t rejected the change; put back");
+        for line in printed.lines() {
+            say.note(line);
+        }
+        return Ok(false);
+    }
+    if reload(host) {
+        say.step("nginx", "reloaded");
+        Ok(true)
+    } else {
+        say.step(
+            "nginx",
+            "FAILED to reload; run: sudo systemctl reload nginx",
+        );
+        Ok(false)
+    }
 }

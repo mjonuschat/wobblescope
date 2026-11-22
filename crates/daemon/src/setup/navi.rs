@@ -1,4 +1,4 @@
-//! The Mainsail sidebar entry: one object in `<config>/.theme/navi.json`.
+//! The Mainsail sidebar entry, one object in `<config>/.theme/navi.json`.
 //!
 //! The file is the user's. An entry is added as text before the closing `]` so the rest of
 //! the file keeps its formatting. Our entry is the one whose `title` is "Wobblescope" and whose
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use super::SetupError;
 use super::host::{Host, write_atomic};
 use super::install::{Say, io_err, read};
-use super::nginx_link::back_up;
+use super::nginx_link::{back_up, target_of};
 use crate::setup::nginx::BACKUP_SUFFIX;
 
 const TITLE: &str = "Wobblescope";
@@ -26,7 +26,6 @@ const ICON: &str = "M9.96,11.31C10.82,8.1 11.5,6 13,6C14.5,6 15.18,8.1 16.04,11.
 /// link after it.
 const POSITION: u32 = 95;
 
-/// Our entry as a JSON value.
 #[must_use]
 pub fn entry() -> Value {
     json!({
@@ -54,7 +53,6 @@ fn compact() -> String {
     format!("{{{}}}", body.join(", "))
 }
 
-/// The entry over several lines: `indent` before the braces, `field_indent` before each key.
 fn spread(indent: &str, field_indent: &str) -> String {
     let body: Vec<String> = fields()
         .iter()
@@ -134,15 +132,12 @@ fn elements(text: &str) -> Option<Vec<(usize, usize)>> {
     }
 }
 
-/// The leading whitespace of the line `start` is on, when only whitespace precedes it there.
 fn own_line_indent(text: &str, start: usize) -> Option<&str> {
     let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
     let before = &text[line_start..start];
     before.trim().is_empty().then_some(before)
 }
 
-/// Our entry written in the style of the element at `span`: compact when that element is on
-/// one line, spread with its field indentation otherwise.
 fn styled(text: &str, span: (usize, usize)) -> String {
     let element = &text[span.0..span.1];
     if !element.contains('\n') {
@@ -158,18 +153,14 @@ fn styled(text: &str, span: (usize, usize)) -> String {
     spread(indent, &field_indent)
 }
 
-/// A new file holding only our entry.
 #[must_use]
 pub fn new_file() -> String {
     format!("[\n  {}\n]\n", spread("  ", "    "))
 }
 
-/// What adding our entry to a file's text does.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Merge {
-    /// Our entry is there and equal.
     Unchanged,
-    /// The text to write.
     Changed(String),
 }
 
@@ -225,12 +216,9 @@ pub fn with_entry(text: &str) -> Result<Merge, String> {
     Ok(Merge::Changed(edited))
 }
 
-/// What removing our entry from a file's text leaves.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Strip {
-    /// Our entry is not there.
     Absent,
-    /// The file's text without our entry, and whether the array is now empty.
     Removed { text: String, empty: bool },
 }
 
@@ -252,7 +240,6 @@ pub fn without_entry(text: &str) -> Result<Strip, String> {
     })
 }
 
-/// Where the file is for a Moonraker config directory.
 #[must_use]
 pub fn path(config_root: &Path) -> PathBuf {
     config_root.join(".theme/navi.json")
@@ -265,7 +252,7 @@ fn backup_path(path: &Path) -> PathBuf {
 }
 
 /// Adds or updates our entry. A file that is not a JSON array is refused with a message and
-/// left alone; that is reported, not raised.
+/// left alone. That is reported, not raised.
 ///
 /// # Errors
 /// [`SetupError`] when the file cannot be read or written.
@@ -294,7 +281,7 @@ pub(super) fn install(host: &Host, say: &mut Say, config_root: &Path) -> Result<
             }
             let (mode, owner) = match &existing {
                 Some(old) => {
-                    back_up(&fs::canonicalize(&file).unwrap_or(file.clone()), old)?;
+                    back_up(&target_of(&file), old)?;
                     (None, None)
                 }
                 None => (Some(0o644), host.owner()),
@@ -314,10 +301,6 @@ pub(super) fn install(host: &Host, say: &mut Say, config_root: &Path) -> Result<
     Ok(())
 }
 
-/// Whether our entry is in the file and equal. Prints the state.
-///
-/// # Errors
-/// [`SetupError`] when the file cannot be read.
 pub(super) fn check(say: &mut Say, config_root: &Path) -> Result<bool, SetupError> {
     let file = path(config_root);
     let (good, state) = match read(&file)? {
@@ -349,7 +332,7 @@ pub(super) fn remove(say: &mut Say, config_root: &Path) -> Result<(), SetupError
         )),
         Ok(Strip::Absent) => say.step("mainsail entry", "no entry"),
         Ok(Strip::Removed { text, empty }) => {
-            let target = fs::canonicalize(&file).unwrap_or_else(|_| file.clone());
+            let target = target_of(&file);
             if empty && !backup_path(&target).exists() {
                 fs::remove_file(&target)
                     .map_err(io_err(format!("cannot remove {}", target.display())))?;

@@ -201,7 +201,6 @@ pub struct Host {
     pub chown: bool,
     /// The directory systemd reads units from.
     pub unit_dir: PathBuf,
-    /// The nginx configuration directory, `/etc/nginx`.
     pub nginx_dir: PathBuf,
     /// The running binary, which the unit starts.
     pub binary: PathBuf,

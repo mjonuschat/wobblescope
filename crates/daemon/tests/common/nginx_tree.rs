@@ -15,8 +15,6 @@ pub fn fixture(name: &str) -> String {
 }
 
 impl Tree {
-    /// `nginx.conf`, `conf.d`, and `sites-enabled` symlinks into `sites-available` for each of
-    /// `sites` (fixture names).
     pub fn new(sites: &[&str]) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
@@ -38,7 +36,6 @@ impl Tree {
         self.dir.path().canonicalize().unwrap()
     }
 
-    /// Writes `sites-available/name` and links it from `sites-enabled`.
     pub fn site(&self, name: &str, text: &str) -> PathBuf {
         let target = self.root().join("sites-available").join(name);
         std::fs::write(&target, text).unwrap();
@@ -54,7 +51,6 @@ impl Tree {
 }
 
 impl Tree {
-    /// Points the `apiserver` upstream at `port`.
     pub fn moonraker_port(&self, port: u16) {
         let path = self.root().join("conf.d/upstreams.conf");
         let text = fixture("upstreams.conf").replace("7125", &port.to_string());

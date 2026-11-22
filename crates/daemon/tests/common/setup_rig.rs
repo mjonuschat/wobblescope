@@ -1,6 +1,3 @@
-//! The setup rig: a fake Moonraker, a fake systemd and nginx, and a printer directory tree in a
-//! temporary directory.
-
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -24,7 +21,6 @@ pub struct Systemd {
     pub active: bool,
     pub flaps: bool,
     pub fail_on: Option<String>,
-    /// What `nginx -t` prints to standard error when it fails; `None` means it passes.
     pub nginx_test_error: Option<String>,
 }
 
@@ -98,7 +94,7 @@ pub struct Rig {
     pub systemd: FakeSystemd,
     pub root: tempfile::TempDir,
     pub binary: PathBuf,
-    /// The nginx directory the host reads; absent unless a test builds one.
+    /// The nginx directory the host reads. It is absent unless a test builds one.
     pub nginx_dir: PathBuf,
 }
 
@@ -135,7 +131,6 @@ impl Rig {
         rig
     }
 
-    /// The port of the fake Moonraker.
     pub fn moonraker_port(&self) -> u16 {
         self.fake
             .http_url()

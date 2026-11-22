@@ -86,7 +86,6 @@ pub fn resolve_api_key(
 pub struct Options {
     /// What to do.
     pub mode: Mode,
-    /// Whether to publish the daemon through nginx (`--no-nginx` turns it off).
     pub nginx: bool,
     /// Where Moonraker is, when the flag names it.
     pub moonraker: Option<String>,
