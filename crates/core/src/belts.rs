@@ -93,7 +93,6 @@ pub enum Belt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ImbalanceState {
-    /// A run of windows with the same stronger belt was found.
     Found,
     /// Enough windows to look at, and no such run. This does not claim the belts are balanced.
     NoneFound,
@@ -372,7 +371,11 @@ fn remove_first(list: &mut Vec<usize>, value: usize) {
 ///
 /// Limitation: a wide feature centred on a window edge can lift three neighbouring windows
 /// and read as an imbalance, and a gap that is narrower than 30 Hz or not aligned to the
-/// windows may or may not be caught. The run rule is all or nothing: if one of a run's three
+/// windows is not guaranteed to be caught. An imbalance is caught when three consecutive
+/// 10 Hz windows each have the same stronger belt and sit above the floor; whether a narrower
+/// or misaligned gap meets that depends on how it falls across the windows.
+///
+/// The run rule is all or nothing: if one of a run's three
 /// windows falls below the floor, ties or reverses, the run is gone and the score is unscaled,
 /// so a small input change can lift the score.
 fn window_imbalance(
@@ -403,7 +406,6 @@ fn window_imbalance(
     struct Window {
         lo: f64,
         stronger: Option<Belt>,
-        /// The stronger belt's power.
         strong: f64,
         ratio: f64,
         eligible: bool,
@@ -943,8 +945,6 @@ mod tests {
         assert_eq!(json["similarity"], 0.0);
     }
 
-    // ---- the level imbalance ----
-
     const BAND: Option<(f64, f64)> = Some((5.0, 100.0));
 
     fn grid_at(step: f64) -> Vec<f64> {
@@ -957,7 +957,6 @@ mod tests {
         grid.iter().map(|&x| f(x)).collect()
     }
 
-    /// Belt A is 1 everywhere; belt B is `b(f)`.
     fn imbalance_of_b(b: impl Fn(f64) -> f64) -> BeltImbalance {
         let grid = grid_at(0.5);
         let psd_a = vec![1.0; grid.len()];
@@ -977,7 +976,6 @@ mod tests {
         mechanical_health(similarity, figure, &none, &none, 0, 1.0)
     }
 
-    /// The highest value of either curve of a result.
     fn highest_of(got: &BeltsResult) -> f64 {
         got.a
             .psd
@@ -987,7 +985,6 @@ mod tests {
             .fold(0.0, f64::max)
     }
 
-    /// The health text of a result had its figure been 1.
     fn unscaled_health(got: &BeltsResult) -> String {
         let highest = highest_of(got);
         mechanical_health(
@@ -1164,7 +1161,6 @@ mod tests {
 
     #[test]
     fn one_zero_belt_window_has_ratio_zero_and_two_zero_ratios_give_figure_zero_and_score_zero() {
-        // A is silent over three windows: three ratios of 0.
         let grid = grid_at(0.5);
         let psd_b = vec![1.0; grid.len()];
         let psd_a = values(&grid, |f| if in_range(f, 45.0, 75.0) { 0.0 } else { 1.0 });
@@ -1178,7 +1174,6 @@ mod tests {
 
     #[test]
     fn a_zero_median_run_has_figure_zero() {
-        // Ratios 0, 0 and 0.5.
         let grid = grid_at(0.5);
         let psd_b = vec![1.0; grid.len()];
         let psd_a = values(&grid, |f| match f {
@@ -1194,7 +1189,6 @@ mod tests {
 
     #[test]
     fn one_zero_window_with_two_nonzero_ratios_gives_a_nonzero_median() {
-        // Ratios 0, 0.5 and 0.5.
         let grid = grid_at(0.5);
         let psd_b = vec![1.0; grid.len()];
         let psd_a = values(&grid, |f| match f {
@@ -1209,7 +1203,6 @@ mod tests {
 
     #[test]
     fn a_window_with_both_zero_is_skipped() {
-        // Both belts are silent in 55 to 65 Hz, between two windows where B is stronger.
         let grid = grid_at(0.5);
         let psd_a = values(&grid, |f| if in_range(f, 55.0, 65.0) { 0.0 } else { 1.0 });
         let psd_b = values(&grid, |f| match f {
@@ -1255,7 +1248,6 @@ mod tests {
         let two = |f: f64| if in_range(f, 47.0, 63.0) { 1.0 } else { 0.0 };
         let few = compare_fn(two, |f| 0.5 * two(f), BAND);
         assert_unavailable_and_unscaled(&few);
-        // A band of 25 Hz, over which B is half of A.
         let wide = |f: f64| (-((f - 30.0) / 4.0).powi(2) / 2.0).exp();
         let narrow = compare_fn(wide, |f| 0.5 * wide(f), Some((20.0, 45.0)));
         assert_unavailable_and_unscaled(&narrow);

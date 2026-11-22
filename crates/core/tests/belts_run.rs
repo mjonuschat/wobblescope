@@ -152,7 +152,6 @@ fn flat_curves_give_a_zero_similarity_not_an_error() {
     assert_eq!(got.result.unwrap().similarity, 0.0);
 }
 
-/// A strong tone at `low` Hz on x only, a resonance at 60 Hz on both, `seconds` long.
 fn with_low_tone(low: f64, seconds: f64) -> RawSamples {
     let mut s = tones(60.0, 100.0, seconds, 0.0);
     let tau = std::f64::consts::TAU;

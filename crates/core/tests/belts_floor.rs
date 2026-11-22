@@ -72,7 +72,6 @@ parity_test! {
         // (numpy); over the whole grid it is 15.23.
         assert!((got.similarity - 81.52601096407666).abs() < 1e-6, "{}", got.similarity);
 
-        // Belt B's resonance at 150 Hz is unpaired.
         assert_eq!(got.a.unpaired.len(), 0);
         assert_eq!(got.b.unpaired.len(), 1);
         assert_eq!(got.freqs[got.b.unpaired[0]], 150.0);
