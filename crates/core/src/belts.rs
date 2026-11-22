@@ -395,7 +395,7 @@ fn window_imbalance(
         return unscaled(ImbalanceState::Unavailable);
     };
     let (start, end) = match band {
-        Some((lo, hi)) => (lo, hi.min(grid_end)),
+        Some((lo, hi)) => (lo.max(grid[0]), hi.min(grid_end)),
         None => (grid[0], grid_end),
     };
     let span = end - start;
@@ -1328,6 +1328,20 @@ mod tests {
         );
         assert_eq!(forward.stronger, Some(Belt::B));
         assert_eq!(swapped.stronger, Some(Belt::A));
+    }
+
+    #[test]
+    fn a_band_starting_below_the_grid_is_cut_at_the_grid_start() {
+        let grid = grid_at(0.5);
+        let flat = vec![1.0; grid.len()];
+        let doubled = values(&grid, twice_over(0.0, 30.0));
+        // Only 0 to 25 Hz lies inside the grid, under the 30 Hz needed.
+        let narrow = window_imbalance(&grid, &flat, &doubled, Some((-5.0, 25.0)));
+        assert_eq!(narrow.state, ImbalanceState::Unavailable);
+        // The windows start at the grid start, not at -5 Hz.
+        let wide = window_imbalance(&grid, &flat, &doubled, Some((-5.0, 45.0)));
+        assert_eq!(wide.state, ImbalanceState::Found);
+        assert_eq!((wide.lo_hz, wide.hi_hz), (0.0, 30.0));
     }
 
     #[test]
