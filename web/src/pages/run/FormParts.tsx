@@ -2,11 +2,12 @@ import { useIsMutating } from "@tanstack/react-query";
 import { RotateCcwIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { HomeSolidIcon } from "@/components/HomeSolidIcon";
 import { homedTone } from "@/components/PrinterControls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { homeMutationKey, levelMutationKey, usePrinterState } from "@/lib/api/queries";
+import { homeMutationKey, levelMutationKey, useHomePrinter, usePrinterState, useStatus } from "@/lib/api/queries";
 import { CardLabel } from "@/ui-kit/CardLabel";
 
 /** The inline error under a field; `name` is what the field's `aria-describedby` points at. */
@@ -82,4 +83,34 @@ export function usePrinterProblem(blocked: string | null): string | null {
     return `Home the printer first. Not homed: ${notHomed.join(", ")}.`;
   }
   return null;
+}
+
+/** Homes the printer from a run form. It shows only while the printer is not fully homed. */
+export function HomeButton() {
+  const status = useStatus();
+  const ready = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
+  const printer = usePrinterState(ready);
+  const home = useHomePrinter();
+  const levelling = useIsMutating({ mutationKey: levelMutationKey }) > 0;
+  if (!ready || !printer.data || homedTone(printer.data.homed_axes) === "full") return null;
+  return (
+    <>
+      {home.isError && (
+        <span role="alert" className="text-sm text-destructive">
+          {home.error.message}
+        </span>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        aria-label="Home all"
+        disabled={home.isPending || levelling || printer.data.busy !== null}
+        onClick={() => home.mutate("all")}
+      >
+        <HomeSolidIcon data-icon="inline-start" />
+        HOME ALL
+      </Button>
+    </>
+  );
 }

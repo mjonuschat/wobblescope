@@ -25,7 +25,7 @@ import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { TestKind } from "@/lib/generated/TestKind";
 import { formatMm, parseNumber } from "@/lib/parse";
 
-import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
+import { ChoiceRow, FieldError, FormCard, HomeButton, ResetButton, usePrinterProblem } from "./FormParts";
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 import { Alert } from "@/ui-kit/Alert";
 
@@ -463,21 +463,24 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
           {/* The reason Start is disabled shows in its tooltip; this copy is for screen readers. */}
           {problem && <p className="sr-only">{problem}</p>}
         </div>
-        <Tooltip>
-          <TooltipTrigger render={<span className="ml-auto" />}>
-            <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
-              {start.isPending ? (
-                "Checking printer…"
-              ) : (
-                <>
-                  <PlayIcon data-icon="inline-start" />
-                  Run test
-                </>
-              )}
-            </Button>
-          </TooltipTrigger>
-          {problem && <TooltipContent side="top">{problem}</TooltipContent>}
-        </Tooltip>
+        <div className="ml-auto flex items-center gap-2">
+          <HomeButton />
+          <Tooltip>
+            <TooltipTrigger render={<span />}>
+              <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
+                {start.isPending ? (
+                  "Checking printer…"
+                ) : (
+                  <>
+                    <PlayIcon data-icon="inline-start" />
+                    Run test
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            {problem && <TooltipContent side="top">{problem}</TooltipContent>}
+          </Tooltip>
+        </div>
       </div>
     </form>
   );

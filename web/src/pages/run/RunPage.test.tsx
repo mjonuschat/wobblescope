@@ -40,6 +40,7 @@ function api({
     if (path === "chips") return { body: chips };
     if (path === "chips/check") return { body: checked ?? chips };
     if (path === "printer") return { body: { homed_axes: homed, busy } };
+    if (path === "printer/home") return { body: { homed: true } };
     if (path === "tests" && call.method === "POST") {
       const reply = typeof start === "function" ? start(call) : start;
       return reply ?? { status: 202, body: { id: "test-1" } };
@@ -97,6 +98,33 @@ describe("the run screen", () => {
     api({ homed: null });
     renderRoute("/run/shaper");
     expect(await screen.findByText("Home the printer first. Not homed: X, Y, Z.")).toBeTruthy();
+  });
+
+  it("offers Home all before Run test while the printer is not fully homed, and homes all axes", async () => {
+    const calls = api({ homed: "xy" });
+    renderRoute("/run/shaper");
+    const home = await screen.findByRole("button", { name: "Home all" });
+    expect(home.textContent).toBe("HOME ALL");
+    expect(home.compareDocumentPosition(startButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(home);
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) => c.method === "POST" && apiPath(c) === "printer/home" && c.body === JSON.stringify({ axes: "all" }),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("shows no Home all button once the printer is homed", async () => {
+    await open({ homed: "xyz" });
+    expect(screen.queryByRole("button", { name: "Home all" })).toBeNull();
+  });
+
+  it("disables Home all while the printer is busy", async () => {
+    api({ homed: "xy", busy: "The printer is homing." });
+    renderRoute("/run/shaper");
+    expect(((await screen.findByRole("button", { name: "Home all" })) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("fills the fields with the printer values, preselects the mode and enables Start", async () => {

@@ -1,5 +1,6 @@
 import type { StatusResponse } from "@/lib/generated/StatusResponse";
-import { useStatus } from "@/lib/api/queries";
+import { homedTone } from "@/components/PrinterControls";
+import { usePrinterState, useStatus } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
 import { toneDot } from "@/ui-kit/tone";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -50,6 +51,20 @@ export function connections(status: StatusResponse | undefined): Connection[] {
   ];
 }
 
+/** The Homed item. An unhomed printer is not a fault, so it is never red. */
+export function homedConnection(klippyReady: boolean, homedAxes: string | null | undefined): Connection {
+  const axes = (homedAxes ?? "").toLowerCase();
+  const homed = ["x", "y", "z"].filter((a) => axes.includes(a)).map((a) => a.toUpperCase());
+  const tone = klippyReady ? homedTone(axes) : "none";
+  return {
+    label: "Homed",
+    tone: { full: "ok", partial: "warn", none: "off" }[tone] as Tone,
+    details: [
+      !klippyReady ? "Klipper is not ready" : homed.length === 0 ? "No axes homed" : `Homed axes: ${homed.join(", ")}`,
+    ],
+  };
+}
+
 export function Dot({ tone }: { tone: Tone }) {
   const color = {
     ok: toneDot.success,
@@ -62,7 +77,9 @@ export function Dot({ tone }: { tone: Tone }) {
 
 export function StatusDots() {
   const status = useStatus();
-  const items = connections(status.data);
+  const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
+  const printer = usePrinterState(klippyReady);
+  const items = [...connections(status.data), homedConnection(klippyReady, printer.data?.homed_axes)];
   return (
     <ul aria-label="Connections" className="flex items-center gap-x-3 sm:gap-x-4">
       {items.map(({ label, tone, details }) => (

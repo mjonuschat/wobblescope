@@ -19,7 +19,7 @@ import type { Mounting } from "@/lib/generated/Mounting";
 import { MOUNTINGS } from "@/lib/mounting";
 import { formatMm, parseNumber } from "@/lib/parse";
 
-import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
+import { ChoiceRow, FieldError, FormCard, HomeButton, ResetButton, usePrinterProblem } from "./FormParts";
 
 type ParameterKey = "z_height" | "speed" | "accel" | "travel_speed";
 
@@ -219,21 +219,24 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
           {/* The reason Start is disabled shows in its tooltip. This copy is for screen readers. */}
           {problem && <p className="sr-only">{problem}</p>}
         </div>
-        <Tooltip>
-          <TooltipTrigger render={<span className="ml-auto" />}>
-            <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
-              {start.isPending ? (
-                "Checking printer…"
-              ) : (
-                <>
-                  <PlayIcon data-icon="inline-start" />
-                  Run test
-                </>
-              )}
-            </Button>
-          </TooltipTrigger>
-          {problem && <TooltipContent side="top">{problem}</TooltipContent>}
-        </Tooltip>
+        <div className="ml-auto flex items-center gap-2">
+          <HomeButton />
+          <Tooltip>
+            <TooltipTrigger render={<span />}>
+              <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
+                {start.isPending ? (
+                  "Checking printer…"
+                ) : (
+                  <>
+                    <PlayIcon data-icon="inline-start" />
+                    Run test
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            {problem && <TooltipContent side="top">{problem}</TooltipContent>}
+          </Tooltip>
+        </div>
       </div>
     </form>
   );

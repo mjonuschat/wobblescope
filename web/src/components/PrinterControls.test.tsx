@@ -24,13 +24,6 @@ function api(homed = "xyz", extra: (path: string) => Reply | null = () => null) 
 
 const posts = (calls: ApiCall[], path: string) => calls.filter((c) => c.method === "POST" && apiPath(c) === path);
 
-/** Home is disabled until the status says Klipper is ready. */
-async function clickHome() {
-  const button = (await screen.findByRole("button", { name: "Home" })) as HTMLButtonElement;
-  await waitFor(() => expect(button.disabled).toBe(false));
-  fireEvent.click(button);
-}
-
 describe("homedTone", () => {
   it("is full for X, Y and Z, partial for some and none for no axis", () => {
     expect(homedTone("xyz")).toBe("full");
@@ -41,18 +34,12 @@ describe("homedTone", () => {
 });
 
 describe("the printer controls in the header", () => {
-  it("colours the home button by how much is homed", async () => {
+  it("has no home button in the header, only the emergency stop", async () => {
     api("xyz");
     renderRoute("/");
-    const button = await screen.findByRole("button", { name: "Home" });
-    await waitFor(() => expect(button.className).toContain("text-success"));
-  });
-
-  it("shows a partly homed printer in the warning color", async () => {
-    api("xy");
-    renderRoute("/");
-    const button = await screen.findByRole("button", { name: "Home" });
-    await waitFor(() => expect(button.className).toContain("text-warning"));
+    await screen.findByRole("button", { name: "Stop printer" });
+    expect(screen.queryByRole("button", { name: "Home" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Homing" })).toBeNull();
   });
 
   it("needs two presses to stop the printer", async () => {
@@ -107,23 +94,5 @@ describe("the printer controls in the header", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("homes the printer with one press", async () => {
-    const calls = api();
-    renderRoute("/");
-    await clickHome();
-    await waitFor(() => expect(posts(calls, "printer/home")).toHaveLength(1));
-  });
-
-  it("shows the daemon's message when homing is refused", async () => {
-    api("", (path) =>
-      path === "printer/home"
-        ? { status: 409, body: { error: "preflight_failed", message: "a test is running", failures: [] } }
-        : null,
-    );
-    renderRoute("/");
-    await clickHome();
-    expect(await screen.findByText("a test is running")).toBeTruthy();
   });
 });

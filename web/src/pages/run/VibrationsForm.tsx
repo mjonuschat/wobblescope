@@ -15,7 +15,7 @@ import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { VibrationsRequest } from "@/lib/generated/VibrationsRequest";
 import { parseNumber } from "@/lib/parse";
 
-import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
+import { ChoiceRow, FieldError, FormCard, HomeButton, ResetButton, usePrinterProblem } from "./FormParts";
 
 type ParameterKey = "size" | "z_height" | "min_speed" | "max_speed" | "speed_increment" | "accel" | "travel_speed";
 
@@ -186,21 +186,24 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
           {/* The reason Start is disabled shows in its tooltip. This copy is for screen readers. */}
           {problem && <p className="sr-only">{problem}</p>}
         </div>
-        <Tooltip>
-          <TooltipTrigger render={<span className="ml-auto" />}>
-            <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
-              {start.isPending ? (
-                "Checking printer…"
-              ) : (
-                <>
-                  <PlayIcon data-icon="inline-start" />
-                  Run test
-                </>
-              )}
-            </Button>
-          </TooltipTrigger>
-          {problem && <TooltipContent side="top">{problem}</TooltipContent>}
-        </Tooltip>
+        <div className="ml-auto flex items-center gap-2">
+          <HomeButton />
+          <Tooltip>
+            <TooltipTrigger render={<span />}>
+              <Button type="submit" size="lg" className="px-5" disabled={problem !== null || start.isPending}>
+                {start.isPending ? (
+                  "Checking printer…"
+                ) : (
+                  <>
+                    <PlayIcon data-icon="inline-start" />
+                    Run test
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            {problem && <TooltipContent side="top">{problem}</TooltipContent>}
+          </Tooltip>
+        </div>
       </div>
     </form>
   );

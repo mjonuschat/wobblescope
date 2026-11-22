@@ -1,9 +1,9 @@
-import { HouseIcon, LoaderCircleIcon, OctagonAlertIcon } from "lucide-react";
+import { LoaderCircleIcon, OctagonAlertIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CONFIRM_WINDOW_MS, useConfirmClick } from "@/lib/confirm";
-import { useHomePrinter, usePrinterState, useStatus, useStopPrinter } from "@/lib/api/queries";
+import { useStatus, useStopPrinter } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
 
 export function homedTone(axes: string | null | undefined): "full" | "partial" | "none" {
@@ -17,9 +17,7 @@ export const STOP_NOTICE_MS = 15_000;
 export function PrinterControls() {
   const status = useStatus();
   const klippyReady = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
-  const printer = usePrinterState(klippyReady);
   const stop = useStopPrinter();
-  const home = useHomePrinter();
   const confirm = useConfirmClick(() => stop.mutate());
 
   // "Stop sent" is about the shutdown it caused, so it goes when Klipper is back.
@@ -42,18 +40,11 @@ export function PrinterControls() {
     return () => clearTimeout(timer);
   }, [stop.isSuccess, klippyReady, resetStop]);
 
-  const homedAxes = printer.data?.homed_axes ?? "";
-  const homedClass = {
-    full: "text-success",
-    partial: "text-warning",
-    none: "",
-  }[homedTone(homedAxes)];
   const stopping = stop.isPending;
   const stopLabel = stopping ? "Stopping printer" : confirm.armed ? "Press again to stop printer" : "Stop printer";
 
   return (
     <div className="ml-auto flex items-center gap-3">
-      {home.isError && <span className="text-warning">{home.error.message}</span>}
       {stop.isError && <span className="text-destructive">{stop.error.message}</span>}
       {stop.isSuccess && <span className="font-mono text-destructive">Stop sent</span>}
       <Tooltip>
@@ -80,27 +71,6 @@ export function PrinterControls() {
           {confirm.armed
             ? `Click again within ${CONFIRM_WINDOW_MS / 1000} seconds to stop.`
             : "Emergency stop. Click twice to confirm."}
-        </TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={home.isPending ? "Homing" : "Home"}
-              disabled={home.isPending || !klippyReady}
-              onClick={() => home.mutate("all")}
-              className={cn(
-                "flex h-9 items-center rounded-md border px-2 transition-colors hover:bg-accent focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
-                homedClass,
-              )}
-            />
-          }
-        >
-          {home.isPending ? <LoaderCircleIcon className="size-5 animate-spin" /> : <HouseIcon className="size-5" />}
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="end">
-          Home all axes (homed: {homedAxes === "" ? "none" : homedAxes})
         </TooltipContent>
       </Tooltip>
     </div>
