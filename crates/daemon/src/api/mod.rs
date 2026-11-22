@@ -6,6 +6,7 @@ mod error;
 mod hold;
 mod imports;
 mod live;
+mod motor_tuning;
 mod origin;
 mod printer;
 mod results;
@@ -29,6 +30,7 @@ use axum::routing::{get, post};
 pub use access::AccessGuard;
 pub use error::ApiError;
 pub use hold::{HoldClientMessage, HoldServerMessage, HoldSocketTimings};
+pub use motor_tuning::MotorTuning;
 pub use printer::{HomeAxes, Homed, LevelKind, Levelled, PrinterState};
 pub use results::ResultList;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
@@ -282,6 +284,7 @@ pub fn mount_configured(
         .route("/printer/emergency-stop", post(printer::emergency_stop))
         .route("/printer/home", post(printer::home))
         .route("/printer/level", post(printer::level))
+        .route("/printer/motor-tuning", get(motor_tuning::motor_tuning))
         .route("/live", get(live::live))
         .route("/stream", get(stream::stream))
         .route("/hold", get(hold::hold))

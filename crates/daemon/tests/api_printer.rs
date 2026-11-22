@@ -416,3 +416,84 @@ async fn a_level_that_loses_its_answer_keeps_motion_blocked() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(rig.slot.motion_uncertain().as_deref(), Some("levelling"));
 }
+
+fn section(motor: &str) -> Value {
+    json!({"motor": motor, "tuning_goal": "auto", "tbl": 1, "sgt": 1, "voltage": 24.0,
+           "pwm_freq_target": 20000.0})
+}
+
+#[tokio::test]
+async fn motor_tuning_lists_the_autotune_sections_sorted_by_stepper_name() {
+    let rig = rig().await;
+    let mut z = section("ldo-42sth40-1684cl350et");
+    z["tpfd"] = json!(3);
+    rig.sim.printer.set_settings(json!({
+        "extruder": {},
+        "autotune_tmc stepper_z": z,
+        "tmc2240 stepper_z": {"run_current": 1.0},
+        "autotune_tmc extruder": section("ldo-36sth20-1004ahg"),
+        "tmc2209 extruder": {},
+        "autotune_tmc stepper_x": section("ldo-42sth48-2004ac"),
+    }));
+    let (status, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let list = body.as_array().unwrap();
+    let names: Vec<_> = list
+        .iter()
+        .map(|e| e["stepper"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["extruder", "stepper_x", "stepper_z"]);
+    assert_eq!(list[2]["driver"], "tmc2240");
+    assert_eq!(list[2]["motor"], "ldo-42sth40-1684cl350et");
+    assert_eq!(list[2]["tpfd"], 3.0);
+    assert_eq!(list[2]["voltage"], 24.0);
+    assert_eq!(list[0]["driver"], "tmc2209");
+    assert_eq!(list[0]["pwm_freq_target"], 20000.0);
+}
+
+#[tokio::test]
+async fn motor_tuning_leaves_a_missing_driver_and_absent_options_null() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(json!({
+        "autotune_tmc stepper_y": {"motor": "m"},
+        "tmc2240 stepper_x": {},
+    }));
+    let (_, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    let entry = &body[0];
+    assert_eq!(entry["stepper"], "stepper_y");
+    assert_eq!(entry["driver"], Value::Null);
+    assert_eq!(entry["motor"], "m");
+    for key in [
+        "tuning_goal",
+        "tpfd",
+        "sg4_thrs",
+        "overvoltage_vth",
+        "voltage",
+    ] {
+        assert_eq!(entry[key], Value::Null, "{key}");
+    }
+    assert_eq!(body.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn motor_tuning_is_empty_without_autotune_sections() {
+    let rig = rig().await;
+    rig.sim
+        .printer
+        .set_settings(json!({"extruder": {}, "tmc2240 stepper_z": {}}));
+    let (status, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!([]));
+}
+
+#[tokio::test]
+async fn motor_tuning_is_empty_when_klipper_is_not_ready() {
+    let rig = rig().await;
+    rig.sim.fake.on(
+        "printer.objects.query",
+        Script::Error(400, "Klippy Disconnected"),
+    );
+    let (status, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!([]));
+}
