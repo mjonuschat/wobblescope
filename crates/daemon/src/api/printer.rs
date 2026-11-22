@@ -315,6 +315,20 @@ async fn move_printer(
         )]));
     }
     let control = control(state)?;
+    // A print, or a macro that Klipper is still running after the daemon stopped waiting for it,
+    // keeps Klipper out of idle, so motion is refused without relying on the marker alone. A
+    // missing idle state counts as not idle. The check and the script are separate calls, so a
+    // client that starts a print between them is not stopped; Klipper has no atomic guard for
+    // that without a macro.
+    let read = tokio::time::timeout(QUERY_TIMEOUT, read_printer_state(&control))
+        .await
+        .map_err(|_| unavailable("Moonraker did not answer the printer state query"))?
+        .map_err(|e| unavailable(format!("cannot read the printer's state: {e}")))?;
+    let mut failures = read.failures(true);
+    failures.retain(|f| f.check != CheckId::Homed);
+    if !failures.is_empty() {
+        return Err(ApiError::preflight(failures));
+    }
     let result = control
         .call(
             "printer.gcode.script",

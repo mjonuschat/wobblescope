@@ -162,6 +162,43 @@ async fn a_home_moonraker_answers_with_an_error_leaves_motion_unblocked() {
     assert!(rig.slot.motion_uncertain().is_none());
 }
 
+#[tokio::test]
+async fn home_and_level_are_refused_when_the_idle_state_is_not_reported() {
+    for uri in ["/api/printer/home", "/api/printer/level"] {
+        let rig = rig().await;
+        rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+        rig.sim
+            .printer
+            .set_field("idle_timeout", "state", json!(null));
+        let (status, body, script) = home_script(&rig, ui_post(uri)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{uri}: {body}");
+        assert_eq!(
+            body["failures"][0]["check"], "toolhead_idle",
+            "{uri}: {body}"
+        );
+        assert_eq!(script, "", "{uri} sent {script}");
+    }
+}
+
+#[tokio::test]
+async fn home_and_level_are_refused_while_a_print_runs_or_the_toolhead_is_not_idle() {
+    for (object, value, check) in [
+        ("print_stats", "printing", "not_printing"),
+        ("print_stats", "paused", "not_printing"),
+        ("idle_timeout", "Printing", "toolhead_idle"),
+    ] {
+        for uri in ["/api/printer/home", "/api/printer/level"] {
+            let rig = rig().await;
+            rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+            rig.sim.printer.set_field(object, "state", json!(value));
+            let (status, body, script) = home_script(&rig, ui_post(uri)).await;
+            assert_eq!(status, StatusCode::CONFLICT, "{uri} {value}: {body}");
+            assert_eq!(body["failures"][0]["check"], check, "{uri} {value}: {body}");
+            assert_eq!(script, "", "{uri} {value} sent {script}");
+        }
+    }
+}
+
 async fn busy_reason(rig: &Rig) -> Value {
     let (status, body) = answer(rig, common::request("GET", "/api/printer")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
