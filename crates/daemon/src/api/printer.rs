@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use axum::Json;
+use axum::body::Bytes;
 use axum::extract::State;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::tests::StopDispatched;
@@ -113,10 +114,56 @@ pub(super) async fn emergency_stop(
     Ok(Json(StopDispatched { dispatched: true }))
 }
 
-/// Homes all axes. It waits for the move to finish, and is refused while a test runs or the last
+/// Which axes `POST /api/printer/home` homes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum HomeAxes {
+    #[default]
+    All,
+    Xy,
+    X,
+    Y,
+    Z,
+}
+
+impl HomeAxes {
+    fn gcode(self) -> &'static str {
+        match self {
+            Self::All => "G28",
+            Self::Xy => "G28 X Y",
+            Self::X => "G28 X",
+            Self::Y => "G28 Y",
+            Self::Z => "G28 Z",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HomeRequest {
+    #[serde(default)]
+    axes: HomeAxes,
+}
+
+/// An empty body means all axes.
+fn parse_home_axes(body: &Bytes) -> Result<HomeAxes, ApiError> {
+    if body.iter().all(u8::is_ascii_whitespace) {
+        return Ok(HomeAxes::All);
+    }
+    serde_json::from_slice::<HomeRequest>(body)
+        .map(|r| r.axes)
+        .map_err(|e| ApiError::invalid(format!("invalid home request: {e}")))
+}
+
+/// Homes the requested axes (all by default). It waits for the move to finish, and is refused while a test runs or the last
 /// test may still be moving the toolhead. It holds the test slot meanwhile, so no test starts
 /// during the move.
-pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, ApiError> {
+pub(super) async fn home(
+    State(state): State<ApiState>,
+    body: Bytes,
+) -> Result<Json<Homed>, ApiError> {
+    let axes = parse_home_axes(&body)?;
     let Some(_permit) = state.capture.slot.try_acquire_as(HOMING_ID) else {
         return Err(ApiError::preflight(vec![CheckFailure::new(
             CheckId::NoTestRunning,
@@ -133,7 +180,7 @@ pub(super) async fn home(State(state): State<ApiState>) -> Result<Json<Homed>, A
     let result = control
         .call(
             "printer.gcode.script",
-            Some(json!({"script": "G28"})),
+            Some(json!({"script": axes.gcode()})),
             HOME_TIMEOUT,
         )
         .await;

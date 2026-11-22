@@ -205,3 +205,80 @@ async fn a_test_start_while_homing_says_so() {
     assert_eq!(failures.len(), 1, "{body}");
     assert!(failures[0]["message"].as_str().unwrap().contains("homing"));
 }
+
+async fn home_script(rig: &Rig, request: Request<Body>) -> (StatusCode, Value, String) {
+    rig.sim
+        .fake
+        .on("printer.gcode.script", Script::Result(json!("ok")));
+    let before = rig.sim.fake.requests_for("printer.gcode.script").len();
+    let (status, body) = answer(rig, request).await;
+    let calls = rig.sim.fake.requests_for("printer.gcode.script");
+    let script = calls
+        .get(before)
+        .map(|c| c.params["script"].as_str().unwrap().to_owned())
+        .unwrap_or_default();
+    (status, body, script)
+}
+
+#[tokio::test]
+async fn home_sends_the_g28_for_each_requested_axes() {
+    for (axes, gcode) in [
+        ("all", "G28"),
+        ("xy", "G28 X Y"),
+        ("x", "G28 X"),
+        ("y", "G28 Y"),
+        ("z", "G28 Z"),
+    ] {
+        let rig = rig().await;
+        let request = post_json("/api/printer/home", &json!({ "axes": axes }));
+        let (status, body, script) = home_script(&rig, request).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(script, gcode, "axes {axes}");
+    }
+}
+
+#[tokio::test]
+async fn home_with_an_empty_json_object_homes_all_axes() {
+    let rig = rig().await;
+    let (status, _, script) = home_script(&rig, post_json("/api/printer/home", &json!({}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(script, "G28");
+}
+
+#[tokio::test]
+async fn home_rejects_an_unknown_axes_value_without_touching_the_printer() {
+    let rig = rig().await;
+    let request = post_json("/api/printer/home", &json!({"axes": "e"}));
+    let (status, body, script) = home_script(&rig, request).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(script.is_empty());
+    assert!(!rig.slot.is_held());
+}
+
+#[tokio::test]
+async fn home_by_axes_still_needs_the_client_header() {
+    let rig = rig().await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/printer/home")
+        .header("origin", "http://evil.example")
+        .header("content-type", "application/json")
+        .body(Body::from(json!({"axes": "x"}).to_string()))
+        .unwrap();
+    let (status, _, script) = home_script(&rig, request).await;
+    assert!(status.is_client_error(), "{status}");
+    assert!(script.is_empty());
+}
+
+#[tokio::test]
+async fn home_by_axes_is_refused_while_a_test_runs() {
+    let rig = rig().await;
+    rig.sim.set_behavior(0, Sweep::Pending);
+    rig.sim.feed_until_motion();
+    let request = json!({"chips": ["adxl345", "lis2dw ebb36"], "axes": ["X"], "mode": "Pulse"});
+    let (status, _) = answer(&rig, post_json("/api/tests", &request)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    rig.until("the sweep", || rig.sim.sweeps().len() == 1).await;
+    let (status, body) = answer(&rig, post_json("/api/printer/home", &json!({"axes": "z"}))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+}

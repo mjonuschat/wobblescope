@@ -29,7 +29,7 @@ use axum::routing::{get, post};
 pub use access::AccessGuard;
 pub use error::ApiError;
 pub use hold::{HoldClientMessage, HoldServerMessage, HoldSocketTimings};
-pub use printer::{Homed, PrinterState};
+pub use printer::{HomeAxes, Homed, PrinterState};
 pub use results::ResultList;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 pub use status::{StatusResponse, StorageState, StorageStatus};
