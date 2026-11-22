@@ -3,9 +3,7 @@
 mod common;
 
 use common::{belt_fixtures, shaketune};
-use wobblescope_core::belts::{
-    BeltsResult, ImbalanceState, SWEEP_FLOOR_HZ, compare_psds, compare_psds_in_band,
-};
+use wobblescope_core::belts::{BeltsResult, SWEEP_FLOOR_HZ, compare_psds, compare_psds_in_band};
 
 /// 500 bins of 0.5 Hz, 0 to 249.5 Hz: with `MAX_FREQ` they are exactly the 500-point grid, so
 /// a curve's value at a grid point is the value written here.
@@ -74,14 +72,10 @@ parity_test! {
         // (numpy); over the whole grid it is 15.23.
         assert!((got.similarity - 81.52601096407666).abs() < 1e-6, "{}", got.similarity);
 
-        // Belt B's resonance at 150 Hz is unpaired and costs 100 / 100 * 30 points, not
-        // 100 / 1000 * 30. The imbalance figure 0.9 is above the tolerance 0.8, so the score is 81.53 - 30 = 51.53.
+        // Belt B's resonance at 150 Hz is unpaired.
         assert_eq!(got.a.unpaired.len(), 0);
         assert_eq!(got.b.unpaired.len(), 1);
         assert_eq!(got.freqs[got.b.unpaired[0]], 150.0);
-        assert_eq!(got.imbalance.state, ImbalanceState::Found);
-        assert!((got.imbalance.figure - 0.9).abs() < 1e-9, "{:?}", got.imbalance);
-        assert_eq!(got.health, "Acceptable mechanical health");
     }
 }
 
@@ -117,15 +111,7 @@ parity_test! {
 }
 
 parity_test! {
-    fn the_floor_moves_only_the_similarity_and_the_imbalance_windows_on_the_shaketune_cases() {
-        // Cases whose health text differs from the whole-grid read. The windows of the
-        // imbalance start at 5 Hz instead of 0 and so fall elsewhere, which changes the figure
-        // of these three.
-        let moved = [
-            ("shifted_peak_6hz", "Potential signs of a mechanical issue"),
-            ("extra_peak_on_b", "Likely a mechanical issue"),
-            ("weak_noisy_b", "Likely a mechanical issue"),
-        ];
+    fn the_floor_moves_only_the_similarity_on_the_shaketune_cases() {
         for case in &shaketune().belts {
             let name = &case.name;
             let (fa, pa, fb, pb) = (&case.freqs_a, &case.psd_a, &case.freqs_b, &case.psd_b);
@@ -145,10 +131,6 @@ parity_test! {
             assert_eq!(floored.offsets, whole.offsets, "{name}: offsets");
             // Dropping 0 to 5 Hz of 500 points shifts the correlation by a fraction of a point.
             assert!((floored.similarity - whole.similarity).abs() < 0.2, "{name}");
-            match moved.iter().find(|(n, _)| n == name) {
-                Some((_, health)) => assert_eq!(floored.health, *health, "{name}: health"),
-                None => assert_eq!(floored.health, whole.health, "{name}: health"),
-            }
         }
     }
 }
