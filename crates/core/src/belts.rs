@@ -358,7 +358,9 @@ fn remove_first(list: &mut Vec<usize>, value: usize) {
 ///
 /// Limitation: a wide feature centred on a window edge can lift three neighbouring windows
 /// and read as an imbalance, and a gap that is narrower than 30 Hz or not aligned to the
-/// windows may or may not be caught.
+/// windows may or may not be caught. The run rule is all or nothing: if one of a run's three
+/// windows falls below the floor, ties or reverses, the run is gone and the score is unscaled,
+/// so a small input change can lift the score.
 fn window_imbalance(
     grid: &[f64],
     psd_a: &[f64],
@@ -392,7 +394,7 @@ fn window_imbalance(
         ratio: f64,
         eligible: bool,
     }
-    let count = ((end - start) / IMBALANCE_WINDOW_HZ).floor() as usize;
+    let count = (span / IMBALANCE_WINDOW_HZ).floor() as usize;
     let mut windows: Vec<Window> = (0..count)
         .map(|k| {
             let lo = start + k as f64 * IMBALANCE_WINDOW_HZ;
@@ -960,15 +962,19 @@ mod tests {
         mechanical_health(similarity, figure, &none, &none, 0, 1.0)
     }
 
-    /// The health text of a result had its figure been 1.
-    fn unscaled_health(got: &BeltsResult) -> String {
-        let highest = got
-            .a
+    /// The highest value of either curve of a result.
+    fn highest_of(got: &BeltsResult) -> f64 {
+        got.a
             .psd
             .iter()
             .chain(&got.b.psd)
             .copied()
-            .fold(0.0, f64::max);
+            .fold(0.0, f64::max)
+    }
+
+    /// The health text of a result had its figure been 1.
+    fn unscaled_health(got: &BeltsResult) -> String {
+        let highest = highest_of(got);
         mechanical_health(
             got.similarity,
             1.0,
@@ -995,13 +1001,7 @@ mod tests {
         assert_eq!(got.imbalance.figure, 1.0);
         assert_eq!(got.health, unscaled_health(got));
         // A multiplier of one half would have changed the verdict.
-        let highest = got
-            .a
-            .psd
-            .iter()
-            .chain(&got.b.psd)
-            .copied()
-            .fold(0.0, f64::max);
+        let highest = highest_of(got);
         let halved = mechanical_health(
             got.similarity,
             0.5,
@@ -1190,7 +1190,8 @@ mod tests {
 
     #[test]
     fn a_one_zero_window_below_the_floor_is_skipped() {
-        // A is silent in 55 to 65 Hz and B holds 0.001, 0.01 of a floor of 1.
+        // A is silent in 55 to 65 Hz and B holds 0.001 per point there: a window sum of 0.02
+        // (20 points) against a floor of about 1, so the window is skipped.
         let grid = grid_at(0.5);
         let psd_a = values(&grid, |f| if in_range(f, 55.0, 65.0) { 0.0 } else { 1.0 });
         let psd_b = values(&grid, |f| match f {

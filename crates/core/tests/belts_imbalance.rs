@@ -51,6 +51,7 @@ parity_test! {
             assert!((got.imbalance.figure / TOLERANCE - case.multiplier).abs() < 1e-4, "{label}");
             assert_eq!((got.imbalance.lo_hz, got.imbalance.hi_hz), (case.lo_hz, case.hi_hz), "{label}");
             assert_eq!(got.pairs.len(), case.pairs, "{label}");
+            assert!(got.imbalance.lo_hz < got.imbalance.hi_hz, "{label}");
             assert_ne!(got.health, "Excellent mechanical health", "{label}");
             assert_eq!(got.health, case.health, "{label}");
         }
