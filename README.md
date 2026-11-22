@@ -89,6 +89,23 @@ check_host_header = true
 | `check_host_header` | off | Refuses requests whose `Host` is not a name the daemon knows. |
 | `allowed_hosts` | none | Extra host names to accept, used only when `check_host_header` is on. |
 
+## Improvements and bugfixes
+
+Wobblescope follows [Shake&Tune](https://github.com/Frix-x/klippain-shaketune), so results for the same data are close. These are the places where it does something different, compared with Shake&Tune as of January 2026.
+
+### Improvements
+
+- The belt comparison ignores noise outside the tested frequencies.
+- Belt peaks are labelled from the lowest frequency up.
+- The axes map works with an accelerometer on the bed.
+- The axes map now works out Z from the other two axes instead of failing.
+
+### Bugfixes
+
+- Belt peaks at the same frequency show their real amplitude difference, not 0 %.
+- Belt peaks at the ends of the chart are no longer missed or marked twice.
+- A vibrations profile that finds no quiet speed range finishes normally.
+
 ## Credits
 
 - [Klippain Shake&Tune](https://github.com/Frix-x/klippain-shaketune) is the reference for the analysis, including belt comparison and the vibrations profile. Results for the same data are close to Shake&Tune's but not identical.
