@@ -582,6 +582,30 @@ pub fn shaketune() -> Oracle {
     serde_json::from_str(include_str!("../golden/shaketune.json")).unwrap()
 }
 
+/// One chip's two belt PSDs as `analyze_belts` builds them, extracted at `extract_max_freq`.
+/// `sweep` is the `(FREQ_START, FREQ_END)` the session recorded, `None` when it recorded none.
+#[derive(Deserialize)]
+pub struct BeltFixture {
+    pub name: String,
+    pub extract_max_freq: f64,
+    pub sweep: Option<(f64, f64)>,
+    pub freqs_a: Vec<f64>,
+    pub psd_a: Vec<f64>,
+    pub freqs_b: Vec<f64>,
+    pub psd_b: Vec<f64>,
+}
+
+/// The belt fixtures in `tests/data/<file>.json.zst`, one entry per chip; `file` is
+/// `belts_unequal_power` or `belts_balanced`.
+pub fn belt_fixtures(file: &str) -> Vec<BeltFixture> {
+    let bytes: &[u8] = match file {
+        "belts_unequal_power" => include_bytes!("../data/belts_unequal_power.json.zst"),
+        "belts_balanced" => include_bytes!("../data/belts_balanced.json.zst"),
+        _ => panic!("unknown belt fixture {file}"),
+    };
+    serde_json::from_str(&unzstd(bytes)).unwrap()
+}
+
 /// Klipper's default fit, which fixes the damping ratio at 0.1.
 pub fn klipper_params() -> wobblescope_core::fit::FitParams {
     wobblescope_core::fit::FitParams {
