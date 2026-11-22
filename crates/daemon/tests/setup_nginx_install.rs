@@ -285,3 +285,98 @@ async fn remove_keeps_a_snippet_without_the_header_and_puts_back_what_nginx_reje
     assert_eq!(read(&tree.available("fluidd")), installed);
     assert!(snippet.exists());
 }
+
+fn navi(rig: &Rig) -> std::path::PathBuf {
+    rig.data().join("config/.theme/navi.json")
+}
+
+#[tokio::test]
+async fn a_mainsail_site_gets_the_sidebar_entry_and_a_fluidd_site_does_not() {
+    let (rig, _tree) = rig_with(&["fluidd"]).await;
+    rig.install().await.0.unwrap();
+    assert!(!navi(&rig).exists());
+
+    let (rig, _tree) = rig_with(&["fluidd", "mainsail"]).await;
+    let (result, out) = rig.install().await;
+    assert_eq!(result, Ok(true), "{out}");
+    let items: Vec<serde_json::Value> = serde_json::from_str(&read(&navi(&rig))).unwrap();
+    assert_eq!(items, [wobblescope::setup::navi::entry()]);
+    assert_eq!(mode_of(&navi(&rig)), 0o644);
+    assert!(
+        out.contains("mainsail entry") && out.contains("installed"),
+        "{out}"
+    );
+    let before = read(&navi(&rig));
+    let (_, out) = rig.install().await;
+    assert!(
+        out.contains("mainsail entry") && out.contains("already current"),
+        "{out}"
+    );
+    assert_eq!(read(&navi(&rig)), before);
+    let (result, out) = rig.run(Mode::Check, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert!(
+        out.lines()
+            .any(|l| l.contains("mainsail entry") && l.contains("ok")),
+        "{out}"
+    );
+}
+
+#[tokio::test]
+async fn an_existing_navi_file_is_merged_backed_up_and_a_bad_one_is_left_alone() {
+    let (rig, _tree) = rig_with(&["mainsail"]).await;
+    std::fs::create_dir_all(navi(&rig).parent().unwrap()).unwrap();
+    let mine = "[\n  {\"title\": \"Docs\", \"href\": \"https://x.test\"}\n]\n";
+    std::fs::write(navi(&rig), mine).unwrap();
+    std::fs::set_permissions(navi(&rig), std::fs::Permissions::from_mode(0o600)).unwrap();
+    rig.install().await.0.unwrap();
+    assert_eq!(mode_of(&navi(&rig)), 0o600);
+    assert!(
+        read(&navi(&rig))
+            .starts_with("[\n  {\"title\": \"Docs\", \"href\": \"https://x.test\"},\n")
+    );
+    let backup = navi(&rig).with_file_name("navi.json.before-wobblescope");
+    assert_eq!(read(&backup), mine);
+
+    let (rig, _tree) = rig_with(&["mainsail"]).await;
+    std::fs::create_dir_all(navi(&rig).parent().unwrap()).unwrap();
+    std::fs::write(navi(&rig), "{\"not\": \"an array\"}").unwrap();
+    let (result, out) = rig.install().await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert!(out.contains("not a JSON array"), "{out}");
+    assert_eq!(read(&navi(&rig)), "{\"not\": \"an array\"}");
+}
+
+#[tokio::test]
+async fn navi_json_behind_a_symlink_is_written_through_it() {
+    let (rig, _tree) = rig_with(&["mainsail"]).await;
+    let real = rig.base().join("shared-navi.json");
+    std::fs::write(&real, "[]\n").unwrap();
+    std::fs::create_dir_all(navi(&rig).parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&real, navi(&rig)).unwrap();
+    rig.install().await.0.unwrap();
+    assert!(
+        std::fs::symlink_metadata(navi(&rig))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(read(&real).contains("Wobblescope"));
+}
+
+#[tokio::test]
+async fn remove_deletes_a_navi_file_setup_created_and_only_our_entry_from_others() {
+    let (rig, _tree) = rig_with(&["mainsail"]).await;
+    rig.install().await.0.unwrap();
+    rig.run(Mode::Remove, None).await.0.unwrap();
+    assert!(!navi(&rig).exists());
+
+    let (rig, _tree) = rig_with(&["mainsail"]).await;
+    std::fs::create_dir_all(navi(&rig).parent().unwrap()).unwrap();
+    std::fs::write(navi(&rig), "[{\"title\": \"Docs\"}]\n").unwrap();
+    rig.install().await.0.unwrap();
+    let (result, out) = rig.run(Mode::Remove, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    let items: Vec<serde_json::Value> = serde_json::from_str(&read(&navi(&rig))).unwrap();
+    assert_eq!(items, [serde_json::json!({"title": "Docs"})]);
+}

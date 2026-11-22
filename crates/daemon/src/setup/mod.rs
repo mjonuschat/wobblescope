@@ -4,6 +4,7 @@
 pub mod host;
 pub mod install;
 pub mod moonraker;
+pub mod navi;
 pub mod nginx;
 mod nginx_link;
 pub mod render;

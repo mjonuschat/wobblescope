@@ -121,7 +121,7 @@ fn by_file(servers: &[Server]) -> Vec<(PathBuf, Vec<&Server>)> {
 
 /// Keeps `text`, the file's content before setup first changes it, beside the file.
 /// Returns the backup's path when this call created it.
-fn back_up(target: &Path, text: &str) -> Result<Option<PathBuf>, SetupError> {
+pub(super) fn back_up(target: &Path, text: &str) -> Result<Option<PathBuf>, SetupError> {
     use std::os::unix::fs::MetadataExt;
     let mut name = target.as_os_str().to_owned();
     name.push(BACKUP_SUFFIX);

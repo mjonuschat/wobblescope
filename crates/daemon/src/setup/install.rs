@@ -9,8 +9,9 @@ use std::path::{Path, PathBuf};
 
 use super::host::{Host, write_atomic};
 use super::moonraker::{Discovery, Moonraker, MoonrakerError};
+use super::nginx::Server;
 use super::render::{self, SERVICE};
-use super::{Options, SetupError, nginx_link};
+use super::{Options, SetupError, navi, nginx_link};
 use crate::config::{self, DEFAULT_MOONRAKER_URL, Settings};
 
 /// What a step found and did.
@@ -39,6 +40,7 @@ impl Step {
 struct Paths {
     install_dir: PathBuf,
     binary: PathBuf,
+    config_root: PathBuf,
     config: PathBuf,
     unit: PathBuf,
     asvc: Result<PathBuf, String>,
@@ -52,6 +54,7 @@ impl Paths {
             .map_or_else(|| host.invoker.home.clone(), Path::to_path_buf);
         Self {
             binary: host.binary.clone(),
+            config_root: disc.config_root.clone(),
             config: disc.config_root.join("wobblescope.toml"),
             unit: host.unit_dir.join(format!("{SERVICE}.service")),
             asvc: disc.data_path.clone().map(|p| p.join("moonraker.asvc")),
@@ -175,18 +178,25 @@ fn nginx_check(host: &Host, say: &mut Say, config: &Path) -> Result<bool, SetupE
     let Some(plan) = nginx_link::find(host, say, moonraker_port(&settings)) else {
         return Ok(true);
     };
-    nginx_link::check(host, say, &plan, settings.listen.port(), config)
+    let mut good = nginx_link::check(host, say, &plan, settings.listen.port(), config)?;
+    if plan.mapped.iter().any(Server::is_mainsail)
+        && let Some(root) = config.parent()
+    {
+        good &= navi::check(say, root)?;
+    }
+    Ok(good)
 }
 
 /// Publishes the daemon through nginx. The daemon must trust nginx's loopback connections
 /// before nginx forwards anything to it, so `trusted_proxies` is written first and a failure
 /// there stops the step before nginx is touched.
-fn nginx_step(host: &Host, say: &mut Say, config: &Path) -> Result<bool, SetupError> {
+/// Returns whether the step worked and whether a Mainsail site now carries the link.
+fn nginx_step(host: &Host, say: &mut Say, config: &Path) -> Result<(bool, bool), SetupError> {
     let Some(settings) = nginx_settings(say, config) else {
-        return Ok(true);
+        return Ok((true, false));
     };
     let Some(plan) = nginx_link::find(host, say, moonraker_port(&settings)) else {
-        return Ok(true);
+        return Ok((true, false));
     };
     let text = read(config)?.unwrap_or_default();
     match render::with_trusted_proxies(&text) {
@@ -198,10 +208,12 @@ fn nginx_step(host: &Host, say: &mut Say, config: &Path) -> Result<bool, SetupEr
         Err(why) => {
             say.step("trusted_proxies", "FAILED, nginx left alone");
             say.note(&format!("{}: {why}", config.display()));
-            return Ok(false);
+            return Ok((false, false));
         }
     }
-    nginx_link::install(host, say, &plan, settings.listen.port())
+    let mainsail = plan.mapped.iter().any(Server::is_mainsail);
+    let worked = nginx_link::install(host, say, &plan, settings.listen.port())?;
+    Ok((worked, mainsail))
 }
 
 /// Installs or repairs the unit, the config file and the service-list entry, then restarts the
@@ -263,7 +275,11 @@ pub async fn install(
     }
 
     if opts.nginx {
-        ok &= nginx_step(host, &mut say, &paths.config)?;
+        let (good, mainsail) = nginx_step(host, &mut say, &paths.config)?;
+        ok &= good;
+        if good && mainsail {
+            navi::install(host, &mut say, &paths.config_root)?;
+        }
     } else {
         say.step("nginx", "skipped (--no-nginx)");
     }
@@ -408,6 +424,7 @@ pub async fn remove(
     let mut ok = true;
     if opts.nginx {
         ok = nginx_link::remove(host, &mut say)?;
+        navi::remove(&mut say, &paths.config_root)?;
     }
     say.note(&format!(
         "kept: wobblescope.toml, the recorded sessions, and {}, with its release_info.json and \
