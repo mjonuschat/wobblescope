@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SessionFilters as Filters } from "@/lib/api/endpoints";
+import type { SessionKind } from "@/lib/generated/SessionKind";
 import type { Summary } from "@/lib/generated/Summary";
 
 /** The value of a filter's "everything" choice; a select cannot hold an empty one. */
@@ -18,7 +19,16 @@ interface Props {
   all: Summary[];
 }
 
-export type FilterColumn = "chip" | "printer" | "pinned";
+export type FilterColumn = "kind" | "chip" | "printer" | "pinned";
+
+/** The session types in the order the filter lists them, with their labels. */
+export const KIND_LABELS: Record<SessionKind, string> = {
+  axes: "Input shaper",
+  belts: "Belts",
+  vibrations: "Vibrations",
+  axesmap: "Axes map",
+  other: "Other",
+};
 
 function Choice({
   label,
@@ -58,7 +68,16 @@ export function ColumnFilter({ column, filters, onChange, all }: Props & { colum
   let value: string;
   let options: { value: string; label: string }[];
   let change: (value: string) => void;
-  if (column === "chip") {
+  if (column === "kind") {
+    label = "Type";
+    everything = "All types";
+    value = filters.kind ?? ALL;
+    const present = new Set(all.map((s) => s.kind));
+    options = (Object.keys(KIND_LABELS) as SessionKind[])
+      .filter((kind) => present.has(kind))
+      .map((kind) => ({ value: kind, label: KIND_LABELS[kind] }));
+    change = (next) => onChange({ ...filters, kind: next === ALL ? undefined : (next as SessionKind) });
+  } else if (column === "chip") {
     label = "Chip";
     everything = "All chips";
     value = filters.chip ?? ALL;

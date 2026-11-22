@@ -18,7 +18,7 @@ import type { OutcomeKind } from "@/lib/generated/OutcomeKind";
 
 import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { ImportDialog } from "./ImportDialog";
-import { ColumnFilter, DateFilter, type FilterColumn } from "./SessionFilters";
+import { ColumnFilter, DateFilter, type FilterColumn, KIND_LABELS } from "./SessionFilters";
 
 const PIN_HINTS = {
   pin: "Never delete this session to make room for new ones.",
@@ -127,8 +127,9 @@ export function SessionsPage() {
                 Session <DateFilter filters={filters} onChange={setFilters} />
               </span>
             </TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Mode</TableHead>
+            <TableHead>
+              <span className="inline-flex items-center gap-1">Type {filter("kind")}</span>
+            </TableHead>
             <TableHead>
               <span className="inline-flex items-center gap-1">Chips {filter("chip")}</span>
             </TableHead>
@@ -145,7 +146,7 @@ export function SessionsPage() {
         <TableBody>
           {list.data.sessions.length === 0 && (
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
                 No sessions match these filters.
               </TableCell>
             </TableRow>
@@ -165,11 +166,7 @@ export function SessionsPage() {
                     </div>
                   )}
                 </TableCell>
-                <TableCell>{s.source === "CsvImport" ? "CSV" : "Wobblescope"}</TableCell>
-                <TableCell>
-                  {s.mode ?? "–"}
-                  {s.kind === "belts" && <span className="ml-2 text-xs text-muted-foreground">Belts</span>}
-                </TableCell>
+                <TableCell>{KIND_LABELS[s.kind]}</TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>
                 <TableCell>{s.printer ?? "–"}</TableCell>
                 <TableCell>

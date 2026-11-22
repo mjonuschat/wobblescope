@@ -43,16 +43,42 @@ describe("the sessions page", () => {
     expect(text[1]).toContain("older");
     expect(text[1]).toContain("3 MiB");
     expect(within(rows[2]).getByRole("button", { name: "Pin" }).className).not.toContain("border-primary");
-    expect(text[2]).toContain("CSV");
   });
 
-  it("a_belt_session_is_tagged_belts", async () => {
-    api([summary("belt", { kind: "belts" }), summary("axes"), summary("odd", { kind: "other" })]);
+  it("shows each session's type and no mode column", async () => {
+    api([
+      summary("a", { kind: "axes" }),
+      summary("b", { kind: "belts" }),
+      summary("c", { kind: "vibrations" }),
+      summary("d", { kind: "axesmap" }),
+      summary("e", { kind: "other" }),
+    ]);
     renderRoute("/sessions");
     const rows = (await screen.findAllByRole("row")).slice(1);
-    expect(within(rows[0]).getByText("Belts")).toBeTruthy();
-    expect(within(rows[1]).queryByText("Belts")).toBeNull();
-    expect(within(rows[2]).queryByText("Belts")).toBeNull();
+    const labels = ["Input shaper", "Belts", "Vibrations", "Axes map", "Other"];
+    rows.forEach((row, i) => {
+      expect(within(row).getByText(labels[i])).toBeTruthy();
+    });
+    expect(screen.queryByRole("columnheader", { name: "Mode" })).toBeNull();
+  });
+
+  it("offers the types present in the list, in a fixed order, and requests the chosen one", async () => {
+    const calls = api([summary("a", { kind: "other" }), summary("b", { kind: "belts" }), summary("c")]);
+    renderRoute("/sessions");
+    await screen.findAllByRole("row");
+    fireEvent.click(screen.getByRole("button", { name: "Filter Type" }));
+    fireEvent.click(await screen.findByRole("combobox", { name: "Type" }));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["All types", "Input shaper", "Belts", "Other"]);
+    const belts = options[2];
+    fireEvent.pointerDown(belts);
+    fireEvent.pointerUp(belts);
+    fireEvent.click(belts);
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.url.pathname.endsWith("/sessions") && c.url.searchParams.get("kind") === "belts"),
+      ).toBe(true),
+    );
   });
 
   it("links each row to the session's zip download", async () => {

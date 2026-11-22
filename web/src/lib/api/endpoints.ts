@@ -13,6 +13,7 @@ import type { ResultList } from "@/lib/generated/ResultList";
 import type { ResultSummary } from "@/lib/generated/ResultSummary";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
+import type { SessionKind } from "@/lib/generated/SessionKind";
 import type { SessionList } from "@/lib/generated/SessionList";
 import type { StartedTest } from "@/lib/generated/StartedTest";
 import type { StatusResponse } from "@/lib/generated/StatusResponse";
@@ -32,6 +33,7 @@ export interface SessionFilters {
   chip?: string;
   printer?: string;
   pinned?: boolean;
+  kind?: SessionKind;
   /** The first day to include, as a local `YYYY-MM-DD`. */
   createdFrom?: string;
   /** The last day to include, as a local `YYYY-MM-DD`. */
@@ -49,6 +51,7 @@ export function listSessions(filters: SessionFilters = {}, signal?: AbortSignal)
   if (filters.chip) url.searchParams.set("chip", filters.chip);
   if (filters.printer) url.searchParams.set("printer", filters.printer);
   if (filters.pinned !== undefined) url.searchParams.set("pinned", String(filters.pinned));
+  if (filters.kind) url.searchParams.set("kind", filters.kind);
   const from = filters.createdFrom ? dayStart(filters.createdFrom) : null;
   // The daemon's `created_to` is exclusive, so the last day included ends where the next starts.
   const to = filters.createdTo ? dayStart(filters.createdTo, 1) : null;

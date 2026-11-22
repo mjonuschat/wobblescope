@@ -28,6 +28,12 @@ describe("endpoints", () => {
     expect(http.url()).toBe("http://printer.local/wobblescope/api/sessions?chip=adxl345+nh36&pinned=true");
   });
 
+  it("sends the session type as kind", async () => {
+    const http = stubFetch({ body: { sessions: [] } });
+    await listSessions({ kind: "axesmap" });
+    expect(new URL(http.url()).searchParams.get("kind")).toBe("axesmap");
+  });
+
   it("sends a date range as the start of the first day and the start of the day after the last", async () => {
     const http = stubFetch({ body: { sessions: [] } });
     await listSessions({ createdFrom: "2026-11-01", createdTo: "2026-11-30" });
