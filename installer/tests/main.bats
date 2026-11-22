@@ -209,3 +209,33 @@ managed_services: wobblescope" ]
   [ "$status" -eq 0 ]
   [ -z "$(calls)" ]
 }
+
+@test "no_nginx_is_passed_through_to_setup" {
+  run wobblescope_main --no-nginx
+  [ "$status" -eq 0 ]
+  grep -qx "sudo:$HOME/wobblescope/wobblescope setup --no-nginx" "$TEST_ROOT/calls.log"
+}
+
+@test "setup_gets_no_extra_arguments_without_the_flag" {
+  run wobblescope_main
+  [ "$status" -eq 0 ]
+  grep -qx "sudo:$HOME/wobblescope/wobblescope setup" "$TEST_ROOT/calls.log"
+}
+
+@test "the_retry_command_after_a_failed_setup_keeps_no_nginx" {
+  touch "$TEST_ROOT/sudo_fail"
+  run wobblescope_main --no-nginx
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"sudo $HOME/wobblescope/wobblescope setup --no-nginx"* ]]
+}
+
+@test "usage_lists_no_nginx" {
+  run wobblescope_main --help
+  [[ "$output" == *"--no-nginx"* ]]
+}
+
+@test "an_unknown_argument_after_no_nginx_is_still_refused" {
+  run wobblescope_main --no-nginx --bogus
+  [ "$status" -ne 0 ]
+  [ -z "$(calls)" ]
+}

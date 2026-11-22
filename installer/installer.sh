@@ -61,10 +61,14 @@ WOBBLESCOPE_BLOCK_NAME="wobblescope"
 
 wobblescope_usage() {
   cat <<'USAGE'
-Usage: wobblescope-installer.sh [--help]
+Usage: wobblescope-installer.sh [--no-nginx] [--help]
 
 Installs the latest wobblescope release into ~/wobblescope, runs `sudo wobblescope setup`,
 and registers wobblescope with Moonraker's update manager. Run as the normal user.
+
+Options:
+  --no-nginx  Do not publish wobblescope at http://<printer>/wobblescope/ through nginx and
+              do not add the Mainsail sidebar entry. Passed on to `wobblescope setup`.
 USAGE
 }
 
@@ -105,12 +109,14 @@ _wobblescope_download() {
 }
 
 wobblescope_main() {
-  if [ $# -gt 0 ]; then
+  local setup_args=()
+  while [ $# -gt 0 ]; do
     case "$1" in
       -h | --help) wobblescope_usage; return 0 ;;
+      --no-nginx) setup_args+=(--no-nginx); shift ;;
       *) log "Unknown argument: $1" >&2; return 1 ;;
     esac
-  fi
+  done
 
   discover_klipper_env
   require_not_root
@@ -142,9 +148,9 @@ wobblescope_main() {
 
   _wobblescope_require_idle || return 1
 
-  if ! sudo "$dir/wobblescope" setup; then
+  if ! sudo "$dir/wobblescope" setup ${setup_args[@]+"${setup_args[@]}"}; then
     log "wobblescope setup failed. The files are in place; retry with:" >&2
-    log "  sudo $dir/wobblescope setup" >&2
+    log "  sudo $dir/wobblescope setup${setup_args[*]:+ ${setup_args[*]}}" >&2
     log "If Moonraker refused as unauthorized, add --api-key <key> (or --api-key - to read it from stdin)." >&2
     return 1
   fi
