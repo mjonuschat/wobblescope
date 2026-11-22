@@ -48,7 +48,7 @@ export function PrinterControlsCard() {
   const busyReason = printer.data?.busy ?? null;
   const moving = homing || levelling;
   const blocked = !ready || moving || busyReason !== null;
-  const error = home.isError ? home.error : level.isError ? level.error : null;
+  const error = home.error ?? level.error;
 
   let note: string | null = null;
   if (levelling) note = LEVEL_BUSY;

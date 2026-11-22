@@ -21,7 +21,6 @@ interface Props {
 
 export type FilterColumn = "kind" | "chip" | "printer" | "pinned";
 
-/** The session types in the order the filter lists them, with their labels. */
 export const KIND_LABELS: Record<SessionKind, string> = {
   axes: "Input shaper",
   belts: "Belts",

@@ -66,7 +66,6 @@ pub enum TestKind {
 }
 
 impl TestKind {
-    /// The id prefix of a session this kind of test records.
     #[must_use]
     pub const fn id_prefix(self) -> &'static str {
         match self {

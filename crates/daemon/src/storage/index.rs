@@ -117,7 +117,6 @@ pub struct ListFilter {
     pub printer: Option<String>,
     /// Keep pinned (true) or unpinned (false) sessions.
     pub pinned: Option<bool>,
-    /// Keep sessions of this kind.
     pub kind: Option<SessionKind>,
 }
 

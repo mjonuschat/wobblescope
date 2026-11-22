@@ -277,7 +277,7 @@ export function sessionDownloadUrl(id: string): string {
   return apiUrl(`sessions/${encodeURIComponent(id)}/download`).toString();
 }
 
-/** The TMC autotune sections Klipper read at startup; empty when there are none. */
+/** The TMC autotune sections Klipper read at startup. The list is empty when there are none. */
 export function getMotorTuning(signal?: AbortSignal) {
   return apiJson<MotorTuning[]>("printer/motor-tuning", { signal });
 }

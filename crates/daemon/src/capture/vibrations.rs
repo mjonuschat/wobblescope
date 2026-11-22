@@ -99,7 +99,7 @@ fn setting(field: &str, value: Option<f64>, default: f64, min: f64) -> Result<f6
     Ok(value)
 }
 
-/// The speeds of one angle: the start speed and every step above it while below the end speed,
+/// The speeds of one angle are the start speed, every step above it while below the end speed,
 /// then the end speed itself. Shake&Tune stops at the last step below the end speed, so a run
 /// never measures the end speed.
 fn speed_list(min_speed: f64, max_speed: f64, speed_increment: f64) -> Vec<f64> {
@@ -214,8 +214,8 @@ pub fn plan_vibrations(
              max_speed",
         );
     }
-    // The analysis needs at least two speeds. The start is below the end, and the end speed
-    // is always listed, so every accepted range has two.
+    // The analysis needs at least two speeds. The start is below the end, and the end
+    // speed is always listed, so every accepted range has two.
     let Some(kinematics) = printer.machine.kinematics.clone() else {
         return refuse(
             "kinematics",

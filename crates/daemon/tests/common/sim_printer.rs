@@ -676,7 +676,6 @@ impl Rig {
         self.app_with(timings, Settings::default())
     }
 
-    /// The API router with the daemon's `settings`.
     pub fn app_with_settings(&self, settings: Settings) -> axum::Router {
         self.app_with(wobblescope::api::StreamTimings::default(), settings)
     }

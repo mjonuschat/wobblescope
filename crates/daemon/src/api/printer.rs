@@ -26,7 +26,6 @@ const HOME_TIMEOUT: Duration = Duration::from_secs(300);
 /// is within tolerance.
 const LEVEL_TIMEOUT: Duration = Duration::from_secs(900);
 
-/// The levelling procedure a printer's Klipper has.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -172,7 +171,7 @@ pub(super) async fn printer(State(state): State<ApiState>) -> Result<Json<Printe
         }
         None => None,
     };
-    // Levelling is extra information: when it cannot be read, the rest of the state still counts.
+    // Levelling is extra information. When it cannot be read, the rest of the state still counts.
     let levelling = best_effort(detect_levelling(&control)).await.flatten();
     let level_kind = levelling.map(|l| l.kind);
     let levelled = match levelling {
@@ -227,7 +226,6 @@ pub(super) async fn emergency_stop(
     Ok(Json(StopDispatched { dispatched: true }))
 }
 
-/// Which axes `POST /api/printer/home` homes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]

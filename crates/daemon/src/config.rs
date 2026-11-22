@@ -320,7 +320,7 @@ impl Default for Settings {
     }
 }
 
-/// Checks that `text` is one G-code command name: it starts with a letter and has only ASCII
+/// Checks that `text` is one G-code command name. It starts with a letter and has only ASCII
 /// letters, digits and `_`. A value with a space cannot carry parameters or a second command.
 fn gcode_command(text: &str) -> Result<(), &'static str> {
     let mut chars = text.chars();

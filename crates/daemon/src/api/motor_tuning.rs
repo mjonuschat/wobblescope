@@ -1,5 +1,5 @@
 //! `GET /api/printer/motor-tuning`: the `klipper_tmc_autotune` settings Klipper read at startup.
-//! The list is sorted by stepper name.
+//! The daemon sorts the list by stepper name.
 
 use std::time::Duration;
 
