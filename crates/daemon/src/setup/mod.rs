@@ -4,6 +4,7 @@
 pub mod host;
 pub mod install;
 pub mod moonraker;
+pub mod nginx;
 pub mod render;
 
 use std::fmt;
