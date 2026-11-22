@@ -16,11 +16,22 @@ use super::render;
 
 const SNIPPET: &str = "snippets/wobblescope.conf";
 
+/// Where nginx is looked for. Debian-style systems keep it in `/usr/sbin`, which an ordinary
+/// user's `PATH` does not include.
+const NGINX_PROGRAMS: [&str; 3] = ["nginx", "/usr/sbin/nginx", "/sbin/nginx"];
+
+/// The first of [`NGINX_PROGRAMS`] that runs.
+fn nginx_program(host: &Host) -> Option<&'static str> {
+    NGINX_PROGRAMS
+        .into_iter()
+        .find(|program| host.runner.run(program, &["-v"]).is_ok())
+}
+
 /// Prints the one-line reasons nothing can be done, and returns the plan otherwise.
 /// Not finding nginx or a site is not an error.
 pub(super) fn find(host: &Host, say: &mut Say, moonraker_port: u16) -> Option<Plan> {
-    if host.runner.run("nginx", &["-v"]).is_err() {
-        say.step("nginx", "not installed, skipped");
+    if nginx_program(host).is_none() {
+        say.step("nginx", "not found on PATH, /usr/sbin or /sbin, skipped");
         return None;
     }
     let Some(layout) = Layout::read(&host.nginx_dir) else {
@@ -165,7 +176,7 @@ impl Undo {
 pub(super) fn test_config(host: &Host) -> Result<Option<String>, SetupError> {
     let outcome = host
         .runner
-        .run("nginx", &["-t"])
+        .run(nginx_program(host).unwrap_or("nginx"), &["-t"])
         .map_err(|e| SetupError::new(format!("cannot run nginx -t: {e}")))?;
     if outcome.success {
         return Ok(None);
@@ -184,7 +195,8 @@ pub(super) fn reload(host: &Host) -> bool {
             .run(program, args)
             .is_ok_and(|outcome| outcome.success)
     };
-    done("systemctl", &["reload", "nginx"]) || done("nginx", &["-s", "reload"])
+    done("systemctl", &["reload", "nginx"])
+        || done(nginx_program(host).unwrap_or("nginx"), &["-s", "reload"])
 }
 
 /// Writes the snippet and the include blocks, then tests and reloads nginx. Returns whether
@@ -326,14 +338,12 @@ pub(super) fn check(
     }
     match test_config(host)? {
         None => report(say, "nginx -t", true, "ok"),
+        // Without root nginx cannot open its pid file or logs, so a failure proves nothing.
+        Some(_) if !host.chown => report(say, "nginx -t", true, "needs sudo, not checked"),
         Some(printed) => {
-            // Without root nginx cannot open its pid file or logs, so a failure proves nothing.
-            report(say, "nginx -t", !host.chown, "failed");
+            report(say, "nginx -t", false, "failed");
             for line in printed.lines() {
                 say.note(line);
-            }
-            if !host.chown {
-                say.note("run --check with sudo for a result that counts");
             }
         }
     }
@@ -358,8 +368,11 @@ pub(super) fn check(
 /// # Errors
 /// [`SetupError`] when a file cannot be read or written. What was changed is put back.
 pub(super) fn remove(host: &Host, say: &mut Say) -> Result<bool, SetupError> {
-    if host.runner.run("nginx", &["-v"]).is_err() {
-        say.step("nginx", "not installed, nothing to remove");
+    if nginx_program(host).is_none() {
+        say.step(
+            "nginx",
+            "not found on PATH, /usr/sbin or /sbin, nothing to remove",
+        );
         return Ok(true);
     }
     let Some(layout) = Layout::read(&host.nginx_dir) else {

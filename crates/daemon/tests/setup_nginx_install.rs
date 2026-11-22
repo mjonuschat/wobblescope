@@ -232,6 +232,48 @@ async fn check_reports_each_piece_and_changes_nothing() {
 }
 
 #[tokio::test]
+async fn nginx_outside_the_path_is_found_in_usr_sbin() {
+    let (rig, tree) = rig_with(&["fluidd"]).await;
+    rig.systemd.0.lock().unwrap().nginx_off_path = true;
+    let (result, out) = rig.install().await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert!(!out.contains("not found"), "{out}");
+    assert!(tree.root().join("snippets/wobblescope.conf").exists());
+    assert_eq!(rig.systemd.count("nginx -t"), 1);
+}
+
+#[tokio::test]
+async fn nginx_missing_everywhere_is_reported_as_not_found_not_as_not_installed() {
+    let (rig, tree) = rig_with(&["fluidd"]).await;
+    rig.systemd.0.lock().unwrap().nginx_missing = true;
+    let (result, out) = rig.install().await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert!(
+        out.contains("not found") && out.contains("/usr/sbin"),
+        "{out}"
+    );
+    assert!(!out.contains("not installed"), "{out}");
+    assert!(!tree.root().join("snippets/wobblescope.conf").exists());
+}
+
+#[tokio::test]
+async fn check_without_root_says_the_config_test_needs_sudo_and_prints_no_nginx_errors() {
+    let (rig, _tree) = rig_with(&["fluidd"]).await;
+    rig.install().await.0.unwrap();
+    rig.systemd.0.lock().unwrap().nginx_test_error =
+        Some("open() \"/run/nginx.pid\" failed (13: Permission denied)".to_owned());
+    let (result, out) = rig.run(Mode::Check, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert!(
+        out.lines()
+            .any(|l| l.contains("nginx -t") && l.contains("needs sudo")),
+        "{out}"
+    );
+    assert!(!out.contains("Permission denied"), "{out}");
+    assert!(!out.contains("failed"), "{out}");
+}
+
+#[tokio::test]
 async fn check_flags_missing_trusted_proxies() {
     let (rig, _tree) = rig_with(&["fluidd"]).await;
     rig.install().await.0.unwrap();

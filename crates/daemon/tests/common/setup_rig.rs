@@ -22,6 +22,10 @@ pub struct Systemd {
     pub flaps: bool,
     pub fail_on: Option<String>,
     pub nginx_test_error: Option<String>,
+    /// `nginx` is not on `PATH`, but `/usr/sbin/nginx` runs.
+    pub nginx_off_path: bool,
+    /// No nginx anywhere.
+    pub nginx_missing: bool,
 }
 
 #[derive(Clone, Default)]
@@ -40,7 +44,13 @@ impl FakeSystemd {
 impl Runner for FakeSystemd {
     fn run(&self, program: &str, args: &[&str]) -> std::io::Result<Outcome> {
         let mut s = self.0.lock().unwrap();
-        if program == "nginx" {
+        if matches!(program, "nginx" | "/usr/sbin/nginx" | "/sbin/nginx") {
+            let absent = s.nginx_missing
+                || (program == "nginx" && s.nginx_off_path)
+                || (program == "/sbin/nginx" && s.nginx_off_path);
+            if absent {
+                return Err(std::io::ErrorKind::NotFound.into());
+            }
             s.calls.push(format!("nginx {}", args.join(" ")));
             let error = if args == ["-t"] {
                 s.nginx_test_error.clone()

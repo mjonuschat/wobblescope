@@ -46,8 +46,10 @@ If nginx serves your Mainsail or Fluidd, `setup` also publishes Wobblescope on t
 
 ```sh
 sudo ~/wobblescope/wobblescope setup
-~/wobblescope/wobblescope setup --check
+sudo ~/wobblescope/wobblescope setup --check
 ```
+
+Without `sudo`, `--check` still reports the service, the config file and the Moonraker entry. It cannot test the nginx configuration, and says so.
 
 If Moonraker rejects setup as unauthorized, add `--api-key <key>`, or `--api-key -` to read the key from standard input.
 
