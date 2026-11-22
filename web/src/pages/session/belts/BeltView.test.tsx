@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/queries";
 import type { BeltSide } from "@/lib/generated/BeltSide";
 import type { BeltsAnalysis } from "@/lib/generated/BeltsAnalysis";
+import type { BeltsResult } from "@/lib/generated/BeltsResult";
 import { beltSpectrum, beltsComparison, beltsResult, twoAxisMeta } from "@/test/fixtures";
 
 import type { Header } from "../SessionResults";
@@ -86,6 +87,38 @@ describe("the belt view", () => {
         .getAllByRole("cell")
         .map((c) => c.textContent),
     ).toEqual(["β", "50.0 Hz", "12.3 %"]);
+  });
+
+  const imbalanceRow = () => screen.getByText("Belt level").nextElementSibling?.textContent;
+  const withImbalance = (imbalance: BeltsResult["imbalance"]) =>
+    fake.belts.mockResolvedValue(beltsComparison("adxl345", beltsResult({ imbalance })));
+
+  it("shows the median ratio, range and stronger belt", async () => {
+    withImbalance({ state: "Found", figure: 0.5, lo_hz: 115, hi_hz: 145, stronger: "B" });
+    renderView();
+    await screen.findByText("Belt level");
+    expect(imbalanceRow()).toBe("Belt B has a median of 2.0x belt A's power from 115 to 145 Hz");
+  });
+
+  it("says no sustained imbalance found", async () => {
+    withImbalance({ state: "NoneFound", figure: 1, lo_hz: 0, hi_hz: 0, stronger: null });
+    renderView();
+    await screen.findByText("Belt level");
+    expect(imbalanceRow()).toBe("No sustained imbalance found. The health score is not scaled.");
+  });
+
+  it("says the level balance is unavailable and the health score is not scaled", async () => {
+    withImbalance({ state: "Unavailable", figure: 1, lo_hz: 0, hi_hz: 0, stronger: null });
+    renderView();
+    await screen.findByText("Belt level");
+    expect(imbalanceRow()).toBe("Level balance unavailable. The health score is not scaled.");
+  });
+
+  it("says no power in belt X in most of this range", async () => {
+    withImbalance({ state: "Found", figure: 0, lo_hz: 115, hi_hz: 145, stronger: "B" });
+    renderView();
+    await screen.findByText("Belt level");
+    expect(imbalanceRow()).toBe("There is no power in belt A in most of this range, 115 to 145 Hz");
   });
 
   it("a_nan_similarity_shows_a_dash", async () => {

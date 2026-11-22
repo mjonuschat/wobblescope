@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 import { useBelts } from "@/analysis/useBelts";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { chipLabel } from "@/lib/format";
+import type { BeltImbalance } from "@/lib/generated/BeltImbalance";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import type { Header } from "../SessionResults";
@@ -12,12 +13,33 @@ import { healthGrade } from "./healthGrade";
 /** Shake&Tune's default; the chart zoom covers closer looks. */
 const MAX_FREQ = 200;
 
-/** The similarity and health rows, styled like the progress panel's labelled rows. */
-function BeltSummary({ similarity, health }: { similarity: number; health: string }) {
+/** One sentence on how unequal the belts' power is; the score is only scaled when it was found. */
+function imbalanceText({ state, figure, lo_hz, hi_hz, stronger }: BeltImbalance): string {
+  if (state === "Unavailable") return "Level balance unavailable. The health score is not scaled.";
+  if (state === "NoneFound" || stronger === null)
+    return "No sustained imbalance found. The health score is not scaled.";
+  const weaker = stronger === "A" ? "B" : "A";
+  const range = `${Math.round(lo_hz)} to ${Math.round(hi_hz)} Hz`;
+  if (figure <= 0) return `There is no power in belt ${weaker} in most of this range, ${range}`;
+  return `Belt ${stronger} has a median of ${(1 / figure).toFixed(1)}x belt ${weaker}'s power from ${range}`;
+}
+
+/** The similarity, belt level and health rows, styled like the progress panel's labelled rows. */
+function BeltSummary({
+  similarity,
+  health,
+  imbalance,
+}: {
+  similarity: number;
+  health: string;
+  imbalance: BeltImbalance;
+}) {
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       <dt className="text-muted-foreground">Estimated similarity</dt>
       <dd>{Number.isFinite(similarity) ? `${similarity.toFixed(1)}%` : "\u2013"}</dd>
+      <dt className="text-muted-foreground">Belt level</dt>
+      <dd>{imbalanceText(imbalance)}</dd>
       <dt className="text-muted-foreground">Mechanical health</dt>
       <dd>{healthGrade(health)} (experimental)</dd>
     </dl>
@@ -62,7 +84,7 @@ export function BeltResults({ id, meta, header }: { id: string; meta: SessionMet
     chip === undefined ? null : (
       <div className="space-y-4">
         <ChipTabs chips={chips} chip={chip} onChange={setSelected} />
-        {result && <BeltSummary similarity={result.similarity} health={result.health} />}
+        {result && <BeltSummary similarity={result.similarity} health={result.health} imbalance={result.imbalance} />}
       </div>
     );
 
