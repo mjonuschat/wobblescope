@@ -185,6 +185,7 @@ export function beltsResult(over: Partial<BeltsResult> = {}): BeltsResult {
       { freq_delta: 50, amplitude_delta_percent: 12.345 },
     ],
     similarity: 87.65,
+    imbalance: { state: "NoneFound", figure: 1, lo_hz: 0, hi_hz: 0, stronger: null },
     health: "Good mechanical health",
     max_freq: 200,
     ...over,

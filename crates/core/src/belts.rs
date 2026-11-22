@@ -29,6 +29,16 @@ pub const PAIR_CAP_HZ: f64 = 10.0;
 pub const MAX_PEAKS: usize = 2;
 /// Health points taken off for an unpaired peak as tall as the highest value of either curve.
 pub const UNPAIRED_PENALTY: f64 = 30.0;
+/// The imbalance figure at and above which the health score is not scaled; below it the score
+/// is scaled by `figure / TOLERANCE`.
+pub const TOLERANCE: f64 = 0.8;
+/// Width in Hz of the windows over which the belts' power is compared.
+pub const IMBALANCE_WINDOW_HZ: f64 = 10.0;
+/// Consecutive windows with the same stronger belt that make an imbalance.
+pub const IMBALANCE_RUN: usize = 3;
+/// A window counts only when its stronger belt rises above this fraction of the median
+/// window power.
+pub const IMBALANCE_FLOOR: f64 = 0.05;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -69,6 +79,39 @@ pub struct PeakOffset {
     pub amplitude_delta_percent: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum Belt {
+    A,
+    B,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum ImbalanceState {
+    /// A run of windows with the same stronger belt was found.
+    Found,
+    /// Enough windows to look at, and no such run. This does not claim the belts are balanced.
+    NoneFound,
+    /// Fewer than three windows above the floor, or a band under 30 Hz.
+    Unavailable,
+}
+
+/// How much weaker one belt is than the other over the most lopsided stretch of the band.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct BeltImbalance {
+    pub state: ImbalanceState,
+    /// Median of the weaker over the stronger belt's power across the run's three windows,
+    /// 0 to 1. 1 unless `state` is `Found`. It is not a bound on each window.
+    pub figure: f64,
+    /// Start and end in Hz of the run; 0 unless `state` is `Found`.
+    pub lo_hz: f64,
+    pub hi_hz: f64,
+    /// The belt with more power over the run; `None` unless `state` is `Found`.
+    pub stronger: Option<Belt>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BeltsResult {
@@ -84,7 +127,10 @@ pub struct BeltsResult {
     /// when the session recorded it and over the whole grid otherwise. 0 when a curve is
     /// flat.
     pub similarity: f64,
-    /// Shake&Tune's mechanical health text.
+    /// The level imbalance between the belts, which scales the health score.
+    pub imbalance: BeltImbalance,
+    /// Mechanical health text: Shake&Tune's bands, applied to a score that the level
+    /// imbalance scales by the imbalance figure.
     pub health: String,
     pub max_freq: f64,
 }
@@ -187,7 +233,8 @@ pub fn compare_psds_in_band(
         peaks: peaks_b,
         unpaired: unpaired_b,
     };
-    let health = mechanical_health(similarity, &a, &b, pairs.len(), highest);
+    let imbalance = window_imbalance(&grid, &a.psd, &b.psd, sweep);
+    let health = mechanical_health(similarity, imbalance.figure, &a, &b, pairs.len(), highest);
     BeltsResult {
         freqs: grid,
         a,
@@ -195,6 +242,7 @@ pub fn compare_psds_in_band(
         pairs,
         offsets,
         similarity,
+        imbalance,
         health,
         max_freq,
     }
@@ -295,15 +343,130 @@ fn remove_first(list: &mut Vec<usize>, value: usize) {
     }
 }
 
-/// `_compute_mhi` and `_mhi_lut`. A NaN score reads as unknown.
+/// Finds the most lopsided stretch of the band. Shake&Tune's similarity is a correlation,
+/// so one belt carrying twice the other's power still scores 99 %.
+///
+/// The band, `band` or the whole grid when `None`, cut at the grid's end, is split into
+/// consecutive 10 Hz windows from its lower limit; a trailing piece shorter than that is
+/// dropped. A belt's window power is the sum of its values at grid points `lo <= f < hi`.
+/// A window is eligible when its stronger belt exceeds 5 % of the median over all windows of
+/// the stronger belt's power, so a large low-frequency resonance cannot raise the floor. A run
+/// is three consecutive eligible windows with the same stronger belt; the run with the lowest
+/// median ratio wins, the lowest frequency on a tie. With no run the figure is 1, and with
+/// fewer than three eligible windows or a band under 30 Hz the result is `Unavailable`, also
+/// with figure 1.
+///
+/// Limitation: a wide feature centred on a window edge can lift three neighbouring windows
+/// and read as an imbalance, and a gap that is narrower than 30 Hz or not aligned to the
+/// windows may or may not be caught.
+fn window_imbalance(
+    grid: &[f64],
+    psd_a: &[f64],
+    psd_b: &[f64],
+    band: Option<(f64, f64)>,
+) -> BeltImbalance {
+    let unscaled = |state| BeltImbalance {
+        state,
+        figure: 1.0,
+        lo_hz: 0.0,
+        hi_hz: 0.0,
+        stronger: None,
+    };
+    let Some(&grid_end) = grid.last() else {
+        return unscaled(ImbalanceState::Unavailable);
+    };
+    let (start, end) = match band {
+        Some((lo, hi)) => (lo, hi.min(grid_end)),
+        None => (grid[0], grid_end),
+    };
+    let span = end - start;
+    if span.is_nan() || span < IMBALANCE_RUN as f64 * IMBALANCE_WINDOW_HZ {
+        return unscaled(ImbalanceState::Unavailable);
+    }
+
+    struct Window {
+        lo: f64,
+        stronger: Option<Belt>,
+        /// The stronger belt's power.
+        strong: f64,
+        ratio: f64,
+        eligible: bool,
+    }
+    let count = ((end - start) / IMBALANCE_WINDOW_HZ).floor() as usize;
+    let mut windows: Vec<Window> = (0..count)
+        .map(|k| {
+            let lo = start + k as f64 * IMBALANCE_WINDOW_HZ;
+            let hi = lo + IMBALANCE_WINDOW_HZ;
+            let power = |psd: &[f64]| -> f64 {
+                grid.iter()
+                    .zip(psd)
+                    .filter(|(f, _)| **f >= lo && **f < hi)
+                    .map(|(_, v)| *v)
+                    .sum()
+            };
+            let (a, b) = (power(psd_a), power(psd_b));
+            let (stronger, strong, weak) = if a > b {
+                (Some(Belt::A), a, b)
+            } else if b > a {
+                (Some(Belt::B), b, a)
+            } else {
+                (None, a, b)
+            };
+            Window {
+                lo,
+                stronger,
+                strong,
+                ratio: if strong > 0.0 { weak / strong } else { 1.0 },
+                eligible: false,
+            }
+        })
+        .collect();
+    let mut sorted: Vec<f64> = windows.iter().map(|w| w.strong).collect();
+    sorted.sort_by(f64::total_cmp);
+    let floor = IMBALANCE_FLOOR * median(&sorted);
+    for w in &mut windows {
+        w.eligible = w.strong > floor;
+    }
+    if windows.iter().filter(|w| w.eligible).count() < IMBALANCE_RUN {
+        return unscaled(ImbalanceState::Unavailable);
+    }
+
+    let mut best: Option<(f64, usize)> = None;
+    for (k, run) in windows.windows(IMBALANCE_RUN).enumerate() {
+        let belt = run[0].stronger;
+        if belt.is_none() || !run.iter().all(|w| w.eligible && w.stronger == belt) {
+            continue;
+        }
+        let mut ratios: Vec<f64> = run.iter().map(|w| w.ratio).collect();
+        ratios.sort_by(f64::total_cmp);
+        let figure = median(&ratios);
+        if best.is_none_or(|(lowest, _)| figure < lowest) {
+            best = Some((figure, k));
+        }
+    }
+    match best {
+        Some((figure, k)) => BeltImbalance {
+            state: ImbalanceState::Found,
+            figure,
+            lo_hz: windows[k].lo,
+            hi_hz: windows[k].lo + IMBALANCE_RUN as f64 * IMBALANCE_WINDOW_HZ,
+            stronger: windows[k].stronger,
+        },
+        None => unscaled(ImbalanceState::NoneFound),
+    }
+}
+
+/// `_compute_mhi` and `_mhi_lut`, with the similarity scaled by the level imbalance multiplier,
+/// `min(1, figure / TOLERANCE)`. A NaN score reads as unknown.
 fn mechanical_health(
     similarity: f64,
+    figure: f64,
     a: &BeltCurve,
     b: &BeltCurve,
     pair_count: usize,
     highest: f64,
 ) -> String {
-    let mut score = similarity;
+    let mut score = similarity * (figure / TOLERANCE).min(1.0);
     if pair_count >= MAX_PEAKS {
         score *= MAX_PEAKS as f64 / pair_count as f64;
     }
@@ -455,7 +618,15 @@ mod tests {
     #[test]
     fn an_unpaired_peak_lowers_the_health_text() {
         let got = compare(&[(50.0, 1.0), (80.0, 1.0)], &[(50.0, 1.0)], MAX_FREQ);
-        assert_eq!(got.health, "Potential signs of a mechanical issue");
+        assert_eq!(got.a.unpaired.len(), 1);
+        assert_eq!(
+            unscaled_health(&got),
+            "Potential signs of a mechanical issue"
+        );
+        // The imbalance check also sees that belt B has no power around 80 Hz, which
+        // lowers the text further.
+        assert_eq!(got.imbalance.state, ImbalanceState::Found);
+        assert_eq!(got.health, "Mechanical issue detected");
     }
 
     #[test]
@@ -697,11 +868,11 @@ mod tests {
         let a = curve(&[], &[]);
         let b = curve(&[], &[]);
         assert_eq!(
-            mechanical_health(80.0, &a, &b, 2, 1.0),
+            mechanical_health(80.0, 1.0, &a, &b, 2, 1.0),
             "Excellent mechanical health"
         );
         assert_eq!(
-            mechanical_health(80.0, &a, &b, 4, 1.0),
+            mechanical_health(80.0, 1.0, &a, &b, 4, 1.0),
             "Potential signs of a mechanical issue"
         );
     }
@@ -711,20 +882,20 @@ mod tests {
         let a = curve(&[3], &[3]);
         let b = curve(&[], &[]);
         assert_eq!(
-            mechanical_health(100.0, &a, &b, 0, 1.0),
+            mechanical_health(100.0, 1.0, &a, &b, 0, 1.0),
             "Good mechanical health"
         );
         assert_eq!(
-            mechanical_health(80.0, &a, &b, 0, 1.0),
+            mechanical_health(80.0, 1.0, &a, &b, 0, 1.0),
             "Acceptable mechanical health"
         );
         let both = curve(&[3], &[3]);
         assert_eq!(
-            mechanical_health(100.0, &a, &both, 0, 1.0),
+            mechanical_health(100.0, 1.0, &a, &both, 0, 1.0),
             "Potential signs of a mechanical issue"
         );
         assert_eq!(
-            mechanical_health(50.0, &a, &both, 0, 1.0),
+            mechanical_health(50.0, 1.0, &a, &both, 0, 1.0),
             "Mechanical issue detected"
         );
     }
@@ -753,5 +924,459 @@ mod tests {
         let got = compare_psds(&f, &flat, &f, &p, MAX_FREQ);
         let json = serde_json::to_value(&got).expect("serialises");
         assert_eq!(json["similarity"], 0.0);
+    }
+
+    // ---- the level imbalance ----
+
+    const BAND: Option<(f64, f64)> = Some((5.0, 100.0));
+
+    fn grid_at(step: f64) -> Vec<f64> {
+        (0..=(100.0 / step) as usize)
+            .map(|i| i as f64 * step)
+            .collect()
+    }
+
+    fn values(grid: &[f64], f: impl Fn(f64) -> f64) -> Vec<f64> {
+        grid.iter().map(|&x| f(x)).collect()
+    }
+
+    /// Belt A is 1 everywhere; belt B is `b(f)`.
+    fn imbalance_of_b(b: impl Fn(f64) -> f64) -> BeltImbalance {
+        let grid = grid_at(0.5);
+        let psd_a = vec![1.0; grid.len()];
+        window_imbalance(&grid, &psd_a, &values(&grid, b), BAND)
+    }
+
+    fn in_range(f: f64, lo: f64, hi: f64) -> bool {
+        f >= lo && f < hi
+    }
+
+    fn twice_over(lo: f64, hi: f64) -> impl Fn(f64) -> f64 {
+        move |f| if in_range(f, lo, hi) { 2.0 } else { 1.0 }
+    }
+
+    fn score(similarity: f64, figure: f64) -> String {
+        let none = curve(&[], &[]);
+        mechanical_health(similarity, figure, &none, &none, 0, 1.0)
+    }
+
+    /// The health text of a result had its figure been 1.
+    fn unscaled_health(got: &BeltsResult) -> String {
+        let highest = got
+            .a
+            .psd
+            .iter()
+            .chain(&got.b.psd)
+            .copied()
+            .fold(0.0, f64::max);
+        mechanical_health(
+            got.similarity,
+            1.0,
+            &got.a,
+            &got.b,
+            got.pairs.len(),
+            highest,
+        )
+    }
+
+    /// Compares two PSDs given as functions of frequency on 0..=250 Hz at 0.25 Hz bins.
+    fn compare_fn(
+        a: impl Fn(f64) -> f64,
+        b: impl Fn(f64) -> f64,
+        sweep: Option<(f64, f64)>,
+    ) -> BeltsResult {
+        let freqs: Vec<f64> = (0..=1000).map(|i| i as f64 * 0.25).collect();
+        let (pa, pb) = (values(&freqs, a), values(&freqs, b));
+        compare_psds_in_band(&freqs, &pa, &freqs, &pb, MAX_FREQ, sweep)
+    }
+
+    fn assert_unavailable_and_unscaled(got: &BeltsResult) {
+        assert_eq!(got.imbalance.state, ImbalanceState::Unavailable);
+        assert_eq!(got.imbalance.figure, 1.0);
+        assert_eq!(got.health, unscaled_health(got));
+        // A multiplier of one half would have changed the verdict.
+        let highest = got
+            .a
+            .psd
+            .iter()
+            .chain(&got.b.psd)
+            .copied()
+            .fold(0.0, f64::max);
+        let halved = mechanical_health(
+            got.similarity,
+            0.5,
+            &got.a,
+            &got.b,
+            got.pairs.len(),
+            highest,
+        );
+        assert_ne!(got.health, halved);
+    }
+
+    #[test]
+    fn equal_curves_give_figure_one_and_an_unchanged_score() {
+        let got = compare(
+            &[(50.0, 1.0), (80.0, 0.5)],
+            &[(50.0, 1.0), (80.0, 0.5)],
+            MAX_FREQ,
+        );
+        assert_eq!(got.imbalance.state, ImbalanceState::NoneFound);
+        assert_eq!(got.imbalance.figure, 1.0);
+        assert_eq!(got.health, unscaled_health(&got));
+        assert_eq!(got.health, "Excellent mechanical health");
+    }
+
+    #[test]
+    fn two_x_over_three_windows_is_found() {
+        let got = imbalance_of_b(twice_over(45.0, 75.0));
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert!((got.figure - 0.5).abs() < 1e-12, "{}", got.figure);
+        assert_eq!((got.lo_hz, got.hi_hz), (45.0, 75.0));
+        assert_eq!(got.stronger, Some(Belt::B));
+    }
+
+    #[test]
+    fn a_twenty_hz_gap_in_two_windows_is_not_a_run() {
+        let got = imbalance_of_b(twice_over(45.0, 65.0));
+        assert_eq!(got.state, ImbalanceState::NoneFound);
+        assert_eq!(got.figure, 1.0);
+    }
+
+    #[test]
+    fn a_thirty_hz_gap_shifted_by_five_hz_gives_what_the_window_powers_give() {
+        // B is 2x over 50 to 80 Hz. The windows 45 to 55 and 75 to 85 hold half of it, so
+        // their ratios are 2/3 and the middle two are 1/2. Two runs have the median 1/2 and
+        // the lower one wins.
+        let got = imbalance_of_b(twice_over(50.0, 80.0));
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert!((got.figure - 0.5).abs() < 1e-12, "{}", got.figure);
+        assert_eq!((got.lo_hz, got.hi_hz), (45.0, 75.0));
+        assert_eq!(got.stronger, Some(Belt::B));
+    }
+
+    #[test]
+    fn the_figure_is_the_median_of_the_run() {
+        // B is 0.9, 0.6 and 0.1 of A in the three windows. The ratio of the summed powers,
+        // 1.6 / 3, is another number.
+        let got = imbalance_of_b(|f| match f {
+            f if in_range(f, 45.0, 55.0) => 0.9,
+            f if in_range(f, 55.0, 65.0) => 0.6,
+            f if in_range(f, 65.0, 75.0) => 0.1,
+            _ => 1.0,
+        });
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert!((got.figure - 0.6).abs() < 1e-12, "{}", got.figure);
+        assert!((got.figure - 1.6 / 3.0).abs() > 0.05);
+        assert_eq!(got.stronger, Some(Belt::A));
+    }
+
+    #[test]
+    fn a_one_bin_spike_and_a_shifted_peak_make_no_run() {
+        let spike = imbalance_of_b(|f| if f == 60.0 { 100.0 } else { 1.0 });
+        assert_eq!(spike.state, ImbalanceState::NoneFound);
+        // A peak at 54.5 Hz in belt A and at 55.5 Hz in belt B: the stronger belt flips at the
+        // edge between two windows.
+        let grid = grid_at(0.5);
+        let psd_a = values(&grid, |f| if f == 54.5 { 50.0 } else { 1.0 });
+        let psd_b = values(&grid, |f| if f == 55.5 { 50.0 } else { 1.0 });
+        let shifted = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(shifted.state, ImbalanceState::NoneFound);
+        assert_eq!(shifted.figure, 1.0);
+    }
+
+    #[test]
+    fn a_run_broken_by_a_reversal_or_a_tie_is_not_counted() {
+        let reversal = imbalance_of_b(|f| match f {
+            f if in_range(f, 45.0, 65.0) => 2.0,
+            f if in_range(f, 65.0, 75.0) => 0.5,
+            _ => 1.0,
+        });
+        assert_eq!(reversal.state, ImbalanceState::NoneFound);
+        let tie = imbalance_of_b(|f| {
+            if in_range(f, 45.0, 65.0) || in_range(f, 75.0, 85.0) {
+                2.0
+            } else {
+                1.0
+            }
+        });
+        assert_eq!(tie.state, ImbalanceState::NoneFound);
+    }
+
+    #[test]
+    fn a_point_on_a_window_edge_belongs_to_the_upper_window() {
+        for step in [0.5, 0.25] {
+            let grid = grid_at(step);
+            let psd_a = vec![1.0; grid.len()];
+            // B is stronger from exactly 55 Hz, an edge of the windows that start at 5 Hz.
+            let psd_b = values(&grid, |f| if f >= 55.0 { 2.0 } else { 1.0 });
+            let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+            assert_eq!(got.state, ImbalanceState::Found, "step {step}");
+            assert_eq!((got.lo_hz, got.hi_hz), (55.0, 85.0), "step {step}");
+        }
+    }
+
+    #[test]
+    fn a_big_low_frequency_resonance_does_not_hide_a_high_gap() {
+        let grid = grid_at(0.5);
+        let resonance = |f: f64| if in_range(f, 5.0, 15.0) { 1000.0 } else { 1.0 };
+        let psd_a = values(&grid, resonance);
+        let psd_b = values(&grid, |f| {
+            resonance(f) * if in_range(f, 45.0, 75.0) { 2.0 } else { 1.0 }
+        });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert_eq!((got.lo_hz, got.hi_hz), (45.0, 75.0));
+    }
+
+    #[test]
+    fn one_zero_belt_window_has_ratio_zero_and_two_zero_ratios_give_figure_zero_and_score_zero() {
+        // A is silent over three windows: three ratios of 0.
+        let grid = grid_at(0.5);
+        let psd_b = vec![1.0; grid.len()];
+        let psd_a = values(&grid, |f| if in_range(f, 45.0, 75.0) { 0.0 } else { 1.0 });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert_eq!(got.figure, 0.0);
+        assert_eq!(got.stronger, Some(Belt::B));
+        assert_eq!(score(100.0, got.figure), "Mechanical issue detected");
+        assert_eq!(score(100.0, 1.0), "Excellent mechanical health");
+    }
+
+    #[test]
+    fn a_zero_median_run_has_figure_zero() {
+        // Ratios 0, 0 and 0.5.
+        let grid = grid_at(0.5);
+        let psd_b = vec![1.0; grid.len()];
+        let psd_a = values(&grid, |f| match f {
+            f if in_range(f, 45.0, 65.0) => 0.0,
+            f if in_range(f, 65.0, 75.0) => 0.5,
+            _ => 1.0,
+        });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert_eq!(got.figure, 0.0);
+        assert_eq!(score(100.0, got.figure), "Mechanical issue detected");
+    }
+
+    #[test]
+    fn one_zero_window_with_two_nonzero_ratios_gives_a_nonzero_median() {
+        // Ratios 0, 0.5 and 0.5.
+        let grid = grid_at(0.5);
+        let psd_b = vec![1.0; grid.len()];
+        let psd_a = values(&grid, |f| match f {
+            f if in_range(f, 45.0, 55.0) => 0.0,
+            f if in_range(f, 55.0, 75.0) => 0.5,
+            _ => 1.0,
+        });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert!((got.figure - 0.5).abs() < 1e-12, "{}", got.figure);
+    }
+
+    #[test]
+    fn a_window_with_both_zero_is_skipped() {
+        // Both belts are silent in 55 to 65 Hz, between two windows where B is stronger.
+        let grid = grid_at(0.5);
+        let psd_a = values(&grid, |f| if in_range(f, 55.0, 65.0) { 0.0 } else { 1.0 });
+        let psd_b = values(&grid, |f| match f {
+            f if in_range(f, 55.0, 65.0) => 0.0,
+            f if in_range(f, 45.0, 75.0) => 2.0,
+            _ => 1.0,
+        });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::NoneFound);
+        assert_eq!(got.figure, 1.0);
+    }
+
+    #[test]
+    fn a_one_zero_window_below_the_floor_is_skipped() {
+        // A is silent in 55 to 65 Hz and B holds 0.001, 0.01 of a floor of 1.
+        let grid = grid_at(0.5);
+        let psd_a = values(&grid, |f| if in_range(f, 55.0, 65.0) { 0.0 } else { 1.0 });
+        let psd_b = values(&grid, |f| match f {
+            f if in_range(f, 55.0, 65.0) => 0.001,
+            f if in_range(f, 45.0, 75.0) => 2.0,
+            _ => 1.0,
+        });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::NoneFound);
+    }
+
+    #[test]
+    fn dominance_alternating_between_belts_has_no_run() {
+        let grid = grid_at(0.5);
+        let b_wins = |f: f64| (((f - 5.0) / 10.0).floor() as i64) % 2 == 0;
+        let psd_a = values(&grid, |f| if b_wins(f) { 1.0 } else { 2.0 });
+        let psd_b = values(&grid, |f| if b_wins(f) { 2.0 } else { 1.0 });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::NoneFound);
+        assert_eq!(got.figure, 1.0);
+        assert_eq!(score(80.0, got.figure), "Excellent mechanical health");
+    }
+
+    #[test]
+    fn fewer_than_three_eligible_windows_or_a_band_under_thirty_hz_is_unavailable() {
+        // Silent but for two windows: the floor is 0 and only two windows are above it.
+        let two = |f: f64| if in_range(f, 47.0, 63.0) { 1.0 } else { 0.0 };
+        let few = compare_fn(two, |f| 0.5 * two(f), BAND);
+        assert_unavailable_and_unscaled(&few);
+        // A band of 25 Hz, over which B is half of A.
+        let wide = |f: f64| (-((f - 30.0) / 4.0).powi(2) / 2.0).exp();
+        let narrow = compare_fn(wide, |f| 0.5 * wide(f), Some((20.0, 45.0)));
+        assert_unavailable_and_unscaled(&narrow);
+    }
+
+    #[test]
+    fn a_wide_feature_centred_on_a_window_edge_is_pinned_as_the_limitation() {
+        // A broad bump on belt B alone, centred on 55 Hz, lifts the windows on both sides of
+        // the edge and their neighbours enough to read as a run.
+        let got = imbalance_of_b(|f| 1.0 + 5.0 * (-((f - 55.0) / 8.0).powi(2) / 2.0).exp());
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert_eq!(got.stronger, Some(Belt::B));
+        assert_eq!((got.lo_hz, got.hi_hz), (35.0, 65.0));
+        assert!((got.figure - 0.2).abs() < 0.05, "{}", got.figure);
+    }
+
+    #[test]
+    fn the_multiplier_is_one_at_and_above_0_8_figure_over_0_8_below_and_zero_at_zero() {
+        // Similarity 68 with no pairs: an uncapped multiplier at 0.9 (1.125) would read 76.5,
+        // Excellent. The rest give 68, 51 (0.6 / 0.8 = 0.75), 34 (0.4 / 0.8 = 0.5) and 0.
+        assert_eq!(score(68.0, 0.9), "Good mechanical health");
+        assert_eq!(score(68.0, 0.8), "Good mechanical health");
+        assert_eq!(score(68.0, 0.6), "Acceptable mechanical health");
+        assert_eq!(score(68.0, 0.4), "Potential signs of a mechanical issue");
+        assert_eq!(score(68.0, 0.0), "Mechanical issue detected");
+    }
+
+    #[test]
+    fn health_uses_the_tolerance_multiplier_end_to_end() {
+        // Two curves with one peak at 20 Hz on a low floor: similarity near 100, one pair. B is
+        // half of A over 65 to 95 Hz, where only the floor is left, so the figure is 0.5 and the
+        // score about 62.5: Good. The raw figure would give 50, Acceptable; the square root
+        // about 70.7, Excellent.
+        let peak = |f: f64| (-((f - 20.0) / 8.0).powi(2) / 2.0).exp() + 0.05;
+        let got = compare_fn(
+            |f| peak(f) * if in_range(f, 65.0, 95.0) { 2.0 } else { 1.0 },
+            peak,
+            BAND,
+        );
+        assert_eq!(got.imbalance.state, ImbalanceState::Found);
+        assert!((got.imbalance.figure - 0.5).abs() < 1e-9);
+        assert!(got.pairs.len() <= 2);
+        assert!(got.similarity > 90.0, "{}", got.similarity);
+        let base = got.similarity * (got.imbalance.figure / TOLERANCE);
+        assert!(base > 55.0 && base <= 70.0, "{base}");
+        // The raw figure and the square root would read differently.
+        assert!(got.similarity * got.imbalance.figure <= 55.0);
+        assert!(
+            got.similarity * got.imbalance.figure.sqrt() > 70.0,
+            "{}",
+            got.similarity
+        );
+        assert_eq!(got.health, "Good mechanical health");
+    }
+
+    #[test]
+    fn the_lowest_of_tied_runs_wins() {
+        let grid = grid_at(0.5);
+        let psd_a = values(&grid, |f| if in_range(f, 65.0, 95.0) { 2.0 } else { 1.0 });
+        let psd_b = values(&grid, |f| if in_range(f, 15.0, 45.0) { 2.0 } else { 1.0 });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, BAND);
+        assert_eq!(got.state, ImbalanceState::Found);
+        assert_eq!((got.lo_hz, got.hi_hz), (15.0, 45.0));
+        assert_eq!(got.stronger, Some(Belt::B));
+    }
+
+    #[test]
+    fn swapping_the_belts_keeps_the_figure_and_flips_the_direction() {
+        let grid = grid_at(0.5);
+        let flat = vec![1.0; grid.len()];
+        let high = values(&grid, twice_over(45.0, 75.0));
+        let forward = window_imbalance(&grid, &flat, &high, BAND);
+        let swapped = window_imbalance(&grid, &high, &flat, BAND);
+        assert_eq!(forward.figure, swapped.figure);
+        assert_eq!(
+            (forward.lo_hz, forward.hi_hz),
+            (swapped.lo_hz, swapped.hi_hz)
+        );
+        assert_eq!(forward.stronger, Some(Belt::B));
+        assert_eq!(swapped.stronger, Some(Belt::A));
+    }
+
+    #[test]
+    fn a_sweep_above_max_freq_makes_no_window_past_the_grid() {
+        let grid = grid_at(0.5);
+        let flat = vec![1.0; grid.len()];
+        // B is 2x from 85 Hz on; only the 85 to 95 window is whole inside the grid.
+        let high = values(&grid, |f| if f >= 85.0 { 2.0 } else { 1.0 });
+        let past = window_imbalance(&grid, &flat, &high, Some((5.0, 500.0)));
+        assert_eq!(past, window_imbalance(&grid, &flat, &high, BAND));
+        assert_eq!(past.state, ImbalanceState::NoneFound);
+        let wide = window_imbalance(
+            &grid,
+            &flat,
+            &values(&grid, twice_over(65.0, 95.0)),
+            Some((5.0, 500.0)),
+        );
+        assert!(wide.hi_hz <= 100.0, "{}", wide.hi_hz);
+    }
+
+    #[test]
+    fn every_health_band_boundary_is_crossed_by_a_known_figure() {
+        // At similarity 100 with no pairs the score is 100 times figure / TOLERANCE.
+        let cases = [
+            (
+                0.70,
+                "Excellent mechanical health",
+                "Good mechanical health",
+            ),
+            (
+                0.55,
+                "Good mechanical health",
+                "Acceptable mechanical health",
+            ),
+            (
+                0.45,
+                "Acceptable mechanical health",
+                "Potential signs of a mechanical issue",
+            ),
+            (
+                0.30,
+                "Potential signs of a mechanical issue",
+                "Likely a mechanical issue",
+            ),
+            (
+                0.15,
+                "Likely a mechanical issue",
+                "Mechanical issue detected",
+            ),
+        ];
+        for (boundary, above, below) in cases {
+            assert_eq!(
+                score(100.0, (boundary + 0.005) * TOLERANCE),
+                above,
+                "figure above {boundary}"
+            );
+            assert_eq!(
+                score(100.0, (boundary - 0.005) * TOLERANCE),
+                below,
+                "figure below {boundary}"
+            );
+        }
+        assert_eq!(score(100.0, 0.0), "Mechanical issue detected");
+    }
+
+    #[test]
+    fn flat_and_all_zero_curves_keep_their_score_and_never_give_a_nan_figure() {
+        let flat = compare_fn(|_| 1.0, |_| 1.0, None);
+        assert_eq!(flat.imbalance.state, ImbalanceState::NoneFound);
+        assert_eq!(flat.imbalance.figure, 1.0);
+        assert_eq!(flat.health, "Mechanical issue detected");
+        let zero = compare_fn(|_| 0.0, |_| 0.0, None);
+        assert_eq!(zero.imbalance.state, ImbalanceState::Unavailable);
+        assert_eq!(zero.imbalance.figure, 1.0);
+        assert_eq!(zero.health, "Mechanical issue detected");
+        let one_flat = compare_fn(|_| 1.0, |f| (-((f - 50.0) / 4.0).powi(2) / 2.0).exp(), None);
+        assert!(!one_flat.imbalance.figure.is_nan());
     }
 }
