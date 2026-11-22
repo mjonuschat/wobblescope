@@ -51,7 +51,7 @@ async fn a_started_test_runs_to_a_session_the_session_api_shows() {
     let rig = rig().await;
     rig.sim.feed_until_motion();
     let id = start_test(&rig).await;
-    assert!(id.starts_with("test-"));
+    assert!(id.starts_with("inputshaper-"));
     let finished = rig.finished().await;
     assert_eq!(finished.outcome, FinishedOutcome::Complete, "{finished:?}");
     assert_eq!(finished.session_id.as_deref(), Some(id.as_str()));

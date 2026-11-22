@@ -331,7 +331,7 @@ pub async fn run(
         .collect();
     let estimate = estimate_bytes(&recordings).unwrap_or(u64::MAX);
     let created_at = iso_utc(now);
-    let base = base_id("test", &created_at);
+    let base = base_id(plan.kind.id_prefix(), &created_at);
     let admitted =
         first_free_id(&base, |id| storage.admit(id, estimate)).map_err(Refusal::Storage)?;
     let Some((id, reservation)) = admitted else {

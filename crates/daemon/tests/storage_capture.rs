@@ -208,8 +208,8 @@ fn a_capture_is_never_evicted_by_another_admission() {
 
 #[test]
 fn ids_take_a_suffix_when_the_second_is_taken() {
-    let base = base_id("test", "2026-11-01T12:14:00Z");
-    assert_eq!(base, "test-20261101T121400Z");
+    let base = base_id("inputshaper", "2026-11-01T12:14:00Z");
+    assert_eq!(base, "inputshaper-20261101T121400Z");
     let mut tried = Vec::new();
     let found = first_free_id(&base, |id| {
         tried.push(id.to_owned());

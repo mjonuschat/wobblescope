@@ -117,6 +117,8 @@ async fn a_bad_or_unknown_parameter_is_refused_by_name() {
         ("/api/sessions?pinned=maybe", "pinned"),
         ("/api/sessions?created_from=yesterday", "created_from"),
         ("/api/sessions?created_to=soon", "created_to"),
+        ("/api/sessions?kind=belt", "kind"),
+        ("/api/sessions?kind=Belts", "kind"),
         ("/api/sessions?colour=red", "colour"),
     ] {
         let (status, body) = json(&app, "GET", uri).await;
@@ -360,4 +362,40 @@ async fn a_listing_carries_the_session_kind() {
             ("a", "axes")
         ]
     );
+}
+
+#[tokio::test]
+async fn the_kind_filter_keeps_only_sessions_of_that_kind() {
+    use wobblescope_core::direction::Direction;
+    let dir = TempDir::new().unwrap();
+    three(dir.path());
+    let mut meta = Spec::new("belts", "2026-10-04T10:00:00Z").meta();
+    meta.format_version = 2;
+    let template = meta.segments[0].clone();
+    meta.segments = [Direction::BELT_A, Direction::BELT_B]
+        .into_iter()
+        .enumerate()
+        .map(|(i, axis)| {
+            let mut segment = template.clone();
+            segment.axis = axis;
+            segment.files[0].sample_file = format!("c0-s{i}.zst");
+            segment
+        })
+        .collect();
+    std::fs::create_dir_all(sessions_dir(dir.path())).unwrap();
+    wobblescope_session::fs::write_session(&sessions_dir(dir.path()), &meta, common::source)
+        .unwrap();
+    let (s, _) = open(dir.path(), BIG);
+    let app = app(Some(s));
+    let (_, body) = json(&app, "GET", "/api/sessions?kind=belts").await;
+    assert_eq!(ids(&body), ["belts"]);
+    let (_, body) = json(&app, "GET", "/api/sessions?kind=axes").await;
+    assert_eq!(ids(&body), ["c", "b", "a"]);
+    let (_, body) = json(&app, "GET", "/api/sessions?kind=axes&pinned=true").await;
+    assert!(ids(&body).is_empty());
+    for kind in ["vibrations", "axesmap", "other"] {
+        let (status, body) = json(&app, "GET", &format!("/api/sessions?kind={kind}")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(ids(&body).is_empty(), "{kind}");
+    }
 }

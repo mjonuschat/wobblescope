@@ -11,6 +11,7 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use wobblescope::capture::CheckId;
 use wobblescope::capture::preflight::{Deps, Refusal, Started, run};
+use wobblescope::capture::request::TestKind;
 use wobblescope::capture::slot::TestSlot;
 use wobblescope::config::Settings;
 use wobblescope::moonraker::status::KlippyState;
@@ -127,7 +128,7 @@ async fn everything_good_starts_with_open_recorders_and_a_reservation_and_sends_
         panic!("pre-flight must pass");
     };
     assert_eq!(started.chips.len(), 2);
-    assert!(started.id.starts_with("test-"));
+    assert!(started.id.starts_with("inputshaper-"));
     assert_eq!(rig.fake.bridge().open_total(), 2);
     assert!(rig.storage.usage().unwrap().reserved_bytes > 0);
     assert!(rig.fake.requests_for("printer.gcode.script").is_empty());
@@ -286,4 +287,27 @@ async fn refused_then_accepted_leaves_nothing_held_by_the_refusals() {
     assert!(rig.storage.usage().unwrap().reserved_bytes > 0);
     drop(started);
     assert_eq!(rig.storage.usage().unwrap().reserved_bytes, 0);
+}
+
+#[tokio::test]
+async fn the_id_of_a_started_test_names_its_kind() {
+    let rig = rig().await;
+    feed(rig.fake.bridge(), "adxl345", 3200.0);
+    feed(rig.fake.bridge(), "ebb36", 400.0);
+    let cases = [
+        (TestKind::Axes, "inputshaper-"),
+        (TestKind::Belts, "belts-"),
+        (TestKind::Vibrations, "vibrations-"),
+        (TestKind::AxesMap, "axesmap-"),
+    ];
+    for (kind, prefix) in cases {
+        let mut plan = test_plan(&["adxl345", "lis2dw ebb36"], &[Axis::X]);
+        plan.kind = kind;
+        let mut deps = Deps::new(&rig.moonraker, &rig.cell, &rig.slot);
+        deps.availability_timeout = Duration::from_millis(500);
+        let Ok(started) = run(&deps, &plan, false, OffsetDateTime::now_utc()).await else {
+            panic!("pre-flight must pass for {kind:?}");
+        };
+        assert!(started.id.starts_with(prefix), "{}", started.id);
+    }
 }

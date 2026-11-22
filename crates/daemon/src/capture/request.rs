@@ -65,6 +65,19 @@ pub enum TestKind {
     Vibrations,
 }
 
+impl TestKind {
+    /// The id prefix of a session this kind of test records.
+    #[must_use]
+    pub const fn id_prefix(self) -> &'static str {
+        match self {
+            Self::Axes => "inputshaper",
+            Self::Belts => "belts",
+            Self::AxesMap => "axesmap",
+            Self::Vibrations => "vibrations",
+        }
+    }
+}
+
 /// `POST /api/tests`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

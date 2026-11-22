@@ -6,7 +6,7 @@ use crate::storage::StorageError;
 pub const MAX_SUFFIX: u32 = 99;
 
 /// The id for something created at `created_at` (`YYYY-MM-DDTHH:MM:SSZ`): the prefix and the
-/// time without its separators, such as `test-20261101T121400Z`.
+/// time without its separators, such as `inputshaper-20261101T121400Z`.
 #[must_use]
 pub fn base_id(prefix: &str, created_at: &str) -> String {
     format!("{prefix}-{}", created_at.replace(['-', ':'], ""))
@@ -35,4 +35,26 @@ pub fn first_free_id<T>(
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::capture::request::TestKind;
+    use wobblescope_session::meta::validate_session_id;
+
+    #[test]
+    fn each_kind_of_test_names_its_ids_after_itself() {
+        let cases = [
+            (TestKind::Axes, "inputshaper-20261101T121400Z"),
+            (TestKind::Belts, "belts-20261101T121400Z"),
+            (TestKind::Vibrations, "vibrations-20261101T121400Z"),
+            (TestKind::AxesMap, "axesmap-20261101T121400Z"),
+        ];
+        for (kind, expected) in cases {
+            let id = base_id(kind.id_prefix(), "2026-11-01T12:14:00Z");
+            assert_eq!(id, expected);
+            validate_session_id(&format!("{id}-{MAX_SUFFIX}")).unwrap();
+        }
+    }
 }
