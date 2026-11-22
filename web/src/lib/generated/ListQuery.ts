@@ -24,4 +24,8 @@ printer: string | null,
 /**
  * `true` for pinned sessions, `false` for unpinned ones.
  */
-pinned: string | null, };
+pinned: string | null, 
+/**
+ * `axes`, `belts`, `axesmap`, `vibrations` or `other`.
+ */
+kind: string | null, };

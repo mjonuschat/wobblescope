@@ -7,7 +7,7 @@ use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use wobblescope_core::fit::Axis;
-use wobblescope_session::meta::SessionMeta;
+use wobblescope_session::meta::{SessionKind, SessionMeta};
 
 use super::error::{ApiBody, ApiError, ApiJson, ApiPath, ApiQuery};
 use super::{ApiState, ImportPermit, Store, blocking};
@@ -31,6 +31,8 @@ pub struct ListQuery {
     pub printer: Option<String>,
     /// `true` for pinned sessions, `false` for unpinned ones.
     pub pinned: Option<String>,
+    /// `axes`, `belts`, `axesmap`, `vibrations` or `other`.
+    pub kind: Option<String>,
 }
 
 impl ListQuery {
@@ -50,12 +52,26 @@ impl ListQuery {
                 _ => Err(ApiError::invalid("pinned must be true or false")),
             })
             .transpose()?;
+        let kind = self
+            .kind
+            .map(|v| match v.as_str() {
+                "axes" => Ok(SessionKind::Axes),
+                "belts" => Ok(SessionKind::Belts),
+                "axesmap" => Ok(SessionKind::AxesMap),
+                "vibrations" => Ok(SessionKind::Vibrations),
+                "other" => Ok(SessionKind::Other),
+                _ => Err(ApiError::invalid(
+                    "kind must be axes, belts, axesmap, vibrations or other",
+                )),
+            })
+            .transpose()?;
         Ok(ListFilter {
             created_from: time("created_from", self.created_from)?,
             created_to: time("created_to", self.created_to)?,
             chip: self.chip,
             printer: self.printer,
             pinned,
+            kind,
         })
     }
 }

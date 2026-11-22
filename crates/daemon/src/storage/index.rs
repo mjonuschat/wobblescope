@@ -117,6 +117,8 @@ pub struct ListFilter {
     pub printer: Option<String>,
     /// Keep pinned (true) or unpinned (false) sessions.
     pub pinned: Option<bool>,
+    /// Keep sessions of this kind.
+    pub kind: Option<SessionKind>,
 }
 
 impl ListFilter {
@@ -129,6 +131,7 @@ impl ListFilter {
                 .as_ref()
                 .is_none_or(|p| s.printer.as_ref() == Some(p))
             && self.pinned.is_none_or(|p| s.pinned == p)
+            && self.kind.is_none_or(|k| s.kind == k)
     }
 }
 
