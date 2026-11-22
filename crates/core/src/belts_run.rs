@@ -99,7 +99,7 @@ fn side(input: Option<&DatasetInput>, max_freq: f64) -> BeltSide {
 /// `max_freq`.
 ///
 /// Each recording is cut to its time window and judged by the same eligibility rules as an axis
-/// recording. Its summed PSD, not normalised, goes to [`compare_psds`] only when both belts are
+/// recording. Its summed PSD, not normalised, goes to [`compare_psds_in_band`] only when both belts are
 /// eligible and their PSDs could be built; otherwise `result` is `None` and each usable side
 /// still carries its own spectrum.
 pub fn analyze_belts(

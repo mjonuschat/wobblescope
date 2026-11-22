@@ -21,9 +21,9 @@ to the extraction limit `max_freq` 200 Hz. Both files are extracted at 200 Hz be
 
 There is no regeneration script: the source recordings are not in the repository.
 
-## Baselines before the level-imbalance change
+## Baselines, whole-grid read, no sweep
 
-`compare_psds_in_band` as it is before the level-imbalance change, for Task 2 to assert against.
+`compare_psds_in_band` as it is before the level-imbalance change.
 
 | Fixture | Chip | Comparison `max_freq` | Sweep | Similarity | Pairs | Health |
 | --- | --- | --- | --- | --- | --- | --- |

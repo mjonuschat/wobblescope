@@ -159,8 +159,9 @@ pub fn compare_psds(
     )
 }
 
-/// As [`compare_psds`], with the similarity and the peaks taken only inside `sweep`, the
-/// `(FREQ_START, FREQ_END)` of the test, ends included. `None` uses the whole grid, which is
+/// As [`compare_psds`], with the similarity, the peaks, the offset and penalty normalization
+/// and the imbalance windows taken only inside `sweep`, the `(FREQ_START, FREQ_END)` of the
+/// test, ends included. `None` uses the whole grid, which is
 /// all Shake&Tune does; [`compare_psds`] and the belt analysis pass the 5 Hz floor instead
 /// when no sweep is recorded.
 pub fn compare_psds_in_band(
@@ -410,8 +411,9 @@ fn window_imbalance(
     let count = (span / IMBALANCE_WINDOW_HZ).floor() as usize;
     let mut windows: Vec<Window> = (0..count)
         .map(|k| {
+            // Both edges are computed from `start`, so a shared edge is the same value.
             let lo = start + k as f64 * IMBALANCE_WINDOW_HZ;
-            let hi = lo + IMBALANCE_WINDOW_HZ;
+            let hi = start + (k + 1) as f64 * IMBALANCE_WINDOW_HZ;
             let power = |psd: &[f64]| -> f64 {
                 grid.iter()
                     .zip(psd)
@@ -1126,6 +1128,25 @@ mod tests {
             assert_eq!(got.state, ImbalanceState::Found, "step {step}");
             assert_eq!((got.lo_hz, got.hi_hz), (55.0, 85.0), "step {step}");
         }
+    }
+
+    #[test]
+    fn a_grid_point_next_to_a_shared_edge_is_counted_in_exactly_one_window() {
+        // For a start of 7.874, (start + 20) + 10 is one ulp under start + 30. A window edge
+        // built from the previous one would leave a grid point at that value in no window.
+        let start = 7.874;
+        let almost_edge = (start + 20.0) + 10.0;
+        assert!(almost_edge < start + 30.0);
+        let mut grid = grid_at(0.5);
+        grid.push(almost_edge);
+        grid.sort_by(f64::total_cmp);
+        let psd_a = vec![1.0; grid.len()];
+        let psd_b = values(&grid, |f| if f >= almost_edge { 2.0 } else { 1.0 });
+        let got = window_imbalance(&grid, &psd_a, &psd_b, Some((start, 100.0)));
+        assert_eq!(got.state, ImbalanceState::Found);
+        // The point is in the window that ends at the shared edge, so B is stronger there.
+        assert_eq!(got.lo_hz, start + 20.0);
+        assert!((got.hi_hz - (start + 50.0)).abs() < 1e-9);
     }
 
     #[test]
