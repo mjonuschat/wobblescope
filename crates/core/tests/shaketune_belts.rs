@@ -4,18 +4,21 @@ mod common;
 use common::{assert_close, close, shaketune};
 use wobblescope_core::belts::{
     GRID_POINTS, MAX_PEAKS, PAIR_CAP_HZ, PEAK_THRESHOLD, PEAK_VICINITY_BINS, PEAK_WINDOW_BINS,
-    UNPAIRED_PENALTY, compare_psds,
+    UNPAIRED_PENALTY, compare_psds_in_band,
 };
 
 parity_test! {
     fn matches_shaketune_on_every_belt_case() {
         for case in &shaketune().belts {
-            let got = compare_psds(
+            // The whole grid, as Shake&Tune reads it. `compare_psds` starts at 5 Hz when no
+            // sweep is recorded; `belts_floor.rs` pins what that moves in these cases.
+            let got = compare_psds_in_band(
                 &case.freqs_a,
                 &case.psd_a,
                 &case.freqs_b,
                 &case.psd_b,
                 case.max_freq,
+                None,
             );
             let want = &case.expected;
             let name = &case.name;

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::CORE_VERSION;
-use crate::belts::{BeltsResult, compare_psds_in_band};
+use crate::belts::{BeltsResult, SWEEP_FLOOR_HZ, compare_psds_in_band};
 use crate::eligibility::{DatasetDecision, DatasetInput, select_eligible};
 use crate::error::CoreError;
 use crate::multichip::windowed_samples;
@@ -94,8 +94,9 @@ fn side(input: Option<&DatasetInput>, max_freq: f64) -> BeltSide {
 }
 
 /// Compares the belt A and belt B recordings of `chip` at `point` up to `max_freq`. `sweep` is
-/// the `(FREQ_START, FREQ_END)` the test ran with, when known; the similarity is read over that
-/// band only.
+/// the `(FREQ_START, FREQ_END)` the test ran with, when known; the peaks, similarity and
+/// normalization are read over that band only. Without it the band is `SWEEP_FLOOR_HZ` to
+/// `max_freq`.
 ///
 /// Each recording is cut to its time window and judged by the same eligibility rules as an axis
 /// recording. Its summed PSD, not normalised, goes to [`compare_psds`] only when both belts are
@@ -111,6 +112,8 @@ pub fn analyze_belts(
 ) -> BeltsAnalysis {
     let belt_a = side(a, max_freq);
     let belt_b = side(b, max_freq);
+    // A bump below Klipper's default `min_freq` is not a belt resonance.
+    let sweep = sweep.or(Some((SWEEP_FLOOR_HZ, max_freq)));
     let result = match (&belt_a.spectrum, &belt_b.spectrum) {
         (Some(sa), Some(sb)) => Some(compare_psds_in_band(
             &sa.freqs, &sa.psd, &sb.freqs, &sb.psd, max_freq, sweep,

@@ -151,3 +151,33 @@ fn flat_curves_give_a_zero_similarity_not_an_error() {
     let got = analyze_belts("adxl", 0, Some(&flat(0.0)), Some(&flat(0.0)), 200.0, None);
     assert_eq!(got.result.unwrap().similarity, 0.0);
 }
+
+/// A strong tone at `low` Hz on x only, a resonance at 60 Hz on both, `seconds` long.
+fn with_low_tone(low: f64, seconds: f64) -> RawSamples {
+    let mut s = tones(60.0, 100.0, seconds, 0.0);
+    let tau = std::f64::consts::TAU;
+    for (k, x) in s.x.iter_mut().enumerate() {
+        *x += 8.0 * (tau * low * k as f64 / RATE).sin();
+    }
+    s
+}
+
+#[test]
+fn analyze_belts_without_a_sweep_uses_the_floor() {
+    let a = input(with_low_tone(2.0, 8.0));
+    let b = input(tones(60.0, 100.0, 8.0, 0.0));
+    let got = analyze_belts("adxl", 0, Some(&a), Some(&b), 200.0, None);
+    let result = got.result.as_ref().expect("result");
+    for &i in result.a.peaks.iter().chain(&result.b.peaks) {
+        assert!(result.freqs[i] >= 5.0, "peak at {} Hz", result.freqs[i]);
+    }
+    assert!(!result.pairs.is_empty());
+    let (pa, pb) = (psd_of(&a), psd_of(&b));
+    assert!(
+        pa.psd_sum[1..5].iter().cloned().fold(0.0, f64::max)
+            > 5.0 * pb.psd_sum[1..5].iter().cloned().fold(0.0, f64::max),
+        "the tone must dominate below 5 Hz"
+    );
+    let with_floor = analyze_belts("adxl", 0, Some(&a), Some(&b), 200.0, Some((5.0, 200.0)));
+    assert_eq!(got.result, with_floor.result);
+}

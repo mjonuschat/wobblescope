@@ -16,8 +16,8 @@ freqs: Array<number>, a: BeltCurve, b: BeltCurve,
 pairs: Array<BeltPair>, offsets: Array<PeakOffset>, 
 /**
  * Pearson correlation of the two curves times 100, clipped to 0..100, over the swept band
- * when the session recorded it and over the whole grid otherwise. 0 when a curve is
- * flat.
+ * when the session recorded it and from `SWEEP_FLOOR_HZ` up otherwise. 0 when a
+ * curve is flat.
  */
 similarity: number, 
 /**

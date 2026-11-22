@@ -12,6 +12,9 @@ use crate::numeric::{interp, linspace, median_sorted as median, percentile_sorte
 use crate::peaks::detect_peaks_whole;
 
 pub const GRID_POINTS: usize = 500;
+/// The lower end in Hz of the band read when a session records no sweep: Klipper's
+/// default `min_freq`.
+pub const SWEEP_FLOOR_HZ: f64 = 5.0;
 /// A peak must rise above this fraction of its own curve's maximum.
 pub const PEAK_THRESHOLD: f64 = 0.1;
 /// Width of the moving average in PSD bins. A Hann window's main lobe is four bins wide,
@@ -75,7 +78,8 @@ pub struct PeakOffset {
     /// Distance in Hz between the two peaks of the pair.
     pub freq_delta: f64,
     /// Difference between belt B's value at its peak and belt A's value at its peak, as a
-    /// percentage of the highest value of either curve inside the swept band, or anywhere without one.
+    /// percentage of the highest value of either curve inside the swept band, or from
+    /// `SWEEP_FLOOR_HZ` up when the session recorded none.
     pub amplitude_delta_percent: f64,
 }
 
@@ -124,8 +128,8 @@ pub struct BeltsResult {
     pub pairs: Vec<BeltPair>,
     pub offsets: Vec<PeakOffset>,
     /// Pearson correlation of the two curves times 100, clipped to 0..100, over the swept band
-    /// when the session recorded it and over the whole grid otherwise. 0 when a curve is
-    /// flat.
+    /// when the session recorded it and from `SWEEP_FLOOR_HZ` up otherwise. 0 when a
+    /// curve is flat.
     pub similarity: f64,
     /// The level imbalance between the belts, which scales the health score.
     pub imbalance: BeltImbalance,
@@ -136,7 +140,8 @@ pub struct BeltsResult {
 }
 
 /// Compares two PSDs. Each is cut at `max_freq` and resampled onto `GRID_POINTS` points from 0
-/// to `max_freq`, and the peaks, pairs, similarity and health are worked out on that grid.
+/// to `max_freq`, and the peaks, pairs, similarity and health are worked out on that grid, from
+/// `SWEEP_FLOOR_HZ` up: a call without a sweep is a session that recorded none.
 pub fn compare_psds(
     freqs_a: &[f64],
     psd_a: &[f64],
@@ -144,12 +149,20 @@ pub fn compare_psds(
     psd_b: &[f64],
     max_freq: f64,
 ) -> BeltsResult {
-    compare_psds_in_band(freqs_a, psd_a, freqs_b, psd_b, max_freq, None)
+    compare_psds_in_band(
+        freqs_a,
+        psd_a,
+        freqs_b,
+        psd_b,
+        max_freq,
+        Some((SWEEP_FLOOR_HZ, max_freq)),
+    )
 }
 
 /// As [`compare_psds`], with the similarity and the peaks taken only inside `sweep`, the
 /// `(FREQ_START, FREQ_END)` of the test, ends included. `None` uses the whole grid, which is
-/// all Shake&Tune does and what a session without recorded sweep settings can offer.
+/// all Shake&Tune does; [`compare_psds`] and the belt analysis pass the 5 Hz floor instead
+/// when no sweep is recorded.
 pub fn compare_psds_in_band(
     freqs_a: &[f64],
     psd_a: &[f64],
