@@ -1,5 +1,5 @@
 import type { EChartsCoreOption } from "echarts/core";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Field, Fields } from "@/ui-kit/Fields";
@@ -7,6 +7,7 @@ import { Panel } from "@/ui-kit/Panel";
 import { EChart } from "@/components/charts/EChart";
 import { WIDE_CHART } from "@/components/charts/size";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { chipLabel } from "@/lib/format";
 import type { ChipVibrations } from "@/lib/generated/ChipVibrations";
 import type { MotorResult } from "@/lib/generated/MotorResult";
@@ -15,7 +16,10 @@ import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import { explainReason } from "../EligibilityPanel";
 import { GoodAngleRanges } from "./VibrationsSummary";
 import {
+  ANGLE_PRESETS,
+  DEFAULT_ANGLE_PRESET,
   LOW_FREQ_WARNING,
+  type AnglePreset,
   angularProfilesOption,
   heatmapOption,
   motorProfileOption,
@@ -42,6 +46,7 @@ function ChartPanel({
   height = 380,
   minWidth,
   intro,
+  selector,
   below,
 }: {
   title: string;
@@ -51,6 +56,8 @@ function ChartPanel({
   /** Keep the chart this wide and scroll it sideways on a narrow screen. */
   minWidth?: number;
   intro?: ReactNode;
+  /** A control that changes what the chart draws, shown in the panel header and in the expanded view. */
+  selector?: ReactNode;
   /** What the chart's numbers refer to, shown under it and in the expanded view. */
   below?: ReactNode;
 }) {
@@ -59,11 +66,15 @@ function ChartPanel({
       title={title}
       label={title}
       action={
-        <ExpandDialog title={title}>
-          {intro}
-          <EChart option={option} label={label} height={EXPANDED_CHART_HEIGHT} />
-          {below}
-        </ExpandDialog>
+        <div className="flex items-center gap-2">
+          {selector}
+          <ExpandDialog title={title}>
+            {selector}
+            {intro}
+            <EChart option={option} label={label} height={EXPANDED_CHART_HEIGHT} />
+            {below}
+          </ExpandDialog>
+        </div>
       }
     >
       {intro}
@@ -90,19 +101,40 @@ function MotorFigures({ motor }: { motor: MotorResult }) {
   );
 }
 
+function AnglePresetPicker({ value, onChange }: { value: AnglePreset; onChange: (value: AnglePreset) => void }) {
+  return (
+    <ToggleGroup
+      variant="outline"
+      size="sm"
+      aria-label="Angles"
+      value={[value]}
+      onValueChange={(next) => {
+        if (next.length > 0) onChange(next[0] as AnglePreset);
+      }}
+    >
+      {ANGLE_PRESETS.map((item) => (
+        <ToggleGroupItem key={item.value} value={item.value} aria-label={item.label}>
+          {item.short}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
+}
+
 /** The charts of one result, made once for it as the heatmaps are large. */
 function Charts({ result, kinematics, name }: { result: VibrationsResult; kinematics: string; name: string }) {
   const theme = useChartTheme();
+  const [preset, setPreset] = useState<AnglePreset>(DEFAULT_ANGLE_PRESET);
   const options = useMemo(
     () => ({
       polarAngle: polarAngleOption(result, theme),
       polarHeatmap: polarHeatmapOption(result, theme),
       speed: speedProfileOption(result, theme),
-      angular: angularProfilesOption(result, kinematics, theme),
+      angular: angularProfilesOption(result, kinematics, theme, preset),
       heatmap: heatmapOption(result, theme),
       motor: result.motor ? motorProfileOption(result.motor, MAX_FREQ, kinematics, theme) : null,
     }),
-    [result, kinematics, theme],
+    [result, kinematics, theme, preset],
   );
   return (
     <>
@@ -133,6 +165,7 @@ function Charts({ result, kinematics, name }: { result: VibrationsResult; kinema
         title="Angular speed profiles"
         option={options.angular}
         label={`Angular speed profiles of ${name}`}
+        selector={<AnglePresetPicker value={preset} onChange={setPreset} />}
       />
       <ChartPanel
         minWidth={WIDE_CHART}

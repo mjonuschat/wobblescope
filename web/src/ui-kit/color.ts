@@ -40,6 +40,17 @@ export function withAlpha(color: string, alpha: number): string {
   return rgba ? toCss([rgba[0], rgba[1], rgba[2], alpha]) : color;
 }
 
+export function mixColors(from: string, to: string, t: number): string {
+  const a = parseCss(from);
+  const b = parseCss(to);
+  if (!a || !b) return from;
+  return toCss(
+    [0, 1, 2, 3].map((i) =>
+      i === 3 ? a[3] + (b[3] - a[3]) * t : Math.round(a[i] + (b[i] - a[i]) * t),
+    ) as unknown as Rgba,
+  );
+}
+
 function luminance([r, g, b]: Rgba): number {
   const channel = (v: number) => {
     const c = v / 255;

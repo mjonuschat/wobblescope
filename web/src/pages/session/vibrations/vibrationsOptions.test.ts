@@ -10,8 +10,11 @@ import { linspaceVibrationsResult, motorResult, vibrationsResult } from "@/test/
 import {
   LOW_FREQ_WARNING,
   niceStep,
+  ANGLE_PRESETS,
+  angleColor,
   angularProfilesOption,
   heatmapOption,
+  presetAngles,
   motorProfileOption,
   polarAngleOption,
   polarHeatmapOption,
@@ -424,6 +427,64 @@ describe("angularProfilesOption", () => {
     expect(names).toEqual(["X (0 deg)", "Y (90 deg)", "45 deg", "135 deg"]);
     const limited = series(angularProfilesOption(vibrationsResult(), "limited_corexy")).map((x) => x.name);
     expect(limited[2]).toBe("A (45 deg)");
+  });
+});
+
+describe("angle presets", () => {
+  const names = (preset: "motors" | "step-22.5" | "step-15", kinematics = "corexy") =>
+    series(angularProfilesOption(vibrationsResult(), kinematics, DEFAULT_CHART_THEME, preset)).map((x) => x.name);
+
+  it("draws the four motor directions by default", () => {
+    const defaults = series(angularProfilesOption(vibrationsResult(), "corexy")).map((x) => x.name);
+    expect(defaults).toEqual(names("motors"));
+    expect(defaults).toEqual(["X (0 deg)", "Y (90 deg)", "A (45 deg)", "B (135 deg)"]);
+    expect(ANGLE_PRESETS.map((p) => p.value)[0]).toBe("motors");
+  });
+
+  it("lists the angles of each preset, all below 180", () => {
+    expect(presetAngles("motors")).toEqual([0, 45, 90, 135]);
+    expect(presetAngles("step-22.5")).toEqual([0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]);
+    expect(presetAngles("step-15")).toEqual([0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165]);
+  });
+
+  it("names the curves, keeping the motor names where an angle is one", () => {
+    expect(names("step-22.5")).toEqual([
+      "X (0 deg)",
+      "22.5 deg",
+      "A (45 deg)",
+      "67.5 deg",
+      "Y (90 deg)",
+      "112.5 deg",
+      "B (135 deg)",
+      "157.5 deg",
+    ]);
+    const fifteen = names("step-15", "cartesian");
+    expect(fifteen).toHaveLength(12);
+    expect(fifteen.slice(0, 4)).toEqual(["X (0 deg)", "15 deg", "30 deg", "45 deg"]);
+    expect(fifteen[6]).toBe("Y (90 deg)");
+  });
+
+  it("takes the row nearest the angle, not the first at or above it", () => {
+    const r = vibrationsResult({
+      angles: [0, 22, 50, 90, 135, 180],
+      grid: [0, 1, 2, 3, 4, 5].map((a) => [a, a + 10]),
+    });
+    const s = series(angularProfilesOption(r, "corexy", DEFAULT_CHART_THEME, "step-22.5"));
+    expect(s[1].data.map((d: number[]) => d[1])).toEqual(r.grid[1]);
+    expect(s[3].data.map((d: number[]) => d[1])).toEqual(r.grid[2]);
+  });
+
+  it("colors an angle the same in every preset, and one color per curve", () => {
+    const theme = DEFAULT_CHART_THEME;
+    const colors = (preset: "motors" | "step-22.5" | "step-15") =>
+      (angularProfilesOption(vibrationsResult(), "corexy", theme, preset) as Loose).color as string[];
+    expect(colors("motors")).toEqual([0, 90, 45, 135].map((a) => angleColor(a, theme)));
+    expect(colors("motors")).toEqual(theme.series.slice(0, 4));
+    expect(colors("step-22.5")).toHaveLength(8);
+    expect(colors("step-15")).toHaveLength(12);
+    expect(colors("step-15")[3]).toBe(colors("motors")[2]);
+    expect(new Set(colors("step-15")).size).toBe(12);
+    expect(angleColor(0, theme)).toBe(angleColor(180, theme));
   });
 });
 

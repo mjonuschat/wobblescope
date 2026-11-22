@@ -91,6 +91,22 @@ describe("the vibrations view", () => {
     expect(fake.vibrations).toHaveBeenCalledTimes(1);
   });
 
+  it("offers_the_angle_presets_above_the_angular_speed_profiles_with_motor_directions_selected", async () => {
+    fake.vibrations.mockResolvedValue(analysis());
+    renderView();
+    await screen.findByRole("region", { name: "Angular speed profiles" });
+    const group = within(screen.getByRole("region", { name: "Angular speed profiles" })).getByRole("group", {
+      name: "Angles",
+    });
+    const motors = within(group).getByRole("button", { name: "Motor directions" });
+    const steps = within(group).getByRole("button", { name: "Every 22.5 degrees" });
+    expect(within(group).getByRole("button", { name: "Every 15 degrees" })).toBeTruthy();
+    expect(motors.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(steps);
+    expect(steps.getAttribute("aria-pressed")).toBe("true");
+    expect(motors.getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("shows_the_motor_panel_on_a_chip_tab", async () => {
     fake.vibrations.mockResolvedValue(analysis());
     renderView();

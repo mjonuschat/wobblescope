@@ -3,7 +3,8 @@ import type { EChartsCoreOption } from "echarts/core";
 import type { MotorResult } from "@/lib/generated/MotorResult";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import { INFERNO, ON_HEATMAP } from "@/components/charts/colormaps";
-import { clampIndex, firstAtOrAbove } from "@/components/charts/indexes";
+import { clampIndex, closestIndex } from "@/components/charts/indexes";
+import { mixColors } from "@/ui-kit/color";
 import { DEFAULT_CHART_THEME, type ChartTheme } from "@/ui-kit/chartTheme";
 
 const splitLine = (theme: ChartTheme) => ({ lineStyle: { color: theme.grid } });
@@ -515,26 +516,67 @@ function angleLabels(kinematics: string): [number, string][] {
   ];
 }
 
-/** The index of the first angle at or above `angle`, as numpy's searchsorted with side left. */
+export type AnglePreset = "motors" | "step-22.5" | "step-15";
+
+export const DEFAULT_ANGLE_PRESET: AnglePreset = "motors";
+
+export const ANGLE_PRESETS: { value: AnglePreset; label: string; short: string }[] = [
+  { value: "motors", label: "Motor directions", short: "Motors" },
+  { value: "step-22.5", label: "Every 22.5 degrees", short: "22.5°" },
+  { value: "step-15", label: "Every 15 degrees", short: "15°" },
+];
+
+const PRESET_STEP: Record<Exclude<AnglePreset, "motors">, number> = { "step-22.5": 22.5, "step-15": 15 };
+
+/** The angles of a preset in ascending order below 180, as a direction repeats every 180 degrees. */
+export function presetAngles(preset: AnglePreset): number[] {
+  if (preset === "motors") return [0, 45, 90, 135];
+  const step = PRESET_STEP[preset];
+  return Array.from({ length: Math.round(180 / step) }, (_, i) => i * step);
+}
+
+function presetCurves(preset: AnglePreset, kinematics: string): [number, string][] {
+  if (preset === "motors") return angleLabels(kinematics);
+  const names = new Map(angleLabels(kinematics));
+  return presetAngles(preset).map((angle) => [angle, names.get(angle) ?? `${angle} deg`]);
+}
+
+/**
+ * The color of a curve at `angle`, a function of the angle alone so a direction keeps its color in
+ * every preset. The four motor directions take the first four categorical colors, as before, and the
+ * angles between them blend the neighbours, closing the loop at 180 degrees.
+ */
+export function angleColor(angle: number, theme: ChartTheme): string {
+  // X and Y keep the categorical colors they had, so the stops run 0, 45, 90, 135 degrees: X, A, Y, B.
+  const [x, y, a, b] = theme.series;
+  const stops = [x, a, y, b];
+  const at = ((((angle % 180) + 180) % 180) / 45) % stops.length;
+  const low = Math.floor(at);
+  return mixColors(stops[low], stops[(low + 1) % stops.length], at - low);
+}
+
 export function angularProfilesOption(
   result: VibrationsResult,
   kinematics: string,
   theme: ChartTheme = DEFAULT_CHART_THEME,
+  preset: AnglePreset = DEFAULT_ANGLE_PRESET,
 ): EChartsCoreOption {
+  const curves = presetCurves(preset, kinematics);
   return {
     ...base(theme),
-    // The four angles carry no lead, so they take the categorical colors.
-    color: [...theme.series],
+    color: curves.map(([angle]) => angleColor(angle, theme)),
     tooltip: { trigger: "axis" },
     legend: { type: "scroll", top: 0, textStyle: { color: theme.text } },
     grid: { top: 48, left: 64, right: 64, bottom: 40 },
     xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine: splitLine(theme) },
     yAxis: { type: "value", name: "Energy", splitLine: splitLine(theme) },
-    series: angleLabels(kinematics).map(([angle, name]) => ({
+    series: curves.map(([angle, name]) => ({
       name,
       type: "line",
       showSymbol: false,
-      data: (result.grid[firstAtOrAbove(result.angles, angle)] ?? []).map((v, i) => [result.speeds[i], v]),
+      // The rows are linspace(0, 360, n), a step of 360 / (n - 1) that is not exactly 0.5 degrees, so
+      // an angle such as 22.5 rarely has a row of its own and the nearest row stands in for it.
+      data: (result.grid[closestIndex(result.angles, angle)] ?? []).map((v, i) => [result.speeds[i], v]),
     })),
   };
 }
