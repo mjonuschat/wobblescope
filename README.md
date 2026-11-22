@@ -31,6 +31,17 @@ To install a specific release, pass `--version`:
 curl -fsSL https://raw.githubusercontent.com/mjonuschat/wobblescope/main/install.sh | bash -s -- --version v0.2.0
 ```
 
+### Opening it from Mainsail or Fluidd
+
+If nginx serves your Mainsail or Fluidd, `setup` also publishes Wobblescope on the same address: `http://<printer>/wobblescope/` (add the port if your site uses one, for example `:81`). It changes:
+
+- `/etc/nginx/snippets/wobblescope.conf`, a file `setup` owns.
+- One line in each Mainsail or Fluidd site file that proxies your Moonraker, `include /etc/nginx/snippets/wobblescope.conf;` between `# BEGIN wobblescope` and `# END wobblescope` comments. A copy of the file as it was is kept as `<file>.before-wobblescope`.
+- A "Wobblescope" button in Mainsail's sidebar, in `.theme/navi.json` next to `moonraker.conf`. An existing `navi.json` keeps its other entries; if it is not a JSON array, `setup` leaves it alone and says so.
+- `trusted_proxies` in `wobblescope.toml`, which gets `127.0.0.1` and `::1` so the daemon sees your real clients behind nginx.
+
+`setup` runs `nginx -t` first, puts everything back if nginx rejects the change, and then reloads nginx. It handles one Moonraker instance, the one in `wobblescope.toml`; sites that proxy another instance are left alone. Add `--no-nginx` to skip all of this. `setup --check` reports each of these pieces. `setup --remove` takes the include lines, the snippet and the sidebar entry out and leaves `wobblescope.toml` as it is.
+
 ### Repairing and checking
 
 ```sh
@@ -46,11 +57,11 @@ If Moonraker rejects setup as unauthorized, add `--api-key <key>`, or `--api-key
 sudo ~/wobblescope/wobblescope setup --remove
 ```
 
-This removes the service but keeps `wobblescope.toml` and the recorded sessions. To finish, delete `~/wobblescope` and the `[update_manager wobblescope]` section in `moonraker.conf`, then restart Moonraker.
+This removes the service and the nginx link but keeps `wobblescope.toml` and the recorded sessions. To finish, delete `~/wobblescope` and the `[update_manager wobblescope]` section in `moonraker.conf`, then restart Moonraker.
 
 ## Running a test
 
-Open `http://<printer>:7140/` in a browser. Each test starts from the settings in your Klipper config, and you can override them per test. Because a test moves the toolhead, home the printer and clear its path first. The emergency stop halts a running test at any time.
+Open `http://<printer>:7140/` in a browser, or `http://<printer>/wobblescope/` when `setup` found nginx. Each test starts from the settings in your Klipper config, and you can override them per test. Because a test moves the toolhead, home the printer and clear its path first. The emergency stop halts a running test at any time.
 
 ## Access
 
