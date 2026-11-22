@@ -9,6 +9,7 @@ import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { Setting } from "@/lib/generated/Setting";
 
 import { AccelerometersCard } from "./AccelerometersCard";
+import { PrinterControlsCard } from "./PrinterControlsCard";
 import { CardLabel } from "@/ui-kit/CardLabel";
 import { PageHeader } from "@/ui-kit/PageHeader";
 
@@ -139,9 +140,10 @@ export function PrinterPage() {
           {settings.error.message}
         </p>
       )}
+      {settings.data && <MachineSection settings={settings.data} />}
+      <PrinterControlsCard />
       {settings.data && (
         <>
-          <MachineSection settings={settings.data} />
           <MotionSection settings={settings.data} />
           <VolumeSection settings={settings.data} />
           <ResonanceSection settings={settings.data} />

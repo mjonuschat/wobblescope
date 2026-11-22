@@ -3,7 +3,9 @@ import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
 import type { VibrationsRequest } from "@/lib/generated/VibrationsRequest";
 import type { TestKind } from "@/lib/generated/TestKind";
 import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
+import type { HomeAxes } from "@/lib/generated/HomeAxes";
 import type { Homed } from "@/lib/generated/Homed";
+import type { Levelled } from "@/lib/generated/Levelled";
 import type { Mode } from "@/lib/generated/Mode";
 import type { Overrides } from "@/lib/generated/Overrides";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
@@ -256,9 +258,18 @@ export function stopPrinter() {
   return apiJson<StopDispatched>("printer/emergency-stop", { method: "POST" });
 }
 
-/** Homes all axes. The answer comes when the move is done, which can take a minute. */
-export function homePrinter() {
-  return apiJson<Homed>("printer/home", { method: "POST" });
+/** Homes the axes. The answer comes when the move is done, which can take a minute. */
+export function homePrinter(axes: HomeAxes = "all") {
+  return apiJson<Homed>("printer/home", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ axes }),
+  });
+}
+
+/** Levels the gantry. The answer comes when the run is done, which can take several minutes. */
+export function levelPrinter() {
+  return apiJson<Levelled>("printer/level", { method: "POST" });
 }
 
 export function sessionDownloadUrl(id: string): string {

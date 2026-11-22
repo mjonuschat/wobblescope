@@ -89,7 +89,7 @@ export function PrinterControls() {
               type="button"
               aria-label={home.isPending ? "Homing" : "Home"}
               disabled={home.isPending || !klippyReady}
-              onClick={() => home.mutate()}
+              onClick={() => home.mutate("all")}
               className={cn(
                 "flex h-9 items-center rounded-md border px-2 transition-colors hover:bg-accent focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
                 homedClass,

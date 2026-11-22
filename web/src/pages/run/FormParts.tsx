@@ -6,7 +6,7 @@ import { homedTone } from "@/components/PrinterControls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { homeMutationKey, usePrinterState } from "@/lib/api/queries";
+import { homeMutationKey, levelMutationKey, usePrinterState } from "@/lib/api/queries";
 import { CardLabel } from "@/ui-kit/CardLabel";
 
 /** The inline error under a field; `name` is what the field's `aria-describedby` points at. */
@@ -70,9 +70,11 @@ export function ResetButton({ disabled, onClick }: { disabled: boolean; onClick:
 export function usePrinterProblem(blocked: string | null): string | null {
   const printer = usePrinterState(true);
   const homing = useIsMutating({ mutationKey: homeMutationKey }) > 0;
+  const levelling = useIsMutating({ mutationKey: levelMutationKey }) > 0;
   if (blocked) return blocked;
   if (printer.isPending) return "Checking whether the printer is homed…";
   if (homing) return "The printer is homing.";
+  if (levelling) return "The printer is levelling.";
   if (printer.data?.busy) return printer.data.busy;
   if (printer.data && homedTone(printer.data.homed_axes) !== "full") {
     const axes = printer.data.homed_axes ?? "";

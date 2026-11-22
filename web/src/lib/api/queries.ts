@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
+import type { HomeAxes } from "@/lib/generated/HomeAxes";
 import type { SaveRequest } from "@/lib/generated/SaveRequest";
 import type { SessionDetail } from "@/lib/generated/SessionDetail";
 import type { AxesMapRequest } from "@/lib/generated/AxesMapRequest";
@@ -37,6 +38,7 @@ import {
   listSessions,
   getPrinter,
   homePrinter,
+  levelPrinter,
   pinSession,
   saveResult,
   startAxesMap,
@@ -324,7 +326,20 @@ export function useHomePrinter() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: homeMutationKey,
-    mutationFn: () => homePrinter(),
+    mutationFn: (axes: HomeAxes = "all") => homePrinter(axes),
+    onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
+  });
+}
+
+/** The key that lets other components see that levelling is in flight in this browser. */
+export const levelMutationKey = ["printer", "level"] as const;
+
+export function useLevelPrinter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: levelMutationKey,
+    mutationFn: () => levelPrinter(),
     onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });
