@@ -36,6 +36,7 @@ import {
   importGroup,
   listResults,
   listSessions,
+  getMotorTuning,
   getPrinter,
   homePrinter,
   levelPrinter,
@@ -58,6 +59,7 @@ export const queryKeys = {
   chips: ["chips"] as const,
   status: ["status"] as const,
   printer: ["printer"] as const,
+  motorTuning: ["printer", "motor-tuning"] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
   spectrogramsOf: (id: string) => ["spectrogram", id] as const,
   /** One chip's map at one probe point. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
@@ -379,4 +381,12 @@ export function useStartVibrations() {
 
 export function useStartAxesMap() {
   return useMutation({ mutationFn: (request: AxesMapRequest) => startAxesMap(request) });
+}
+
+/** The configured TMC autotune settings. They are as of Klipper's start, so they are read when the page opens. */
+export function useMotorTuning() {
+  return useQuery({
+    queryKey: queryKeys.motorTuning,
+    queryFn: ({ signal }) => getMotorTuning(signal),
+  });
 }

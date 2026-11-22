@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import { Field, Fields } from "@/ui-kit/Fields";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ApiClientError } from "@/lib/api/client";
-import { useCheckChips, useChips, useSettings, useStatus } from "@/lib/api/queries";
+import { useCheckChips, useChips, useMotorTuning, useSettings, useStatus } from "@/lib/api/queries";
 import type { AxisLimits } from "@/lib/generated/AxisLimits";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { Setting } from "@/lib/generated/Setting";
 
 import { AccelerometersCard } from "./AccelerometersCard";
+import { MotorTuningCard } from "./MotorTuningCard";
 import { PrinterControlsCard } from "./PrinterControlsCard";
 import { CardLabel } from "@/ui-kit/CardLabel";
 import { PageHeader } from "@/ui-kit/PageHeader";
@@ -130,6 +131,7 @@ export function PrinterPage() {
   const chips = useChips();
   const check = useCheckChips();
   const status = useStatus();
+  const motorTuning = useMotorTuning();
   const ready = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -162,6 +164,7 @@ export function PrinterPage() {
           {check.error instanceof ApiClientError ? check.error.message : "The chip check failed."}
         </p>
       )}
+      {motorTuning.data && <MotorTuningCard tuning={motorTuning.data} />}
     </div>
   );
 }

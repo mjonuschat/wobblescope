@@ -7,6 +7,8 @@ import { apiPath, stubApiWithStatus } from "@/test/status";
 
 import { firmwareName, measure } from "./PrinterPage";
 
+let motorTuning: unknown[] = [];
+
 function api() {
   return stubApiWithStatus((call) => {
     switch (apiPath(call)) {
@@ -25,6 +27,8 @@ function api() {
         };
       case "settings":
         return { body: printerSettings() };
+      case "printer/motor-tuning":
+        return { body: motorTuning };
       case "chips":
         return {
           body: {
@@ -98,5 +102,22 @@ describe("measure", () => {
     expect(measure(20000, "mm/s²")).toBe("20000 mm/s²");
     expect(measure(0.5, "", 2)).toBe("0.5");
     expect(measure(null, "mm/s")).toBe("unknown");
+  });
+
+  it("shows the motor tuning card below the other sections when the printer has autotune sections", async () => {
+    motorTuning = [{ stepper: "stepper_z", driver: "tmc2240", motor: "m", tuning_goal: "auto", voltage: 24 }];
+    api();
+    renderRoute("/");
+    expect(await screen.findByText("Motor tuning")).toBeTruthy();
+    expect(screen.getByText("stepper_z")).toBeTruthy();
+    motorTuning = [];
+  });
+
+  it("leaves the motor tuning card out when there are no autotune sections", async () => {
+    motorTuning = [];
+    api();
+    renderRoute("/");
+    await screen.findByText("corexy");
+    expect(screen.queryByText("Motor tuning")).toBeNull();
   });
 });

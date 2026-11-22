@@ -8,6 +8,7 @@ import type { Homed } from "@/lib/generated/Homed";
 import type { Levelled } from "@/lib/generated/Levelled";
 import type { Mode } from "@/lib/generated/Mode";
 import type { Overrides } from "@/lib/generated/Overrides";
+import type { MotorTuning } from "@/lib/generated/MotorTuning";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { PrinterState } from "@/lib/generated/PrinterState";
 import type { ResultDetail } from "@/lib/generated/ResultDetail";
@@ -274,4 +275,9 @@ export function levelPrinter() {
 
 export function sessionDownloadUrl(id: string): string {
   return apiUrl(`sessions/${encodeURIComponent(id)}/download`).toString();
+}
+
+/** The TMC autotune sections Klipper read at startup; empty when there are none. */
+export function getMotorTuning(signal?: AbortSignal) {
+  return apiJson<MotorTuning[]>("printer/motor-tuning", { signal });
 }
