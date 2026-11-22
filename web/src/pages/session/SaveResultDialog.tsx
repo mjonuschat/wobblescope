@@ -102,12 +102,18 @@ export function SaveResultButton({ sessionId, meta, axis, params, overrides, res
     <>
       <Tooltip>
         <TooltipTrigger render={<span />}>
-          <Button type="button" variant="outline" disabled={unavailable !== null} onClick={() => setOpen(true)}>
-            <SaveIcon data-icon="inline-start" />
-            Save
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Save"
+            disabled={unavailable !== null}
+            onClick={() => setOpen(true)}
+          >
+            <SaveIcon />
           </Button>
         </TooltipTrigger>
-        {unavailable && <TooltipContent side="top">{unavailable}</TooltipContent>}
+        <TooltipContent side="bottom">{unavailable ?? "Save result"}</TooltipContent>
       </Tooltip>
       <Dialog open={open} onOpenChange={close}>
         <DialogContent>

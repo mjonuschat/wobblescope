@@ -207,6 +207,7 @@ describe("the session view", () => {
     serve();
     renderRoute("/sessions/s1");
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
+    expect(box.closest("li")?.textContent).toContain("The capture looks unreliable");
     expect(box.getAttribute("aria-checked")).toBe("false");
     expect(screen.queryByRole("checkbox", { name: /Include a anyway/ })).toBeNull();
     expect(fake.analyze.mock.calls[0][0].overrides).toEqual([]);

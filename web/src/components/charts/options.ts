@@ -156,7 +156,16 @@ export function psdOption({
       symbol: "none",
       data: [
         ...thresholds,
-        { xAxis: best.freq, label: { formatter: `${best.name} ${formatHz(best.freq)} Hz`, color: theme.text } },
+        {
+          xAxis: best.freq,
+          // At the bottom, below the axis numbers: at the top it lies over the marker of a peak at the same frequency.
+          label: {
+            formatter: `${best.name} ${formatHz(best.freq)} Hz`,
+            color: theme.text,
+            position: "start",
+            offset: [0, 20],
+          },
+        },
       ],
     };
   }

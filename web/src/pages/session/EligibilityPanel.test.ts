@@ -6,9 +6,7 @@ import { explainReason, verdict } from "./EligibilityPanel";
 
 describe("explainReason", () => {
   it("puts the analysis's health reasons in plain words", () => {
-    expect(explainReason("degraded capture health")).toBe(
-      "The capture looks unreliable: dropped samples, timing gaps or suspect values. The session's health notes say which.",
-    );
+    expect(explainReason("degraded capture health")).toBe("The capture looks unreliable. The health notes say why.");
   });
 
   it("explains an incomplete capture with what is missing", () => {
@@ -41,8 +39,7 @@ describe("verdict", () => {
     expect(verdict(decision({ decision: "Excluded", reasons: ["degraded capture health"] }))).toEqual({
       tone: "bad",
       headline: "Left out",
-      detail:
-        "The capture looks unreliable: dropped samples, timing gaps or suspect values. The session's health notes say which.",
+      detail: "The capture looks unreliable. The health notes say why.",
     });
     expect(verdict(decision({ decision: "Overridden", reasons: ["degraded capture health"] })).headline).toBe(
       "Included at your request",

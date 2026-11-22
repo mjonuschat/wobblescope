@@ -22,8 +22,7 @@ function overridable(analysis: Analysis) {
 }
 
 export function explainReason(reason: string): string {
-  if (reason === "degraded capture health")
-    return "The capture looks unreliable: dropped samples, timing gaps or suspect values. The session's health notes say which.";
+  if (reason === "degraded capture health") return "The capture looks unreliable. The health notes say why.";
   const missing = /^incomplete coverage: (.*)$/.exec(reason)?.[1];
   if (missing) return `The capture is incomplete: ${missing}`;
   return reason;
@@ -60,6 +59,12 @@ export function EligibilityPanel({
   const { decisions } = analysis.eligibility;
   if (decisions.length === 0 && analysis.failures.length === 0) return null;
   const manyPoints = new Set(decisions.map((d) => d.point)).size > 1;
+  const overridableChips = overridable(analysis);
+  // The override is per chip, so its checkbox sits under the chip's first decision that needs it.
+  const checkboxAt = new Map<string, number>();
+  decisions.forEach((d, index) => {
+    if (d.decision !== "Included" && !checkboxAt.has(d.chip)) checkboxAt.set(d.chip, index);
+  });
   return (
     <Panel title="Data quality">
       <ul className="flex flex-wrap items-start gap-x-3 gap-y-3">
@@ -88,26 +93,26 @@ export function EligibilityPanel({
                     Could not be analysed: {d.dropped}
                   </Alert>
                 )}
+                {checkboxAt.get(d.chip) === index && (
+                  <div className="flex items-center gap-2 pt-1 text-sm">
+                    <Checkbox
+                      id={`include-${d.chip}`}
+                      checked={overridableChips.get(d.chip)?.overridden ?? false}
+                      disabled={readOnly}
+                      onCheckedChange={(checked) =>
+                        onOverridesChange?.(checked ? [...overrides, d.chip] : overrides.filter((c) => c !== d.chip))
+                      }
+                    />
+                    <Label htmlFor={`include-${d.chip}`} className="font-normal">
+                      Include {d.chip} anyway
+                    </Label>
+                  </div>
+                )}
               </div>
             </li>
           );
         })}
       </ul>
-      {[...overridable(analysis)].map(([chip, { overridden }]) => (
-        <div key={chip} className="flex items-center gap-2 text-sm">
-          <Checkbox
-            id={`include-${chip}`}
-            checked={overridden}
-            disabled={readOnly}
-            onCheckedChange={(checked) =>
-              onOverridesChange?.(checked ? [...overrides, chip] : overrides.filter((c) => c !== chip))
-            }
-          />
-          <Label htmlFor={`include-${chip}`} className="font-normal">
-            Include {chip} anyway
-          </Label>
-        </div>
-      ))}
       {analysis.failures.length > 0 && (
         <ul className="space-y-1 text-sm text-destructive">
           {analysis.failures.map((f) => (

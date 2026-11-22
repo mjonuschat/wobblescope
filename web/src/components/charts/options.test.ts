@@ -71,6 +71,13 @@ describe("psdOption", () => {
     expect(marked.some((m) => m.yAxis !== undefined)).toBe(false);
   });
 
+  it("puts the recommended shaper's label below the frequency axis, clear of a peak marker", () => {
+    const marked = series(option).flatMap((s) => s.markLine?.data ?? []);
+    const label = (marked.find((m) => m.xAxis === 48.2) as { label?: { position?: string; offset?: number[] } }).label;
+    expect(label?.position).toBe("start");
+    expect(label?.offset?.[1]).toBeGreaterThan(0);
+  });
+
   it("ends the frequency axis at the fit settings\u2019 maximum", () => {
     expect((option as { xAxis: { max: number } }).xAxis.max).toBe(200);
   });
