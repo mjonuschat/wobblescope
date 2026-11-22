@@ -1,6 +1,7 @@
 import { PlayIcon } from "lucide-react";
 import { useState } from "react";
 
+import { HintLabel } from "@/components/HintLabel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -16,14 +17,15 @@ import { parseNumber } from "@/lib/parse";
 
 import { ChoiceRow, FieldError, FormCard, ResetButton, usePrinterProblem } from "./FormParts";
 
-type ParameterKey = "size" | "z_height" | "max_speed" | "speed_increment" | "accel" | "travel_speed";
+type ParameterKey = "size" | "z_height" | "min_speed" | "max_speed" | "speed_increment" | "accel" | "travel_speed";
 
 /** Shake&Tune's defaults and the lowest values the form accepts. */
 const PARAMETERS: { key: ParameterKey; label: string; unit: string; fallback: number; min: number | null }[] = [
   { key: "size", label: "Size", unit: "mm", fallback: 100, min: 50 },
   { key: "z_height", label: "Z height", unit: "mm", fallback: 20, min: null },
-  { key: "max_speed", label: "Max speed", unit: "mm/s", fallback: 200, min: 10 },
-  { key: "speed_increment", label: "Speed increment", unit: "mm/s", fallback: 2, min: 1 },
+  { key: "min_speed", label: "Start speed", unit: "mm/s", fallback: 2, min: 2 },
+  { key: "max_speed", label: "End speed", unit: "mm/s", fallback: 200, min: 10 },
+  { key: "speed_increment", label: "Speed step", unit: "mm/s", fallback: 2, min: 1 },
   { key: "accel", label: "Acceleration", unit: "mm/s²", fallback: 3000, min: 100 },
   { key: "travel_speed", label: "Travel speed", unit: "mm/s", fallback: 120, min: 20 },
 ];
@@ -55,6 +57,11 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
     else if (key === "z_height" && value <= 0) complaints[key] = "Z height must be above 0 mm.";
     else values[key] = value;
   }
+  const startSpeed = values.min_speed ?? 2;
+  const endSpeed = values.max_speed ?? 200;
+  if (complaints.min_speed === undefined && startSpeed >= endSpeed) {
+    complaints.min_speed = "Start speed must be below the end speed.";
+  }
 
   let problem = usePrinterProblem(blocked);
   if (!problem && ordered.length === 0) problem = "Choose at least one chip.";
@@ -81,11 +88,14 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
 
   const anyOverride = PARAMETERS.some(({ key }) => (texts[key] ?? "") !== "");
 
-  const parameterField = ({ key, label, unit, fallback }: (typeof PARAMETERS)[number]) => (
+  const inGroup = (...keys: ParameterKey[]) => PARAMETERS.filter((p) => keys.includes(p.key));
+
+  const parameterField = ({ key, label, unit, fallback }: (typeof PARAMETERS)[number], hint?: string) => (
     <div key={key} className="space-y-1">
-      <Label htmlFor={`vibrations-${key}`}>{label}</Label>
+      {hint ? <HintLabel label={label} hint={hint} /> : <Label htmlFor={`vibrations-${key}`}>{label}</Label>}
       <UnitInput
         id={`vibrations-${key}`}
+        aria-label={hint ? label : undefined}
         unit={unit}
         placeholder={String(fallback)}
         value={texts[key] ?? String(fallback)}
@@ -137,7 +147,21 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
       </FormCard>
 
       <FormCard title="Parameters" action={<ResetButton disabled={!anyOverride} onClick={() => setTexts({})} />}>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">{PARAMETERS.map((p) => parameterField(p))}</div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {[...inGroup("size", "z_height"), ...inGroup("accel"), ...inGroup("travel_speed")].map((p) =>
+              parameterField(
+                p,
+                p.key === "travel_speed" ? "The speed of the moves between measured moves." : undefined,
+              ),
+            )}
+          </div>
+          <ChoiceRow label="Speed range">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {inGroup("min_speed", "max_speed", "speed_increment").map((p) => parameterField(p))}
+            </div>
+          </ChoiceRow>
+        </div>
       </FormCard>
 
       <Separator />

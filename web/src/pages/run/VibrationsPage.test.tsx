@@ -48,8 +48,11 @@ describe("the vibrations run page", () => {
     expect(screen.getByRole("heading", { name: "Vibrations profile" })).toBeTruthy();
     expect(field(/^Size/).value).toBe("100");
     expect(field(/^Z height/).value).toBe("20");
-    expect(field(/^Max speed/).value).toBe("200");
-    expect(field(/^Speed increment/).value).toBe("2");
+    expect(screen.getByText("Speed range")).toBeTruthy();
+    expect(field(/^Start speed/).value).toBe("2");
+    expect(field(/^End speed/).value).toBe("200");
+    expect(field(/^Speed step/).value).toBe("2");
+    expect(screen.getByRole("button", { name: "About travel speed" })).toBeTruthy();
     expect(field(/^Acceleration/).value).toBe("3000");
     expect(field(/^Travel speed/).value).toBe("120");
   });
@@ -58,8 +61,9 @@ describe("the vibrations run page", () => {
     const calls = await open();
     const cases: [RegExp, string, string][] = [
       [/^Size/, "49", "Size must be at least 50 mm."],
-      [/^Max speed/, "9", "Max speed must be at least 10 mm/s."],
-      [/^Speed increment/, "0.5", "Speed increment must be at least 1 mm/s."],
+      [/^Start speed/, "1", "Start speed must be at least 2 mm/s."],
+      [/^End speed/, "9", "End speed must be at least 10 mm/s."],
+      [/^Speed step/, "0.5", "Speed step must be at least 1 mm/s."],
       [/^Acceleration/, "99", "Acceleration must be at least 100 mm/s\u00b2."],
       [/^Travel speed/, "19", "Travel speed must be at least 20 mm/s."],
     ];
@@ -74,6 +78,23 @@ describe("the vibrations run page", () => {
     expect(posted(calls)).toHaveLength(0);
     fireEvent.change(field(/^Size/), { target: { value: "50" } });
     expect(startButton().disabled).toBe(false);
+  });
+
+  it("refuses_a_start_speed_not_below_the_end_speed", async () => {
+    await open();
+    fireEvent.change(field(/^Start speed/), { target: { value: "200" } });
+    expect(screen.getByText("Start speed must be below the end speed.")).toBeTruthy();
+    expect(startButton().disabled).toBe(true);
+    fireEvent.change(field(/^Start speed/), { target: { value: "20" } });
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("posts_the_start_speed_when_it_is_changed", async () => {
+    const calls = await open();
+    fireEvent.change(field(/^Start speed/), { target: { value: "20" } });
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    expect(JSON.parse(String(posted(calls)[0].body))).toMatchObject({ min_speed: 20 });
   });
 
   it("posts_the_chosen_chips_and_parameters", async () => {

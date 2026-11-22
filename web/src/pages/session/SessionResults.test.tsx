@@ -134,7 +134,7 @@ describe("the session results", () => {
     serve("vibrations", meta);
     renderResults();
     expect(await screen.findByRole("tab", { name: "All chips" })).toBeTruthy();
-    expect(screen.getByText("Max speed")).toBeTruthy();
+    expect(screen.getByText("End speed")).toBeTruthy();
     expect(fake.analyze).not.toHaveBeenCalled();
     expect(fake.belts).not.toHaveBeenCalled();
   });

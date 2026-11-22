@@ -268,9 +268,9 @@ describe("the session details", () => {
     const value = (label: string) => within(group).getByText(label).nextElementSibling?.textContent;
     expect(value("Size")).toBe("100 mm");
     expect(value("Z height")).toBe("20 mm");
-    expect(value("Min speed")).toBe("20 mm/s");
-    expect(value("Max speed")).toBe("100 mm/s");
-    expect(value("Speed increment")).toBe("5 mm/s");
+    expect(value("Start speed")).toBe("20 mm/s");
+    expect(value("End speed")).toBe("100 mm/s");
+    expect(value("Speed step")).toBe("5 mm/s");
     expect(value("Acceleration")).toBe("3000 mm/s²");
     expect(value("Travel speed")).toBe("120 mm/s");
     expect(value("Kinematics")).toBe("corexy");
