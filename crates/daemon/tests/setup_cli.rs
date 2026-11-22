@@ -133,3 +133,15 @@ fn the_atomic_write_follows_a_symlink_to_its_target() {
     );
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
 }
+
+#[test]
+fn no_nginx_is_a_setup_flag_and_off_by_default() {
+    for (flags, expected) in [(vec![], false), (vec!["--no-nginx"], true)] {
+        let mut argv = vec!["wobblescope", "setup"];
+        argv.extend(flags);
+        let Some(Command::Setup(args)) = Cli::try_parse_from(argv).unwrap().command else {
+            panic!("expected setup");
+        };
+        assert_eq!(args.no_nginx, expected);
+    }
+}

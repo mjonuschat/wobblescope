@@ -52,3 +52,12 @@ impl Tree {
         self.root().join("sites-available").join(name)
     }
 }
+
+impl Tree {
+    /// Points the `apiserver` upstream at `port`.
+    pub fn moonraker_port(&self, port: u16) {
+        let path = self.root().join("conf.d/upstreams.conf");
+        let text = fixture("upstreams.conf").replace("7125", &port.to_string());
+        std::fs::write(path, text).unwrap();
+    }
+}

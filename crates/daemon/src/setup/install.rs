@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use super::host::{Host, write_atomic};
 use super::moonraker::{Discovery, Moonraker, MoonrakerError};
 use super::render::{self, SERVICE};
-use super::{Options, SetupError};
-use crate::config::DEFAULT_MOONRAKER_URL;
+use super::{Options, SetupError, nginx_link};
+use crate::config::{self, DEFAULT_MOONRAKER_URL, Settings};
 
 /// What a step found and did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,21 +61,21 @@ impl Paths {
 }
 
 /// Prints one line per step as it happens, so a run that stops still shows what was done.
-struct Say<'a> {
-    out: &'a mut dyn Write,
+pub(super) struct Say<'a> {
+    pub(super) out: &'a mut dyn Write,
 }
 
 impl Say<'_> {
-    fn step(&mut self, label: &str, state: &str) {
+    pub(super) fn step(&mut self, label: &str, state: &str) {
         let _ = writeln!(self.out, "  {label:<26} {state}");
     }
 
-    fn note(&mut self, text: &str) {
+    pub(super) fn note(&mut self, text: &str) {
         let _ = writeln!(self.out, "    {text}");
     }
 }
 
-fn io_err(what: impl std::fmt::Display) -> impl FnOnce(io::Error) -> SetupError {
+pub(super) fn io_err(what: impl std::fmt::Display) -> impl FnOnce(io::Error) -> SetupError {
     move |e| SetupError::new(format!("{what}: {e}"))
 }
 
@@ -83,7 +83,7 @@ fn moonraker_err(e: MoonrakerError) -> SetupError {
     SetupError::new(e.to_string())
 }
 
-fn read(path: &Path) -> Result<Option<String>, SetupError> {
+pub(super) fn read(path: &Path) -> Result<Option<String>, SetupError> {
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -139,6 +139,48 @@ async fn stays_active(host: &Host) -> Result<bool, SetupError> {
     tokio::time::sleep(host.settle).await;
     let outcome = host.systemctl(&["is-active", SERVICE])?;
     Ok(outcome.success && outcome.stdout == "active")
+}
+
+/// The port the daemon's Moonraker URL names.
+fn moonraker_port(settings: &Settings) -> u16 {
+    let uri = &settings.moonraker_url;
+    uri.port_u16()
+        .unwrap_or(if uri.scheme_str() == Some("https") {
+            443
+        } else {
+            80
+        })
+}
+
+/// Publishes the daemon through nginx. The daemon must trust nginx's loopback connections
+/// before nginx forwards anything to it, so `trusted_proxies` is written first and a failure
+/// there stops the step before nginx is touched.
+fn nginx_step(host: &Host, say: &mut Say, config: &Path) -> Result<bool, SetupError> {
+    let settings = match config::load(Some(config)) {
+        Ok(settings) => settings,
+        Err(e) => {
+            say.step("nginx", "skipped: wobblescope.toml is not valid");
+            say.note(&e.to_string());
+            return Ok(true);
+        }
+    };
+    let Some(plan) = nginx_link::find(host, say, moonraker_port(&settings)) else {
+        return Ok(true);
+    };
+    let text = read(config)?.unwrap_or_default();
+    match render::with_trusted_proxies(&text) {
+        Ok(Some(updated)) => {
+            edit_moonraker_file(config, &updated)?;
+            say.step("trusted_proxies", "added 127.0.0.1 and ::1");
+        }
+        Ok(None) => say.step("trusted_proxies", "already current"),
+        Err(why) => {
+            say.step("trusted_proxies", "FAILED, nginx left alone");
+            say.note(&format!("{}: {why}", config.display()));
+            return Ok(false);
+        }
+    }
+    nginx_link::install(host, say, &plan, settings.listen.port())
 }
 
 /// Installs or repairs the unit, the config file and the service-list entry, then restarts the
@@ -197,6 +239,12 @@ pub async fn install(
                 }
             }
         }
+    }
+
+    if opts.nginx {
+        ok &= nginx_step(host, &mut say, &paths.config)?;
+    } else {
+        say.step("nginx", "skipped (--no-nginx)");
     }
 
     match &paths.asvc {

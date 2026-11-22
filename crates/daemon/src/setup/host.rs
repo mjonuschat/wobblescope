@@ -201,6 +201,8 @@ pub struct Host {
     pub chown: bool,
     /// The directory systemd reads units from.
     pub unit_dir: PathBuf,
+    /// The nginx configuration directory, `/etc/nginx`.
+    pub nginx_dir: PathBuf,
     /// The running binary, which the unit starts.
     pub binary: PathBuf,
     /// The command runner.
@@ -250,6 +252,7 @@ impl Host {
             invoker,
             chown: euid == 0,
             unit_dir: PathBuf::from("/etc/systemd/system"),
+            nginx_dir: PathBuf::from(super::nginx::NGINX_DIR),
             binary,
             runner: Box::new(SystemRunner),
             settle: Duration::from_secs(5),

@@ -31,6 +31,9 @@ pub struct SetupArgs {
     /// section, the config file and the recorded sessions stay
     #[arg(long)]
     pub remove: bool,
+    /// Do not publish Wobblescope under /wobblescope/ in nginx or add the Mainsail sidebar entry
+    #[arg(long)]
+    pub no_nginx: bool,
     /// Where Moonraker listens, when not at the default
     #[arg(long, value_name = "URL")]
     pub moonraker: Option<String>,

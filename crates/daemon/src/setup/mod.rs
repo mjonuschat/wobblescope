@@ -5,6 +5,7 @@ pub mod host;
 pub mod install;
 pub mod moonraker;
 pub mod nginx;
+mod nginx_link;
 pub mod render;
 
 use std::fmt;
@@ -84,6 +85,8 @@ pub fn resolve_api_key(
 pub struct Options {
     /// What to do.
     pub mode: Mode,
+    /// Whether to publish the daemon through nginx (`--no-nginx` turns it off).
+    pub nginx: bool,
     /// Where Moonraker is, when the flag names it.
     pub moonraker: Option<String>,
     /// Moonraker's API key, when given.
@@ -116,6 +119,7 @@ pub async fn run(args: SetupArgs) -> std::process::ExitCode {
         let api_key = resolve_api_key(args.api_key.as_ref(), &mut std::io::stdin().lock())?;
         let opts = Options {
             mode,
+            nginx: !args.no_nginx,
             moonraker: args.moonraker,
             api_key: api_key.clone(),
         };

@@ -9,6 +9,7 @@ pub mod fake_moonraker;
 pub mod fake_printer;
 pub mod hold_sim;
 pub mod nginx_tree;
+pub mod setup_rig;
 pub mod sim_printer;
 
 use wobblescope_core::RawSamples;
