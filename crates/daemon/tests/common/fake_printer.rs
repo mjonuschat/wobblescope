@@ -117,6 +117,11 @@ impl FakePrinter {
             Script::Result(p.query(params))
         });
         let p = printer.clone();
+        fake.on_fn("printer.objects.list", move |_, _| {
+            let s = p.state.lock().unwrap();
+            Script::Result(json!({"objects": s.objects.keys().collect::<Vec<_>>()}))
+        });
+        let p = printer.clone();
         fake.on_fn("server.files.roots", move |_, _| {
             let s = p.state.lock().unwrap();
             Script::Result(

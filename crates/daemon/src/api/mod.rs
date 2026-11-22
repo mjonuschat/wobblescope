@@ -29,7 +29,7 @@ use axum::routing::{get, post};
 pub use access::AccessGuard;
 pub use error::ApiError;
 pub use hold::{HoldClientMessage, HoldServerMessage, HoldSocketTimings};
-pub use printer::{HomeAxes, Homed, PrinterState};
+pub use printer::{HomeAxes, Homed, LevelKind, Levelled, PrinterState};
 pub use results::ResultList;
 pub use sessions::{ImportQuery, ListQuery, PinRequest, SessionDetail, SessionList};
 pub use status::{StatusResponse, StorageState, StorageStatus};
@@ -281,6 +281,7 @@ pub fn mount_configured(
         .route("/printer", get(printer::printer))
         .route("/printer/emergency-stop", post(printer::emergency_stop))
         .route("/printer/home", post(printer::home))
+        .route("/printer/level", post(printer::level))
         .route("/live", get(live::live))
         .route("/stream", get(stream::stream))
         .route("/hold", get(hold::hold))

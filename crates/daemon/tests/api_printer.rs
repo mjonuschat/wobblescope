@@ -40,7 +40,10 @@ async fn the_printer_state_reports_the_homed_axes() {
         .set_field("toolhead", "homed_axes", json!("xy"));
     let (status, body) = answer(&rig, common::request("GET", "/api/printer")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body, json!({"homed_axes": "xy", "busy": null}));
+    assert_eq!(
+        body,
+        json!({"homed_axes": "xy", "busy": null, "levelled": null, "level_kind": null, "level_command": null})
+    );
 }
 
 #[tokio::test]
@@ -281,4 +284,135 @@ async fn home_by_axes_is_refused_while_a_test_runs() {
     rig.until("the sweep", || rig.sim.sweeps().len() == 1).await;
     let (status, body) = answer(&rig, post_json("/api/printer/home", &json!({"axes": "z"}))).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
+}
+
+fn level_post() -> Request<Body> {
+    ui_post("/api/printer/level")
+}
+
+async fn state_of(rig: &Rig) -> Value {
+    answer(rig, common::request("GET", "/api/printer")).await.1
+}
+
+#[tokio::test]
+async fn the_printer_state_reports_z_tilt_and_whether_it_is_applied() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    let state = state_of(&rig).await;
+    assert_eq!(state["level_kind"], "z_tilt");
+    assert_eq!(state["levelled"], false);
+    rig.sim.printer.set_field("z_tilt", "applied", json!(true));
+    assert_eq!(state_of(&rig).await["levelled"], true);
+}
+
+#[tokio::test]
+async fn the_printer_state_names_the_command_the_level_button_runs() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    assert_eq!(state_of(&rig).await["level_command"], "Z_TILT_ADJUST");
+    let app = rig.app_with_settings(wobblescope::config::Settings {
+        level_command: Some("LEVEL_BED".to_owned()),
+        ..wobblescope::config::Settings::default()
+    });
+    let (_, _, body) = send(&app, common::request("GET", "/api/printer")).await;
+    let state: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(state["level_command"], "LEVEL_BED");
+    assert_eq!(state["level_kind"], "z_tilt");
+}
+
+#[tokio::test]
+async fn the_printer_state_reports_kalicos_z_tilt_ng_as_z_tilt() {
+    let rig = rig().await;
+    rig.sim
+        .printer
+        .set_field("z_tilt_ng", "applied", json!(true));
+    let state = state_of(&rig).await;
+    assert_eq!(state["level_kind"], "z_tilt");
+    assert_eq!(state["levelled"], true);
+    assert_eq!(state["level_command"], "Z_TILT_ADJUST");
+}
+
+#[tokio::test]
+async fn the_printer_state_reports_quad_gantry_level() {
+    let rig = rig().await;
+    rig.sim
+        .printer
+        .set_field("quad_gantry_level", "applied", json!(true));
+    let state = state_of(&rig).await;
+    assert_eq!(state["level_kind"], "quad_gantry_level");
+    assert_eq!(state["levelled"], true);
+}
+
+#[tokio::test]
+async fn level_runs_the_command_for_the_levelling_the_printer_has() {
+    for (object, gcode) in [
+        ("z_tilt", "Z_TILT_ADJUST"),
+        ("z_tilt_ng", "Z_TILT_ADJUST"),
+        ("quad_gantry_level", "QUAD_GANTRY_LEVEL"),
+    ] {
+        let rig = rig().await;
+        rig.sim.printer.set_field(object, "applied", json!(false));
+        let (status, body, script) = home_script(&rig, level_post()).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body, json!({"levelled": true}));
+        assert_eq!(script, gcode);
+    }
+}
+
+#[tokio::test]
+async fn level_uses_the_configured_command_instead() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    rig.sim
+        .fake
+        .on("printer.gcode.script", Script::Result(json!("ok")));
+    let app = rig.app_with_settings(wobblescope::config::Settings {
+        level_command: Some("LEVEL_BED".to_owned()),
+        ..wobblescope::config::Settings::default()
+    });
+    let (status, _, _) = send(&app, level_post()).await;
+    assert_eq!(status, StatusCode::OK);
+    let calls = rig.sim.fake.requests_for("printer.gcode.script");
+    assert_eq!(calls[0].params["script"], "LEVEL_BED");
+}
+
+#[tokio::test]
+async fn level_is_refused_when_the_printer_has_no_levelling() {
+    let rig = rig().await;
+    let (status, body, script) = home_script(&rig, level_post()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(script.is_empty());
+    assert!(!rig.slot.is_held());
+}
+
+#[tokio::test]
+async fn level_is_refused_while_a_test_runs() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    rig.sim.set_behavior(0, Sweep::Pending);
+    rig.sim.feed_until_motion();
+    let request = json!({"chips": ["adxl345", "lis2dw ebb36"], "axes": ["X"], "mode": "Pulse"});
+    let (status, _) = answer(&rig, post_json("/api/tests", &request)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    rig.until("the sweep", || rig.sim.sweeps().len() == 1).await;
+    let (status, body) = answer(&rig, level_post()).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["failures"][0]["check"], "no_test_running");
+}
+
+#[tokio::test]
+async fn the_printer_state_says_the_printer_is_levelling_while_levelling_holds_the_slot() {
+    let rig = rig().await;
+    let _levelling = rig.slot.try_acquire_as("levelling").unwrap();
+    assert_eq!(busy_reason(&rig).await, "The printer is levelling.");
+}
+
+#[tokio::test]
+async fn a_level_that_loses_its_answer_keeps_motion_blocked() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    rig.sim.fake.on("printer.gcode.script", Script::Close);
+    let (status, _) = answer(&rig, level_post()).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(rig.slot.motion_uncertain().as_deref(), Some("levelling"));
 }

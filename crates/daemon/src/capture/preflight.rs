@@ -251,6 +251,13 @@ pub fn busy_failure(slot: &TestSlot, failures: &mut Vec<CheckFailure>) -> CheckF
             "the printer is homing; wait until it finishes",
         );
     }
+    if slot.is_levelling() {
+        failures.retain(|f| f.check != CheckId::ToolheadIdle);
+        return CheckFailure::new(
+            CheckId::NoTestRunning,
+            "the printer is levelling; wait until it finishes",
+        );
+    }
     CheckFailure::new(CheckId::NoTestRunning, "another test is already running")
 }
 

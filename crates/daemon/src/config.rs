@@ -125,6 +125,7 @@ struct RawConfig {
     trusted_proxies: Option<Vec<String>>,
     allowed_hosts: Option<Vec<String>>,
     check_host_header: Option<bool>,
+    level_command: Option<String>,
 }
 
 /// The storage settings, with sizes in bytes.
@@ -165,6 +166,9 @@ pub struct Settings {
     /// Whether a request whose `Host` is not a name the daemon knows is refused, which guards
     /// against DNS rebinding. Off by default.
     pub check_host_header: bool,
+    /// The G-code command the Level button sends instead of `Z_TILT_ADJUST` or
+    /// `QUAD_GANTRY_LEVEL`, for a printer that wraps levelling in its own macro.
+    pub level_command: Option<String>,
 }
 
 impl Settings {
@@ -311,7 +315,21 @@ impl Default for Settings {
             trusted_proxies: Vec::new(),
             allowed_hosts: Vec::new(),
             check_host_header: false,
+            level_command: None,
         }
+    }
+}
+
+/// Checks that `text` is one G-code command name: it starts with a letter and has only ASCII
+/// letters, digits and `_`. A value with a space cannot carry parameters or a second command.
+fn gcode_command(text: &str) -> Result<(), &'static str> {
+    let mut chars = text.chars();
+    let valid = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if valid && text.len() <= 64 {
+        Ok(())
+    } else {
+        Err("must be one G-code command name, such as LEVEL_BED")
     }
 }
 
@@ -492,6 +510,9 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         allowed_hosts
             .push(allowed_host(text).map_err(|reason| entry("allowed_hosts", text, reason))?);
     }
+    if let Some(command) = &raw.level_command {
+        gcode_command(command).map_err(|reason| invalid("level_command", reason))?;
+    }
     let moonraker_url = match raw.moonraker_url {
         Some(text) => moonraker_url(&text).map_err(|reason| invalid("moonraker_url", reason))?,
         None => defaults.moonraker_url,
@@ -519,6 +540,7 @@ pub fn load(path: Option<&Path>) -> Result<Settings, ConfigError> {
         trusted_proxies,
         allowed_hosts,
         check_host_header: raw.check_host_header.unwrap_or(defaults.check_host_header),
+        level_command: raw.level_command,
         moonraker_url,
         moonraker_tls,
         moonraker_api_key: raw.moonraker_api_key,

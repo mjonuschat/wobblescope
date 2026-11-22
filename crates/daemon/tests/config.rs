@@ -265,6 +265,21 @@ fn max_segment_seconds_defaults_to_600_and_zero_is_refused() {
 }
 
 #[test]
+fn level_command_is_unset_by_default_and_must_be_one_command_name() {
+    assert_eq!(load_text("").unwrap().level_command, None);
+    assert_eq!(
+        load_text("level_command = \"LEVEL_BED\"\n")
+            .unwrap()
+            .level_command
+            .as_deref(),
+        Some("LEVEL_BED")
+    );
+    for bad in ["", "Z TILT", "QGL; M112", "1QGL", "QGL X=1"] {
+        refused_naming(&format!("level_command = \"{bad}\"\n"), "level_command");
+    }
+}
+
+#[test]
 fn the_host_header_check_is_off_unless_the_config_turns_it_on() {
     assert!(!load_text("").unwrap().check_host_header);
     assert!(

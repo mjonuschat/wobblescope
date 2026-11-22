@@ -673,7 +673,20 @@ impl Rig {
         &self,
         timings: wobblescope::api::StreamTimings,
     ) -> axum::Router {
-        wobblescope::api::mount_capture(
+        self.app_with(timings, Settings::default())
+    }
+
+    /// The API router with the daemon's `settings`.
+    pub fn app_with_settings(&self, settings: Settings) -> axum::Router {
+        self.app_with(wobblescope::api::StreamTimings::default(), settings)
+    }
+
+    fn app_with(
+        &self,
+        timings: wobblescope::api::StreamTimings,
+        settings: Settings,
+    ) -> axum::Router {
+        wobblescope::api::mount_configured(
             self.cell.clone(),
             self.moonraker.clone(),
             wobblescope::api::ImportGate::default(),
@@ -685,6 +698,7 @@ impl Rig {
                 stream_timings: timings,
                 hold: wobblescope::api::HoldSocketTimings::default(),
             },
+            settings,
         )
     }
 }

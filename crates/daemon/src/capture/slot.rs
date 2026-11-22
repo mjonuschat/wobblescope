@@ -23,6 +23,9 @@ struct State {
 /// The id the slot carries while the printer homes, so a refusal can say so.
 pub const HOMING_ID: &str = "homing";
 
+/// The id the slot carries while the printer levels its gantry or bed, so a refusal can say so.
+pub const LEVELLING_ID: &str = "levelling";
+
 /// The id the slot carries while the chips are checked, so a refusal can say so.
 pub const CHIP_CHECK_ID: &str = "chip-check";
 
@@ -109,6 +112,11 @@ impl TestSlot {
     #[must_use]
     pub fn is_homing(&self) -> bool {
         self.current_id().as_deref() == Some(HOMING_ID)
+    }
+
+    #[must_use]
+    pub fn is_levelling(&self) -> bool {
+        self.current_id().as_deref() == Some(LEVELLING_ID)
     }
 
     /// Asks the running test `id` to stop. Returns whether such a test holds the slot.

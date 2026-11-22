@@ -87,6 +87,7 @@ check_host_header = true
 | `free_space_headroom_mib` | `256` | Free space that must remain after a test's estimated size. |
 | `trusted_proxies` | none | Proxies whose `Forwarded`, `X-Forwarded-For` and `X-Real-IP` headers the daemon believes. |
 | `check_host_header` | off | Refuses requests whose `Host` is not a name the daemon knows. |
+| `level_command` | none | G-code command the Z-TILT or QGL button on the Printer page sends instead of `Z_TILT_ADJUST` or `QUAD_GANTRY_LEVEL`. |
 | `allowed_hosts` | none | Extra host names to accept, used only when `check_host_header` is on. |
 
 ## Improvements and bugfixes
