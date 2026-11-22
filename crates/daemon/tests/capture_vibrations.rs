@@ -26,6 +26,7 @@ fn plan() -> TestPlan {
         chips: CHIPS.iter().map(|c| (*c).to_owned()).collect(),
         size: Some(50.0),
         z_height: None,
+        min_speed: None,
         max_speed: Some(10.0),
         speed_increment: Some(8.0),
         accel: Some(3000.0),

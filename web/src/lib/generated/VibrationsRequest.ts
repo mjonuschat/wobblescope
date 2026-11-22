@@ -17,6 +17,10 @@ size: number | null,
  */
 z_height: number | null, 
 /**
+ * First speed, in mm/s. At least 2 and below `max_speed`; 2 when unset.
+ */
+min_speed: number | null, 
+/**
  * Highest speed, in mm/s.
  */
 max_speed: number | null, 

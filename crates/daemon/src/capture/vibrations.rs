@@ -23,7 +23,7 @@ pub const DEFAULT_SPEED_INCREMENT: f64 = 2.0;
 pub const DEFAULT_ACCEL: f64 = 3000.0;
 /// Speed of the positioning moves when the request gives none, in mm/s.
 pub const DEFAULT_TRAVEL_SPEED: f64 = 120.0;
-/// Lowest speed of every run, in mm/s.
+/// Start speed when the request gives none, and the lowest start speed allowed, in mm/s.
 pub const MIN_SPEED: f64 = 2.0;
 
 const MIN_SIZE: f64 = 50.0;
@@ -51,6 +51,9 @@ pub struct VibrationsRequest {
     /// Z height of the moves, in mm.
     #[serde(default)]
     pub z_height: Option<f64>,
+    /// First speed, in mm/s. At least 2 and below `max_speed`; 2 when unset.
+    #[serde(default)]
+    pub min_speed: Option<f64>,
     /// Highest speed, in mm/s.
     #[serde(default)]
     pub max_speed: Option<f64>,
@@ -98,11 +101,11 @@ fn setting(field: &str, value: Option<f64>, default: f64, min: f64) -> Result<f6
 
 /// The speeds of one angle. The count is Shake&Tune's `int((max - 2) / increment + 1)`, so the
 /// last speed can be below `max_speed` (D33).
-fn speed_list(max_speed: f64, speed_increment: f64) -> Vec<f64> {
+fn speed_list(min_speed: f64, max_speed: f64, speed_increment: f64) -> Vec<f64> {
     // The count truncates toward zero as Python's int() does.
-    let count = ((max_speed - MIN_SPEED) / speed_increment + 1.0) as usize;
+    let count = ((max_speed - min_speed) / speed_increment + 1.0) as usize;
     (0..count)
-        .map(|i| MIN_SPEED + i as f64 * speed_increment)
+        .map(|i| min_speed + i as f64 * speed_increment)
         .collect()
 }
 
@@ -166,12 +169,21 @@ pub fn plan_vibrations(
     if !z_height.is_finite() {
         return refuse("z_height", "must be a number");
     }
+    // Shake&Tune always starts at 2 mm/s. A request can set the start speed, which is
+    // refused below 2 mm/s and at or above the end speed.
+    let min_speed = setting("min_speed", request.min_speed, MIN_SPEED, MIN_SPEED)?;
     let max_speed = setting(
         "max_speed",
         request.max_speed,
         DEFAULT_MAX_SPEED,
         MIN_MAX_SPEED,
     )?;
+    if min_speed >= max_speed {
+        return refuse(
+            "min_speed",
+            format!("must be below the end speed of {max_speed} mm/s"),
+        );
+    }
     let speed_increment = setting(
         "speed_increment",
         request.speed_increment,
@@ -196,11 +208,11 @@ pub fn plan_vibrations(
     }
     // The analysis needs at least two speeds, so a run with one would record for minutes and
     // then be unanalysable.
-    if speed_list(max_speed, speed_increment).len() < 2 {
+    if speed_list(min_speed, max_speed, speed_increment).len() < 2 {
         return refuse(
             "speed_increment",
             format!(
-                "the speed range {MIN_SPEED} to {max_speed} mm/s with this step has fewer than two \
+                "the speed range {min_speed} to {max_speed} mm/s with this step has fewer than two \
                  speeds; lower speed_increment or raise max_speed"
             ),
         );
@@ -218,7 +230,7 @@ pub fn plan_vibrations(
         speed_increment,
         accel,
         travel_speed,
-        min_speed: MIN_SPEED,
+        min_speed,
         kinematics,
         max_velocity: printer.machine.max_velocity,
     };
@@ -271,7 +283,7 @@ pub fn plan_vibrations(
     let plan = VibrationsPlan {
         run,
         angles,
-        speeds: speed_list(max_speed, speed_increment),
+        speeds: speed_list(min_speed, max_speed, speed_increment),
         mid,
     };
     let segment_seconds = estimated_angle_seconds(&plan);
@@ -428,6 +440,7 @@ mod tests {
             chips: vec!["adxl345".to_owned()],
             size: None,
             z_height: None,
+            min_speed: None,
             max_speed: None,
             speed_increment: None,
             accel: None,
@@ -513,8 +526,42 @@ mod tests {
     }
 
     #[test]
+    fn start_speed_defaults_to_two() {
+        let plan = vibrations(&request());
+        assert_eq!((plan.run.min_speed, plan.speeds[0]), (2.0, 2.0));
+    }
+
+    #[test]
+    fn a_custom_start_speed_starts_the_list_and_is_recorded() {
+        let mut r = request();
+        r.min_speed = Some(20.0);
+        r.speed_increment = Some(5.0);
+        let plan = vibrations(&r);
+        assert_eq!(plan.run.min_speed, 20.0);
+        assert_eq!(&plan.speeds[..3], &[20.0, 25.0, 30.0]);
+    }
+
+    #[test]
+    fn a_start_speed_below_two_is_refused() {
+        let mut r = request();
+        r.min_speed = Some(1.5);
+        assert_eq!(refused(&r).field, "min_speed");
+    }
+
+    #[test]
+    fn a_start_speed_not_below_the_end_speed_is_refused() {
+        let mut r = request();
+        r.min_speed = Some(200.0);
+        assert_eq!(refused(&r).field, "min_speed");
+        r.min_speed = Some(250.0);
+        assert_eq!(refused(&r).field, "min_speed");
+        r.min_speed = Some(f64::NAN);
+        assert_eq!(refused(&r).field, "min_speed");
+    }
+
+    #[test]
     fn speed_list_matches_shaketune_count() {
-        let speeds = speed_list(200.0, 5.0);
+        let speeds = speed_list(2.0, 200.0, 5.0);
         assert_eq!(speeds.len(), 40);
         assert_eq!(&speeds[..3], &[2.0, 7.0, 12.0]);
         assert_eq!(speeds[39], 197.0);
