@@ -33,6 +33,18 @@ describe("vibrationsProgress", () => {
     expect(vibrationsProgress(metaWith(3))).toBe("Angle 1 of 2, speed 3 of 5");
   });
 
+  it("counts_the_end_speed_when_the_step_does_not_divide_the_range", () => {
+    const meta = metaWith(3);
+    meta.vibrations_run!.speed_increment = 30;
+    expect(vibrationsProgress(meta)).toBe("Angle 1 of 2, speed 3 of 4");
+  });
+
+  it("takes_the_per_angle_count_from_a_finished_first_segment_of_an_older_session", () => {
+    const meta = metaWith(4, 1);
+    meta.vibrations_run!.speed_increment = 30;
+    expect(vibrationsProgress(meta)).toBe("Angle 2 of 2, speed 1 of 4");
+  });
+
   it("says_the_second_angle_is_not_started_when_the_first_is_exactly_finished", () => {
     expect(vibrationsProgress(metaWith(5))).toBe("Angle 1 of 2 finished, no step of angle 2 finished");
     expect(vibrationsProgress(metaWith())).toBe("Angle 1 of 2, speed 0 of 5");
