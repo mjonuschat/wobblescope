@@ -199,3 +199,89 @@ async fn a_site_file_behind_a_symlink_keeps_its_mode_and_stays_a_symlink() {
     );
     assert_eq!(mode_of(&tree.available("fluidd.before-wobblescope")), 0o640);
 }
+
+#[tokio::test]
+async fn check_reports_each_piece_and_changes_nothing() {
+    let (rig, tree) = rig_with(&["fluidd", "mainsail"]).await;
+    rig.install().await.0.unwrap();
+    let (result, out) = rig.run(Mode::Check, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    for label in ["nginx snippet", "nginx site", "nginx -t", "trusted_proxies"] {
+        assert!(
+            out.lines().any(|l| l.contains(label) && l.contains("ok")),
+            "{label}: {out}"
+        );
+    }
+
+    let site = read(&tree.available("mainsail"));
+    std::fs::write(tree.available("mainsail"), fixture("mainsail")).unwrap();
+    std::fs::write(tree.root().join("snippets/wobblescope.conf"), "# other\n").unwrap();
+    let (result, out) = rig.run(Mode::Check, None).await;
+    assert_eq!(result, Ok(false), "{out}");
+    assert!(
+        out.contains("mainsail (listen 81): include missing"),
+        "{out}"
+    );
+    assert!(
+        out.contains("nginx snippet") && out.contains("stale"),
+        "{out}"
+    );
+    assert_eq!(read(&tree.available("mainsail")), fixture("mainsail"));
+    assert_ne!(site, fixture("mainsail"));
+    assert_eq!(rig.systemd.count("reload nginx"), 1);
+}
+
+#[tokio::test]
+async fn check_flags_missing_trusted_proxies() {
+    let (rig, _tree) = rig_with(&["fluidd"]).await;
+    rig.install().await.0.unwrap();
+    std::fs::write(
+        rig.config(),
+        format!("moonraker_url = \"{}\"\n", rig.fake.http_url()),
+    )
+    .unwrap();
+    let (result, out) = rig.run(Mode::Check, None).await;
+    assert_eq!(result, Ok(false), "{out}");
+    assert!(out.contains("missing 127.0.0.1 or ::1"), "{out}");
+}
+
+#[tokio::test]
+async fn remove_takes_the_block_and_the_snippet_out_and_keeps_the_config() {
+    let (rig, tree) = rig_with(&["fluidd", "mainsail"]).await;
+    rig.install().await.0.unwrap();
+    let config = read(&rig.config());
+    let (result, out) = rig.run(Mode::Remove, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    for name in ["fluidd", "mainsail"] {
+        assert_eq!(read(&tree.available(name)), fixture(name));
+    }
+    assert!(!tree.root().join("snippets/wobblescope.conf").exists());
+    assert_eq!(read(&rig.config()), config);
+    assert_eq!(rig.systemd.count("nginx -t"), 2);
+    assert_eq!(rig.systemd.count("reload nginx"), 2);
+    let (result, out) = rig.run(Mode::Remove, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert_eq!(rig.systemd.count("reload nginx"), 2);
+}
+
+#[tokio::test]
+async fn remove_keeps_a_snippet_without_the_header_and_puts_back_what_nginx_rejects() {
+    let (rig, tree) = rig_with(&["fluidd"]).await;
+    rig.install().await.0.unwrap();
+    let snippet = tree.root().join("snippets/wobblescope.conf");
+    let installed = read(&tree.available("fluidd"));
+    std::fs::write(&snippet, "location /x {}\n").unwrap();
+    let (result, out) = rig.run(Mode::Remove, None).await;
+    assert_eq!(result, Ok(true), "{out}");
+    assert!(snippet.exists());
+    assert_eq!(read(&tree.available("fluidd")), fixture("fluidd"));
+
+    std::fs::write(tree.available("fluidd"), &installed).unwrap();
+    std::fs::write(&snippet, wobblescope::setup::render::snippet(7140)).unwrap();
+    rig.systemd.0.lock().unwrap().nginx_test_error = Some("nginx: [emerg] boom".to_owned());
+    let (result, out) = rig.run(Mode::Remove, None).await;
+    assert_eq!(result, Ok(false), "{out}");
+    assert!(out.contains("boom"), "{out}");
+    assert_eq!(read(&tree.available("fluidd")), installed);
+    assert!(snippet.exists());
+}

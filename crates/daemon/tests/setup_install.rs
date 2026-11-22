@@ -105,7 +105,7 @@ async fn check_names_a_missing_piece_changes_nothing_and_runs_only_read_commands
     assert!(
         calls[before..]
             .iter()
-            .all(|c| c.starts_with("is-enabled") || c.starts_with("is-active")),
+            .all(|c| c.starts_with("is-enabled") || c.starts_with("is-active") || c == "nginx -v"),
         "{calls:?}"
     );
     let (repair, _) = rig.install().await;

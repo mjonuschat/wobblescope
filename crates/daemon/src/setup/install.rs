@@ -152,17 +152,38 @@ fn moonraker_port(settings: &Settings) -> u16 {
         })
 }
 
+/// The settings `--check` judges nginx by: the config file's, or the defaults when it is
+/// missing.
+fn nginx_settings(say: &mut Say, config: &Path) -> Option<Settings> {
+    if !config.exists() {
+        return Some(Settings::default());
+    }
+    match config::load(Some(config)) {
+        Ok(settings) => Some(settings),
+        Err(e) => {
+            say.step("nginx", "skipped: wobblescope.toml is not valid");
+            say.note(&e.to_string());
+            None
+        }
+    }
+}
+
+fn nginx_check(host: &Host, say: &mut Say, config: &Path) -> Result<bool, SetupError> {
+    let Some(settings) = nginx_settings(say, config) else {
+        return Ok(true);
+    };
+    let Some(plan) = nginx_link::find(host, say, moonraker_port(&settings)) else {
+        return Ok(true);
+    };
+    nginx_link::check(host, say, &plan, settings.listen.port(), config)
+}
+
 /// Publishes the daemon through nginx. The daemon must trust nginx's loopback connections
 /// before nginx forwards anything to it, so `trusted_proxies` is written first and a failure
 /// there stops the step before nginx is touched.
 fn nginx_step(host: &Host, say: &mut Say, config: &Path) -> Result<bool, SetupError> {
-    let settings = match config::load(Some(config)) {
-        Ok(settings) => settings,
-        Err(e) => {
-            say.step("nginx", "skipped: wobblescope.toml is not valid");
-            say.note(&e.to_string());
-            return Ok(true);
-        }
+    let Some(settings) = nginx_settings(say, config) else {
+        return Ok(true);
     };
     let Some(plan) = nginx_link::find(host, say, moonraker_port(&settings)) else {
         return Ok(true);
@@ -286,7 +307,7 @@ pub async fn install(
 pub async fn check(
     host: &Host,
     mr: &Moonraker,
-    _opts: &Options,
+    opts: &Options,
     out: &mut dyn Write,
 ) -> Result<bool, SetupError> {
     let disc = discover(host, mr).await?;
@@ -342,10 +363,13 @@ pub async fn check(
         }
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
+    if opts.nginx {
+        ok &= nginx_check(host, &mut say, &paths.config)?;
+    }
     Ok(ok)
 }
 
-/// Stops and removes the service and its service-list entry. The binary, `release_info.json`,
+/// Stops and removes the service, its service-list entry and the nginx link. The binary, `release_info.json`,
 /// the `update_manager` section, the config file and the recorded sessions stay.
 ///
 /// # Errors
@@ -353,7 +377,7 @@ pub async fn check(
 pub async fn remove(
     host: &Host,
     mr: &Moonraker,
-    _opts: &Options,
+    opts: &Options,
     out: &mut dyn Write,
 ) -> Result<bool, SetupError> {
     let disc = discover(host, mr).await?;
@@ -381,10 +405,14 @@ pub async fn remove(
         },
         Err(note) => say.step("moonraker.asvc", &format!("skipped: {note}")),
     }
+    let mut ok = true;
+    if opts.nginx {
+        ok = nginx_link::remove(host, &mut say)?;
+    }
     say.note(&format!(
         "kept: wobblescope.toml, the recorded sessions, and {}, with its release_info.json and \
          the [update_manager wobblescope] section in moonraker.conf",
         paths.install_dir.display()
     ));
-    Ok(true)
+    Ok(ok)
 }

@@ -300,3 +300,173 @@ fn write_all(
     }
     Ok(changed)
 }
+
+/// Reports the snippet, each mapped site, `nginx -t` and `trusted_proxies`, and changes
+/// nothing. Returns whether all of them are in order.
+///
+/// # Errors
+/// [`SetupError`] when a file cannot be read.
+pub(super) fn check(
+    host: &Host,
+    say: &mut Say,
+    plan: &Plan,
+    listen_port: u16,
+    config: &Path,
+) -> Result<bool, SetupError> {
+    let mut good = true;
+    let mut report = |say: &mut Say, label: &str, ok: bool, state: &str| {
+        good &= ok;
+        say.step(label, state);
+    };
+    let state = snippet_state(host, &snippet_path(host), &render::snippet(listen_port))?;
+    report(
+        say,
+        "nginx snippet",
+        state == SnippetState::Current,
+        match state {
+            SnippetState::Current => "ok",
+            SnippetState::Missing => "missing",
+            SnippetState::Stale => "stale",
+        },
+    );
+    for (target, group) in by_file(&plan.mapped) {
+        let text = read(&target)?.unwrap_or_default();
+        let current = group.iter().all(|s| {
+            s.first_location.is_some_and(|first| {
+                render::with_include_block(&text, s.open, s.close, first) == Ok(None)
+            })
+        });
+        let label = group
+            .iter()
+            .map(|s| s.label())
+            .collect::<Vec<_>>()
+            .join(", ");
+        report(
+            say,
+            "nginx site",
+            current,
+            &format!(
+                "{label}: {}",
+                if current { "ok" } else { "include missing" }
+            ),
+        );
+    }
+    match test_config(host)? {
+        None => report(say, "nginx -t", true, "ok"),
+        Some(printed) => {
+            // Without root nginx cannot open its pid file or logs, so a failure proves nothing.
+            report(say, "nginx -t", !host.chown, "failed");
+            for line in printed.lines() {
+                say.note(line);
+            }
+            if !host.chown {
+                say.note("run --check with sudo for a result that counts");
+            }
+        }
+    }
+    let proxies = read(config)?.unwrap_or_default();
+    let trusted = render::with_trusted_proxies(&proxies) == Ok(None);
+    report(
+        say,
+        "trusted_proxies",
+        trusted,
+        if trusted {
+            "ok"
+        } else {
+            "missing 127.0.0.1 or ::1"
+        },
+    );
+    Ok(good)
+}
+
+/// Takes the include block out of every file nginx reads, deletes the snippet when it carries
+/// our header, then tests and reloads nginx. A rejected configuration is put back.
+///
+/// # Errors
+/// [`SetupError`] when a file cannot be read or written; what was changed is put back.
+pub(super) fn remove(host: &Host, say: &mut Say) -> Result<bool, SetupError> {
+    if host.runner.run("nginx", &["-v"]).is_err() {
+        say.step("nginx", "not installed, nothing to remove");
+        return Ok(true);
+    }
+    let Some(layout) = Layout::read(&host.nginx_dir) else {
+        say.step("nginx", "no nginx.conf, nothing to remove");
+        return Ok(true);
+    };
+    let mut undo = Undo::default();
+    let result = remove_all(host, say, &layout, &mut undo);
+    let changed = match result {
+        Ok(changed) => changed,
+        Err(e) => {
+            undo.run();
+            return Err(e);
+        }
+    };
+    if !changed {
+        say.step("nginx", "no link to remove");
+        return Ok(true);
+    }
+    if let Some(printed) = test_config(host)? {
+        undo.run();
+        say.step("nginx", "FAILED: nginx -t rejected the change; put back");
+        for line in printed.lines() {
+            say.note(line);
+        }
+        return Ok(false);
+    }
+    if reload(host) {
+        say.step("nginx", "reloaded");
+        Ok(true)
+    } else {
+        say.step(
+            "nginx",
+            "FAILED to reload; run: sudo systemctl reload nginx",
+        );
+        Ok(false)
+    }
+}
+
+fn remove_all(
+    host: &Host,
+    say: &mut Say,
+    layout: &Layout,
+    undo: &mut Undo,
+) -> Result<bool, SetupError> {
+    let mut changed = false;
+    let mut done: Vec<PathBuf> = Vec::new();
+    for file in &layout.files {
+        let target = target_of(file);
+        if done.contains(&target) {
+            continue;
+        }
+        done.push(target.clone());
+        let Some(text) = read(&target)? else { continue };
+        let stripped = render::without_include_blocks(&text)
+            .map_err(|e| SetupError::new(format!("{}: {e}", target.display())))?;
+        if let Some(stripped) = stripped {
+            undo.files.push((target.clone(), text, None));
+            write_atomic(&target, stripped.as_bytes(), None, None)
+                .map_err(io_err(format!("cannot update {}", target.display())))?;
+            say.step(
+                "nginx site",
+                &format!("{}: include removed", file.display()),
+            );
+            changed = true;
+        }
+    }
+    let path = snippet_path(host);
+    match read(&path)? {
+        Some(text) if text.starts_with(render::SNIPPET_HEADER) => {
+            undo.snippet = Some((path.clone(), Some(text)));
+            fs::remove_file(&path).map_err(io_err(format!("cannot remove {}", path.display())))?;
+            say.step("nginx snippet", "removed");
+            changed = true;
+        }
+        Some(_) => say.note(&format!(
+            "nginx: kept {}: it does not carry the wobblescope header",
+            path.display()
+        )),
+        None => {}
+    }
+    Ok(changed)
+}
