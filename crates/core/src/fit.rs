@@ -19,6 +19,20 @@ use crate::shaper::{AUTOTUNE_SHAPERS, Shaper, builtin};
 pub const TEST_DAMPING_RATIOS: [f64; 3] = [0.075, 0.1, 0.15];
 /// Upper bound of the searched shaper frequency in Hz.
 pub const MAX_SHAPER_FREQ: f64 = 150.0;
+/// How far above the end of the sweep the analysis reads, as a factor of the end frequency.
+const SWEEP_CUTOFF_FACTOR: f64 = 1.5;
+
+/// The upper frequency the fit reads for a sweep that ended at `freq_end` Hz. It is one and a
+/// half times the end, never below [`MAX_FREQ`]. A sweep with no usable end reads up to [`MAX_FREQ`].
+#[must_use]
+pub fn sweep_max_freq(freq_end: f64) -> f64 {
+    if freq_end.is_finite() && freq_end > 0.0 {
+        (freq_end * SWEEP_CUTOFF_FACTOR).max(MAX_FREQ)
+    } else {
+        MAX_FREQ
+    }
+}
+
 /// Step of the searched shaper frequency in Hz.
 pub const FREQ_STEP: f64 = 0.2;
 const SMOOTHING_ACCEL: f64 = 5000.0;
@@ -40,7 +54,8 @@ pub struct FitParams {
     pub max_vibrations: Option<f64>,
     /// Damping ratios for the robustness check (default [`TEST_DAMPING_RATIOS`]).
     pub test_damping_ratios: Option<Vec<f64>>,
-    /// Upper PSD frequency considered (default 200 Hz).
+    /// Upper PSD frequency considered (default 200 Hz). It is never below the highest shaper
+    /// frequency tried, which a long sweep raises (see `max_shaper_freq`).
     pub max_freq: Option<f64>,
     /// Shapers to evaluate, in order (default [`AUTOTUNE_SHAPERS`]).
     pub shapers: Option<Vec<String>>,
@@ -679,6 +694,21 @@ pub fn find_best_shaper(
 
 #[cfg(test)]
 mod tests {
+    use super::sweep_max_freq;
+
+    #[test]
+    fn the_sweep_cutoff_is_one_and_a_half_times_the_end_above_200_hz() {
+        assert_eq!(sweep_max_freq(250.0), 375.0);
+        assert_eq!(sweep_max_freq(100.0), 200.0);
+    }
+
+    #[test]
+    fn a_sweep_with_no_usable_end_reads_up_to_200_hz() {
+        for end in [0.0, -5.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(sweep_max_freq(end), 200.0);
+        }
+    }
+
     use super::*;
 
     /// A normalised PSD on a 1 Hz grid to 400 Hz with power only above `from` Hz.

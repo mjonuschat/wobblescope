@@ -14,7 +14,7 @@ use wobblescope_core::belts_run::{BeltsAnalysis, analyze_belts};
 use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::DatasetInput;
 use wobblescope_core::error::CoreError;
-use wobblescope_core::fit::{Axis, FitParams, Recommendation};
+use wobblescope_core::fit::{Axis, FitParams, Recommendation, sweep_max_freq};
 use wobblescope_core::multichip::{Analysis, analyze};
 use wobblescope_core::spectrogram::{Spectrogram, spectrogram_of};
 use wobblescope_core::spectrum::{LiveSpectrum, Peak, Spectrum, top_peaks};
@@ -69,7 +69,8 @@ impl Session {
         self.files.insert(name.to_owned(), bytes);
     }
 
-    /// Analyses every recording of `axis` with `core`. Files are decoded one at a time for the
+    /// Analyses every recording of `axis` with `core`. When `params` sets no `max_freq` and the
+    /// session recorded its sweep, the fit reads up to [`sweep_max_freq`] of the sweep end. Files are decoded one at a time for the
     /// call only. The chips named in `overrides` are included even when their health or
     /// coverage would exclude them; the result's eligibility says so. A damaged file, or one
     /// holding a different number of samples than the metadata records, is reported in the
@@ -85,7 +86,15 @@ impl Session {
     ) -> Result<Analysis, AnalyzeError> {
         let mut inputs = self.inputs(axis)?;
         apply_overrides(&mut inputs, overrides);
-        Ok(analyze(&inputs, params)?)
+        let mut params = params.clone();
+        if params.max_freq.is_none() {
+            params.max_freq = self
+                .meta
+                .settings
+                .as_ref()
+                .map(|s| sweep_max_freq(s.freq_end));
+        }
+        Ok(analyze(&inputs, &params)?)
     }
 
     /// The time-frequency map of the recording of `chip` at probe point `point` on `axis`, up to

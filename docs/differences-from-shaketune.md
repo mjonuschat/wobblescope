@@ -109,6 +109,10 @@ of the recording is exactly zero, which happens with a dead sensor or long still
 Wobblescope picks the smallest non-zero value instead. A recording with no signal at all is
 reported as flat.
 
+### Where does the analysis stop?
+
+Wobblescope scales the analysis to the frequency range you tested. Shake&Tune stops at 200 Hz unless you change its config, which cuts off a printer that resonates higher.
+
 ## Axes map calibration
 
 ### Why does it say "unable to determine" instead of stopping with an error?

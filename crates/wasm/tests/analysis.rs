@@ -127,6 +127,53 @@ parity_test! {
     }
 }
 
+fn sweep_to(freq_end: f64) -> SweepSettings {
+    SweepSettings {
+        freq_start: 5.0,
+        freq_end,
+        hz_per_sec: 1.0,
+        accel_per_hz: 60.0,
+        sweeping_accel: None,
+        sweeping_period: None,
+    }
+}
+
+parity_test! {
+    fn the_analysis_cutoff_follows_the_end_of_the_recorded_sweep() {
+        let w = win();
+        let mut meta = two_chip_x_meta(&w, Health::Ok);
+        meta.settings = Some(sweep_to(250.0));
+        let s = loaded(&w, meta);
+        let via = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
+        let wide = FitParams { max_freq: Some(375.0), ..FitParams::default() };
+        assert_eq!(via, analyze(&direct(&w), &wide).unwrap());
+        assert_ne!(via, analyze(&direct(&w), &FitParams::default()).unwrap());
+    }
+}
+
+parity_test! {
+    fn a_short_sweep_keeps_the_default_cutoff() {
+        let w = win();
+        let mut meta = two_chip_x_meta(&w, Health::Ok);
+        meta.settings = Some(sweep_to(100.0));
+        let s = loaded(&w, meta);
+        let via = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
+        assert_eq!(via, analyze(&direct(&w), &FitParams::default()).unwrap());
+    }
+}
+
+parity_test! {
+    fn a_cutoff_the_caller_sets_replaces_the_sweep_cutoff() {
+        let w = win();
+        let mut meta = two_chip_x_meta(&w, Health::Ok);
+        meta.settings = Some(sweep_to(250.0));
+        let s = loaded(&w, meta);
+        let params = FitParams { max_freq: Some(200.0), ..FitParams::default() };
+        let via = s.analyze(Axis::X, &params, &[]).unwrap();
+        assert_eq!(via, analyze(&direct(&w), &FitParams::default()).unwrap());
+    }
+}
+
 parity_test! {
     fn an_override_brings_an_excluded_chip_into_the_analysis_and_says_so() {
         let w = win();
