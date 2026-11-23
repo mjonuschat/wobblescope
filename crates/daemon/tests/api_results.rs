@@ -358,12 +358,14 @@ fn install_legacy(dir: &std::path::Path, label: &str) -> String {
     id
 }
 
-/// Keys of `Analysis` that results saved by older versions do not have.
-const ADDED: [&str; 4] = [
+/// Keys of `Analysis` that results saved by older versions do not have, and the version stamp,
+/// which is that of the build that made the result.
+const ADDED: [&str; 5] = [
     "damping_source",
     "resonance_freq",
     "for_performance",
     "peaks",
+    "core_version",
 ];
 
 fn without_added_keys(value: &mut Value) {
