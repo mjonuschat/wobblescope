@@ -96,10 +96,6 @@ comparison makes the limit 11 Hz. Wobblescope uses 10 Hz, as intended.
 Shake&Tune numbers pairs in the order its matching finds them, so pair "A" is not always the
 lowest peak. Wobblescope sorts them by frequency, so the table and the graph read the same way.
 
-### Why does the same printer read differently at different places on the bed?
-
-A belt test describes the printer at the point where it ran, and a different point can give a different result.
-
 ## Input shaper graphs
 
 ### Why does my spectrogram not fail on a recording with silent stretches?
