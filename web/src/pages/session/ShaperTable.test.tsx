@@ -45,6 +45,19 @@ describe("ShaperTable", () => {
     }
   });
 
+  it("copies through execCommand when the page has no clipboard API", async () => {
+    const exec = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+    try {
+      render(<ShaperTable recommendation={recommendation()} snippets={["snippet zv"]} />);
+      fireEvent.click(screen.getAllByRole("button", { name: "Copy" })[0]);
+      await waitFor(() => expect(exec).toHaveBeenCalledWith("copy"));
+      expect(await screen.findByText("Copied")).toBeTruthy();
+    } finally {
+      Object.defineProperty(document, "execCommand", { value: undefined, configurable: true });
+    }
+  });
+
   it("marks the row recommended for performance", () => {
     const rec = { ...recommendation(), for_performance: candidate("zv", 55) };
     render(<ShaperTable recommendation={rec} />);

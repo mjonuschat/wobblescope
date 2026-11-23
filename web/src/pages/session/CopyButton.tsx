@@ -7,8 +7,31 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const CONFIRMATION_MS = 2000;
 
 /**
- * Copies text to the clipboard. Where the browser has none (a page served over plain HTTP has
- * no clipboard), it says so and the text stays selectable on screen.
+ * Copies with a hidden textarea and `execCommand`, which still works on a page served over
+ * plain HTTP, where `navigator.clipboard` does not exist.
+ */
+function legacyCopy(text: string): boolean {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  document.body.appendChild(area);
+  try {
+    area.select();
+    return typeof document.execCommand === "function" && document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    area.remove();
+    previous?.focus();
+  }
+}
+
+/**
+ * Copies text to the clipboard, falling back to `execCommand` where the browser has no
+ * clipboard API. If both fail it says so and the text stays selectable on screen.
  */
 export function CopyButton({ text }: { text: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
@@ -23,9 +46,11 @@ export function CopyButton({ text }: { text: string }) {
     try {
       await navigator.clipboard.writeText(text);
       setState("copied");
+      return;
     } catch {
-      setState("failed");
+      // No clipboard API (insecure context) or permission denied: try the legacy path.
     }
+    setState(legacyCopy(text) ? "copied" : "failed");
   }
 
   return (
