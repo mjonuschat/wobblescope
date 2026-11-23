@@ -29,6 +29,11 @@ all: Array<CalibrationResult>,
  */
 settings: FitSettings, 
 /**
+ * Whether `best` is the highest frequency its shaper was tried at. The resonance may
+ * then lie above the search range, which the fit cannot see.
+ */
+best_at_search_limit: boolean, 
+/**
  * `wobblescope-core` version that produced it.
  */
 core_version: string, };

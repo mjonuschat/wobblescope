@@ -100,6 +100,7 @@ export function recommendation(best = candidate("mzv", 48.2)): Recommendation {
     for_performance: null,
     all: [candidate("zv", 55), best],
     settings,
+    best_at_search_limit: false,
     core_version: "0.1.0",
   };
 }

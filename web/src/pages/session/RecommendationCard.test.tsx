@@ -42,6 +42,18 @@ describe("RecommendationCard", () => {
     expect(screen.queryByRole("listitem")).toBeNull();
   });
 
+  it("warns when the best shaper is at the highest frequency tried", () => {
+    const rec = { ...recommendation(candidate("mzv", 149.8)), best_at_search_limit: true };
+    render(<RecommendationCard title="t" recommendation={rec} snippet={null} />);
+    expect(screen.getByText(/highest frequency tried/)).toBeTruthy();
+    expect(screen.getByText(/higher end frequency/)).toBeTruthy();
+  });
+
+  it("shows no warning when the best shaper is inside the range", () => {
+    render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
+    expect(screen.queryByText(/highest frequency tried/)).toBeNull();
+  });
+
   it("explains the max acceleration in a tooltip on its label", async () => {
     render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
     expect(screen.queryByText(/not a limit of your printer/)).toBeNull();

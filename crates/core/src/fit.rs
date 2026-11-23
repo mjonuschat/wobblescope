@@ -205,6 +205,10 @@ pub struct Recommendation {
     pub all: Vec<CalibrationResult>,
     /// The settings used.
     pub settings: FitSettings,
+    /// Whether `best` is the highest frequency its shaper was tried at. The resonance may
+    /// then lie above the search range, which the fit cannot see.
+    #[serde(default)]
+    pub best_at_search_limit: bool,
     /// `wobblescope-core` version that produced it.
     pub core_version: String,
 }
@@ -695,6 +699,9 @@ pub fn find_best_shaper(
         best = t.clone();
     }
 
+    let best_at_search_limit = builtin(&best.name)
+        .and_then(|shaper| test_freqs_of(shaper, params).last().copied())
+        .is_some_and(|top| (best.freq - top).abs() < FREQ_STEP / 2.0);
     Ok(Recommendation {
         freq_bins,
         for_performance: performance_pick(&best, &all),
@@ -712,6 +719,7 @@ pub fn find_best_shaper(
             freq_step: FREQ_STEP,
             shapers: names,
         },
+        best_at_search_limit,
         core_version: CORE_VERSION.to_owned(),
     })
 }
@@ -770,6 +778,57 @@ mod tests {
     }
 
     use super::*;
+
+    fn resonance_at(at: f64) -> CalibrationData {
+        let freq_bins: Vec<f64> = (0..=400).map(f64::from).collect();
+        let psd_sum: Vec<f64> = freq_bins
+            .iter()
+            .map(|f| 1.0 / (1.0 + ((f - at) / 6.0).powi(2)))
+            .collect();
+        CalibrationData {
+            name: "resonance".to_owned(),
+            psd_x: psd_sum.clone(),
+            psd_y: vec![0.0; freq_bins.len()],
+            psd_z: vec![0.0; freq_bins.len()],
+            psd_sum,
+            freq_bins,
+            normalized: true,
+        }
+    }
+
+    #[test]
+    fn a_resonance_above_the_search_puts_the_best_shaper_at_its_limit() {
+        let rec = super::find_best_shaper(&[resonance_at(300.0)], &FitParams::default()).unwrap();
+        assert!(
+            rec.best_at_search_limit,
+            "{} at {}",
+            rec.best.name, rec.best.freq
+        );
+    }
+
+    #[test]
+    fn a_resonance_inside_the_search_is_not_at_its_limit() {
+        let rec = super::find_best_shaper(&[resonance_at(60.0)], &FitParams::default()).unwrap();
+        assert!(
+            !rec.best_at_search_limit,
+            "{} at {}",
+            rec.best.name, rec.best.freq
+        );
+    }
+
+    #[test]
+    fn a_higher_ceiling_takes_the_resonance_out_of_the_limit() {
+        let params = FitParams {
+            max_shaper_freq: Some(400.0),
+            ..FitParams::default()
+        };
+        let rec = super::find_best_shaper(&[resonance_at(300.0)], &params).unwrap();
+        assert!(
+            !rec.best_at_search_limit,
+            "{} at {}",
+            rec.best.name, rec.best.freq
+        );
+    }
 
     /// A normalised PSD on a 1 Hz grid to 400 Hz with power only above `from` Hz.
     fn powered_above(from: f64) -> CalibrationData {

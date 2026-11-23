@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Alert } from "@/ui-kit/Alert";
 import { Field, Fields } from "@/ui-kit/Fields";
 import { Panel } from "@/ui-kit/Panel";
 import { pointLabel } from "@/components/charts/options";
@@ -140,5 +141,15 @@ export function RecommendationCard({
   ) : (
     low
   );
-  return <Panel title={title}>{body}</Panel>;
+  return (
+    <Panel title={title}>
+      {recommendation.best_at_search_limit && (
+        <Alert tone="warning" variant="inline" className="mb-3">
+          The best shaper, {formatHz(best.freq)} Hz, is the highest frequency tried. The real resonance may be higher.
+          Run the test again with a higher end frequency.
+        </Alert>
+      )}
+      {body}
+    </Panel>
+  );
 }
