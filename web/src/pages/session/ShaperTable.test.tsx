@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { candidate } from "@/test/fixtures";
@@ -56,6 +56,23 @@ describe("ShaperTable", () => {
     } finally {
       Object.defineProperty(document, "execCommand", { value: undefined, configurable: true });
     }
+  });
+
+  it("lists a shaper that was not fitted with a warning and no copy button", () => {
+    const rec = { ...recommendation(), unfitted: [{ name: "3hump_ei", max_damping: 0.2 }] };
+    render(<ShaperTable recommendation={rec} snippets={["a", "b"]} />);
+    const row = screen.getAllByRole("row").find((r) => r.getAttribute("data-unfitted") === "true");
+    expect(row?.textContent).toContain("3hump_ei");
+    expect(
+      within(row as HTMLElement).getByRole("img", { name: /^3hump_ei not fitted: damping ratio .* limit of 0.2$/ }),
+    ).toBeTruthy();
+    expect(within(row as HTMLElement).queryByRole("button", { name: "Copy" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(rec.all.length);
+    expect(
+      within(row as HTMLElement)
+        .getByRole("img")
+        .getAttribute("tabindex"),
+    ).toBe("0");
   });
 
   it("marks the row recommended for performance", () => {

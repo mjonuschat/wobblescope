@@ -1,14 +1,19 @@
-//! The damping ratio of the main resonance, estimated the way Shake&Tune does
-//! (`compute_mechanical_parameters`, at the commit pinned in `docs/specs/shaketune-deviations.md`).
+//! The damping ratio of the main resonance, from the width of its peak
+//! (Shake&Tune's `compute_mechanical_parameters`, at the commit pinned in
+//! `docs/specs/shaketune-deviations.md`).
 //!
-//! The estimate is kept exactly as Shake&Tune computes it, including where it is likely wrong
-//! (it takes the half-power points at the peak divided by the square root of two); each
-//! deliberate difference is a row in that file.
+//! Shake&Tune measures the width where the PSD has fallen to the peak divided by the square root
+//! of two, which is the half-power level of an amplitude, not of a power spectrum. The shaper
+//! fit uses half the peak, and stops measuring where the spectrum turns up again towards a second
+//! peak ([`estimate_damping`]); [`estimate_damping_above`], which the vibrations profile uses,
+//! keeps Shake&Tune's level and walks on to the level.
 
 use crate::shaper::DEFAULT_DAMPING_RATIO;
 
-/// Fraction of the peak at which the bandwidth is measured.
-pub const HALF_POWER_LEVEL: f64 = std::f64::consts::FRAC_1_SQRT_2;
+/// Fraction of the peak at which the bandwidth of a PSD is measured: half, since a PSD is power.
+pub const HALF_POWER_LEVEL: f64 = 0.5;
+/// The level Shake&Tune uses, where the shaper fit uses [`HALF_POWER_LEVEL`].
+pub const SHAKETUNE_HALF_POWER_LEVEL: f64 = std::f64::consts::FRAC_1_SQRT_2;
 /// The damping ratio used when the data gives no estimate.
 pub const FALLBACK_DAMPING: f64 = DEFAULT_DAMPING_RATIO;
 
@@ -31,7 +36,13 @@ pub fn estimate_damping(freq_bins: &[f64], psd: &[f64]) -> Option<DampingEstimat
         return None;
     }
     let peak = (0..n).fold(0, |best, i| if psd[i] > psd[best] { i } else { best });
-    Some(half_power_estimate(freq_bins, psd, peak))
+    Some(half_power_estimate(
+        freq_bins,
+        psd,
+        peak,
+        HALF_POWER_LEVEL,
+        true,
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -67,7 +78,13 @@ pub fn estimate_damping_above(
         |from: usize| (from..n).fold(from, |best, i| if psd[i] > psd[best] { i } else { best });
     let low_freq_max = argmax(0) < first;
     let peak_index = argmax(first);
-    let found = half_power_estimate(freq_bins, psd, peak_index);
+    let found = half_power_estimate(
+        freq_bins,
+        psd,
+        peak_index,
+        SHAKETUNE_HALF_POWER_LEVEL,
+        false,
+    );
     Some(MechanicalParams {
         fr: found.fr,
         zeta: found.zeta,
@@ -76,21 +93,93 @@ pub fn estimate_damping_above(
     })
 }
 
-fn half_power_estimate(freq_bins: &[f64], psd: &[f64], peak: usize) -> DampingEstimate {
+/// How far the spectrum must climb out of a dip, as a fraction of the peak, for the dip to count
+/// as the valley before a second peak and not as ripple on the peak's skirt.
+const VALLEY_RISE: f64 = 0.1;
+
+/// Whether the dip at `at` is a valley: walking on from it (through `ahead`, the indices in the
+/// order walked) the spectrum climbs at least [`VALLEY_RISE`] of the peak before it falls to `half`.
+fn is_valley(
+    psd: &[f64],
+    at: usize,
+    ahead: impl Iterator<Item = usize>,
+    half: f64,
+    peak: f64,
+) -> bool {
+    let top = ahead
+        .take_while(|&j| psd[j] > half)
+        .map(|j| psd[j])
+        .fold(psd[at], f64::max);
+    top - psd[at] >= VALLEY_RISE * peak
+}
+
+#[derive(Clone, Copy)]
+enum Edge {
+    Half(usize),
+    /// A local minimum still above the level, where the spectrum rises towards another peak.
+    Valley(usize),
+}
+
+/// The edges of the peak at `peak`. With `stop_at_valleys`, a walk that meets a local minimum
+/// above the level ends there, so a second peak close to the first is not measured as part of it.
+fn edges(psd: &[f64], peak: usize, level: f64, stop_at_valleys: bool) -> Option<(Edge, Edge)> {
+    let half = psd[peak] * level;
+    if !stop_at_valleys {
+        let below = psd[..peak].iter().rposition(|p| *p <= half)?;
+        let above = psd[peak..].iter().position(|p| *p <= half)? + peak;
+        return Some((Edge::Half(below), Edge::Half(above)));
+    }
+    let below = (0..peak).rev().find_map(|i| {
+        if psd[i] <= half {
+            Some(Edge::Half(i))
+        } else if i > 0 && psd[i - 1] > psd[i] && is_valley(psd, i, (0..i).rev(), half, psd[peak]) {
+            Some(Edge::Valley(i))
+        } else {
+            None
+        }
+    })?;
+    let above = (peak + 1..psd.len()).find_map(|i| {
+        if psd[i] <= half {
+            Some(Edge::Half(i))
+        } else if i + 1 < psd.len()
+            && psd[i + 1] > psd[i]
+            && is_valley(psd, i, i + 1..psd.len(), half, psd[peak])
+        {
+            Some(Edge::Valley(i))
+        } else {
+            None
+        }
+    })?;
+    Some((below, above))
+}
+
+fn half_power_estimate(
+    freq_bins: &[f64],
+    psd: &[f64],
+    peak: usize,
+    level: f64,
+    stop_at_valleys: bool,
+) -> DampingEstimate {
     let fr = freq_bins[peak];
-    let half = psd[peak] * HALF_POWER_LEVEL;
-    let below = psd[..peak].iter().rposition(|p| *p <= half);
-    let above = psd[peak..]
-        .iter()
-        .position(|p| *p <= half)
-        .map(|k| k + peak);
-    let (Some(lo), Some(hi)) = (below, above) else {
+    let half = psd[peak] * level;
+    let Some((lo, hi)) = edges(psd, peak, level, stop_at_valleys) else {
         return DampingEstimate { fr, zeta: None };
     };
-    let f_below = freq_bins[lo]
-        + (half - psd[lo]) * (freq_bins[lo + 1] - freq_bins[lo]) / (psd[lo + 1] - psd[lo]);
-    let f_above = freq_bins[hi - 1]
-        + (half - psd[hi - 1]) * (freq_bins[hi] - freq_bins[hi - 1]) / (psd[hi] - psd[hi - 1]);
+    let f_below = match lo {
+        Edge::Half(lo) => {
+            freq_bins[lo]
+                + (half - psd[lo]) * (freq_bins[lo + 1] - freq_bins[lo]) / (psd[lo + 1] - psd[lo])
+        }
+        Edge::Valley(lo) => freq_bins[lo],
+    };
+    let f_above = match hi {
+        Edge::Half(hi) => {
+            freq_bins[hi - 1]
+                + (half - psd[hi - 1]) * (freq_bins[hi] - freq_bins[hi - 1])
+                    / (psd[hi] - psd[hi - 1])
+        }
+        Edge::Valley(hi) => freq_bins[hi],
+    };
     let ratio = (f_above - f_below) / fr;
     let (b1, b2) = (ratio.powi(2), ratio.powi(4));
     let inner = 1.0 / (4.0 + 4.0 * b1 - b2);

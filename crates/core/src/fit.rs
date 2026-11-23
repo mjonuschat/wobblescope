@@ -209,8 +209,22 @@ pub struct Recommendation {
     /// then lie above the search range, which the fit cannot see.
     #[serde(default)]
     pub best_at_search_limit: bool,
+    /// Requested shapers that were not fitted because the damping ratio estimated from the data is
+    /// above what they support.
+    #[serde(default)]
+    pub unfitted: Vec<UnfittedShaper>,
     /// `wobblescope-core` version that produced it.
     pub core_version: String,
+}
+
+/// A shaper left out of a fit: the damping ratio estimated from the data is not below `max_damping`,
+/// where the shaper's formulas stop.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct UnfittedShaper {
+    pub name: String,
+    /// The damping ratio the shaper supports up to, exclusive.
+    pub max_damping: f64,
 }
 
 /// Axis of an exported configuration snippet.
@@ -371,6 +385,39 @@ struct Damping {
     ratio: f64,
     source: DampingSource,
     resonance_freq: Option<f64>,
+}
+
+/// Splits the requested shapers into those that can be built with the damping ratio of a fit and
+/// those that cannot. A ratio the caller set is kept for every shaper, so a shaper that cannot take
+/// it is an error. A ratio estimated from the data is not the caller's choice,
+/// and a heavily damped resonance gives one above what 3hump_ei (0.2) or 2hump_ei (0.3) supports.
+///
+/// # Errors
+/// [`CoreError::ShaperInit`] when an estimated ratio leaves none of the requested shapers.
+fn shapers_for(
+    names: Vec<String>,
+    damping: &Damping,
+) -> Result<(Vec<String>, Vec<UnfittedShaper>), CoreError> {
+    if damping.source == DampingSource::Fixed {
+        return Ok((names, Vec::new()));
+    }
+    let (mut kept, mut unfitted) = (Vec::new(), Vec::new());
+    for name in names {
+        match builtin(&name).map(|s| s.max_damping()) {
+            Some(max) if damping.ratio >= max => unfitted.push(UnfittedShaper {
+                name,
+                max_damping: max,
+            }),
+            _ => kept.push(name),
+        }
+    }
+    if kept.is_empty() {
+        return Err(CoreError::ShaperInit(format!(
+            "the damping ratio estimated from the data, {}, is above what the requested shapers support",
+            damping.ratio
+        )));
+    }
+    Ok((kept, unfitted))
 }
 
 /// The damping ratio a fit over `data` uses. That is the caller's, else the estimate from the
@@ -697,7 +744,7 @@ pub fn find_best_shaper(
     }
     let params = &with_ceiling_in_range(params, data);
     let damping = resolve_damping(data, params);
-    let names = shaper_names(params);
+    let (names, unfitted) = shapers_for(shaper_names(params), &damping)?;
     let mut best: Option<CalibrationResult> = None;
     let mut all: Vec<CalibrationResult> = Vec::new();
     let mut max_freq_used = f64::NEG_INFINITY;
@@ -773,6 +820,7 @@ pub fn find_best_shaper(
             shapers: names,
         },
         best_at_search_limit,
+        unfitted,
         core_version: CORE_VERSION.to_owned(),
     })
 }
@@ -959,5 +1007,68 @@ mod tests {
     fn power_inside_the_fit_range_passes_the_check() {
         let max_freq = lowest_fit_max_freq(&FitParams::default());
         assert_eq!(check_dataset(&powered_above(50.0), max_freq), Ok(()));
+    }
+
+    fn resonator(zeta: f64) -> CalibrationData {
+        let freq_bins: Vec<f64> = (0..=1600).map(|i| f64::from(i) * 0.25).collect();
+        let psd_sum: Vec<f64> = freq_bins
+            .iter()
+            .map(|f| {
+                let r = f / 60.0;
+                1.0 / ((1.0 - r * r).powi(2) + (2.0 * zeta * r).powi(2))
+            })
+            .collect();
+        CalibrationData {
+            name: "resonator".to_owned(),
+            psd_x: psd_sum.clone(),
+            psd_y: vec![0.0; freq_bins.len()],
+            psd_z: vec![0.0; freq_bins.len()],
+            psd_sum,
+            freq_bins,
+            normalized: true,
+        }
+    }
+
+    #[test]
+    fn a_shaper_that_cannot_take_the_estimated_ratio_is_left_out_and_named() {
+        let rec = find_best_shaper(&[resonator(0.25)], &FitParams::default()).unwrap();
+        assert_eq!(rec.settings.damping_source, DampingSource::Estimated);
+        assert!(rec.settings.damping_ratio >= 0.2 && rec.settings.damping_ratio < 0.3);
+        assert_eq!(
+            rec.unfitted,
+            [UnfittedShaper {
+                name: "3hump_ei".to_owned(),
+                max_damping: 0.2
+            }]
+        );
+        assert_eq!(rec.settings.shapers, ["zv", "mzv", "ei", "2hump_ei"]);
+        assert!(rec.all.iter().all(|c| c.name != "3hump_ei"));
+    }
+
+    #[test]
+    fn a_lightly_damped_resonance_leaves_no_shaper_out() {
+        let rec = find_best_shaper(&[resonator(0.1)], &FitParams::default()).unwrap();
+        assert!(rec.unfitted.is_empty());
+        assert_eq!(rec.all.len(), 5);
+    }
+
+    #[test]
+    fn a_ratio_the_caller_sets_is_still_refused_by_a_shaper_that_cannot_take_it() {
+        let params = FitParams {
+            damping_ratio: Some(0.25),
+            ..FitParams::default()
+        };
+        let e = find_best_shaper(&[resonator(0.25)], &params).unwrap_err();
+        assert!(matches!(e, CoreError::ShaperInit(_)), "{e:?}");
+    }
+
+    #[test]
+    fn an_estimated_ratio_that_no_requested_shaper_supports_is_an_error() {
+        let params = FitParams {
+            shapers: Some(vec!["3hump_ei".to_owned()]),
+            ..FitParams::default()
+        };
+        let e = find_best_shaper(&[resonator(0.25)], &params).unwrap_err();
+        assert!(matches!(e, CoreError::ShaperInit(_)), "{e:?}");
     }
 }

@@ -117,6 +117,18 @@ Wobblescope searches for shapers up to the end of the frequency range you tested
 
 Wobblescope warns when the recommended shaper is the highest frequency it tried, because the real resonance may be higher.
 
+### Why is my damping ratio higher than in Shake&Tune?
+
+The damping ratio is estimated from the width of the main resonance peak. Shake&Tune measures the width where the spectrum has fallen to the peak divided by the square root of two. Wobblescope measures it at half the peak instead.
+
+Wobblescope also stops measuring the width where the spectrum turns up again, by at least a tenth of the main peak, towards a second peak. Shake&Tune measures both peaks as one wide one.
+
+The higher ratio changes the shaper table and the `damping_ratio` lines in the config snippet.
+
+### Why is a shaper in the table with a warning and no numbers?
+
+A shaper's formulas are only valid up to a damping ratio: 0.2 for 3hump_ei and 0.3 for 2hump_ei. A heavily damped resonance gives an estimated ratio above that. Wobblescope then leaves that shaper out of the search and lists it with a warning, instead of stopping the whole analysis. A ratio you enter yourself is not changed, so a shaper that cannot take it is still an error.
+
 ## Axes map calibration
 
 ### Why does it say "unable to determine" instead of stopping with an error?

@@ -27,6 +27,8 @@ pub trait Shaper: Sync {
     fn name(&self) -> &'static str;
     /// Lowest frequency the autotuner searches, chosen for a projected `max_accel` near 1500.
     fn min_freq(&self) -> f64;
+    /// The damping ratio the shaper's formulas stop at: it is built for ratios below this.
+    fn max_damping(&self) -> f64;
     /// Builds the impulse sequence.
     ///
     /// # Errors
@@ -51,6 +53,10 @@ impl Shaper for Def {
 
     fn min_freq(&self) -> f64 {
         self.min_freq
+    }
+
+    fn max_damping(&self) -> f64 {
+        self.max_damping
     }
 
     fn impulses(&self, freq: f64, damping_ratio: f64) -> Result<Impulses, CoreError> {

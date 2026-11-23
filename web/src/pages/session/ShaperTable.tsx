@@ -1,4 +1,7 @@
+import { TriangleAlertIcon } from "lucide-react";
+
 import { CopyButton } from "./CopyButton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatAccel, formatHz } from "@/lib/format";
 import type { Recommendation } from "@/lib/generated/Recommendation";
@@ -9,7 +12,8 @@ interface Props {
 }
 
 export function ShaperTable({ recommendation, snippets = null }: Props) {
-  const { best, all, for_performance: performance } = recommendation;
+  const { best, all, for_performance: performance, unfitted, settings } = recommendation;
+  const hasActions = snippets !== null || unfitted.length > 0;
   return (
     <Table>
       <TableHeader>
@@ -19,7 +23,7 @@ export function ShaperTable({ recommendation, snippets = null }: Props) {
           <TableHead>Vibrations</TableHead>
           <TableHead>Smoothing</TableHead>
           <TableHead>Max accel</TableHead>
-          {snippets && (
+          {hasActions && (
             <TableHead className="w-0">
               <span className="sr-only">Copy the config</span>
             </TableHead>
@@ -53,6 +57,35 @@ export function ShaperTable({ recommendation, snippets = null }: Props) {
             </TableRow>
           );
         })}
+        {unfitted.map((u) => (
+          <TableRow key={u.name} data-unfitted="true" className="text-muted-foreground">
+            <TableCell>{u.name}</TableCell>
+            <TableCell>-</TableCell>
+            <TableCell>-</TableCell>
+            <TableCell>-</TableCell>
+            <TableCell>-</TableCell>
+            <TableCell className="text-right">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      role="img"
+                      tabIndex={0}
+                      aria-label={`${u.name} not fitted: damping ratio ${settings.damping_ratio.toFixed(3)} is above this shaper's limit of ${u.max_damping}`}
+                      className="inline-flex size-8 items-center justify-center text-destructive"
+                    />
+                  }
+                >
+                  <TriangleAlertIcon className="size-4" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-64">
+                  Not fitted: damping ratio {settings.damping_ratio.toFixed(3)} is above this shaper&apos;s limit of{" "}
+                  {u.max_damping}.
+                </TooltipContent>
+              </Tooltip>
+            </TableCell>
+          </TableRow>
+        ))}
       </TableBody>
     </Table>
   );
