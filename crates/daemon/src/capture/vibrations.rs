@@ -118,7 +118,7 @@ fn speed_list(min_speed: f64, max_speed: f64, speed_increment: f64) -> Vec<f64> 
 }
 
 /// The factor on the segment length at `speed`. Shake&Tune shortens the segments below 100 mm/s
-/// from the full size at 100 mm/s down to a fifth of it (D32).
+/// from the full size at 100 mm/s down to a fifth of it.
 fn length_multiplier(speed: f64) -> f64 {
     if speed < 100.0 {
         1.0 / 5.0 + 4.0 / 5.0 * speed / 100.0
@@ -205,7 +205,7 @@ pub fn plan_vibrations(
         DEFAULT_TRAVEL_SPEED,
         MIN_TRAVEL_SPEED,
     )?;
-    // D31: Shake&Tune checks size / (max_speed / 60) < 0.25, which is 60 times too lax. This
+    // Shake&Tune checks size / (max_speed / 60) < 0.25, which is 60 times too lax. This
     // checks size / max_speed >= 0.25 and refuses otherwise.
     if size / max_speed < 0.25 {
         return refuse(

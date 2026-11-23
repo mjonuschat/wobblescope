@@ -125,7 +125,7 @@ pub fn spectrogram(samples: &RawSamples, max_freq: f64) -> Result<Spectrogram, C
     }
     let mut floor = percentile(&all, FLOOR_PERCENT).expect("a matrix has values");
     if floor <= 0.0 {
-        // D7: Shake&Tune's log colour scale fails for a floor of zero, so it has none to match.
+        // Shake&Tune's log colour scale fails for a floor of zero, so it has none to match.
         floor = all
             .iter()
             .copied()

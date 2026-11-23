@@ -72,10 +72,10 @@ fn interpolated(measured: &[f64], energy: &[f64], speed: f64) -> f64 {
 /// `energy` must hold both `main` angles with at least two distinct speeds overall (the caller
 /// checks, as Shake&Tune does before this step). A speed missing at an angle counts as zero energy,
 /// as in Shake&Tune. A speed below the lowest measured one is extrapolated and may give negative
-/// energy (D35).
+/// energy.
 ///
 /// The angles are `linspace(0, 360, 720)`, which contains both 0 and 360, so the first row equals
-/// the last and the step is 0.5007 degrees (D43).
+/// the last and the step is 0.5007 degrees.
 pub fn direction_speed_grid(energy: &EnergyByAngleSpeed, k: Kinematics, main: [f64; 2]) -> Grid {
     let mut measured: Vec<f64> = energy
         .iter()
@@ -136,7 +136,7 @@ pub fn direction_speed_grid(energy: &EnergyByAngleSpeed, k: Kinematics, main: [f
 ///
 /// For the grid to read as circular, 9 rows from each end are copied to the other before the
 /// average and cut off after it. The grid holds both 0 and 360 degrees, so the copies repeat that
-/// row (D43).
+/// row.
 pub fn angle_powers(grid: &Grid) -> Vec<f64> {
     let powers: Vec<f64> = grid
         .data
@@ -158,7 +158,7 @@ pub struct SpeedCurves {
     pub max: Vec<f64>,
     /// Variance over all directions, rescaled so that its maximum equals the maximum of `max`.
     pub variance: Vec<f64>,
-    /// `max` times `variance`, the figure peaks and quiet speeds are read from (D45).
+    /// `max` times `variance`, the figure peaks and quiet speeds are read from.
     pub metric: Vec<f64>,
 }
 
@@ -228,10 +228,10 @@ fn corrcoef(x: &[f64], y: &[f64]) -> f64 {
 /// of 10 to 100: `100 * correlation^0.75 + 10`.
 ///
 /// The two sections are the quarter turn (180 rows) before the midpoint and the one after it, in
-/// the same order, so one is the other rotated by 90 degrees and not mirrored (D37). The score is
+/// the same order, so one is the other rotated by 90 degrees and not mirrored. The score is
 /// capped at 100 but never raised to 0, because Shake&Tune calls `np.clip(0, 100, x)` with its
 /// arguments in the wrong order. An anti-correlated grid raises a negative number to a fractional
-/// power and gives NaN (D36). Both are reproduced.
+/// power and gives NaN. Both are reproduced.
 pub fn symmetry(grid: &Grid, main: [f64; 2]) -> f64 {
     let total = grid.angles.len();
     let half = total / 2;
@@ -269,7 +269,7 @@ mod tests {
             speeds: vec![1.0],
             data,
         };
-        // Shake&Tune returns NaN here (D36), and so does the port.
+        // Shake&Tune returns NaN here, and so does the port.
         assert!(symmetry(&grid, [0.0, 90.0]).is_nan());
     }
 

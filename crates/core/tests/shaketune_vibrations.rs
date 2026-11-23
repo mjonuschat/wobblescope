@@ -260,7 +260,7 @@ parity_test! {
             }
             assert_close(&format!("{name} global profile"), &global, &fixture.global_motor_profile);
 
-            // D38: the weight of 90 degrees reads row 90 (45 degrees), not row 180. Moving the
+            // The weight of 90 degrees reads row 90 (45 degrees), not row 180. Moving the
             // energy of that row changes the result, moving the energy of row 180 does not.
             let mut energy = fixture.all_angles_energy.clone();
             let row = main[1] as usize;

@@ -7,11 +7,11 @@ export type Zone = { start: number,
 /**
  * Index at which the zone ends. It is the first sample at or above the threshold, so it is
  * outside the zone, except for a zone that runs to the end of the data, where it is the last
- * sample and inside (D42).
+ * sample and inside.
  */
 end: number, 
 /**
  * Mean of the samples from `start` up to but not including `end`, as a percentage of the
- * curve's maximum (D42).
+ * curve's maximum.
  */
 energy: number, };

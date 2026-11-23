@@ -60,7 +60,7 @@ pub(crate) fn complete_axis(directions: &mut [[f64; 3]; 3], missing: usize) -> b
         cross = cross.map(|c| -c);
     }
     let norm = cross.iter().map(|c| c * c).sum::<f64>().sqrt();
-    // D22: the reference divides by this norm unchecked and yields NaN for parallel vectors.
+    // The reference divides by this norm unchecked and yields NaN for parallel vectors.
     if norm < MIN_CROSS_NORM {
         return false;
     }

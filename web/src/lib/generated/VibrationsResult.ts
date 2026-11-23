@@ -29,7 +29,7 @@ peaks: Array<number>,
  */
 peak_speeds: Array<number>, good_speeds: Array<Zone>, good_angles: Array<Zone>, 
 /**
- * Symmetry score. `None` when Shake&Tune's value is NaN (D36).
+ * Symmetry score. `None` when Shake&Tune's value is NaN.
  */
 symmetry: number | null, 
 /**

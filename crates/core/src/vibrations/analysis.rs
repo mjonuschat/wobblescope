@@ -92,7 +92,7 @@ pub struct VibrationsResult {
     pub peak_speeds: Vec<f64>,
     pub good_speeds: Vec<Zone>,
     pub good_angles: Vec<Zone>,
-    /// Symmetry score. `None` when Shake&Tune's value is NaN (D36).
+    /// Symmetry score. `None` when Shake&Tune's value is NaN.
     pub symmetry: Option<f64>,
     /// The motor profile. `None` for a worst case and when no resonance can be found.
     pub motor: Option<MotorResult>,
@@ -110,7 +110,7 @@ pub(crate) fn derive(grid: &Grid, kinematics: Kinematics) -> VibrationsResult {
     let angle_energy = angle_powers(grid);
     let curves = speed_powers(grid);
 
-    // D44: the window and the vicinity are counts of grid points, so their width in mm/s depends
+    // The window and the vicinity are counts of grid points, so their width in mm/s depends
     // on the grid's speed step. Kept as Shake&Tune has it.
     let max_metric = curves
         .metric

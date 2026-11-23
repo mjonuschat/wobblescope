@@ -13,7 +13,7 @@ import type { ChipAxis } from "@/lib/generated/ChipAxis";
 
 /**
  * The colors of the chip axes x, y and z: violet, the accent and magenta, the hues of Shake&Tune's purple,
- * orange and pink, taken from the theme so each reads on a light and a dark surface (D47).
+ * orange and pink, taken from the theme so each reads on a light and a dark surface.
  */
 export const chipAxisColors = (theme: ChartTheme): readonly [string, string, string] => [
   theme.series[0],

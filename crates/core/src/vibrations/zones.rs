@@ -8,10 +8,10 @@ pub struct Zone {
     pub start: usize,
     /// Index at which the zone ends. It is the first sample at or above the threshold, so it is
     /// outside the zone, except for a zone that runs to the end of the data, where it is the last
-    /// sample and inside (D42).
+    /// sample and inside.
     pub end: usize,
     /// Mean of the samples from `start` up to but not including `end`, as a percentage of the
-    /// curve's maximum (D42).
+    /// curve's maximum.
     pub energy: f64,
 }
 
@@ -63,12 +63,12 @@ pub fn low_energy_zones(power: &[f64], threshold: f64) -> Vec<Zone> {
 
 /// Cuts `deletion_range` samples either side of every peak out of the zones it falls in, then
 /// merges zones that overlap, keeping the lower energy. The result is in order of `start`, not of
-/// energy, as Shake&Tune leaves it (D41).
+/// energy, as Shake&Tune leaves it.
 ///
 /// `peak_speed_indices` pairs each peak speed with its index in `speeds`. A peak counts for a zone
 /// when its speed lies between the speeds at the zone's `start` and `end`.
 ///
-/// Shake&Tune fails with an `IndexError` when no zone is left (D40). This returns an empty list.
+/// Shake&Tune fails with an `IndexError` when no zone is left. This returns an empty list.
 pub fn filter_and_split_zones(
     speeds: &[f64],
     zones: &[Zone],
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn empty_zone_list_after_peak_removal_is_empty_not_a_panic() {
-        // D40: Shake&Tune raises IndexError here.
+        // Shake&Tune raises IndexError here.
         let speeds: Vec<f64> = (0..10).map(f64::from).collect();
         let zone = Zone {
             start: 3,
@@ -152,7 +152,6 @@ mod tests {
 
     #[test]
     fn zone_ending_at_the_data_end_is_inclusive_and_others_exclusive() {
-        // D42
         let power = [5.0, 1.0, 1.0, 5.0, 5.0, 5.0, 5.0, 1.0, 1.0];
         let zones = low_energy_zones(&power, 0.1);
         let spans: Vec<(usize, usize)> = zones.iter().map(|z| (z.start, z.end)).collect();

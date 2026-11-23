@@ -14,10 +14,10 @@ const ENERGY_AMPLIFICATION: i32 = 2;
 /// The PSD profile of each main angle and the weighted average of both.
 ///
 /// A profile is the mean PSD over the angle's speeds, smoothed with a moving average of 20 bins
-/// whose ends are padded with zeros, so it fades towards zero at both ends (D39). The weight of an
+/// whose ends are padded with zeros, so it fades towards zero at both ends. The weight of an
 /// angle is the square of its energy times the square of the area under its profile. The energy is
 /// `angle_energy[angle]`, read with the angle in degrees as the row number of an array that has a
-/// row every half degree, so 90 degrees reads the row of 45 degrees (D38). When the weights add up
+/// row every half degree, so 90 degrees reads the row of 45 degrees. When the weights add up
 /// to zero the global profile is the unweighted sum of the profiles.
 ///
 /// Both `main` angles must be in `psds` and below the length of `angle_energy`. The caller checks,
