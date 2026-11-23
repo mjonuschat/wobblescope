@@ -153,10 +153,14 @@ impl WasmLiveSpectrum {
 
 /// The `[input_shaper]` snippet for a recommendation and axis.
 #[wasm_bindgen]
-pub fn config_snippet(recommendation: JsValue, axis: JsValue) -> Result<String, JsError> {
+pub fn config_snippet(
+    recommendation: JsValue,
+    axis: JsValue,
+    source: &str,
+) -> Result<String, JsError> {
     let recommendation: Recommendation = from_js("recommendation", recommendation)?;
     let axis: Axis = from_js("axis", axis)?;
-    Ok(crate::config_snippet(&recommendation, axis))
+    Ok(crate::config_snippet(&recommendation, axis, source))
 }
 
 /// Version of `core` that runs in the browser.

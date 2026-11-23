@@ -11,6 +11,7 @@ import type { ProbePoint } from "@/lib/generated/ProbePoint";
 import type { Recommendation } from "@/lib/generated/Recommendation";
 
 import { CopyButton } from "./CopyButton";
+import { fitSettingFields } from "./fit";
 import { subheadingClass } from "@/ui-kit/CardLabel";
 
 const MAX_ACCEL_HINT =
@@ -51,16 +52,19 @@ interface ShaperProps {
   dampingHint?: string;
   /** What each chip leaves behind, shown under the remaining vibrations. */
   byChip?: ReactNode;
+  /** The fit's settings, shown as a second row of the same grid. */
+  settings: Recommendation["settings"];
 }
 
-function Shaper({ result, snippet, heading, damping, dampingHint, byChip }: ShaperProps) {
+function Shaper({ result, snippet, heading, damping, dampingHint, byChip, settings }: ShaperProps) {
+  const columns = heading ? "sm:grid-cols-2 lg:grid-cols-2" : "sm:grid-cols-4 lg:grid-cols-4";
   return (
     <section aria-label={heading} className={heading ? "min-w-0 space-y-3 rounded-lg border p-4" : "space-y-3"}>
       {heading && <h3 className={subheadingClass}>{heading}</h3>}
       <p className="text-xl font-semibold">
         {result.name} at {formatHz(result.freq)} Hz
       </p>
-      <Fields className={heading ? "sm:grid-cols-2 lg:grid-cols-2" : "sm:grid-cols-4 lg:grid-cols-4"}>
+      <Fields className={columns}>
         <Field label="Remaining vibrations">
           {(result.vibrs * 100).toFixed(1)}%{byChip}
         </Field>
@@ -71,6 +75,13 @@ function Shaper({ result, snippet, heading, damping, dampingHint, byChip }: Shap
         <Field label="Damping ratio" hint={dampingHint}>
           {damping}
         </Field>
+      </Fields>
+      <Fields aria-label="Fit settings" className={columns}>
+        {fitSettingFields(settings).map((f) => (
+          <Field key={f.label} label={f.label}>
+            {f.value}
+          </Field>
+        ))}
       </Fields>
       {snippet && (
         <div className="relative">
@@ -121,6 +132,7 @@ export function RecommendationCard({
       result={best}
       snippet={snippet}
       damping={damping}
+      settings={settings}
       dampingHint={dampingHint}
       byChip={byChip(datasetVibrations)}
       heading={performance ? "For low vibrations" : undefined}
@@ -133,6 +145,7 @@ export function RecommendationCard({
         result={performance}
         snippet={performanceSnippet}
         damping={damping}
+        settings={settings}
         dampingHint={dampingHint}
         byChip={byChip(datasetVibrations.map((v, i) => ({ ...v, vibrs: performance.dataset_vibrs[i] ?? v.vibrs })))}
         heading="For performance"

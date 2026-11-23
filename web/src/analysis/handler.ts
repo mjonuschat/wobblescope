@@ -24,7 +24,7 @@ export interface SessionHandle {
 /** The part of the wasm module the worker uses. */
 export interface WasmModule {
   WasmSession: new (meta: SessionMeta) => SessionHandle;
-  config_snippet(recommendation: Recommendation, axis: Axis): string;
+  config_snippet(recommendation: Recommendation, axis: Axis, source: string): string;
 }
 
 function describe(error: unknown): string {
@@ -68,17 +68,23 @@ export function createHandler(loadModule: () => Promise<WasmModule>) {
   async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
     const { module, handle } = await open(request);
     const analysis = handle.analyze(request.axis, request.params, request.overrides);
-    const snippet = (r: Recommendation | null) => (r ? module.config_snippet(r, request.axis) : null);
-    const candidates = (r: Recommendation | null) =>
-      r ? r.all.map((candidate) => module.config_snippet({ ...r, best: candidate }, request.axis)) : null;
+    // One chip's analysis is the whole analysis, so its header names the chip rather than "all chips".
+    const combined = analysis.per_chip.length === 1 ? analysis.per_chip[0].chip : "all chips";
+    const snippet = (r: Recommendation | null) => (r ? module.config_snippet(r, request.axis, combined) : null);
+    const candidates = (r: Recommendation | null, chip: string) =>
+      r ? r.all.map((candidate) => module.config_snippet({ ...r, best: candidate }, request.axis, chip)) : null;
     const result: AnalysisResult = {
       analysis,
       snippets: {
         worstCase: snippet(analysis.worst_case),
         worstCasePerformance: analysis.worst_case?.for_performance
-          ? module.config_snippet({ ...analysis.worst_case, best: analysis.worst_case.for_performance }, request.axis)
+          ? module.config_snippet(
+              { ...analysis.worst_case, best: analysis.worst_case.for_performance },
+              request.axis,
+              `${combined} (for performance)`,
+            )
           : null,
-        perChip: analysis.per_chip.map((chip) => candidates(chip.recommendation)),
+        perChip: analysis.per_chip.map((chip) => candidates(chip.recommendation, chip.chip)),
       },
     };
     return result;

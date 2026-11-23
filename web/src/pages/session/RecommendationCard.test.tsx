@@ -228,4 +228,26 @@ describe("RecommendationCard", () => {
     render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
     expect(screen.queryByText("Score")).toBeNull();
   });
+
+  it("shows the fit settings in a row under the result", () => {
+    render(<RecommendationCard title="t" recommendation={recommendation()} snippet={null} />);
+    const row = screen.getByLabelText("Fit settings");
+    expect(within(row).getByText("Corner velocity").nextElementSibling?.textContent).toBe(`${settings.scv} mm/s`);
+    expect(within(row).getByText("Max frequency")).toBeTruthy();
+    expect(within(row).queryByText("Max smoothing")).toBeNull();
+    expect(within(row).queryByText("Shapers")).toBeNull();
+  });
+
+  it("adds the limits, step and shapers to the row when they are not the defaults", () => {
+    const rec = {
+      ...recommendation(),
+      settings: { ...settings, max_smoothing: 0.1, max_vibrations: 0.05, freq_step: 0.5, shapers: ["zv", "mzv"] },
+    };
+    render(<RecommendationCard title="t" recommendation={rec} snippet={null} />);
+    const row = screen.getByLabelText("Fit settings");
+    expect(within(row).getByText("0.1 mm")).toBeTruthy();
+    expect(within(row).getByText("5%")).toBeTruthy();
+    expect(within(row).getByText("0.5 Hz")).toBeTruthy();
+    expect(within(row).getByText("zv mzv")).toBeTruthy();
+  });
 });

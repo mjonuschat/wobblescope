@@ -77,6 +77,33 @@ parity_test! {
 }
 
 parity_test! {
+    fn a_line_break_in_the_source_label_stays_inside_the_comment() {
+        let (rec, _) = recommend("chip_a");
+        let snippet = rec.config_snippet(Axis::X, "chip\nunexpected_option: 1\r\nmore");
+        assert!(snippet.lines().all(|l| !l.starts_with("unexpected_option") && !l.starts_with("more")));
+        assert!(snippet.contains("# Wobblescope: chip unexpected_option: 1  more, axis X\n"));
+    }
+}
+
+parity_test! {
+    fn summary_lists_limits_and_non_default_settings_only() {
+        let (mut rec, _) = recommend("chip_a");
+        let plain = rec.settings.summary();
+        assert!(!plain.contains("smoothing") && !plain.contains("vibrations"));
+        assert!(!plain.contains("step") && !plain.contains("shapers"));
+        rec.settings.max_smoothing = Some(0.1);
+        rec.settings.max_vibrations = Some(0.05);
+        rec.settings.freq_step = 0.5;
+        rec.settings.shapers = vec!["zv".to_owned(), "mzv".to_owned()];
+        let text = rec.settings.summary();
+        assert!(text.contains("max smoothing 0.1 mm"), "{text}");
+        assert!(text.contains("max vibrations 5%"), "{text}");
+        assert!(text.contains("frequency step 0.5 Hz"), "{text}");
+        assert!(text.ends_with("shapers zv mzv"), "{text}");
+    }
+}
+
+parity_test! {
     fn recommendation_records_settings_and_version() {
         let (rec, _) = recommend("chip_a");
         assert_eq!(rec.settings.scv, 5.0);
@@ -91,11 +118,18 @@ parity_test! {
         let (mut rec, _) = recommend("chip_a");
         rec.best.name = "mzv".to_owned();
         rec.best.freq = 53.449;
+        let snippet = rec.config_snippet(Axis::X, "chip_a");
+        let lines: Vec<&str> = snippet.lines().collect();
+        assert_eq!(lines[0], "[input_shaper]");
+        assert_eq!(lines[1], "# Wobblescope: chip_a, axis X");
+        assert_eq!(lines[2], format!("# Fit settings: {}", rec.settings.summary()));
+        assert!(lines[2].starts_with("# Fit settings: scv 5, damping ratio 0.1, max frequency "));
+        assert!(lines[3].starts_with("# Result: mzv at 53.4 Hz, "));
         assert_eq!(
-            rec.config_snippet(Axis::X),
-            "[input_shaper]\nshaper_type_x: mzv\nshaper_freq_x: 53.4\ndamping_ratio_x: 0.1\n"
+            lines[4..],
+            ["shaper_type_x: mzv", "shaper_freq_x: 53.4", "damping_ratio_x: 0.1"]
         );
-        assert!(rec.config_snippet(Axis::Y).contains("shaper_freq_y: 53.4\n"));
+        assert!(rec.config_snippet(Axis::Y, "chip_a").contains("shaper_freq_y: 53.4\n"));
     }
 }
 

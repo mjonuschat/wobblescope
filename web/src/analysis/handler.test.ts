@@ -68,7 +68,7 @@ function fakeModule(run: () => Analysis = analysis, runSpectrogram: () => Spectr
         sessions.push(this);
       }
     },
-    config_snippet: (rec, axis) => `snippet ${rec.best.name} ${axis}`,
+    config_snippet: (rec, axis, source) => `snippet ${rec.best.name} ${axis} ${source}`,
   } as WasmModule;
   return { module, sessions };
 }
@@ -133,9 +133,9 @@ describe("the worker handler", () => {
     expect(sessions[0].analyzeCalls).toEqual([["X", defaultParams, []]]);
     const result = (response as { result: { snippets: unknown } }).result;
     expect(result.snippets).toEqual({
-      worstCase: "snippet mzv X",
+      worstCase: "snippet mzv X all chips",
       worstCasePerformance: null,
-      perChip: [["snippet zv X", "snippet mzv X"], null],
+      perChip: [["snippet zv X a", "snippet mzv X a"], null],
     });
   });
 
@@ -149,7 +149,20 @@ describe("the worker handler", () => {
     const handle = createHandler(async () => module);
     const response = await handle(request({ files: { "c0-s0.zst": bytes(1) } }));
     const result = (response as { result: { snippets: { worstCasePerformance: string | null } } }).result;
-    expect(result.snippets.worstCasePerformance).toBe("snippet zv X");
+    expect(result.snippets.worstCasePerformance).toBe("snippet zv X all chips (for performance)");
+  });
+
+  it("names the chip in the header of a one-chip analysis", async () => {
+    const one = () => {
+      const a = analysis();
+      a.per_chip = a.per_chip.slice(0, 1);
+      return a;
+    };
+    const { module } = fakeModule(one);
+    const handle = createHandler(async () => module);
+    const response = await handle(request({ files: { "c0-s0.zst": bytes(1) } }));
+    const result = (response as { result: { snippets: { worstCase: string } } }).result;
+    expect(result.snippets.worstCase).toBe("snippet mzv X a");
   });
 
   it("answers a spectrogram request with the wasm result and the same id", async () => {

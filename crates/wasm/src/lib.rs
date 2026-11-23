@@ -315,9 +315,10 @@ impl Live {
     }
 }
 
-/// The Klipper `[input_shaper]` lines for `axis`, as `core` renders them.
-pub fn config_snippet(recommendation: &Recommendation, axis: Axis) -> String {
-    recommendation.config_snippet(axis)
+/// The Klipper `[input_shaper]` lines for `axis`, as `core` renders them. `source` names the chip
+/// (or `all chips`) in the header comment.
+pub fn config_snippet(recommendation: &Recommendation, axis: Axis, source: &str) -> String {
+    recommendation.config_snippet(axis, source)
 }
 
 /// Version of `core` that runs here.

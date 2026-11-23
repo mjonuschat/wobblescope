@@ -103,7 +103,7 @@ fn snippet_with(damping_ratio: f64) -> String {
     };
     find_best_shaper(&[normalized("chip_a")], &params)
         .unwrap()
-        .config_snippet(wobblescope_core::fit::Axis::X)
+        .config_snippet(wobblescope_core::fit::Axis::X, "chip_a")
 }
 
 #[test]

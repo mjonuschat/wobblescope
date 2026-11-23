@@ -1,6 +1,7 @@
 import type { Analysis } from "@/lib/generated/Analysis";
 import type { Axis } from "@/lib/generated/Axis";
 import type { FitParams } from "@/lib/generated/FitParams";
+import type { Recommendation } from "@/lib/generated/Recommendation";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 import { parseNumber } from "@/lib/parse";
 
@@ -90,4 +91,32 @@ export function effectiveSettings(analysis: Analysis) {
   return (
     analysis.worst_case?.settings ?? analysis.per_chip.find((c) => c.recommendation)?.recommendation?.settings ?? null
   );
+}
+
+const DEFAULT_SHAPERS = ["zv", "mzv", "ei", "2hump_ei", "3hump_ei"];
+const DEFAULT_FREQ_STEP = 0.2;
+
+/**
+ * The settings a fit used, for the recommendation card. The damping ratio is left out because the
+ * card shows it beside the result. Mirrors `FitSettings::summary` in `core`: the limits, the step
+ * and the shaper list appear only when set or not the default.
+ */
+export function fitSettingFields(settings: Recommendation["settings"]): { label: string; value: string }[] {
+  const fields = [
+    { label: "Corner velocity", value: `${settings.scv} mm/s` },
+    { label: "Max frequency", value: `${settings.max_freq} Hz` },
+  ];
+  if (settings.max_smoothing !== null) {
+    fields.push({ label: "Max smoothing", value: `${settings.max_smoothing} mm` });
+  }
+  if (settings.max_vibrations !== null) {
+    fields.push({ label: "Max vibrations", value: `${toPercent(settings.max_vibrations)}%` });
+  }
+  if (settings.freq_step !== DEFAULT_FREQ_STEP) {
+    fields.push({ label: "Frequency step", value: `${settings.freq_step} Hz` });
+  }
+  if (settings.shapers.join() !== DEFAULT_SHAPERS.join()) {
+    fields.push({ label: "Shapers", value: settings.shapers.join(" ") });
+  }
+  return fields;
 }

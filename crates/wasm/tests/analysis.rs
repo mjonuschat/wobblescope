@@ -265,8 +265,8 @@ parity_test! {
         let s = loaded(&w, two_chip_x_meta(&w, Health::Ok));
         let a = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
         let best = a.worst_case.unwrap();
-        let snippet = config_snippet(&best, Axis::X);
-        assert_eq!(snippet, best.config_snippet(Axis::X));
+        let snippet = config_snippet(&best, Axis::X, "all chips");
+        assert_eq!(snippet, best.config_snippet(Axis::X, "all chips"));
         assert!(snippet.starts_with("[input_shaper]"));
     }
 }

@@ -223,16 +223,55 @@ pub enum Axis {
     Y,
 }
 
+impl FitSettings {
+    /// The settings that shaped a fit, as one line for a config comment. The smoothing and
+    /// vibration limits, the step and the shaper list appear only when they were set or differ from
+    /// the defaults.
+    pub fn summary(&self) -> String {
+        let mut parts = vec![
+            format!("scv {}", self.scv),
+            format!("damping ratio {}", ratio_text(self.damping_ratio)),
+            format!("max frequency {} Hz", self.max_freq),
+        ];
+        if let Some(v) = self.max_smoothing {
+            parts.push(format!("max smoothing {v} mm"));
+        }
+        if let Some(v) = self.max_vibrations {
+            parts.push(format!("max vibrations {}%", v * 100.0));
+        }
+        if self.freq_step != FREQ_STEP {
+            parts.push(format!("frequency step {} Hz", self.freq_step));
+        }
+        if self.shapers != AUTOTUNE_SHAPERS {
+            parts.push(format!("shapers {}", self.shapers.join(" ")));
+        }
+        parts.join(", ")
+    }
+}
+
 impl Recommendation {
-    /// Klipper `[input_shaper]` lines for `axis`. The fitted damping ratio is exported too, to four
-    /// decimals, so applying the snippet gives the impulses that were fitted to within that rounding.
-    pub fn config_snippet(&self, axis: Axis) -> String {
-        let a = match axis {
-            Axis::X => "x",
-            Axis::Y => "y",
+    /// Klipper `[input_shaper]` lines for `axis`, headed by comments that say where the values
+    /// came from: `source` (a chip name, `all chips`), the fit settings and the shaper's figures.
+    /// The fitted damping ratio is exported to four decimals, so applying the snippet gives the
+    /// impulses that were fitted to within that rounding.
+    pub fn config_snippet(&self, axis: Axis, source: &str) -> String {
+        let (a, upper) = match axis {
+            Axis::X => ("x", "X"),
+            Axis::Y => ("y", "Y"),
         };
+        // An imported chip name can hold a line break, which would end the comment.
+        let source: String = source
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .collect();
         format!(
-            "[input_shaper]\nshaper_type_{a}: {}\nshaper_freq_{a}: {:.1}\ndamping_ratio_{a}: {}\n",
+            "[input_shaper]\n# Wobblescope: {source}, axis {upper}\n# Fit settings: {}\n# Result: {} at {:.1} Hz, {:.1}% vibrations, {:.3} mm smoothing, max accel {:.0} mm/s²\nshaper_type_{a}: {}\nshaper_freq_{a}: {:.1}\ndamping_ratio_{a}: {}\n",
+            self.settings.summary(),
+            self.best.name,
+            self.best.freq,
+            self.best.vibrs * 100.0,
+            self.best.smoothing,
+            self.best.max_accel,
             self.best.name,
             self.best.freq,
             ratio_text(self.settings.damping_ratio)
