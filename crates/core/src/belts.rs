@@ -179,10 +179,12 @@ pub fn compare_psds_in_band(
     let grid = linspace(0.0, max_freq, GRID_POINTS);
     // Both curves are smoothed over the same width in Hz, that of the coarser PSD.
     let bin = bin_spacing(freqs_a).max(bin_spacing(freqs_b));
-    let (psd_a, peaks_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq, bin, sweep);
-    let (psd_b, peaks_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq, bin, sweep);
+    let (psd_a, found_a) = resample_and_find_peaks(&grid, freqs_a, psd_a, max_freq, bin, sweep);
+    let (psd_b, found_b) = resample_and_find_peaks(&grid, freqs_b, psd_b, max_freq, bin, sweep);
+    let peaks_a: Vec<usize> = found_a.iter().map(|p| p.0).collect();
+    let peaks_b: Vec<usize> = found_b.iter().map(|p| p.0).collect();
 
-    let (mut index_pairs, unpaired_a, unpaired_b) = pair_peaks(&peaks_a, &peaks_b, &grid);
+    let (mut index_pairs, unpaired_a, unpaired_b) = pair_peaks(&found_a, &found_b);
     // Shake&Tune numbers the pairs in the order the greedy match found them (closest
     // first), so the first label is not the lowest peak. Grid indices rise with frequency.
     index_pairs.sort_unstable();
@@ -198,17 +200,21 @@ pub fn compare_psds_in_band(
     };
     let highest = nan_max(band_max(&psd_a), &[band_max(&psd_b)]);
 
+    // The frequency a peak was found at, which the pairing used; the grid point is for the charts.
+    let own_freq = |found: &[(usize, f64)], at: usize| {
+        found.iter().find(|p| p.0 == at).map_or(grid[at], |p| p.1)
+    };
     let pairs: Vec<BeltPair> = index_pairs
         .iter()
         .map(|&(i, j)| BeltPair {
             a: BeltPeak {
                 index: i,
-                freq: grid[i],
+                freq: own_freq(&found_a, i),
                 level: psd_a[i],
             },
             b: BeltPeak {
                 index: j,
-                freq: grid[j],
+                freq: own_freq(&found_b, j),
                 level: psd_b[j],
             },
         })
@@ -216,7 +222,7 @@ pub fn compare_psds_in_band(
     let offsets = index_pairs
         .iter()
         .map(|&(i, j)| PeakOffset {
-            freq_delta: (grid[j] - grid[i]).abs(),
+            freq_delta: (own_freq(&found_b, j) - own_freq(&found_a, i)).abs(),
             // Shake&Tune reads belt A's curve at both peaks, so two peaks in one bin always
             // give 0. The amplitude of belt B's peak is read from belt B.
             amplitude_delta_percent: ((psd_b[j] - psd_a[i]) / highest).abs() * 100.0,
@@ -273,7 +279,7 @@ fn resample_and_find_peaks(
     max_freq: f64,
     bin: f64,
     sweep: Option<(f64, f64)>,
-) -> (Vec<f64>, Vec<usize>) {
+) -> (Vec<f64>, Vec<(usize, f64)>) {
     let (cut_freqs, cut_psd): (Vec<f64>, Vec<f64>) = freqs
         .iter()
         .zip(psd)
@@ -294,7 +300,8 @@ fn resample_and_find_peaks(
     let band_max = nan_max(f64::NEG_INFINITY, &band);
     let threshold = PEAK_THRESHOLD * band_max;
     // Peaks are found on the PSD's own bins, so the grid, whose spacing follows `max_freq`,
-    // cannot change which of them there are. Each is then put on the nearest grid point.
+    // cannot change which of them there are. Each is kept with its own frequency, which the band
+    // and the pairing use, and with the nearest grid point, which the charts use.
     let own = bin_spacing(freqs);
     let points = |bins: f64| {
         if own > 0.0 {
@@ -304,7 +311,7 @@ fn resample_and_find_peaks(
         }
     };
     let step = (grid[grid.len() - 1] - grid[0]) / (grid.len() - 1) as f64;
-    let mut peaks: Vec<usize> = detect_peaks_whole_prominent(
+    let mut peaks: Vec<(usize, f64)> = detect_peaks_whole_prominent(
         &cut_psd,
         threshold,
         points(PEAK_WINDOW_BINS),
@@ -312,11 +319,17 @@ fn resample_and_find_peaks(
         PEAK_PROMINENCE,
     )
     .into_iter()
-    .map(|i| (((cut_freqs[i] - grid[0]) / step).round() as usize).min(grid.len() - 1))
-    .filter(|&i| in_band(grid[i]))
+    .map(|i| cut_freqs[i])
+    .filter(|&f| in_band(f))
+    .map(|f| {
+        (
+            (((f - grid[0]) / step).round() as usize).min(grid.len() - 1),
+            f,
+        )
+    })
     .collect();
-    peaks.sort_unstable();
-    peaks.dedup();
+    peaks.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    peaks.dedup_by_key(|p| p.0);
     (resampled, peaks)
 }
 
@@ -328,16 +341,17 @@ fn bin_spacing(freqs: &[f64]) -> f64 {
 }
 
 /// Greedy pairing, closest first, as `_pair_peaks`: matched index pairs, then the leftover
-/// peaks of each belt. Like Python's `list.remove`, a matched index takes out only its first
-/// occurrence, so duplicates of it stay behind as unpaired.
+/// peaks of each belt. A peak is its grid index and its own frequency in Hz, and distances are
+/// read from the frequencies, which do not move with the grid. Like Python's `list.remove`, a
+/// matched index takes out only its first occurrence, so duplicates of it stay behind as
+/// unpaired.
 fn pair_peaks(
-    peaks_a: &[usize],
-    peaks_b: &[usize],
-    grid: &[f64],
+    peaks_a: &[(usize, f64)],
+    peaks_b: &[(usize, f64)],
 ) -> (Vec<(usize, usize)>, Vec<usize>, Vec<usize>) {
     let mut distances: Vec<f64> = peaks_a
         .iter()
-        .flat_map(|&p| peaks_b.iter().map(move |&q| (grid[p] - grid[q]).abs()))
+        .flat_map(|&(_, p)| peaks_b.iter().map(move |&(_, q)| (p - q).abs()))
         .collect();
     let threshold = if distances.is_empty() {
         PAIR_CAP_HZ
@@ -353,9 +367,9 @@ fn pair_peaks(
     while !left_a.is_empty() && !left_b.is_empty() {
         let mut min_distance = f64::INFINITY;
         let mut best = None;
-        for &p in &left_a {
-            for &q in &left_b {
-                let distance = (grid[p] - grid[q]).abs();
+        for &(p, fp) in &left_a {
+            for &(q, fq) in &left_b {
+                let distance = (fp - fq).abs();
                 if distance <= threshold && distance < min_distance {
                     min_distance = distance;
                     best = Some((p, q));
@@ -367,11 +381,15 @@ fn pair_peaks(
         remove_first(&mut left_a, p);
         remove_first(&mut left_b, q);
     }
-    (pairs, left_a, left_b)
+    (
+        pairs,
+        left_a.into_iter().map(|p| p.0).collect(),
+        left_b.into_iter().map(|p| p.0).collect(),
+    )
 }
 
-fn remove_first(list: &mut Vec<usize>, value: usize) {
-    if let Some(at) = list.iter().position(|&v| v == value) {
+fn remove_first(list: &mut Vec<(usize, f64)>, value: usize) {
+    if let Some(at) = list.iter().position(|v| v.0 == value) {
         list.remove(at);
     }
 }
@@ -693,7 +711,7 @@ mod tests {
             .copied()
             .fold(f64::NEG_INFINITY, f64::max);
         let want_amplitude = ((got.b.psd[j] - got.a.psd[i]) / highest * 100.0).abs();
-        let want_freq = (got.freqs[j] - got.freqs[i]).abs();
+        let want_freq = (pair.b.freq - pair.a.freq).abs();
         assert!(want_amplitude > 1.0);
         assert!((got.offsets[0].freq_delta - want_freq).abs() < 1e-12);
         assert!((got.offsets[0].amplitude_delta_percent - want_amplitude).abs() < 1e-9);
@@ -766,9 +784,24 @@ mod tests {
             let (fb, pb) = modes_at(0.25, &[(other, 1.0)]);
             compare_psds(&fa, &pa, &fb, &pb, MAX_FREQ).pairs.len()
         };
-        // A peak sits on the nearest grid point, 0.4 Hz apart, so the cap is tried with room.
-        assert_eq!(at(49.5), 1);
-        assert_eq!(at(51.0), 0);
+        assert_eq!(at(50.0), 1);
+        assert_eq!(at(50.5), 0);
+    }
+
+    #[test]
+    fn a_pair_at_the_cap_is_paired_at_every_max_freq() {
+        // The grid spacing follows `max_freq`; the distance between peaks must not.
+        for max_freq in [150.0, 163.0, 177.0, 190.0, 200.0, 213.0, 250.0] {
+            let (fa, pa) = modes_at(0.25, &[(40.0, 1.0)]);
+            let (fb, pb) = modes_at(0.25, &[(50.0, 1.0)]);
+            let got = compare_psds(&fa, &pa, &fb, &pb, max_freq);
+            assert_eq!(got.pairs.len(), 1, "at {max_freq}");
+            assert_eq!((got.pairs[0].a.freq, got.pairs[0].b.freq), (40.0, 50.0));
+            assert_eq!(got.offsets[0].freq_delta, 10.0, "at {max_freq}");
+            let (fb, pb) = modes_at(0.25, &[(50.25, 1.0)]);
+            let got = compare_psds(&fa, &pa, &fb, &pb, max_freq);
+            assert!(got.pairs.is_empty(), "at {max_freq}");
+        }
     }
 
     #[test]
@@ -826,14 +859,17 @@ mod tests {
 
     #[test]
     fn a_peak_on_the_band_edge_is_kept() {
-        let (fa, pa) = modes(&[(60.0, 1.0)]);
-        let at = compare_psds_in_band(&fa, &pa, &fa, &pa, 200.0, None).pairs[0]
-            .a
-            .freq;
-        let kept = compare_psds_in_band(&fa, &pa, &fa, &pa, 200.0, Some((at, 120.0)));
-        assert_eq!(kept.pairs.len(), 1);
-        let dropped = compare_psds_in_band(&fa, &pa, &fa, &pa, 200.0, Some((at + 0.01, 120.0)));
-        assert!(dropped.pairs.is_empty());
+        let (fa, pa) = modes_at(0.25, &[(60.0, 1.0)]);
+        for max_freq in [150.0, 177.0, 200.0, 250.0] {
+            let kept = compare_psds_in_band(&fa, &pa, &fa, &pa, max_freq, Some((60.0, 120.0)));
+            assert_eq!(kept.pairs.len(), 1, "at {max_freq}");
+            let kept = compare_psds_in_band(&fa, &pa, &fa, &pa, max_freq, Some((20.0, 60.0)));
+            assert_eq!(kept.pairs.len(), 1, "at {max_freq}");
+            let dropped = compare_psds_in_band(&fa, &pa, &fa, &pa, max_freq, Some((60.1, 120.0)));
+            assert!(dropped.pairs.is_empty(), "at {max_freq}");
+            let dropped = compare_psds_in_band(&fa, &pa, &fa, &pa, max_freq, Some((20.0, 59.9)));
+            assert!(dropped.pairs.is_empty(), "at {max_freq}");
+        }
     }
 
     #[test]
@@ -943,7 +979,8 @@ mod tests {
     #[test]
     fn duplicate_peaks_leave_their_copy_unpaired() {
         let grid = linspace(0.0, 100.0, GRID_POINTS);
-        let (pairs, left_a, left_b) = pair_peaks(&[10, 10], &[10], &grid);
+        let at = (10, grid[10]);
+        let (pairs, left_a, left_b) = pair_peaks(&[at, at], &[at]);
         assert_eq!(pairs, vec![(10, 10)]);
         assert_eq!(left_a, vec![10]);
         assert!(left_b.is_empty());
