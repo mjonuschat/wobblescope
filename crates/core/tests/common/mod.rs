@@ -295,6 +295,7 @@ pub fn fit_params(p: &Params) -> wobblescope_core::fit::FitParams {
         max_vibrations: p.max_vibrations,
         test_damping_ratios: p.test_damping_ratios.clone(),
         max_freq: p.max_freq,
+        max_shaper_freq: None,
         shapers: None,
     }
 }

@@ -31,6 +31,11 @@ test_damping_ratios: Array<number> | null,
  */
 max_freq: number | null, 
 /**
+ * Upper bound of the searched shaper frequency in Hz (default [`MAX_SHAPER_FREQ`]). A value
+ * below the default is ignored.
+ */
+max_shaper_freq: number | null, 
+/**
  * Shapers to evaluate, in order (default [`AUTOTUNE_SHAPERS`]).
  */
 shapers: Array<string> | null, };

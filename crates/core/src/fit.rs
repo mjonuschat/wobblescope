@@ -57,6 +57,9 @@ pub struct FitParams {
     /// Upper PSD frequency considered (default 200 Hz). It is never below the highest shaper
     /// frequency tried, which a long sweep raises (see `max_shaper_freq`).
     pub max_freq: Option<f64>,
+    /// Upper bound of the searched shaper frequency in Hz (default [`MAX_SHAPER_FREQ`]). A value
+    /// below the default is ignored.
+    pub max_shaper_freq: Option<f64>,
     /// Shapers to evaluate, in order (default [`AUTOTUNE_SHAPERS`]).
     pub shapers: Option<Vec<String>>,
 }
@@ -70,6 +73,7 @@ impl Default for FitParams {
             max_vibrations: None,
             test_damping_ratios: None,
             max_freq: None,
+            max_shaper_freq: None,
             shapers: None,
         }
     }
@@ -282,6 +286,12 @@ pub(crate) fn validate_params(p: &FitParams) -> Result<(), CoreError> {
     {
         return Err(invalid("max_freq", f));
     }
+    if let Some(f) = p
+        .max_shaper_freq
+        .filter(|f| !(non_negative(*f) && *f <= MAX_FREQ_LIMIT))
+    {
+        return Err(invalid("max_shaper_freq", f));
+    }
     Ok(())
 }
 
@@ -353,8 +363,21 @@ fn test_ratios_of(params: &FitParams) -> Vec<f64> {
     )
 }
 
-fn test_freqs_of(shaper: &dyn Shaper) -> Vec<f64> {
-    let freq_end = MAX_SHAPER_FREQ;
+/// The shaper frequency ceiling for a sweep that ended at `freq_end` Hz. It is the end of the
+/// sweep, never below [`MAX_SHAPER_FREQ`]. A sweep with no usable end keeps [`MAX_SHAPER_FREQ`].
+#[must_use]
+pub fn sweep_max_shaper_freq(freq_end: f64) -> f64 {
+    if freq_end.is_finite() {
+        freq_end.max(MAX_SHAPER_FREQ)
+    } else {
+        MAX_SHAPER_FREQ
+    }
+}
+
+fn test_freqs_of(shaper: &dyn Shaper, params: &FitParams) -> Vec<f64> {
+    let freq_end = params
+        .max_shaper_freq
+        .map_or(MAX_SHAPER_FREQ, |f| f.max(MAX_SHAPER_FREQ));
     let freq_start = shaper.min_freq().min(freq_end - 1e-7);
     arange(freq_start, freq_end, FREQ_STEP)
 }
@@ -392,7 +415,7 @@ pub(crate) fn lowest_fit_max_freq(params: &FitParams) -> f64 {
     shaper_names(params)
         .iter()
         .filter_map(|name| builtin(name))
-        .map(|shaper| effective_max_freq(params, &test_freqs_of(shaper)))
+        .map(|shaper| effective_max_freq(params, &test_freqs_of(shaper, params)))
         .fold(f64::INFINITY, f64::min)
 }
 
@@ -474,7 +497,7 @@ fn fit_with_damping(
     damping_ratio: f64,
 ) -> Result<ShaperFit, CoreError> {
     let test_ratios = test_ratios_of(params);
-    let test_freqs = test_freqs_of(shaper);
+    let test_freqs = test_freqs_of(shaper, params);
     let max_freq = effective_max_freq(params, &test_freqs);
     for d in data {
         check_dataset(d, max_freq)?;
@@ -625,7 +648,8 @@ pub fn find_best_shaper(
 
     for name in &names {
         let shaper = builtin(name).ok_or_else(|| CoreError::UnknownShaper(name.clone()))?;
-        max_freq_used = max_freq_used.max(effective_max_freq(params, &test_freqs_of(shaper)));
+        max_freq_used =
+            max_freq_used.max(effective_max_freq(params, &test_freqs_of(shaper, params)));
 
         let ShaperFit {
             freq_bins: grid,
@@ -694,7 +718,43 @@ pub fn find_best_shaper(
 
 #[cfg(test)]
 mod tests {
-    use super::sweep_max_freq;
+    use super::{FitParams, sweep_max_freq, sweep_max_shaper_freq, test_freqs_of};
+    use crate::shaper::builtin;
+
+    fn top_candidate(params: &FitParams) -> f64 {
+        let shaper = builtin("mzv").unwrap();
+        *test_freqs_of(shaper, params).last().unwrap()
+    }
+
+    #[test]
+    fn the_shaper_search_stops_at_150_hz_by_default() {
+        assert!((top_candidate(&FitParams::default()) - 149.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_higher_ceiling_extends_the_shaper_search() {
+        let params = FitParams {
+            max_shaper_freq: Some(250.0),
+            ..FitParams::default()
+        };
+        assert!((top_candidate(&params) - 249.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_ceiling_below_150_hz_is_ignored() {
+        let params = FitParams {
+            max_shaper_freq: Some(100.0),
+            ..FitParams::default()
+        };
+        assert!((top_candidate(&params) - 149.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_sweep_ceiling_is_the_sweep_end_but_never_below_150_hz() {
+        assert_eq!(sweep_max_shaper_freq(250.0), 250.0);
+        assert_eq!(sweep_max_shaper_freq(135.0), 150.0);
+        assert_eq!(sweep_max_shaper_freq(f64::NAN), 150.0);
+    }
 
     #[test]
     fn the_sweep_cutoff_is_one_and_a_half_times_the_end_above_200_hz() {

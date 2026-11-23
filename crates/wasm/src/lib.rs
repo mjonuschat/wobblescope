@@ -14,7 +14,9 @@ use wobblescope_core::belts_run::{BeltsAnalysis, analyze_belts};
 use wobblescope_core::direction::Direction;
 use wobblescope_core::eligibility::DatasetInput;
 use wobblescope_core::error::CoreError;
-use wobblescope_core::fit::{Axis, FitParams, Recommendation, sweep_max_freq};
+use wobblescope_core::fit::{
+    Axis, FitParams, Recommendation, sweep_max_freq, sweep_max_shaper_freq,
+};
 use wobblescope_core::multichip::{Analysis, analyze};
 use wobblescope_core::spectrogram::{Spectrogram, spectrogram_of};
 use wobblescope_core::spectrum::{LiveSpectrum, Peak, Spectrum, top_peaks};
@@ -70,7 +72,8 @@ impl Session {
     }
 
     /// Analyses every recording of `axis` with `core`. When `params` sets no `max_freq` and the
-    /// session recorded its sweep, the fit reads up to [`sweep_max_freq`] of the sweep end. Files are decoded one at a time for the
+    /// session recorded its sweep, the fit reads up to [`sweep_max_freq`] of the sweep end, and likewise the shaper search up to
+    /// [`sweep_max_shaper_freq`] when it sets no `max_shaper_freq`. Files are decoded one at a time for the
     /// call only. The chips named in `overrides` are included even when their health or
     /// coverage would exclude them; the result's eligibility says so. A damaged file, or one
     /// holding a different number of samples than the metadata records, is reported in the
@@ -87,12 +90,11 @@ impl Session {
         let mut inputs = self.inputs(axis)?;
         apply_overrides(&mut inputs, overrides);
         let mut params = params.clone();
-        if params.max_freq.is_none() {
-            params.max_freq = self
-                .meta
-                .settings
-                .as_ref()
-                .map(|s| sweep_max_freq(s.freq_end));
+        if let Some(sweep) = &self.meta.settings {
+            params.max_freq = params.max_freq.or(Some(sweep_max_freq(sweep.freq_end)));
+            params.max_shaper_freq = params
+                .max_shaper_freq
+                .or(Some(sweep_max_shaper_freq(sweep.freq_end)));
         }
         Ok(analyze(&inputs, &params)?)
     }

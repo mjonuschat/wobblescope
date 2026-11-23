@@ -18,6 +18,7 @@ describe("FitSettingsForm", () => {
       max_vibrations: null,
       test_damping_ratios: null,
       max_freq: null,
+      max_shaper_freq: null,
       shapers: null,
     });
   });

@@ -139,13 +139,17 @@ fn sweep_to(freq_end: f64) -> SweepSettings {
 }
 
 parity_test! {
-    fn the_analysis_cutoff_follows_the_end_of_the_recorded_sweep() {
+    fn the_cutoff_and_the_shaper_ceiling_follow_the_end_of_the_recorded_sweep() {
         let w = win();
         let mut meta = two_chip_x_meta(&w, Health::Ok);
         meta.settings = Some(sweep_to(250.0));
         let s = loaded(&w, meta);
         let via = s.analyze(Axis::X, &FitParams::default(), &[]).unwrap();
-        let wide = FitParams { max_freq: Some(375.0), ..FitParams::default() };
+        let wide = FitParams {
+            max_freq: Some(375.0),
+            max_shaper_freq: Some(250.0),
+            ..FitParams::default()
+        };
         assert_eq!(via, analyze(&direct(&w), &wide).unwrap());
         assert_ne!(via, analyze(&direct(&w), &FitParams::default()).unwrap());
     }
@@ -170,7 +174,12 @@ parity_test! {
         let s = loaded(&w, meta);
         let params = FitParams { max_freq: Some(200.0), ..FitParams::default() };
         let via = s.analyze(Axis::X, &params, &[]).unwrap();
-        assert_eq!(via, analyze(&direct(&w), &FitParams::default()).unwrap());
+        let expected = FitParams {
+            max_freq: Some(200.0),
+            max_shaper_freq: Some(250.0),
+            ..FitParams::default()
+        };
+        assert_eq!(via, analyze(&direct(&w), &expected).unwrap());
     }
 }
 

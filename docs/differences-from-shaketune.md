@@ -113,6 +113,10 @@ reported as flat.
 
 Wobblescope scales the analysis to the frequency range you tested. Shake&Tune stops at 200 Hz unless you change its config, which cuts off a printer that resonates higher.
 
+### Why does the shaper search go above 150 Hz?
+
+Wobblescope searches for shapers up to the end of the frequency range you tested, if that is above 150 Hz. Shake&Tune stops at 150 Hz, so on a stiff printer the best shaper lands on 149.8 Hz and the real resonance is missed.
+
 ## Axes map calibration
 
 ### Why does it say "unable to determine" instead of stopping with an error?
