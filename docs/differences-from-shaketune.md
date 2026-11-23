@@ -74,10 +74,10 @@ test. The same applies when a score lands on exactly 0, which Shake&Tune also sh
 
 ### Why does the number of peaks not change with the maximum frequency?
 
-In Shake&Tune the width used to find peaks depends on the maximum frequency you choose, so two
-modes at 50 and 57 Hz count as two peaks at a 100 Hz limit and as one at 200 Hz. Wobblescope
-sets the width in Hz, based on the sensor's resolution. The peak count can still change between
-150 and 200 Hz on some recordings. The cause is not found yet.
+In Shake&Tune the maximum frequency you choose changes how close two peaks can be before they
+merge. Peaks at 50 and 57 Hz show as two with a 100 Hz limit and as one with a 200 Hz limit.
+Wobblescope finds the same peaks whatever maximum you choose. It also ignores small bumps that are
+only noise on a flat stretch of a curve.
 
 ### Why are peaks near the start or end of the range handled differently?
 

@@ -14,8 +14,8 @@ parity_test! {
         let observed = [
             ("adxl345 carto", 150.0, 0.32383, 115.0, 145.0, 1, "Potential signs of a mechanical issue"),
             ("adxl345 carto", 200.0, 0.31199, 165.0, 195.0, 1, "Potential signs of a mechanical issue"),
-            ("adxl345 nh36", 150.0, 0.48073, 115.0, 145.0, 2, "Acceptable mechanical health"),
-            ("adxl345 nh36", 200.0, 0.39794, 155.0, 185.0, 2, "Potential signs of a mechanical issue"),
+            ("adxl345 nh36", 150.0, 0.48073, 115.0, 145.0, 2, "Good mechanical health"),
+            ("adxl345 nh36", 200.0, 0.39794, 155.0, 185.0, 2, "Acceptable mechanical health"),
         ];
         let fixtures = belt_fixtures("belts_unequal_power");
         for (chip, max_freq, figure, lo, hi, pairs, health) in observed {
@@ -42,7 +42,7 @@ parity_test! {
         let f = fixtures.iter().find(|f| f.name == "lis2dw ebb36").expect("lis2dw ebb36");
         assert!(f.sweep.is_some());
         for (max_freq, pairs, health) in [
-            (150.0, 4, "Potential signs of a mechanical issue"),
+            (150.0, 3, "Good mechanical health"),
             (200.0, 3, "Good mechanical health"),
         ] {
             let floored = compare_psds(&f.freqs_a, &f.psd_a, &f.freqs_b, &f.psd_b, max_freq);

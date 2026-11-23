@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::numeric::{interp, linspace, median_sorted as median, percentile_sorted as percentile};
-use crate::peaks::detect_peaks_whole;
+use crate::peaks::detect_peaks_whole_prominent;
 
 pub const GRID_POINTS: usize = 500;
 /// The lower end in Hz of the band read when a session records no sweep: Klipper's
@@ -28,6 +28,10 @@ pub const PEAK_VICINITY_BINS: f64 = 4.0;
 /// `distance <= cutoff`. Shake&Tune compares `distance < cutoff + 1`, which makes the
 /// real cap 11 Hz.
 pub const PAIR_CAP_HZ: f64 = 10.0;
+/// A peak must stand this fraction of its own height above the higher of the lowest points on
+/// either side before a higher point. Noise ripples on a plateau come out near 0 and the
+/// weakest real peak of the captures checked near 0.2.
+pub const PEAK_PROMINENCE: f64 = 0.1;
 /// Number of paired peaks above which the health score is scaled down.
 pub const MAX_PEAKS: usize = 2;
 /// Health points taken off for an unpaired peak as tall as the highest value of either curve.
@@ -139,8 +143,9 @@ pub struct BeltsResult {
 }
 
 /// Compares two PSDs. Each is cut at `max_freq` and resampled onto `GRID_POINTS` points from 0
-/// to `max_freq`, and the peaks, pairs, similarity and health are worked out on that grid, from
-/// `SWEEP_FLOOR_HZ` up: a call without a sweep is a session that recorded none.
+/// to `max_freq`. Peaks are found on each PSD's own bins and put on the nearest grid point. The
+/// pairs, similarity and health are worked out on the grid, from `SWEEP_FLOOR_HZ` up, because a
+/// call without a sweep is a session that recorded none.
 pub fn compare_psds(
     freqs_a: &[f64],
     psd_a: &[f64],
@@ -280,23 +285,38 @@ fn resample_and_find_peaks(
     // that the similarity, read over the band, never sees. Its height must not set the
     // threshold either, or a tall one hides the real peaks inside the band.
     let in_band = |f: f64| sweep.is_none_or(|(lo, hi)| f >= lo && f <= hi);
-    let band: Vec<f64> = grid
+    let band: Vec<f64> = cut_freqs
         .iter()
-        .zip(&resampled)
+        .zip(&cut_psd)
         .filter(|(f, _)| in_band(**f))
         .map(|(_, v)| *v)
         .collect();
     let band_max = nan_max(f64::NEG_INFINITY, &band);
     let threshold = PEAK_THRESHOLD * band_max;
+    // Peaks are found on the PSD's own bins, so the grid, whose spacing follows `max_freq`,
+    // cannot change which of them there are. Each is then put on the nearest grid point.
+    let own = bin_spacing(freqs);
+    let points = |bins: f64| {
+        if own > 0.0 {
+            ((bins * bin / own).round() as usize).max(1)
+        } else {
+            1
+        }
+    };
     let step = (grid[grid.len() - 1] - grid[0]) / (grid.len() - 1) as f64;
-    let points = |bins: f64| ((bins * bin / step).round() as usize).max(1);
-    let mut peaks = detect_peaks_whole(
-        &resampled,
+    let mut peaks: Vec<usize> = detect_peaks_whole_prominent(
+        &cut_psd,
         threshold,
         points(PEAK_WINDOW_BINS),
         points(PEAK_VICINITY_BINS),
-    );
-    peaks.retain(|&i| in_band(grid[i]));
+        PEAK_PROMINENCE,
+    )
+    .into_iter()
+    .map(|i| (((cut_freqs[i] - grid[0]) / step).round() as usize).min(grid.len() - 1))
+    .filter(|&i| in_band(grid[i]))
+    .collect();
+    peaks.sort_unstable();
+    peaks.dedup();
     (resampled, peaks)
 }
 
@@ -746,8 +766,9 @@ mod tests {
             let (fb, pb) = modes_at(0.25, &[(other, 1.0)]);
             compare_psds(&fa, &pa, &fb, &pb, MAX_FREQ).pairs.len()
         };
-        assert_eq!(at(50.0), 1);
-        assert_eq!(at(50.5), 0);
+        // A peak sits on the nearest grid point, 0.4 Hz apart, so the cap is tried with room.
+        assert_eq!(at(49.5), 1);
+        assert_eq!(at(51.0), 0);
     }
 
     #[test]

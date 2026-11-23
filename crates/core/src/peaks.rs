@@ -89,7 +89,15 @@ fn detect_peaks_filtered(
         psd.windows(window)
             .map(|w| w.iter().fold(0.0, |acc, v| v.mul_add(kernel, acc))),
     );
-    peaks_of_smoothed(psd, &smoothed, threshold, relative_height, vicinity, false)
+    peaks_of_smoothed(
+        psd,
+        &smoothed,
+        threshold,
+        relative_height,
+        None,
+        vicinity,
+        false,
+    )
 }
 
 /// [`detect_peaks_with`] for a curve whose whole length matters, as the belt comparison needs.
@@ -111,7 +119,53 @@ pub fn detect_peaks_whole(
         return Vec::new();
     }
     let smoothed = smooth_centred(psd, window.max(1));
-    peaks_of_smoothed(psd, &smoothed, threshold, None, vicinity, true)
+    peaks_of_smoothed(psd, &smoothed, threshold, None, None, vicinity, true)
+}
+
+/// [`detect_peaks_whole`] that also drops a peak whose prominence is at most `min_prominence`
+/// times its own smoothed height. The prominence is the height above the higher of the
+/// two lowest points reached on the way to a higher point of the smoothed curve, or to its end.
+/// A ripple on a plateau between two real peaks has a prominence near 0 and is dropped. A
+/// resonance stands well clear of it.
+pub fn detect_peaks_whole_prominent(
+    psd: &[f64],
+    threshold: f64,
+    window: usize,
+    vicinity: usize,
+    min_prominence: f64,
+) -> Vec<usize> {
+    if psd.len() < 3 {
+        return Vec::new();
+    }
+    let smoothed = smooth_centred(psd, window.max(1));
+    peaks_of_smoothed(
+        psd,
+        &smoothed,
+        threshold,
+        None,
+        Some(min_prominence),
+        vicinity,
+        true,
+    )
+}
+
+/// Height of `smoothed[p]` above the higher of the lowest values reached on each side before a
+/// higher value, or the end of the curve, is met.
+fn prominence(smoothed: &[f64], p: usize) -> f64 {
+    let top = smoothed[p];
+    let side = |values: &mut dyn Iterator<Item = f64>| {
+        let mut lowest = top;
+        for v in values {
+            if v > top {
+                break;
+            }
+            lowest = lowest.min(v);
+        }
+        lowest
+    };
+    let left = side(&mut smoothed[..p].iter().rev().copied());
+    let right = side(&mut smoothed[p + 1..].iter().copied());
+    top - left.max(right)
 }
 
 fn smooth_centred(psd: &[f64], window: usize) -> Vec<f64> {
@@ -143,6 +197,7 @@ fn peaks_of_smoothed(
     smoothed: &[f64],
     threshold: f64,
     relative_height: Option<f64>,
+    min_prominence: Option<f64>,
     vicinity: usize,
     first_of_plateau: bool,
 ) -> Vec<usize> {
@@ -156,6 +211,9 @@ fn peaks_of_smoothed(
             smoothed[p] > smoothed[j + 2]
         };
         if smoothed[j] < smoothed[p] && falls && smoothed[p] > threshold {
+            if min_prominence.is_some_and(|m| prominence(smoothed, p) <= m * smoothed[p]) {
+                continue;
+            }
             if let Some(relative) = relative_height {
                 let around =
                     &smoothed[p.saturating_sub(vicinity)..(p + vicinity + 1).min(smoothed.len())];

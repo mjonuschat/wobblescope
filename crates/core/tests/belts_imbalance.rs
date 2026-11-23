@@ -61,7 +61,7 @@ parity_test! {
 parity_test! {
     fn the_balanced_capture_keeps_its_baseline() {
         for (max_freq, pairs, health) in [
-            (150.0, 4, "Potential signs of a mechanical issue"),
+            (150.0, 3, "Good mechanical health"),
             (200.0, 3, "Good mechanical health"),
         ] {
             let got = compare("belts_balanced", "lis2dw ebb36", max_freq);
