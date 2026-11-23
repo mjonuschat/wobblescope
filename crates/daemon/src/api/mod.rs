@@ -284,6 +284,7 @@ pub fn mount_configured(
         .route("/printer/emergency-stop", post(printer::emergency_stop))
         .route("/printer/home", post(printer::home))
         .route("/printer/level", post(printer::level))
+        .route("/printer/prepare", post(printer::prepare))
         .route("/printer/motor-tuning", get(motor_tuning::motor_tuning))
         .route("/live", get(live::live))
         .route("/stream", get(stream::stream))

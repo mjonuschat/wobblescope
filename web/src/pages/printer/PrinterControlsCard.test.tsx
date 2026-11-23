@@ -24,6 +24,7 @@ function api(printer: Partial<Printer> = {}, extra: (path: string) => Reply | nu
     if (path === "printer") return { body: { ...base, ...printer } };
     if (path === "printer/home") return { body: { homed: true } };
     if (path === "printer/level") return { body: { levelled: true } };
+    if (path === "printer/prepare") return { body: { homed: true, levelled: true } };
     if (path === "settings") return { body: printerSettings() };
     return { status: 404, body: { error: "not_found", message: "no" } };
   });
@@ -106,7 +107,7 @@ describe("the printer card", () => {
     expect((await enabled("Z-tilt adjust")).title).toBe("Runs LEVEL_BED");
   });
 
-  it("posts the level request and says it cannot be cancelled while it runs", async () => {
+  it("posts the level request and says it is levelling while it runs", async () => {
     const calls = api({ level_kind: "z_tilt", levelled: false });
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -117,18 +118,18 @@ describe("the printer card", () => {
     });
     renderRoute("/");
     fireEvent.click(await enabled("Z-tilt adjust"));
-    expect(await screen.findByText(/cannot be cancelled except with the emergency stop/)).toBeTruthy();
+    expect(await screen.findByText("Levelling…")).toBeTruthy();
     expect((await button("Home all")).disabled).toBe(true);
     release();
     await waitFor(() => expect(posts(calls, "printer/level")).toHaveLength(1));
-    await waitFor(() => expect(screen.queryByText(/cannot be cancelled/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Levelling…")).toBeNull());
   });
 
   it("disables every button while a test runs and says why", async () => {
     api({ busy: "A test is running.", level_kind: "z_tilt", levelled: false });
     renderRoute("/");
     expect(await screen.findByText("A test is running.")).toBeTruthy();
-    for (const name of ["Home XY", "Home X", "Home Y", "Home Z", "Home all", "Z-tilt adjust"]) {
+    for (const name of ["Prepare the printer", "Home XY", "Home X", "Home Y", "Home Z", "Home all", "Z-tilt adjust"]) {
       expect((await button(name)).disabled).toBe(true);
     }
   });
@@ -152,5 +153,48 @@ describe("the printer card", () => {
     renderRoute("/");
     fireEvent.click(await enabled("Home Z"));
     expect(await screen.findByText("homing failed: timeout")).toBeTruthy();
+  });
+
+  it("has a PREP button first in the row, hidden without levelling", async () => {
+    api();
+    renderRoute("/");
+    await enabled("Home all");
+    expect(screen.queryByRole("button", { name: "Prepare the printer" })).toBeNull();
+  });
+
+  it("puts PREP before the home buttons, and its tooltip lists the commands", async () => {
+    api({ level_kind: "z_tilt", levelled: false, level_command: "Z_TILT_ADJUST" });
+    renderRoute("/");
+    const prep = await enabled("Prepare the printer");
+    expect(prep.textContent).toBe("PREP");
+    expect(prep.title).toBe("Runs G28, Z_TILT_ADJUST, then G28 Z");
+    expect(prep.parentElement?.firstElementChild).toBe(prep);
+  });
+
+  it("posts the prepare request and disables the other buttons while it runs", async () => {
+    const calls = api({ level_kind: "z_tilt", levelled: false });
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/printer/prepare")) await held;
+      return inner(input, init);
+    });
+    renderRoute("/");
+    fireEvent.click(await enabled("Prepare the printer"));
+    await waitFor(async () => expect((await button("Home all")).disabled).toBe(true));
+    expect(screen.queryByRole("status")).toBeNull();
+    release();
+    await waitFor(() => expect(posts(calls, "printer/prepare")).toHaveLength(1));
+  });
+
+  it("shows the failed step and what was done when PREP fails", async () => {
+    const message = "levelling failed: out of tolerance. Homing finished; the Z home was not run.";
+    api({ level_kind: "z_tilt", levelled: false }, (path) =>
+      path === "printer/prepare" ? { status: 503, body: { error: "moonraker_unavailable", message } } : null,
+    );
+    renderRoute("/");
+    fireEvent.click(await enabled("Prepare the printer"));
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
 });

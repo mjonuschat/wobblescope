@@ -6,6 +6,7 @@ import type { ChipsSnapshot } from "@/lib/generated/ChipsSnapshot";
 import type { HomeAxes } from "@/lib/generated/HomeAxes";
 import type { Homed } from "@/lib/generated/Homed";
 import type { Levelled } from "@/lib/generated/Levelled";
+import type { Prepared } from "@/lib/generated/Prepared";
 import type { Mode } from "@/lib/generated/Mode";
 import type { Overrides } from "@/lib/generated/Overrides";
 import type { MotorTuning } from "@/lib/generated/MotorTuning";
@@ -271,6 +272,11 @@ export function homePrinter(axes: HomeAxes = "all") {
 /** Levels the gantry. The answer comes when the run is done, which can take several minutes. */
 export function levelPrinter() {
   return apiJson<Levelled>("printer/level", { method: "POST" });
+}
+
+/** Homes, levels and homes Z again. The answer comes when the last step is done, which can take many minutes. */
+export function preparePrinter() {
+  return apiJson<Prepared>("printer/prepare", { method: "POST" });
 }
 
 export function sessionDownloadUrl(id: string): string {

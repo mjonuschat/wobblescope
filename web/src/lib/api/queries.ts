@@ -40,6 +40,7 @@ import {
   getPrinter,
   homePrinter,
   levelPrinter,
+  preparePrinter,
   pinSession,
   saveResult,
   startAxesMap,
@@ -342,6 +343,19 @@ export function useLevelPrinter() {
   return useMutation({
     mutationKey: levelMutationKey,
     mutationFn: () => levelPrinter(),
+    onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
+  });
+}
+
+/** The key that lets other components see that the prepare sequence is in flight in this browser. */
+export const prepareMutationKey = ["printer", "prepare"] as const;
+
+export function usePreparePrinter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: prepareMutationKey,
+    mutationFn: () => preparePrinter(),
     onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });

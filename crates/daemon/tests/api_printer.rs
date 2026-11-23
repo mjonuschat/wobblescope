@@ -454,6 +454,132 @@ async fn a_level_that_loses_its_answer_keeps_motion_blocked() {
     assert_eq!(rig.slot.motion_uncertain().as_deref(), Some("levelling"));
 }
 
+fn prepare_post() -> Request<Body> {
+    ui_post("/api/printer/prepare")
+}
+
+fn scripts_of(rig: &Rig) -> Vec<String> {
+    rig.sim
+        .fake
+        .requests_for("printer.gcode.script")
+        .iter()
+        .map(|c| c.params["script"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[tokio::test]
+async fn prepare_homes_levels_then_homes_z() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    rig.sim
+        .fake
+        .on("printer.gcode.script", Script::Result(json!("ok")));
+    let (status, body) = answer(&rig, prepare_post()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!({"homed": true, "levelled": true}));
+    assert_eq!(scripts_of(&rig), ["G28", "Z_TILT_ADJUST", "G28 Z"]);
+    assert!(!rig.slot.is_held());
+}
+
+#[tokio::test]
+async fn prepare_uses_the_configured_level_command() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    rig.sim
+        .fake
+        .on("printer.gcode.script", Script::Result(json!("ok")));
+    let app = rig.app_with_settings(wobblescope::config::Settings {
+        level_command: Some("LEVEL_BED".to_owned()),
+        ..wobblescope::config::Settings::default()
+    });
+    let (status, _, _) = send(&app, prepare_post()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(scripts_of(&rig), ["G28", "LEVEL_BED", "G28 Z"]);
+}
+
+#[tokio::test]
+async fn prepare_stops_at_the_step_that_fails_and_says_what_was_done() {
+    for (failing, expected_scripts, word, note) in [
+        (
+            0,
+            1,
+            "homing failed",
+            "Levelling and the Z home were not run.",
+        ),
+        (
+            1,
+            2,
+            "levelling failed",
+            "Homing finished; the Z home was not run.",
+        ),
+        (2, 3, "re-homing Z failed", "Z needs to be homed again."),
+    ] {
+        let rig = rig().await;
+        rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+        rig.sim.fake.on_fn("printer.gcode.script", move |_, n| {
+            if n == failing {
+                Script::Error(400, "Error: out of tolerance")
+            } else {
+                Script::Result(json!("ok"))
+            }
+        });
+        let (status, body) = answer(&rig, prepare_post()).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+        let message = body["message"].as_str().unwrap();
+        assert!(message.contains(word), "{message}");
+        assert!(message.contains("out of tolerance"), "{message}");
+        assert!(message.contains(note), "{message}");
+        assert_eq!(scripts_of(&rig).len(), expected_scripts);
+        assert!(!rig.slot.is_held());
+    }
+}
+
+#[tokio::test]
+async fn prepare_is_refused_when_the_printer_has_no_levelling() {
+    let rig = rig().await;
+    let (status, body) = answer(&rig, prepare_post()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(scripts_of(&rig).is_empty());
+}
+
+#[tokio::test]
+async fn prepare_is_refused_while_a_test_runs() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    rig.sim.set_behavior(0, Sweep::Pending);
+    rig.sim.feed_until_motion();
+    let request = json!({"chips": ["adxl345", "lis2dw ebb36"], "axes": ["X"], "mode": "Pulse"});
+    let (status, _) = answer(&rig, post_json("/api/tests", &request)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    rig.until("the sweep", || rig.sim.sweeps().len() == 1).await;
+    let (status, body) = answer(&rig, prepare_post()).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["failures"][0]["check"], "no_test_running");
+}
+
+#[tokio::test]
+async fn prepare_holds_the_slot_between_its_steps() {
+    let rig = rig().await;
+    rig.sim.printer.set_field("z_tilt", "applied", json!(false));
+    let slot = rig.slot.clone();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+    let log = seen.clone();
+    rig.sim.fake.on_fn("printer.gcode.script", move |_, _| {
+        log.lock().unwrap().push(slot.current_id());
+        Script::Result(json!("ok"))
+    });
+    let (status, _) = answer(&rig, prepare_post()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            Some("homing".to_owned()),
+            Some("levelling".to_owned()),
+            Some("homing".to_owned())
+        ]
+    );
+}
+
 fn section(motor: &str) -> Value {
     json!({"motor": motor, "tuning_goal": "auto", "tbl": 1, "sgt": 1, "voltage": 24.0,
            "pwm_freq_target": 20000.0})

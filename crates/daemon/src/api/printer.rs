@@ -11,7 +11,7 @@ use super::{ApiError, ApiState};
 use crate::capture::preflight::quarantine_duration;
 use crate::capture::preflight::read_printer_state;
 use crate::capture::runner::watch_idle;
-use crate::capture::slot::{CHIP_CHECK_ID, HOMING_ID, LEVELLING_ID};
+use crate::capture::slot::{CHIP_CHECK_ID, HOMING_ID, LEVELLING_ID, SlotPermit};
 use crate::capture::{CheckFailure, CheckId};
 use crate::moonraker::rpc::{Rpc, RpcError};
 
@@ -135,6 +135,15 @@ pub struct Levelled {
 pub struct Homed {
     /// Always true: Klipper finished the homing move.
     pub homed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Prepared {
+    /// Always true: every step finished, the last being the Z home.
+    pub homed: bool,
+    /// Always true: Klipper finished the levelling run.
+    pub levelled: bool,
 }
 
 fn unavailable(message: impl Into<String>) -> ApiError {
@@ -295,6 +304,60 @@ pub(super) async fn level(State(state): State<ApiState>) -> Result<Json<Levelled
     Ok(Json(Levelled { levelled: true }))
 }
 
+/// Homes all axes, levels, then homes Z again, because levelling moves the Z motors on their
+/// own and so shifts Z=0. It holds the test slot for the whole sequence and stops at the first
+/// step that fails, without retrying: the error says which step failed and what was done before.
+pub(super) async fn prepare(State(state): State<ApiState>) -> Result<Json<Prepared>, ApiError> {
+    let control = control(&state)?;
+    let levelling = tokio::time::timeout(QUERY_TIMEOUT, detect_levelling(&control))
+        .await
+        .map_err(|_| unavailable("Moonraker did not answer the object list query"))?
+        .map_err(|e| unavailable(format!("cannot read the printer's objects: {e}")))?
+        .ok_or_else(|| {
+            ApiError::invalid("this printer has no z_tilt, z_tilt_ng or quad_gantry_level")
+        })?;
+    let level = level_command(&state, levelling.kind);
+    let (permit, control) = begin_motion(&state, HOMING_ID).await?;
+    let steps: [(&'static str, &str, Duration, &str, &str); 3] = [
+        (
+            HOMING_ID,
+            HomeAxes::All.gcode(),
+            HOME_TIMEOUT,
+            "homing",
+            "Levelling and the Z home were not run.",
+        ),
+        (
+            LEVELLING_ID,
+            &level,
+            LEVEL_TIMEOUT,
+            "levelling",
+            "Homing finished; the Z home was not run.",
+        ),
+        (
+            HOMING_ID,
+            HomeAxes::Z.gcode(),
+            HOME_TIMEOUT,
+            "re-homing Z",
+            "Homing and levelling finished; Z needs to be homed again.",
+        ),
+    ];
+    for (id, script, timeout, what, done) in steps {
+        permit.begin(id);
+        run_script(&state, &control, id, script, timeout, what)
+            .await
+            .map_err(|e| match e {
+                ApiError::MoonrakerUnavailable { message } => ApiError::MoonrakerUnavailable {
+                    message: format!("{message}. {done}"),
+                },
+                other => other,
+            })?;
+    }
+    Ok(Json(Prepared {
+        homed: true,
+        levelled: true,
+    }))
+}
+
 async fn move_printer(
     state: &ApiState,
     id: &'static str,
@@ -302,7 +365,14 @@ async fn move_printer(
     timeout: Duration,
     what: &str,
 ) -> Result<(), ApiError> {
-    let Some(_permit) = state.capture.slot.try_acquire_as(id) else {
+    let (_permit, control) = begin_motion(state, id).await?;
+    run_script(state, &control, id, script, timeout, what).await
+}
+
+/// Takes the test slot as `id` and checks that the printer may move. The permit keeps the slot
+/// until it is dropped.
+async fn begin_motion(state: &ApiState, id: &'static str) -> Result<(SlotPermit, Rpc), ApiError> {
+    let Some(permit) = state.capture.slot.try_acquire_as(id) else {
         return Err(ApiError::preflight(vec![CheckFailure::new(
             CheckId::NoTestRunning,
             "a test is running; the printer cannot move until it ends",
@@ -329,6 +399,17 @@ async fn move_printer(
     if !failures.is_empty() {
         return Err(ApiError::preflight(failures));
     }
+    Ok((permit, control))
+}
+
+async fn run_script(
+    state: &ApiState,
+    control: &Rpc,
+    id: &'static str,
+    script: &str,
+    timeout: Duration,
+    what: &str,
+) -> Result<(), ApiError> {
     let result = control
         .call(
             "printer.gcode.script",

@@ -1,5 +1,5 @@
 import { useIsMutating } from "@tanstack/react-query";
-import { ScaleIcon } from "lucide-react";
+import { ListChecksIcon, ScaleIcon } from "lucide-react";
 
 import { HomeSolidIcon } from "@/components/HomeSolidIcon";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   homeMutationKey,
   levelMutationKey,
+  prepareMutationKey,
   useHomePrinter,
   useLevelPrinter,
+  usePreparePrinter,
   usePrinterState,
   useStatus,
 } from "@/lib/api/queries";
@@ -32,27 +34,28 @@ const LEVEL_BUTTON: Record<LevelKind, { label: string; name: string }> = {
   quad_gantry_level: { label: "QGL", name: "Quad gantry level" },
 };
 
-const LEVEL_BUSY = "Levelling. This cannot be cancelled except with the emergency stop.";
-
 export function PrinterControlsCard() {
   const status = useStatus();
   const ready = status.data?.moonraker.state === "connected" && status.data.klippy.state === "ready";
   const printer = usePrinterState(ready);
   const home = useHomePrinter();
   const level = useLevelPrinter();
+  const prepare = usePreparePrinter();
+  const preparing = useIsMutating({ mutationKey: prepareMutationKey }) > 0;
   const homing = useIsMutating({ mutationKey: homeMutationKey }) > 0;
   const levelling = useIsMutating({ mutationKey: levelMutationKey }) > 0;
 
   const homed = (printer.data?.homed_axes ?? "").toLowerCase();
   const levelKind = printer.data?.level_kind ?? null;
   const busyReason = printer.data?.busy ?? null;
-  const moving = homing || levelling;
+  const moving = homing || levelling || preparing;
   const blocked = !ready || moving || busyReason !== null;
-  const error = home.error ?? level.error;
+  const error = home.error ?? level.error ?? prepare.error;
 
   let note: string | null = null;
-  if (levelling) note = LEVEL_BUSY;
+  if (levelling) note = "Levelling…";
   else if (homing) note = "Homing…";
+  else if (preparing) note = null;
   else if (!ready) note = "Klipper is not ready.";
   else if (busyReason) note = busyReason;
 
@@ -79,6 +82,22 @@ export function PrinterControlsCard() {
           )}
         </ul>
         <div className="flex flex-wrap gap-2">
+          {levelKind && (
+            <Button
+              type="button"
+              aria-label="Prepare the printer"
+              disabled={blocked}
+              title={`Runs G28, ${printer.data?.level_command ?? "the levelling"}, then G28 Z`}
+              onClick={() => {
+                home.reset();
+                level.reset();
+                prepare.mutate();
+              }}
+            >
+              <ListChecksIcon data-icon="inline-start" />
+              PREP
+            </Button>
+          )}
           {HOME_BUTTONS.map(({ axes, label, name }) => (
             <Button
               key={axes}
@@ -88,6 +107,7 @@ export function PrinterControlsCard() {
               disabled={blocked}
               onClick={() => {
                 level.reset();
+                prepare.reset();
                 home.mutate(axes);
               }}
             >
@@ -104,6 +124,7 @@ export function PrinterControlsCard() {
               title={printer.data?.level_command ? `Runs ${printer.data.level_command}` : undefined}
               onClick={() => {
                 home.reset();
+                prepare.reset();
                 level.mutate();
               }}
             >
