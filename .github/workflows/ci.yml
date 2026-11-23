@@ -80,11 +80,16 @@ jobs:
 
   test:
     name: Test suite
-    needs: [changes]
+    # The daemon embeds web/dist, and a test checks that the built page's files are served.
+    needs: [changes, web-build]
     if: ${{ github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
