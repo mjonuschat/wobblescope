@@ -378,6 +378,18 @@ pub fn sweep_max_shaper_freq(freq_end: f64) -> f64 {
     }
 }
 
+/// `params` with a requested `max_shaper_freq` cut to the highest bin every dataset has, so no
+/// candidate is judged on frequencies the PSD does not reach. The default 150 Hz is left alone.
+fn with_ceiling_in_range(params: &FitParams, data: &[CalibrationData]) -> FitParams {
+    let mut params = params.clone();
+    let reach = data
+        .iter()
+        .filter_map(|d| d.freq_bins.last().copied())
+        .fold(f64::INFINITY, f64::min);
+    params.max_shaper_freq = params.max_shaper_freq.map(|f| f.min(reach));
+    params
+}
+
 fn test_freqs_of(shaper: &dyn Shaper, params: &FitParams) -> Vec<f64> {
     let freq_end = params
         .max_shaper_freq
@@ -489,6 +501,7 @@ pub fn fit_shaper(
     for d in data {
         validate_dataset(d)?;
     }
+    let params = &with_ceiling_in_range(params, data);
     let damping = resolve_damping(data, params);
     fit_with_damping(shaper, data, params, damping.ratio)
 }
@@ -643,6 +656,7 @@ pub fn find_best_shaper(
     for d in data {
         validate_dataset(d)?;
     }
+    let params = &with_ceiling_in_range(params, data);
     let damping = resolve_damping(data, params);
     let names = shaper_names(params);
     let mut best: Option<CalibrationResult> = None;
@@ -780,7 +794,11 @@ mod tests {
     use super::*;
 
     fn resonance_at(at: f64) -> CalibrationData {
-        let freq_bins: Vec<f64> = (0..=400).map(f64::from).collect();
+        resonance_to(at, 400)
+    }
+
+    fn resonance_to(at: f64, top: u32) -> CalibrationData {
+        let freq_bins: Vec<f64> = (0..=top).map(f64::from).collect();
         let psd_sum: Vec<f64> = freq_bins
             .iter()
             .map(|f| 1.0 / (1.0 + ((f - at) / 6.0).powi(2)))
@@ -814,6 +832,21 @@ mod tests {
             "{} at {}",
             rec.best.name, rec.best.freq
         );
+    }
+
+    #[test]
+    fn a_ceiling_above_the_last_bin_is_cut_to_it() {
+        let params = FitParams {
+            max_shaper_freq: Some(500.0),
+            ..FitParams::default()
+        };
+        let rec = super::find_best_shaper(&[resonance_to(240.0, 250)], &params).unwrap();
+        let top = rec.freq_bins.last().copied().unwrap();
+        assert!(
+            top < 250.0,
+            "searched up to {top} Hz on a PSD that ends at 250 Hz"
+        );
+        assert!(rec.best_at_search_limit || rec.best.freq < 250.0);
     }
 
     #[test]
