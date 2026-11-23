@@ -113,6 +113,10 @@ Wobblescope scales the analysis to the frequency range you tested. Shake&Tune st
 
 Wobblescope searches for shapers up to the end of the frequency range you tested, if that is above 150 Hz. Shake&Tune stops at 150 Hz, so on a stiff printer the best shaper lands on 149.8 Hz and the real resonance is missed.
 
+### Why does my graph show more peaks than Shake&Tune's?
+
+Wobblescope smooths the spectrum less than Shake&Tune does, so it finds more weak peaks, mostly above 100 Hz. The thresholds are the same as Shake&Tune's: 5% of the strongest value for a marker and 12% for one that matters.
+
 ### Why does the result warn that the best shaper is at the edge of the range?
 
 Wobblescope warns when the recommended shaper is the highest frequency it tried, because the real resonance may be higher.

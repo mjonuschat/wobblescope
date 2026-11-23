@@ -5,7 +5,7 @@ use common::{case, close, klipper_params, load_csv, normalized, shaketune, stem}
 use wobblescope_core::eligibility::{Coverage, DatasetInput, Health};
 use wobblescope_core::multichip::analyze;
 use wobblescope_core::peaks::{
-    PEAK_DETECTION, PEAK_EFFECT, detect_peaks, detect_peaks_with, psd_peaks,
+    PEAK_DETECTION, PEAK_EFFECT, detect_peaks, detect_peaks_with, psd_peaks, psd_peaks_with,
 };
 
 parity_test! {
@@ -14,7 +14,7 @@ parity_test! {
         for (name, want) in &oracle.cases {
             let case = case(name);
             for (input, w) in case.inputs.iter().zip(&want.datasets) {
-                let got = psd_peaks(&normalized(stem(input)), 200.0).unwrap();
+                let got = psd_peaks_with(&normalized(stem(input)), 200.0, 5).unwrap();
                 let label = format!("{name} {}", w.name);
                 close(&format!("{label} detect"), got.detect_threshold, w.detect_threshold);
                 close(&format!("{label} effect"), got.effect_threshold, w.effect_threshold);

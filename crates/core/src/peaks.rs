@@ -1,7 +1,8 @@
 //! Peaks of a PSD, found the way Shake&Tune finds them (`detect_peaks` and the thresholds of its
 //! shaper graph, at the commit pinned in `docs/specs/shaketune-deviations.md`).
 //!
-//! The detector is kept exactly as Shake&Tune writes it, including its quirks. Peaks closer
+//! The detector is kept as Shake&Tune writes it, including its quirks. The one difference on the
+//! shaper graph is a narrower smoothing window ([`PSD_WINDOW`]), so close peaks stay apart. Peaks closer
 //! than the smoothing window merge and the last two bins are never examined. Deliberate
 //! differences: a peak refined to a negative index is kept near the start instead of wrapping
 //! to the end of the array, and a bin that two peaks refine to is reported once.
@@ -16,6 +17,9 @@ pub const PEAK_DETECTION: f64 = 0.05;
 pub const PEAK_EFFECT: f64 = 0.12;
 /// Width of the moving average the curve is smoothed with before peaks are looked for.
 const WINDOW: usize = 5;
+/// The smoothing window of [`psd_peaks`]. Shake&Tune's 5 bins span 8 Hz on a 1.56 Hz grid, which
+/// joins peaks that close and lowers a narrow one to about 80% of its height.
+pub const PSD_WINDOW: usize = 3;
 /// A peak is moved to the largest raw value within this many bins.
 const VICINITY: usize = 3;
 
@@ -242,6 +246,11 @@ fn peaks_of_smoothed(
 /// The peaks of `data.psd_sum` up to `max_freq`, with Shake&Tune's thresholds at 5% and 12% of
 /// its strongest value. `None` when no bin up to `max_freq` has power.
 pub fn psd_peaks(data: &CalibrationData, max_freq: f64) -> Option<PsdPeaks> {
+    psd_peaks_with(data, max_freq, PSD_WINDOW)
+}
+
+/// [`psd_peaks`] with a smoothing `window` of the caller's choosing. Shake&Tune's is 5.
+pub fn psd_peaks_with(data: &CalibrationData, max_freq: f64, window: usize) -> Option<PsdPeaks> {
     let kept = data
         .freq_bins
         .iter()
@@ -254,7 +263,7 @@ pub fn psd_peaks(data: &CalibrationData, max_freq: f64) -> Option<PsdPeaks> {
     }
     let detect_threshold = PEAK_DETECTION * max;
     let effect_threshold = PEAK_EFFECT * max;
-    let peaks = detect_peaks(psd, detect_threshold)
+    let peaks = detect_peaks_with(psd, detect_threshold, window, VICINITY)
         .into_iter()
         .map(|i| PsdPeak {
             freq: data.freq_bins[i],
@@ -409,5 +418,16 @@ mod tests {
         assert_eq!(got.peaks[0].freq, 10.0);
         assert_eq!(got.detect_threshold, 0.05);
         assert!(got.peaks[0].above_effect);
+    }
+
+    #[test]
+    fn two_peaks_five_bins_apart_stay_two_peaks_on_the_graph() {
+        let bump = |i: usize, c: f64| (-((i as f64 - c).powi(2)) / 4.5).exp();
+        let psd: Vec<f64> = (0..500)
+            .map(|i| bump(i, 200.0) + 0.9 * bump(i, 205.0))
+            .collect();
+        let data = data(psd);
+        assert_eq!(psd_peaks_with(&data, 1000.0, 5).unwrap().peaks.len(), 1);
+        assert_eq!(psd_peaks(&data, 1000.0).unwrap().peaks.len(), 2);
     }
 }
