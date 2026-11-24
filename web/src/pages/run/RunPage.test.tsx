@@ -95,7 +95,7 @@ describe("the run screen", () => {
   it("disables Start and says why while the printer is busy", async () => {
     api({ busy: "The printer is homing." });
     renderRoute("/run/shaper");
-    expect(await screen.findByText("The printer is homing.")).toBeTruthy();
+    expect((await screen.findAllByText("The printer is homing.")).length).toBeGreaterThan(0);
     expect(startButton().disabled).toBe(true);
   });
 
@@ -658,24 +658,15 @@ describe("a test of the other kind", () => {
   }
 
   it.each([
-    ["/run/shaper", "belts", "A Belts test is running.", "/run/belts"],
-    ["/run/belts", "axes", "A Input shaper test is running.", "/run/shaper"],
-  ] as const)("on %s a running %s test is a notice with a link and the form", async (path, other, text, to) => {
-    await openWith(path, { test: running(other), last: null });
-    expect(await screen.findByText(text)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
-    expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
-    expect(screen.queryByLabelText("Segment progress")).toBeNull();
-  });
-
-  it.each([
+    ["/run/shaper", "belts"],
+    ["/run/belts", "axes"],
     ["/run/shaper", "axes_map"],
     ["/run/belts", "axes_map"],
-  ] as const)("on %s a running %s test links to the axes-map page", async (path, other) => {
+  ] as const)("on %s a running %s test shows the form, not its progress", async (path, other) => {
     await openWith(path, { test: running(other), last: null });
-    expect(await screen.findByText("A Axes map calibration test is running.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe("/run/axes-map");
+    expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByLabelText("Segment progress")).toBeNull();
+    expect(screen.queryByText(/test is running/)).toBeNull();
   });
 
   it.each([

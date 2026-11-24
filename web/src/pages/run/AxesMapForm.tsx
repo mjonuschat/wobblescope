@@ -19,7 +19,15 @@ import type { Mounting } from "@/lib/generated/Mounting";
 import { MOUNTINGS } from "@/lib/mounting";
 import { formatMm, parseNumber } from "@/lib/parse";
 
-import { ChoiceRow, FieldError, FormCard, HomeButton, ResetButton, usePrinterProblem } from "./FormParts";
+import {
+  ChoiceRow,
+  FieldError,
+  FormCard,
+  HomeButton,
+  ResetButton,
+  reportStartFailure,
+  usePrinterProblem,
+} from "./FormParts";
 
 type ParameterKey = "z_height" | "speed" | "accel" | "travel_speed";
 
@@ -74,7 +82,6 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
   const error = start.error;
   const body = error instanceof ApiClientError ? error.body : null;
   const failures: CheckFailure[] = body?.error === "preflight_failed" ? body.failures : [];
-  const general = error && failures.length === 0 ? error.message : null;
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -89,7 +96,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
     // The daemon takes an unset setting as absent, which the generated type spells as `null`,
     // and JSON.stringify drops the undefined fields.
     const request = draft as AxesMapRequest;
-    start.mutate(request, { onSuccess: (started) => onStarted(started.id) });
+    start.mutate(request, { onSuccess: (started) => onStarted(started.id), onError: reportStartFailure });
   }
 
   const anyOverride = PARAMETERS.some(({ key }) => (texts[key] ?? "") !== "");
@@ -201,11 +208,6 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
 
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          {general && (
-            <p role="alert" className="text-sm text-destructive">
-              {general}
-            </p>
-          )}
           {failures.length > 0 && (
             <div role="alert" className="space-y-1 text-sm text-destructive">
               <p>The test did not start:</p>

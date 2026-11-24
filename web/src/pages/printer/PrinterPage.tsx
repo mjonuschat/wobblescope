@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 import { Field, Fields } from "@/ui-kit/Fields";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { ApiClientError } from "@/lib/api/client";
 import { useCheckChips, useChips, useMotorTuning, useSettings, useStatus } from "@/lib/api/queries";
 import type { AxisLimits } from "@/lib/generated/AxisLimits";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
@@ -158,11 +157,6 @@ export function PrinterPage() {
           checking={check.isPending}
           checkBlocked={ready ? null : "Klipper is not ready."}
         />
-      )}
-      {check.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {check.error instanceof ApiClientError ? check.error.message : "The chip check failed."}
-        </p>
       )}
       {motorTuning.data && <MotorTuningCard tuning={motorTuning.data} />}
     </div>

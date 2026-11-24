@@ -107,7 +107,7 @@ describe("the printer card", () => {
     expect((await enabled("Z-tilt adjust")).title).toBe("Runs LEVEL_BED");
   });
 
-  it("posts the level request and says it is levelling while it runs", async () => {
+  it("posts the level request and disables the other buttons while it runs", async () => {
     const calls = api({ level_kind: "z_tilt", levelled: false });
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -118,17 +118,14 @@ describe("the printer card", () => {
     });
     renderRoute("/");
     fireEvent.click(await enabled("Z-tilt adjust"));
-    expect(await screen.findByText("Levelling…")).toBeTruthy();
-    expect((await button("Home all")).disabled).toBe(true);
+    await waitFor(async () => expect((await button("Home all")).disabled).toBe(true));
     release();
     await waitFor(() => expect(posts(calls, "printer/level")).toHaveLength(1));
-    await waitFor(() => expect(screen.queryByText("Levelling…")).toBeNull());
   });
 
-  it("disables every button while a test runs and says why", async () => {
+  it("disables every button while a test runs", async () => {
     api({ busy: "A test is running.", level_kind: "z_tilt", levelled: false });
     renderRoute("/");
-    expect(await screen.findByText("A test is running.")).toBeTruthy();
     for (const name of ["Prepare the printer", "Home XY", "Home X", "Home Y", "Home Z", "Home all", "Z-tilt adjust"]) {
       expect((await button(name)).disabled).toBe(true);
     }
@@ -140,11 +137,10 @@ describe("the printer card", () => {
       { ...healthyStatus, klippy: { state: "shutdown", message: "x" } },
     );
     renderRoute("/");
-    expect(await screen.findByText("Klipper is not ready.")).toBeTruthy();
     expect((await button("Home all")).disabled).toBe(true);
   });
 
-  it("shows an error from the daemon on the card", async () => {
+  it("shows an error from the daemon as a toast", async () => {
     api({}, (path) =>
       path === "printer/home"
         ? { status: 503, body: { error: "moonraker_unavailable", message: "homing failed: timeout" } }
@@ -188,13 +184,13 @@ describe("the printer card", () => {
     await waitFor(() => expect(posts(calls, "printer/prepare")).toHaveLength(1));
   });
 
-  it("shows the failed step and what was done when PREP fails", async () => {
+  it("shows the failed step and what was done as a toast when PREP fails", async () => {
     const message = "levelling failed: out of tolerance. Homing finished; the Z home was not run.";
     api({ level_kind: "z_tilt", levelled: false }, (path) =>
       path === "printer/prepare" ? { status: 503, body: { error: "moonraker_unavailable", message } } : null,
     );
     renderRoute("/");
     fireEvent.click(await enabled("Prepare the printer"));
-    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect(await screen.findByText(message)).toBeTruthy();
   });
 });

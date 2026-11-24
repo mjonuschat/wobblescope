@@ -89,6 +89,34 @@ describe("checking the chips", () => {
   });
 });
 
+describe("a failed chip check", () => {
+  it("is shown as a toast", async () => {
+    stubApiWithStatus((call) => {
+      switch (apiPath(call)) {
+        case "chips/check":
+          return { status: 503, body: { error: "moonraker_unavailable", message: "chip check failed: timeout" } };
+        case "settings":
+          return { body: printerSettings() };
+        case "chips":
+          return {
+            body: {
+              known: true,
+              current: true,
+              chips: [chip("adxl345")],
+              skipped: [],
+              defaults: { x: [], y: [] },
+            },
+          };
+        default:
+          return { status: 404, body: { error: "not_found", message: "no" } };
+      }
+    });
+    renderRoute("/");
+    fireEvent.click(await screen.findByRole("button", { name: "Check chips" }));
+    expect(await screen.findByText("chip check failed: timeout")).toBeTruthy();
+  });
+});
+
 describe("firmwareName", () => {
   it("calls mainline Klipper and keeps Kalico", () => {
     expect(firmwareName("mainline")).toBe("Klipper");

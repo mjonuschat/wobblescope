@@ -1,15 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Steps } from "@/components/Steps";
 import { Button } from "@/components/ui/button";
 import { queryKeys, useChips, useStatus } from "@/lib/api/queries";
-import type { TestKind } from "@/lib/generated/TestKind";
 import type { TestState } from "@/lib/generated/TestState";
 
 import { AxesMapForm } from "./AxesMapForm";
-import { KIND_PAGES, KIND_TITLES } from "./kinds";
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { useLive } from "./useLive";
 import { useStartedRun } from "./useStartedRun";
@@ -34,7 +31,6 @@ export function AxesMapPage() {
   const [advanced, setAdvanced] = useState<string | null>(null);
   // Only a calibration is shown here; a test of another kind is shown on its own page.
   const ownTest = live.test?.kind === "axes_map" ? live.test : null;
-  const otherKind: TestKind | null = live.test !== null && !ownTest ? live.test.kind : null;
   useEffect(() => {
     if (ownTest) setLastSeen(ownTest);
   }, [ownTest]);
@@ -103,14 +99,6 @@ export function AxesMapPage() {
   } else {
     body = (
       <>
-        {otherKind && (
-          <p className="text-sm">
-            A {KIND_TITLES[otherKind]} test is running.{" "}
-            <Link to={KIND_PAGES[otherKind]} className="underline">
-              Go to the {KIND_TITLES[otherKind]} page
-            </Link>
-          </p>
-        )}
         {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
         {chips.isError && (
           <p role="alert" className="text-sm text-destructive">

@@ -51,11 +51,12 @@ describe("the accelerometers card", () => {
     expect(props.onCheck).toHaveBeenCalledOnce();
   });
 
-  it("disables the check with its reason when Klipper is not ready", () => {
+  it("disables the check, with the reason as its tooltip, when Klipper is not ready", () => {
     const props = panel({ checkBlocked: "Klipper is not ready." });
     const button = screen.getByRole("button", { name: "Check chips" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(screen.getByText("Klipper is not ready.")).toBeTruthy();
+    expect(button.title).toBe("Klipper is not ready.");
+    expect(screen.queryByText("Klipper is not ready.")).toBeNull();
     fireEvent.click(button);
     expect(props.onCheck).not.toHaveBeenCalled();
   });

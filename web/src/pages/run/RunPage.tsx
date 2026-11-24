@@ -1,5 +1,4 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import type { TestState } from "@/lib/generated/TestState";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -9,7 +8,7 @@ import { Steps } from "@/components/Steps";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
 
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
-import { KIND_PAGES, KIND_TITLES, offersBelts } from "./kinds";
+import { KIND_TITLES, offersBelts } from "./kinds";
 import { TestForm } from "./TestForm";
 import { useLive } from "./useLive";
 import { useStartedRun } from "./useStartedRun";
@@ -37,7 +36,6 @@ export function RunPage({ kind }: { kind: TestKind }) {
   // Only a test of this page's kind is shown here, so a test of the other kind never becomes
   // `lastSeen` and cannot be held on screen when it ends.
   const ownTest = live.test?.kind === kind ? live.test : null;
-  const otherKind: TestKind | null = live.test !== null && live.test.kind !== kind ? live.test.kind : null;
   useEffect(() => {
     if (ownTest) setLastSeen(ownTest);
   }, [ownTest]);
@@ -119,14 +117,6 @@ export function RunPage({ kind }: { kind: TestKind }) {
   } else {
     body = (
       <>
-        {otherKind && (
-          <p className="text-sm">
-            A {KIND_TITLES[otherKind]} test is running.{" "}
-            <Link to={KIND_PAGES[otherKind]} className="underline">
-              Go to the {KIND_TITLES[otherKind]} page
-            </Link>
-          </p>
-        )}
         {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
         {chips.isError && (
           <p role="alert" className="text-sm text-destructive">

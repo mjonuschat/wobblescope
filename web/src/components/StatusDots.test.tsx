@@ -5,7 +5,37 @@ import { printerSettings } from "@/test/capture";
 import { renderRoute } from "@/test/render";
 import { apiPath, healthyStatus, stubApiWithStatus } from "@/test/status";
 
-import { homedConnection } from "./StatusDots";
+import { activityConnection, homedConnection } from "./StatusDots";
+
+describe("activityConnection", () => {
+  it("shows nothing while Klipper is not ready", () => {
+    expect(activityConnection(false, "A test is running.", null)).toBeNull();
+  });
+
+  it("is idle when nothing runs", () => {
+    expect(activityConnection(true, null, null)).toMatchObject({ label: "Idle", tone: "off" });
+  });
+
+  it.each([
+    ["The printer is homing.", "Homing"],
+    ["The printer is levelling.", "Levelling"],
+    ["The chips are being checked.", "Checking chips"],
+    ["A hold is running.", "Hold running"],
+    ["A test is running.", "Test running"],
+    ["The toolhead is moving.", "Moving"],
+    ["The printer may still be moving.", "Moving"],
+  ])("puts %s as %s, with the sentence in the tooltip", (busy, word) => {
+    expect(activityConnection(true, busy, null)).toEqual({ label: word, tone: "warn", details: [busy] });
+  });
+
+  it("names an unknown busy reason Busy", () => {
+    expect(activityConnection(true, "Something else.", null)?.label).toBe("Busy");
+  });
+
+  it("counts a move started in this browser before the poll sees it", () => {
+    expect(activityConnection(true, null, "Preparing")).toMatchObject({ label: "Preparing", tone: "warn" });
+  });
+});
 
 describe("homedConnection", () => {
   it("is ok when X, Y and Z are homed", () => {

@@ -26,6 +26,17 @@ function api(
 }
 
 describe("the sessions page", () => {
+  it("shows a failed pin as a toast", async () => {
+    api([summary("s1")], (path, method) =>
+      method === "PATCH" && path === "sessions/s1"
+        ? { status: 500, body: { error: "internal", message: "could not pin s1" } }
+        : null,
+    );
+    renderRoute("/sessions");
+    fireEvent.click(await screen.findByRole("button", { name: "Pin" }));
+    expect(await screen.findByText("could not pin s1")).toBeTruthy();
+  });
+
   it("lists sessions in the order returned with chips and size, and outlines the unpin button of a pinned one", async () => {
     api([
       summary("newest", { chips: ["adxl345", "lis2dw ebb36"], size_bytes: 1536, pinned: true }),

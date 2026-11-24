@@ -16,6 +16,8 @@ import {
   usePrinterState,
   useStatus,
 } from "@/lib/api/queries";
+import { ApiClientError } from "@/lib/api/client";
+import { reportError } from "@/lib/notify";
 import { CardLabel } from "@/ui-kit/CardLabel";
 
 /** The inline error under a field; `name` is what the field's `aria-describedby` points at. */
@@ -108,15 +110,9 @@ export function HomeButton() {
   const levelling = useIsMutating({ mutationKey: levelMutationKey }) > 0;
   if (!ready || !printer.data || homedTone(printer.data.homed_axes) === "full") return null;
   const canLevel = printer.data.level_kind != null;
-  const error = canLevel ? prepare.error : home.error;
   const disabled = home.isPending || prepare.isPending || levelling || printer.data.busy !== null;
   return (
     <>
-      {error && (
-        <span role="alert" className="text-sm text-destructive">
-          {error.message}
-        </span>
-      )}
       {canLevel ? (
         <Button
           type="button"
@@ -145,4 +141,10 @@ export function HomeButton() {
       )}
     </>
   );
+}
+
+/** Reports a failed start that has no list of reasons to show beside the Run button. */
+export function reportStartFailure(error: Error) {
+  const body = error instanceof ApiClientError ? error.body : null;
+  if (body?.error !== "preflight_failed") reportError(error.message);
 }

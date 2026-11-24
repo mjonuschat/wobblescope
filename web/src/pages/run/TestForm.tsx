@@ -25,6 +25,7 @@ import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { TestKind } from "@/lib/generated/TestKind";
 import { formatMm, parseNumber } from "@/lib/parse";
 
+import { reportError } from "@/lib/notify";
 import { ChoiceRow, FieldError, FormCard, HomeButton, ResetButton, usePrinterProblem } from "./FormParts";
 import { OVERRIDE_FIELDS, type OverrideKey, POINT_PATTERNS, type PointPattern, patternPoints } from "./planning";
 import { Alert } from "@/ui-kit/Alert";
@@ -111,6 +112,22 @@ function PointInputs({
   );
 }
 
+const FIELD_ERRORS = ["chips", "axes", "points", ...OVERRIDE_FIELDS.map((f) => f.key)];
+
+/** What to tell the user of a failed start when no field or list of reasons shows it. */
+function generalMessage(error: Error): string | null {
+  const body = error instanceof ApiClientError ? error.body : null;
+  const named = body?.error === "invalid_request" ? fieldOf(body.message) : null;
+  const failures = body?.error === "preflight_failed" ? body.failures : [];
+  if (!named && failures.length === 0) return error.message;
+  return named && !FIELD_ERRORS.includes(named.field) ? `${named.field}: ${named.text}` : null;
+}
+
+function reportGeneral(error: Error) {
+  const message = generalMessage(error);
+  if (message) reportError(message);
+}
+
 export function TestForm({ kind, settings, chipList, chips, onChipsChange, blocked, onStarted }: Props) {
   const start = useStartTest();
   const belts = kind === "belts";
@@ -165,12 +182,6 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
   const body = error instanceof ApiClientError ? error.body : null;
   const named = body?.error === "invalid_request" ? fieldOf(body.message) : null;
   const failures: CheckFailure[] = body?.error === "preflight_failed" ? body.failures : [];
-  const general =
-    error && !named && failures.length === 0
-      ? error.message
-      : named && !["chips", "axes", "points", ...OVERRIDE_FIELDS.map((f) => f.key)].includes(named.field)
-        ? `${named.field}: ${named.text}`
-        : null;
   const errorFor = (field: string) => (named?.field === field ? named.text : undefined);
 
   function submit(event: React.FormEvent) {
@@ -194,7 +205,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
         ),
         points: parsedPoints.map((p) => p as [number, number, number]),
       },
-      { onSuccess: (started) => onStarted(started.id) },
+      { onSuccess: (started) => onStarted(started.id), onError: reportGeneral },
     );
   }
 
@@ -445,11 +456,6 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
 
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          {general && (
-            <p role="alert" className="text-sm text-destructive">
-              {general}
-            </p>
-          )}
           {failures.length > 0 && (
             <div role="alert" className="space-y-1 text-sm text-destructive">
               <p>The test did not start:</p>

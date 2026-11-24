@@ -1,15 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Steps } from "@/components/Steps";
 import { Button } from "@/components/ui/button";
 import { queryKeys, useChips, useSettings, useStatus } from "@/lib/api/queries";
-import type { TestKind } from "@/lib/generated/TestKind";
 import type { TestState } from "@/lib/generated/TestState";
 
 import { VibrationsForm } from "./VibrationsForm";
-import { KIND_PAGES, KIND_TITLES, offersVibrations } from "./kinds";
+import { offersVibrations } from "./kinds";
 import { ProgressView, ResultView, StartingView } from "./ProgressView";
 import { useLive } from "./useLive";
 import { useStartedRun } from "./useStartedRun";
@@ -35,7 +33,6 @@ export function VibrationsPage() {
   const [advanced, setAdvanced] = useState<string | null>(null);
   // Only a vibrations profile is shown here. A test of another kind is shown on its own page.
   const ownTest = live.test?.kind === "vibrations" ? live.test : null;
-  const otherKind: TestKind | null = live.test !== null && !ownTest ? live.test.kind : null;
   useEffect(() => {
     if (ownTest) setLastSeen(ownTest);
   }, [ownTest]);
@@ -105,14 +102,6 @@ export function VibrationsPage() {
   } else {
     body = (
       <>
-        {otherKind && (
-          <p className="text-sm">
-            A {KIND_TITLES[otherKind]} test is running.{" "}
-            <Link to={KIND_PAGES[otherKind]} className="underline">
-              Go to the {KIND_TITLES[otherKind]} page
-            </Link>
-          </p>
-        )}
         {chips.isPending && <p className="text-sm text-muted-foreground">Loading chips…</p>}
         {chips.isError && (
           <p role="alert" className="text-sm text-destructive">

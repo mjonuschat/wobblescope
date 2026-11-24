@@ -20,6 +20,8 @@ import type { ImportGroupState } from "@/pages/sessions/importModel";
 
 import { getAnalysisClient } from "@/analysis/client";
 
+import { reportError } from "@/lib/notify";
+
 import { ApiClientError } from "./client";
 import {
   type SessionFilters,
@@ -193,6 +195,7 @@ export function usePinSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => pinSession(id, pinned),
+    onError: (e) => reportError(e.message),
     onSuccess: (summary) => {
       queryClient.setQueryData<SessionDetail>(queryKeys.session(summary.id), (old) =>
         old ? { ...old, summary } : old,
@@ -287,6 +290,7 @@ export function useCheckChips() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => checkChips(),
+    onError: (e) => reportError(e instanceof ApiClientError ? e.message : "The chip check failed."),
     onSuccess: (chips) => {
       queryClient.setQueryData(queryKeys.chips, chips);
     },
@@ -330,6 +334,7 @@ export function useHomePrinter() {
   return useMutation({
     mutationKey: homeMutationKey,
     mutationFn: (axes: HomeAxes = "all") => homePrinter(axes),
+    onError: (e) => reportError(e.message),
     onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });
@@ -343,6 +348,7 @@ export function useLevelPrinter() {
   return useMutation({
     mutationKey: levelMutationKey,
     mutationFn: () => levelPrinter(),
+    onError: (e) => reportError(e.message),
     onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });
@@ -356,6 +362,7 @@ export function usePreparePrinter() {
   return useMutation({
     mutationKey: prepareMutationKey,
     mutationFn: () => preparePrinter(),
+    onError: (e) => reportError(e.message),
     onMutate: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.printer }),
   });

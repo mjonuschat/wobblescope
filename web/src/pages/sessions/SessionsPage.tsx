@@ -160,11 +160,6 @@ export function SessionsPage() {
                     {s.id}
                   </Link>
                   <div className="text-xs text-muted-foreground">{formatTime(s.created_at)}</div>
-                  {pin.isError && pin.variables?.id === s.id && (
-                    <div role="alert" className="text-xs text-destructive">
-                      {pin.error.message}
-                    </div>
-                  )}
                 </TableCell>
                 <TableCell>{KIND_LABELS[s.kind]}</TableCell>
                 <TableCell>{s.chips.join(", ")}</TableCell>

@@ -94,7 +94,7 @@ describe("the axes-map run page", () => {
   it("keeps_start_disabled_while_the_printer_is_busy_even_if_every_axis_reads_homed", async () => {
     api(undefined, "The printer is homing.");
     renderRoute("/run/axes-map");
-    expect(await screen.findByText("The printer is homing.")).toBeTruthy();
+    expect((await screen.findAllByText("The printer is homing.")).length).toBeGreaterThan(0);
     expect(startButton().disabled).toBe(true);
   });
 
@@ -242,15 +242,11 @@ describe("a test of another kind on the axes-map run page", () => {
     });
   }
 
-  it.each([
-    ["axes", "A Input shaper test is running.", "/run/shaper"],
-    ["belts", "A Belts test is running.", "/run/belts"],
-  ] as const)("a running %s test is a notice with a link and the form", async (other, text, to) => {
+  it.each(["axes", "belts"] as const)("a running %s test shows the form, not its progress", async (other) => {
     await openWith({ test: running(other), last: null });
-    expect(await screen.findByText(text)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /^Go to the/ }).getAttribute("href")).toBe(to);
     expect(await screen.findByRole("button", { name: /Run test|Checking printer/ })).toBeTruthy();
     expect(screen.queryByLabelText("Segment progress")).toBeNull();
+    expect(screen.queryByText(/test is running/)).toBeNull();
   });
 
   it("a finished test of another kind shows the form, not the result", async () => {

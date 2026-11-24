@@ -53,7 +53,6 @@ export function AccelerometersCard({ chips, onCheck, checking, checkBlocked }: P
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
-        {checkBlocked && <p className="text-sm text-muted-foreground">{checkBlocked}</p>}
         {!chips.known && (
           <p className="text-sm text-muted-foreground">The daemon has not read the chip list from Klipper yet.</p>
         )}

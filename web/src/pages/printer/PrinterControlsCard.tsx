@@ -50,14 +50,6 @@ export function PrinterControlsCard() {
   const busyReason = printer.data?.busy ?? null;
   const moving = homing || levelling || preparing;
   const blocked = !ready || moving || busyReason !== null;
-  const error = home.error ?? level.error ?? prepare.error;
-
-  let note: string | null = null;
-  if (levelling) note = "Levelling…";
-  else if (homing) note = "Homing…";
-  else if (preparing) note = null;
-  else if (!ready) note = "Klipper is not ready.";
-  else if (busyReason) note = busyReason;
 
   return (
     <Card>
@@ -88,11 +80,7 @@ export function PrinterControlsCard() {
               aria-label="Prepare the printer"
               disabled={blocked}
               title={`Runs G28, ${printer.data?.level_command ?? "the levelling"}, then G28 Z`}
-              onClick={() => {
-                home.reset();
-                level.reset();
-                prepare.mutate();
-              }}
+              onClick={() => prepare.mutate()}
             >
               <ListChecksIcon data-icon="inline-start" />
               PREP
@@ -105,11 +93,7 @@ export function PrinterControlsCard() {
               variant="outline"
               aria-label={name}
               disabled={blocked}
-              onClick={() => {
-                level.reset();
-                prepare.reset();
-                home.mutate(axes);
-              }}
+              onClick={() => home.mutate(axes)}
             >
               <HomeSolidIcon data-icon="inline-start" />
               {label}
@@ -122,27 +106,13 @@ export function PrinterControlsCard() {
               aria-label={LEVEL_BUTTON[levelKind].name}
               disabled={blocked}
               title={printer.data?.level_command ? `Runs ${printer.data.level_command}` : undefined}
-              onClick={() => {
-                home.reset();
-                prepare.reset();
-                level.mutate();
-              }}
+              onClick={() => level.mutate()}
             >
               <ScaleIcon data-icon="inline-start" />
               {LEVEL_BUTTON[levelKind].label}
             </Button>
           )}
         </div>
-        {note && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {note}
-          </p>
-        )}
-        {error && !moving && (
-          <p role="alert" className="text-sm text-destructive">
-            {error.message}
-          </p>
-        )}
       </CardContent>
     </Card>
   );

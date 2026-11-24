@@ -130,7 +130,7 @@ describe("the vibrations run page", () => {
   it("keeps_start_disabled_while_the_printer_is_busy", async () => {
     api(printerSettings(), "The printer is homing.");
     renderRoute("/run/vibrations");
-    expect(await screen.findByText("The printer is homing.")).toBeTruthy();
+    expect((await screen.findAllByText("The printer is homing.")).length).toBeGreaterThan(0);
     expect(startButton().disabled).toBe(true);
   });
 
