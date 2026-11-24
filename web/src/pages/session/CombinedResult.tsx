@@ -9,6 +9,8 @@ import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { useChartTheme } from "@/ui-kit/chartTheme";
 
 interface Props {
+  /** Links the chart's tooltip and legend with the other charts of the group. */
+  linkGroup?: string;
   /** Where the vibration axis ends, so two charts can share it. */
   max?: number;
   summed: SummedPsd;
@@ -18,7 +20,7 @@ interface Props {
 
 const LABEL = "All chips added together, vibration strength against frequency";
 
-export function CombinedResult({ summed, maxFreq, switcher, max }: Props) {
+export function CombinedResult({ summed, maxFreq, switcher, linkGroup, max }: Props) {
   const theme = useChartTheme();
   // The same option on a re-render keeps the legend choices.
   const option = useMemo(() => summedOption(summed, maxFreq, theme, max), [summed, maxFreq, theme, max]);
@@ -26,7 +28,7 @@ export function CombinedResult({ summed, maxFreq, switcher, max }: Props) {
     <Panel title="Resonance and shapers" label="All chips">
       {switcher}
       <div className="relative">
-        <EChart option={option} label={LABEL} minWidth={WIDE_CHART} legendSwitches={["Axes"]} />
+        <EChart option={option} label={LABEL} minWidth={WIDE_CHART} legendSwitches={["Axes"]} group={linkGroup} />
         <div className="absolute top-0 right-0">
           <ExpandDialog title="Resonance and shapers: All chips">
             <EChart option={option} label={LABEL} height={EXPANDED_CHART_HEIGHT} legendSwitches={["Axes"]} />

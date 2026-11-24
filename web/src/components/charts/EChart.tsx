@@ -5,6 +5,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
+import { joinGroup, namesOf, setRow, syncWithGroup } from "./legendGroup";
+
 import { ChartZoomControls } from "./ChartZoomControls";
 import "./register";
 
@@ -56,10 +58,15 @@ interface Props {
    * every curve of that legend. The option leaves room for it (see `LEGEND_LEFT`).
    */
   legendSwitches?: string[];
+  /**
+   * Charts with the same group follow each other: the tooltip, and the legend toggles, so two
+   * charts of the same curves can be compared at one frequency.
+   */
+  group?: string;
 }
 
 /** A chart that fills its container's width and follows its size. */
-export function EChart({ option, label, height = 340, minWidth, onClickX, zoom, legendSwitches }: Props) {
+export function EChart({ option, label, height = 340, minWidth, onClickX, zoom, legendSwitches, group }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
@@ -89,7 +96,13 @@ export function EChart({ option, label, height = 340, minWidth, onClickX, zoom, 
     zr.on("mousemove", move);
     zr.on("globalout", leave);
     const changed = () => refreshRef.current();
-    const legendEvents = ["legendselectchanged", "legendselectall", "legendinverseselect"];
+    const legendEvents = [
+      "legendselectchanged",
+      "legendselected",
+      "legendunselected",
+      "legendselectall",
+      "legendinverseselect",
+    ];
     for (const name of legendEvents) instance.on(name, changed);
     const observer = new ResizeObserver(() => instance.resize());
     observer.observe(element.current!);
@@ -110,12 +123,21 @@ export function EChart({ option, label, height = 340, minWidth, onClickX, zoom, 
       keepLegendChoices(option, instance.getOption() as { legend?: LegendOption[] } | undefined),
       true,
     );
+    syncWithGroup(instance);
     refreshLegend();
     // A full replace closes the tooltip, which on a chart that updates 10 times a second makes
     // it flicker under a resting pointer. Opening it again here happens before the next paint.
     const at = pointer.current;
     if (at) instance.dispatchAction({ type: "showTip", x: at.x, y: at.y });
   }, [option, refreshLegend]);
+
+  useEffect(() => {
+    const instance = chart.current;
+    if (!instance || !group) return;
+    const leave = joinGroup(instance, group);
+    echarts.connect(group);
+    return leave;
+  }, [group]);
 
   const clickRef = useRef(onClickX);
   clickRef.current = onClickX;
@@ -135,10 +157,7 @@ export function EChart({ option, label, height = 340, minWidth, onClickX, zoom, 
   function showRow(index: number, show: boolean) {
     const instance = chart.current;
     if (!instance) return;
-    if (show) instance.dispatchAction({ type: "legendAllSelect", legendIndex: index });
-    else
-      for (const name of rows[index].names)
-        instance.dispatchAction({ type: "legendUnSelect", legendIndex: index, name });
+    setRow(instance, index, show, rows[index].names);
     refreshLegend();
   }
 

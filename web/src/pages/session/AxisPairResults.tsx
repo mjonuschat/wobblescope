@@ -19,6 +19,8 @@ import { effectiveSettings } from "./fit";
 import { type SpectrogramSource, SpectrogramPanel } from "./SpectrogramPanel";
 
 const ALL_CHIPS = "*all-chips*";
+/** The charts of the two axes follow each other. */
+const LINK_GROUP = "axis-pair";
 
 export interface PairColumn {
   axis: Axis;
@@ -164,7 +166,13 @@ export function AxisPairResults({ columns: given, meta, overrides, onOverridesCh
             </Cell>,
             <Cell key={`${axis}-resonance`} order={rowOrder(4, i)} axis={axis}>
               {showAll && analysis.summed ? (
-                <CombinedResult summed={analysis.summed} maxFreq={maxFreq} switcher={null} max={combinedScale} />
+                <CombinedResult
+                  summed={analysis.summed}
+                  maxFreq={maxFreq}
+                  switcher={null}
+                  linkGroup={LINK_GROUP}
+                  max={combinedScale}
+                />
               ) : (
                 chosen && (
                   <ChipResult
@@ -174,6 +182,7 @@ export function AxisPairResults({ columns: given, meta, overrides, onOverridesCh
                     maxFreq={maxFreq}
                     decisions={analysis.eligibility.decisions}
                     scale={scale}
+                    linkGroup={LINK_GROUP}
                   />
                 )
               )}

@@ -27,6 +27,8 @@ interface Props {
   decisions: DatasetDecision[];
   /** Replaces the chart's own scale, so two charts can be compared at one scale. */
   scale?: SharedScale;
+  /** Links the chart's tooltip and legend with the other charts of the group. */
+  linkGroup?: string;
 }
 
 function ChipDetails({
@@ -38,6 +40,7 @@ function ChipDetails({
   autoScale,
   chartHeight,
   corner,
+  linkGroup,
 }: Omit<Props, "switcher" | "scale"> & {
   /** The left axis of the PSD chart ends here; `null` scales it to the data. */
   maxScale: number | null;
@@ -65,6 +68,7 @@ function ChipDetails({
           height={chartHeight}
           minWidth={WIDE_CHART}
           legendSwitches={["Axes", "Shapers"]}
+          group={linkGroup}
         />
         {corner && <div className="absolute top-0 right-0">{corner}</div>}
       </div>
@@ -79,7 +83,7 @@ function ChipDetails({
   );
 }
 
-export function ChipResult({ chip, switcher, snippets, maxFreq, decisions, scale }: Props) {
+export function ChipResult({ chip, switcher, snippets, maxFreq, decisions, scale, linkGroup }: Props) {
   // Where the vibration axis ends. `null` fits it to the data.
   const [ownScale, setOwnScale] = useState<number | null>(null);
   const maxScale = scale ? scale.value : ownScale;
@@ -95,6 +99,7 @@ export function ChipResult({ chip, switcher, snippets, maxFreq, decisions, scale
       {switcher}
       <ChipDetails
         {...details}
+        linkGroup={linkGroup}
         corner={
           <div className="flex gap-2">
             <ScaleDialog value={maxScale} onChange={setMaxScale} />

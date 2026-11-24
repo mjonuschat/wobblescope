@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EChart } from "./EChart";
 
 const instance = vi.hoisted(() => ({
+  group: "",
   getZr: () => ({ on: vi.fn(), off: vi.fn() }),
   setOption: vi.fn(),
   getOption: vi.fn(() => ({ legend: [] as { selected?: Record<string, boolean> }[] })),
@@ -13,7 +14,8 @@ const instance = vi.hoisted(() => ({
   on: vi.fn(),
   off: vi.fn(),
 }));
-vi.mock("echarts/core", () => ({ init: () => instance, use: vi.fn() }));
+const connect = vi.hoisted(() => vi.fn());
+vi.mock("echarts/core", () => ({ init: () => instance, use: vi.fn(), connect }));
 vi.mock("./register", () => ({}));
 
 describe("EChart", () => {
@@ -107,6 +109,24 @@ describe("EChart", () => {
       const option = { legend: { data: ["X"], selected: { X: false } } };
       render(<EChart option={option} label="x" />);
       expect(instance.setOption.mock.calls.at(-1)?.[0]).toBe(option);
+    });
+  });
+
+  describe("a group", () => {
+    it("connects the chart to the charts of the same group", () => {
+      connect.mockClear();
+      const { unmount } = render(<EChart option={{}} label="x" group="axis-pair" />);
+      expect(instance.group).toBe("axis-pair");
+      expect(connect).toHaveBeenCalledWith("axis-pair");
+      unmount();
+      expect(instance.group).toBe("");
+    });
+
+    it("leaves a chart without a group alone", () => {
+      connect.mockClear();
+      instance.group = "";
+      render(<EChart option={{}} label="x" />);
+      expect(connect).not.toHaveBeenCalled();
     });
   });
 });
