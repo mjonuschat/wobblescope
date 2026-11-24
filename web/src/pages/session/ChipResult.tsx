@@ -48,6 +48,7 @@ function ChipDetails({
           label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
           height={chartHeight}
           minWidth={WIDE_CHART}
+          legendSwitches={["Axes", "Shapers"]}
         />
         {corner && <div className="absolute top-0 right-0">{corner}</div>}
       </div>

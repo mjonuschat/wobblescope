@@ -50,6 +50,9 @@ function autoscale(chip: ChipAnalysis, maxFreq: number): number | undefined {
   return largest > 0 ? largest * 1.05 : undefined;
 }
 
+/** Where a legend row's items start, to the right of its switch (see `EChart`'s `legendSwitches`). */
+export const LEGEND_LEFT = 92;
+
 /**
  * One chip's PSDs on the left axis (the total per probe point, with X, Y and Z behind the
  * legend) and every fitted shaper's response on the right axis, with the recommended
@@ -182,22 +185,15 @@ export function psdOption({
   }
   const measured = series.filter((s) => s.yAxisIndex === undefined).map((s) => s.name as string);
   const shapers = series.filter((s) => s.yAxisIndex === 1).map((s) => s.name as string);
-  const rowLabel = (label: string, top: number) => ({
-    type: "text",
-    left: 0,
-    top: top + 4,
-    style: { text: label, fill: theme.muted, fontSize: 12 },
-  });
   return {
     ...base(null, maxFreq, theme),
     grid: { top: shapers.length > 0 ? 84 : 52, left: 64, right: 64, bottom: 40 },
     legend: [
-      { type: "scroll", data: measured, top: 0, left: 56, selected, textStyle: { color: theme.text } },
+      { type: "scroll", data: measured, top: 0, left: LEGEND_LEFT, selected, textStyle: { color: theme.text } },
       ...(shapers.length > 0
-        ? [{ type: "scroll", data: shapers, top: 28, left: 56, textStyle: { color: theme.text } }]
+        ? [{ type: "scroll", data: shapers, top: 28, left: LEGEND_LEFT, textStyle: { color: theme.text } }]
         : []),
     ],
-    graphic: [rowLabel("Axes", 0), ...(shapers.length > 0 ? [rowLabel("Shapers", 28)] : [])],
     yAxis: [
       {
         type: "value",
@@ -243,11 +239,10 @@ export function summedOption(
       type: "scroll",
       data: curves.map(([name]) => name),
       top: 0,
-      left: 56,
+      left: LEGEND_LEFT,
       selected: { X: false, Y: false, Z: false },
       textStyle: { color: theme.text },
     },
-    graphic: [{ type: "text", left: 0, top: 4, style: { text: "Axes", fill: theme.muted, fontSize: 12 } }],
     yAxis: { type: "value", name: "Vibration strength", splitLine: splitLine(theme) },
     series: curves.map(([name, values]) => ({
       name,

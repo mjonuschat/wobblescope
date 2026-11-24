@@ -23,10 +23,10 @@ export function CombinedResult({ summed, maxFreq, switcher }: Props) {
     <Panel title="Resonance and shapers" label="All chips">
       {switcher}
       <div className="relative">
-        <EChart option={option} label={LABEL} minWidth={WIDE_CHART} />
+        <EChart option={option} label={LABEL} minWidth={WIDE_CHART} legendSwitches={["Axes"]} />
         <div className="absolute top-0 right-0">
           <ExpandDialog title="Resonance and shapers: All chips">
-            <EChart option={option} label={LABEL} height={EXPANDED_CHART_HEIGHT} />
+            <EChart option={option} label={LABEL} height={EXPANDED_CHART_HEIGHT} legendSwitches={["Axes"]} />
           </ExpandDialog>
         </div>
       </div>
