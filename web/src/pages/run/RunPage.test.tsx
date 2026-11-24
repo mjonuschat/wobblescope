@@ -23,6 +23,7 @@ interface Options {
   checked?: ChipsSnapshot;
   homed?: string | null;
   busy?: string | null;
+  levelKind?: "z_tilt" | "quad_gantry_level" | null;
   start?: Reply | ((call: ApiCall) => Reply);
 }
 
@@ -33,14 +34,24 @@ function api({
   start,
   homed = "xyz",
   busy = null,
+  levelKind = null,
 }: Options = {}) {
   return stubApiWithStatus((call) => {
     const path = apiPath(call);
     if (path === "settings") return { body: settings };
     if (path === "chips") return { body: chips };
     if (path === "chips/check") return { body: checked ?? chips };
-    if (path === "printer") return { body: { homed_axes: homed, busy } };
+    if (path === "printer")
+      return {
+        body: {
+          homed_axes: homed,
+          busy,
+          level_kind: levelKind,
+          level_command: levelKind ? "Z_TILT_ADJUST" : null,
+        },
+      };
     if (path === "printer/home") return { body: { homed: true } };
+    if (path === "printer/prepare") return { body: { homed: true, levelled: true } };
     if (path === "tests" && call.method === "POST") {
       const reply = typeof start === "function" ? start(call) : start;
       return reply ?? { status: 202, body: { id: "test-1" } };
@@ -114,6 +125,24 @@ describe("the run screen", () => {
         ),
       ).toBe(true),
     );
+  });
+
+  it("offers PREP instead of Home all on a printer that can level, in the same outline style", async () => {
+    const calls = api({ homed: "xy", levelKind: "z_tilt" });
+    renderRoute("/run/shaper");
+    const prep = await screen.findByRole("button", { name: "Prepare the printer" });
+    expect(prep.textContent).toBe("PREP");
+    expect(prep.title).toBe("Runs G28, Z_TILT_ADJUST, then G28 Z");
+    expect(prep.className).not.toContain("bg-primary");
+    expect(screen.queryByRole("button", { name: "Home all" })).toBeNull();
+    expect(prep.compareDocumentPosition(startButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(prep);
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && apiPath(c) === "printer/prepare")).toBe(true));
+  });
+
+  it("shows no PREP button once the printer is homed", async () => {
+    await open({ homed: "xyz", levelKind: "z_tilt" });
+    expect(screen.queryByRole("button", { name: "Prepare the printer" })).toBeNull();
   });
 
   it("shows no Home all button once the printer is homed", async () => {
