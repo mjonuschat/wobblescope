@@ -32,6 +32,15 @@ const posted = (calls: ApiCall[]) => calls.filter((c) => c.method === "POST" && 
 const field = (label: RegExp | string) => screen.getByLabelText(label) as HTMLInputElement;
 const startButton = () => screen.getByRole("button", { name: /Run test|Checking printer/ }) as HTMLButtonElement;
 
+const resolution = () => screen.getByRole("combobox", { name: "Angular resolution" });
+async function chooseResolution(name: RegExp) {
+  fireEvent.click(resolution());
+  const option = await screen.findByRole("option", { name });
+  fireEvent.pointerDown(option);
+  fireEvent.pointerUp(option);
+  fireEvent.click(option);
+}
+
 async function open(settings?: PrinterSettings) {
   const calls = api(settings);
   renderRoute("/run/vibrations");
@@ -41,7 +50,9 @@ async function open(settings?: PrinterSettings) {
 }
 
 describe("the vibrations run page", () => {
-  beforeEach(() => stubWebSocket({ idle: true }));
+  beforeEach(() => {
+    stubWebSocket({ idle: true });
+  });
 
   it("is_titled_and_shows_the_parameters_with_their_defaults", async () => {
     await open();
@@ -180,5 +191,41 @@ describe("the vibrations run page", () => {
     act(() => FakeSocket.latest.send({ test: null, last: null }));
     expect(await screen.findByRole("button", { name: "Run test" })).toBeTruthy();
     expect(screen.queryByText("Starting…")).toBeNull();
+  });
+
+  it("shows_four_resolutions_with_their_direction_counts", async () => {
+    await open();
+    fireEvent.click(resolution());
+    const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(names).toEqual([
+      "Motor directions (2 directions)",
+      "Every 45° (4 directions)",
+      "Every 22.5° (8 directions)",
+      "Every 15° (12 directions)",
+    ]);
+  });
+
+  it("the_default_sends_no_angular_step", async () => {
+    const calls = await open();
+    expect(resolution().textContent).toContain("Motor directions");
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    expect(JSON.parse(String(posted(calls)[0].body))).not.toHaveProperty("angular_step");
+  });
+
+  it("choosing_every_15_degrees_sends_angular_step_15", async () => {
+    const calls = await open();
+    await chooseResolution(/Every 15°/);
+    fireEvent.click(startButton());
+    await waitFor(() => expect(posted(calls)).toHaveLength(1));
+    expect(JSON.parse(String(posted(calls)[0].body))).toMatchObject({ angular_step: 15 });
+  });
+
+  it("reset_returns_to_motor_directions", async () => {
+    await open();
+    await chooseResolution(/Every 45°/);
+    expect(resolution().textContent).toContain("Every 45°");
+    fireEvent.click(screen.getByRole("button", { name: /Reset/ }));
+    expect(resolution().textContent).toContain("Motor directions");
   });
 });

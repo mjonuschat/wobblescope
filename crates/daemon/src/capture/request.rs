@@ -60,8 +60,9 @@ pub enum TestKind {
     /// An axes-map calibration: one move each along X, Y and Z. It is started through
     /// `POST /api/axes-map`, not as a test request.
     AxesMap,
-    /// A vibrations profile: back-and-forth moves at rising speeds along two angles. It is
-    /// started through `POST /api/vibrations`, not as a test request.
+    /// A vibrations profile: back-and-forth moves at rising speeds along the motor directions
+    /// or at every chosen angular step. It is started through `POST /api/vibrations`, not as a
+    /// test request.
     Vibrations,
 }
 

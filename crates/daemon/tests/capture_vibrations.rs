@@ -564,20 +564,3 @@ async fn a_crash_recovered_extra_direction_run_stores_a_valid_version_3_session(
     assert_step_session(&journal, 0);
     assert!(recovered.is_none());
 }
-
-#[tokio::test]
-async fn the_start_route_refuses_a_step_until_enabled() {
-    let rig = vibrations_rig(true).await;
-    let body = json!({"chips": CHIPS, "angular_step": 45});
-    let (status, _, bytes) = common::send(&rig.app(), post("/api/vibrations", &body)).await;
-    let answer: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
-    assert!(
-        answer
-            .to_string()
-            .contains("angular_step is not available yet"),
-        "{answer}"
-    );
-    assert!(rig.sim.scripts().is_empty());
-}
-

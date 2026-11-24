@@ -49,7 +49,7 @@ impl Run {
         })
     }
 
-    /// Runs both angles. `saved` holds the limits to put back.
+    /// Runs every angle of the plan. `saved` holds the limits to put back.
     pub(super) async fn run_vibrations(&mut self, saved: Saved) -> Result<(), Failure> {
         let Some(plan) = self.plan.vibrations.clone() else {
             return Err(Failure::certain("the plan is not a vibrations profile"));

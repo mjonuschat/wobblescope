@@ -1,6 +1,3 @@
-//! A vibrations-profile request: back-and-forth moves at rising speeds along two angles, checked
-//! against the printer and turned into a plan and the G-code that runs each step.
-
 use serde::Deserialize;
 use wobblescope_core::direction::Direction;
 use wobblescope_session::codec::MAX_SAMPLES;
@@ -125,7 +122,7 @@ fn repeats(speed: f64) -> u32 {
 /// Checks `request` against what the printer reports and builds the plan. `chip_rates` holds the
 /// nominal sample rate of each chip in the request, `None` when unknown.
 ///
-/// A vibrations profile has two segments of many steps each, so `max_segment_seconds` does not
+/// A vibrations profile has a few segments of many steps each, so `max_segment_seconds` does not
 /// apply to it and is not read.
 ///
 /// # Errors

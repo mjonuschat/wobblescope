@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HintLabel } from "@/components/HintLabel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,6 +25,7 @@ import {
   reportStartFailure,
   usePrinterProblem,
 } from "./FormParts";
+import { RESOLUTIONS } from "./planning";
 
 type ParameterKey = "size" | "z_height" | "min_speed" | "max_speed" | "speed_increment" | "accel" | "travel_speed";
 
@@ -50,6 +52,7 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
   const isUsable = (section: string) =>
     chipList.chips.find((c) => c.section === section)?.availability.state !== "unavailable";
   const [chosen, setChosen] = useState<string[] | null>(null);
+  const [resolution, setResolution] = useState<(typeof RESOLUTIONS)[number]["value"]>("motors");
   const [texts, setTexts] = useState<Partial<Record<ParameterKey, string>>>({});
 
   const selected = (chosen ?? [...new Set([...chipList.defaults.x, ...chipList.defaults.y])]).filter(isUsable);
@@ -75,6 +78,17 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
   if (!problem && ordered.length === 0) problem = "Choose at least one chip.";
   if (!problem && Object.keys(complaints).length > 0) problem = "Fix the settings that are not valid.";
 
+  const draft: { chips: string[] } & Partial<Omit<VibrationsRequest, "chips">> = { chips: ordered };
+  for (const { key, fallback } of PARAMETERS) {
+    const value = values[key];
+    if (value !== undefined && value !== fallback) draft[key] = value;
+  }
+  if (resolution !== "motors") draft.angular_step = Number(resolution);
+  // The daemon takes an unset setting as absent, which the generated type spells as `null`,
+  // and JSON.stringify drops the undefined fields.
+  const request = draft as VibrationsRequest;
+  const chosenResolution = RESOLUTIONS.find((r) => r.value === resolution) ?? RESOLUTIONS[0];
+
   const error = start.error;
   const body = error instanceof ApiClientError ? error.body : null;
   const failures: CheckFailure[] = body?.error === "preflight_failed" ? body.failures : [];
@@ -82,18 +96,10 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (problem || start.isPending) return;
-    const draft: { chips: string[] } & Partial<Omit<VibrationsRequest, "chips">> = { chips: ordered };
-    for (const { key, fallback } of PARAMETERS) {
-      const value = values[key];
-      if (value !== undefined && value !== fallback) draft[key] = value;
-    }
-    // The daemon takes an unset setting as absent, which the generated type spells as `null`,
-    // and JSON.stringify drops the undefined fields.
-    const request = draft as VibrationsRequest;
     start.mutate(request, { onSuccess: (started) => onStarted(started.id), onError: reportStartFailure });
   }
 
-  const anyOverride = PARAMETERS.some(({ key }) => (texts[key] ?? "") !== "");
+  const anyOverride = resolution !== "motors" || PARAMETERS.some(({ key }) => (texts[key] ?? "") !== "");
 
   const inGroup = (...keys: ParameterKey[]) => PARAMETERS.filter((p) => keys.includes(p.key));
 
@@ -153,7 +159,18 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
         )}
       </FormCard>
 
-      <FormCard title="Parameters" action={<ResetButton disabled={!anyOverride} onClick={() => setTexts({})} />}>
+      <FormCard
+        title="Parameters"
+        action={
+          <ResetButton
+            disabled={!anyOverride}
+            onClick={() => {
+              setTexts({});
+              setResolution("motors");
+            }}
+          />
+        }
+      >
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {[...inGroup("size", "z_height"), ...inGroup("accel"), ...inGroup("travel_speed")].map((p) =>
@@ -167,6 +184,20 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               {inGroup("min_speed", "max_speed", "speed_increment").map((p) => parameterField(p))}
             </div>
+          </ChoiceRow>
+          <ChoiceRow label="Angular resolution">
+            <Select value={resolution} onValueChange={(v) => setResolution(v as typeof resolution)}>
+              <SelectTrigger id="vibrations-resolution" aria-label="Angular resolution" className="w-72">
+                <SelectValue>{`${chosenResolution.label} (${chosenResolution.directions} directions)`}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {RESOLUTIONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {`${r.label} (${r.directions} directions)`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </ChoiceRow>
         </div>
       </FormCard>

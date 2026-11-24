@@ -77,9 +77,6 @@ pub(super) async fn start_vibrations(
     State(state): State<ApiState>,
     ApiJson(request): ApiJson<VibrationsRequest>,
 ) -> Result<(StatusCode, Json<StartedTest>), ApiError> {
-    if request.angular_step.is_some() && !STEP_ENABLED {
-        return Err(ApiError::invalid("angular_step is not available yet"));
-    }
     let plan = plan_vibrations_request(&state, &request).await?;
     start_plan(state, plan).await
 }
