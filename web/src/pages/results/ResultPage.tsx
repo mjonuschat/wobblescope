@@ -6,6 +6,7 @@ import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
 import { ArrowLeftIcon } from "lucide-react";
 
 import { DownloadProgress } from "@/components/DownloadProgress";
+import { axisTabClass, axisTabsListClass } from "@/ui-kit/axisTabs";
 import { Waiting } from "@/components/Waiting";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -155,9 +156,9 @@ export function ResultPage({ rid }: { rid: string }) {
       ) : (
         <>
           <Tabs value={axis.axis} onValueChange={(value) => setSelected(value as Axis)}>
-            <TabsList variant="line">
+            <TabsList variant="line" className={axisTabsListClass}>
               {axes.map((a) => (
-                <TabsTrigger key={a} value={a} className="after:bg-primary">
+                <TabsTrigger key={a} value={a} className={axisTabClass}>
                   Axis {a}
                 </TabsTrigger>
               ))}

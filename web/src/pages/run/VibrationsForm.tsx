@@ -142,7 +142,7 @@ export function VibrationsForm({ chipList, blocked, onStarted }: Props) {
                         )
                       }
                     />
-                    <Label htmlFor={`vibrations-chip-${index}`} className="font-mono">
+                    <Label htmlFor={`vibrations-chip-${index}`} className="font-mono text-foreground">
                       {chip.section}
                     </Label>
                   </div>

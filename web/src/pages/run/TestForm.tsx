@@ -307,7 +307,7 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
                           )
                         }
                       />
-                      <Label htmlFor={`chip-${index}`} className="font-mono">
+                      <Label htmlFor={`chip-${index}`} className="font-mono text-foreground">
                         {chip.section}
                       </Label>
                     </div>
@@ -330,7 +330,9 @@ export function TestForm({ kind, settings, chipList, chips, onChipsChange, block
                         )
                       }
                     />
-                    <Label htmlFor={`axis-${axis}`}>{axis}</Label>
+                    <Label htmlFor={`axis-${axis}`} className="text-foreground">
+                      {axis}
+                    </Label>
                   </div>
                 ))}
               </div>

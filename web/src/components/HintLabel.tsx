@@ -11,7 +11,7 @@ export function HintLabel({ label, hint }: { label: string; hint: string }) {
           <button
             type="button"
             aria-label={`About ${label.toLowerCase()}`}
-            className="-mx-1 flex cursor-help items-center gap-1 rounded px-1 py-0.5 text-sm leading-none font-medium"
+            className="-mx-1 flex cursor-help items-center gap-1 rounded px-1 py-0.5 text-sm leading-none font-normal text-muted-foreground hover:text-foreground focus-visible:text-foreground"
           />
         }
       >

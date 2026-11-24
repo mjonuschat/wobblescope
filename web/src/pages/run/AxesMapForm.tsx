@@ -150,7 +150,7 @@ export function AxesMapForm({ chipList, blocked, onStarted }: Props) {
                             )
                           }
                         />
-                        <Label htmlFor={`axes-map-chip-${index}`} className="font-mono">
+                        <Label htmlFor={`axes-map-chip-${index}`} className="font-mono text-foreground">
                           {chip.section}
                         </Label>
                       </div>

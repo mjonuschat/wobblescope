@@ -53,7 +53,9 @@ export function ImportGroupCard({ group, number, labels, known, failure, disable
               disabled={disabled}
               onCheckedChange={(checked) => update((s) => confirmGroup(s, group.id, checked === true))}
             />
-            <Label htmlFor={`confirm-${group.id}`}>I recorded these together</Label>
+            <Label htmlFor={`confirm-${group.id}`} className="text-foreground">
+              I recorded these together
+            </Label>
           </div>
         </div>
       )}

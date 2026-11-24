@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
 import { Panel } from "@/ui-kit/Panel";
+import { axisTabClass, axisTabsListClass } from "@/ui-kit/axisTabs";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/api/queries";
@@ -164,9 +165,9 @@ function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: H
       ) : (
         <>
           <Tabs value={axis} onValueChange={(value) => setSelected(value as Axis)}>
-            <TabsList variant="line">
+            <TabsList variant="line" className={axisTabsListClass}>
               {axes.map((a) => (
-                <TabsTrigger key={a} value={a} className="after:bg-primary">
+                <TabsTrigger key={a} value={a} className={axisTabClass}>
                   Axis {a}
                 </TabsTrigger>
               ))}

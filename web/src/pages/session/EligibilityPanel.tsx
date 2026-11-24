@@ -103,7 +103,7 @@ export function EligibilityPanel({
                         onOverridesChange?.(checked ? [...overrides, d.chip] : overrides.filter((c) => c !== d.chip))
                       }
                     />
-                    <Label htmlFor={`include-${d.chip}`} className="font-normal">
+                    <Label htmlFor={`include-${d.chip}`} className="text-foreground">
                       Include {d.chip} anyway
                     </Label>
                   </div>
