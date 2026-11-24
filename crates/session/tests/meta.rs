@@ -150,8 +150,8 @@ parity_test! {
 
 parity_test! {
     fn a_newer_format_version_is_reported_even_when_the_shape_changed() {
-        let err = SessionMeta::from_json(r#"{"format_version": 3, "renamed": true}"#).unwrap_err();
-        assert!(matches!(err, SessionError::UnsupportedFormatVersion { found: 3 }));
+        let err = SessionMeta::from_json(r#"{"format_version": 4, "renamed": true}"#).unwrap_err();
+        assert!(matches!(err, SessionError::UnsupportedFormatVersion { found: 4 }));
     }
 }
 
@@ -360,12 +360,12 @@ parity_test! {
 }
 
 parity_test! {
-    fn a_version_three_session_is_refused_with_its_version() {
+    fn a_version_four_session_is_refused_with_its_version() {
         let mut meta = belts_at(0, 0);
-        meta.format_version = 3;
+        meta.format_version = 4;
         assert!(matches!(
             meta.validate().unwrap_err(),
-            SessionError::UnsupportedFormatVersion { found: 3 }
+            SessionError::UnsupportedFormatVersion { found: 4 }
         ));
     }
 }
@@ -604,13 +604,13 @@ parity_test! {
 }
 
 parity_test! {
-    fn an_axes_map_session_at_version_3_is_refused_with_the_version_found() {
+    fn an_axes_map_session_at_version_4_is_refused_with_the_version_found() {
         let mut m = axes_map_meta();
-        m.format_version = 3;
+        m.format_version = 4;
         let json = serde_json::to_string(&m).unwrap();
         assert!(matches!(
             SessionMeta::from_json(&json),
-            Err(SessionError::UnsupportedFormatVersion { found: 3 })
+            Err(SessionError::UnsupportedFormatVersion { found: 4 })
         ));
     }
 }
@@ -652,6 +652,7 @@ fn vibrations_run(kinematics: &str) -> VibrationsRun {
         min_speed: 20.0,
         kinematics: kinematics.to_owned(),
         max_velocity: None,
+        angular_step: None,
     }
 }
 
@@ -748,5 +749,208 @@ parity_test! {
         three.segments.push(three.segments[0].clone());
         three.segments[2].point = 1;
         assert!(three.validate().is_err());
+    }
+}
+
+fn stepped_meta(kinematics: &str, step: f64, angles: &[f64]) -> SessionMeta {
+    let axes: Vec<Direction> = angles.iter().map(|&a| Direction::from_degrees(a)).collect();
+    let mut meta = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+    meta.format_version = 3;
+    let template = meta.segments[0].clone();
+    meta.segments = axes
+        .iter()
+        .enumerate()
+        .map(|(i, &axis)| {
+            let mut segment = template.clone();
+            segment.axis = axis;
+            segment.files = vec![file(0, i, 100)];
+            segment
+        })
+        .collect();
+    let mut run = vibrations_run(kinematics);
+    run.angular_step = Some(step);
+    meta.vibrations_run = Some(run);
+    meta
+}
+
+fn stepped_run(kinematics: &str, step: Option<f64>) -> VibrationsRun {
+    let mut run = vibrations_run(kinematics);
+    run.angular_step = step;
+    run
+}
+
+parity_test! {
+    fn planned_angles_cartesian_every_45() {
+        assert_eq!(
+            stepped_run("cartesian", Some(45.0)).planned_angles(),
+            Some(vec![0.0, 90.0, 45.0, 135.0])
+        );
+    }
+}
+
+parity_test! {
+    fn planned_angles_corexy_every_45() {
+        assert_eq!(
+            stepped_run("corexy", Some(45.0)).planned_angles(),
+            Some(vec![45.0, 135.0, 0.0, 90.0])
+        );
+    }
+}
+
+parity_test! {
+    fn planned_angles_every_15_has_twelve_with_motor_pair_first() {
+        let planned = stepped_run("corexy", Some(15.0)).planned_angles().unwrap();
+        assert_eq!(planned.len(), 12);
+        assert_eq!(planned[..2], [45.0, 135.0]);
+        assert_eq!(planned[2..4], [0.0, 15.0]);
+        assert_eq!(planned[11], 165.0);
+    }
+}
+
+parity_test! {
+    fn planned_angles_without_a_step_is_the_motor_pair() {
+        assert_eq!(stepped_run("corexy", None).planned_angles(), Some(vec![45.0, 135.0]));
+        assert_eq!(stepped_run("delta", None).planned_angles(), None);
+        assert_eq!(stepped_run("delta", Some(45.0)).planned_angles(), None);
+    }
+}
+
+parity_test! {
+    fn a_step_needs_version_3() {
+        let mut meta = stepped_meta("corexy", 45.0, &[45.0, 135.0]);
+        assert_eq!(meta.required_version(), 3);
+        meta.validate().unwrap();
+        meta.format_version = 2;
+        let err = meta.validate().unwrap_err();
+        assert_eq!(invalid_field(err), "format_version");
+    }
+}
+
+parity_test! {
+    fn an_angle_direction_needs_version_3() {
+        let mut meta = stepped_meta("corexy", 22.5, &[45.0, 135.0, 0.0, 22.5]);
+        assert_eq!(meta.required_version(), 3);
+        meta.format_version = 2;
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "format_version");
+        let mut plain = vector_meta(&[(Direction::Angle(22500), 0)]);
+        assert_eq!(plain.required_version(), 3);
+        assert_eq!(invalid_field(plain.validate().unwrap_err()), "format_version");
+        plain.format_version = 3;
+        assert_eq!(invalid_field(plain.validate().unwrap_err()), "segments[0].axis");
+    }
+}
+
+parity_test! {
+    fn an_unaccepted_step_is_refused() {
+        let meta = stepped_meta("corexy", 30.0, &[45.0, 135.0]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "vibrations_run.angular_step");
+    }
+}
+
+parity_test! {
+    fn an_angle_outside_the_steps_grid_is_refused() {
+        let meta = stepped_meta("corexy", 45.0, &[45.0, 135.0, 0.0, 22.5]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[3].axis");
+    }
+}
+
+parity_test! {
+    fn a_non_canonical_label_is_refused() {
+        let mut meta = stepped_meta("corexy", 45.0, &[45.0, 135.0]);
+        meta.segments[0].axis = Direction::Angle(45000);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[0].axis");
+        let mut meta = stepped_meta("corexy", 45.0, &[45.0, 135.0]);
+        meta.segments[0].axis = Direction::Vector([1, 2, 0]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[0].axis");
+    }
+}
+
+parity_test! {
+    fn a_duplicate_angle_is_refused() {
+        let mut meta = stepped_meta("corexy", 45.0, &[45.0, 135.0]);
+        meta.segments[1].axis = Direction::BELT_B;
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[1].axis");
+    }
+}
+
+parity_test! {
+    fn segments_must_follow_plan_order() {
+        let meta = stepped_meta("corexy", 45.0, &[135.0, 45.0]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[0].axis");
+        let meta = stepped_meta("corexy", 45.0, &[45.0, 135.0, 90.0, 0.0]);
+        assert_eq!(invalid_field(meta.validate().unwrap_err()), "segments[2].axis");
+        stepped_meta("corexy", 45.0, &[45.0, 135.0, 0.0, 90.0]).validate().unwrap();
+    }
+}
+
+parity_test! {
+    fn any_outcome_may_hold_a_prefix_of_the_plan_or_none() {
+        for count in 0..=4 {
+            let angles = [45.0, 135.0, 0.0, 90.0];
+            let mut meta = stepped_meta("corexy", 45.0, &angles[..count]);
+            for outcome in [
+                Outcome::Complete,
+                Outcome::Incomplete { reason: "stopped".into() },
+                Outcome::Failed { reason: "failed".into() },
+            ] {
+                meta.outcome = outcome;
+                meta.validate().unwrap();
+            }
+        }
+    }
+}
+
+parity_test! {
+    fn x_and_vector_labels_may_mix_only_when_a_step_is_set() {
+        stepped_meta("cartesian", 45.0, &[0.0, 90.0, 45.0, 135.0]).validate().unwrap();
+        let mut legacy = vibrations_meta("corexy", [Direction::X, Direction::BELT_A]);
+        legacy.format_version = 2;
+        assert_eq!(invalid_field(legacy.validate().unwrap_err()), "segments");
+    }
+}
+
+parity_test! {
+    fn a_legacy_vibrations_session_still_refuses_mixed_labels_and_a_third_segment() {
+        let mut mixed = vibrations_meta("corexy", [Direction::X, Direction::BELT_A]);
+        mixed.format_version = 2;
+        assert!(mixed.validate().is_err());
+        let mut three = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        three.segments.push(three.segments[0].clone());
+        three.segments[2].axis = Direction::X;
+        assert!(three.validate().is_err());
+    }
+}
+
+parity_test! {
+    fn a_motor_only_run_writes_no_angular_step() {
+        let meta = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        let value: serde_json::Value = serde_json::from_str(&meta.to_json().unwrap()).unwrap();
+        assert!(!value["vibrations_run"].as_object().unwrap().contains_key("angular_step"));
+    }
+}
+
+parity_test! {
+    fn version_4_is_unsupported_and_3_is_supported() {
+        let meta = stepped_meta("corexy", 45.0, &[45.0, 135.0]);
+        let json = meta.to_json().unwrap();
+        SessionMeta::from_json(&json).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value["format_version"] = serde_json::json!(4);
+        assert!(matches!(
+            SessionMeta::from_json(&value.to_string()),
+            Err(SessionError::UnsupportedFormatVersion { found: 4 })
+        ));
+    }
+}
+
+parity_test! {
+    fn an_old_session_reads_as_the_motor_pair() {
+        let meta = vibrations_meta("corexy", [Direction::BELT_B, Direction::BELT_A]);
+        let mut value: serde_json::Value = serde_json::from_str(&meta.to_json().unwrap()).unwrap();
+        value["vibrations_run"].as_object_mut().unwrap().remove("angular_step");
+        let old = SessionMeta::from_json(&value.to_string()).unwrap();
+        let run = old.vibrations_run.unwrap();
+        assert_eq!(run.angular_step, None);
+        assert_eq!(run.planned_angles(), Some(vec![45.0, 135.0]));
     }
 }

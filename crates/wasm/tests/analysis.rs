@@ -874,6 +874,7 @@ fn vibrations_meta(outcome: Outcome) -> SessionMeta {
             min_speed: 20.0,
             kinematics: "cartesian".to_owned(),
             max_velocity: None,
+            angular_step: None,
         }),
         notes: vec![],
         probe_points: vec![ProbePoint { position: None }],

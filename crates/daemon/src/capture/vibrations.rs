@@ -232,6 +232,7 @@ pub fn plan_vibrations(
         min_speed,
         kinematics,
         max_velocity: printer.machine.max_velocity,
+        angular_step: None,
     };
     let Some(angles) = run.angles() else {
         return refuse(

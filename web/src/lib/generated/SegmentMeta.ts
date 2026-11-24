@@ -9,7 +9,7 @@ import type { TimeWindow } from "./TimeWindow";
  */
 export type SegmentMeta = { 
 /**
- * Test direction; serialised as `"X"`, `"Y"` or `{"Vector":[x,y,z]}`.
+ * Test direction; serialised as `"X"`, `"Y"`, `{"Vector":[x,y,z]}` or `{"Angle":n}` with `n` in thousandths of a degree.
  */
 axis: Direction, 
 /**

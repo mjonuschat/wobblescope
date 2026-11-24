@@ -81,6 +81,7 @@ export function angleLabel(axis: Direction): string {
   if (axis === "X") return "X (0 deg)";
   if (axis === "Y") return "Y (90 deg)";
   if (typeof axis === "string") return axis;
+  if ("Angle" in axis) return `${axis.Angle / 1000} deg`;
   const [x, y, z] = axis.Vector;
   if (z === 0 && x === 1 && y === 1) return "45 deg";
   if (z === 0 && x === 1 && y === -1) return "135 deg";
@@ -89,6 +90,7 @@ export function angleLabel(axis: Direction): string {
 
 export function segmentLabel(axis: Direction): string {
   if (typeof axis === "string") return `${axis} Axis`;
+  if ("Angle" in axis) return `${axis.Angle / 1000} deg`;
   const [x, y, z] = axis.Vector;
   if (z === 0 && x === 1 && y === -1) return "Belt A (Axis 1,-1)";
   if (z === 0 && x === 1 && y === 1) return "Belt B (Axis 1,1)";

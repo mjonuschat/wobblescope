@@ -36,4 +36,9 @@ kinematics: string,
 /**
  * Observed toolhead velocity limit in mm/s.
  */
-max_velocity?: number | null, };
+max_velocity?: number | null, 
+/**
+ * Degrees between the measured directions when the run covers more than the motor pair:
+ * 45, 22.5 or 15. Absent for a run of the motor pair alone.
+ */
+angular_step?: number | null, };

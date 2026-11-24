@@ -14,6 +14,13 @@ pub const FORMAT_VERSION: u32 = 1;
 /// and [`FORMAT_VERSION`].
 pub const FORMAT_VERSION_VECTOR: u32 = 2;
 
+/// Version of the metadata shape for sessions holding an angle direction or a vibrations
+/// `angular_step`. Older readers refuse it, as they would misread the segments.
+pub const FORMAT_VERSION_ANGLE: u32 = 3;
+
+/// The degrees between measured directions that a vibrations run may ask for.
+pub const ANGULAR_STEPS: [f64; 3] = [45.0, 22.5, 15.0];
+
 /// The directions of an axes-map session's segments, in order: +X, +Y, +Z.
 pub const AXES_MAP_DIRECTIONS: [Direction; 3] = [
     Direction::Vector([1, 0, 0]),
@@ -106,6 +113,11 @@ pub struct VibrationsRun {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional = nullable))]
     pub max_velocity: Option<f64>,
+    /// Degrees between the measured directions when the run covers more than the motor pair:
+    /// 45, 22.5 or 15. Absent for a run of the motor pair alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
+    pub angular_step: Option<f64>,
 }
 
 impl VibrationsRun {
@@ -117,6 +129,23 @@ impl VibrationsRun {
             "corexy" | "limited_corexy" => Some([45.0, 135.0]),
             _ => None,
         }
+    }
+
+    /// The angles of the run in measuring order, in degrees: the motor pair first, then the rest
+    /// of the step's grid in `[0, 180)` ascending. Just the motor pair without a step; `None`
+    /// for unknown kinematics.
+    pub fn planned_angles(&self) -> Option<Vec<f64>> {
+        let pair = self.angles()?;
+        let mut planned = pair.to_vec();
+        if let Some(step) = self.angular_step {
+            let count = (180.0 / step).round() as u32;
+            planned.extend(
+                (0..count)
+                    .map(|i| f64::from(i) * step)
+                    .filter(|a| !pair.contains(a)),
+            );
+        }
+        Some(planned)
     }
 }
 
@@ -262,7 +291,7 @@ pub struct StepMeta {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SegmentMeta {
-    /// Test direction; serialised as `"X"`, `"Y"` or `{"Vector":[x,y,z]}`.
+    /// Test direction; serialised as `"X"`, `"Y"`, `{"Vector":[x,y,z]}` or `{"Angle":n}` with `n` in thousandths of a degree.
     pub axis: Direction,
     /// Position of the point in [`SessionMeta::probe_points`].
     pub point: u32,
@@ -387,7 +416,7 @@ pub fn undersampled_note(nominal_hz: Option<f64>, observed_hz: Option<f64>) -> O
 }
 
 fn is_supported_version(version: u32) -> bool {
-    version == FORMAT_VERSION || version == FORMAT_VERSION_VECTOR
+    version == FORMAT_VERSION || version == FORMAT_VERSION_VECTOR || version == FORMAT_VERSION_ANGLE
 }
 
 fn positive_finite(v: f64) -> bool {
@@ -435,10 +464,21 @@ impl SessionMeta {
             .find(|f| f.chip == chip)
     }
 
-    /// The format version a writer must give this session: 2 when any segment has a vector
-    /// direction, else 1.
+    /// The format version a writer must give this session: 3 with an angular step or an angle
+    /// direction, 2 when any segment has a vector direction, else 1.
     pub fn required_version(&self) -> u32 {
-        if self
+        let stepped = self
+            .vibrations_run
+            .as_ref()
+            .is_some_and(|r| r.angular_step.is_some());
+        if stepped
+            || self
+                .segments
+                .iter()
+                .any(|s| matches!(s.axis, Direction::Angle(_)))
+        {
+            FORMAT_VERSION_ANGLE
+        } else if self
             .segments
             .iter()
             .any(|s| matches!(s.axis, Direction::Vector(_)))
@@ -487,6 +527,27 @@ impl SessionMeta {
             });
         }
         validate_session_id(&self.id)?;
+        if self.required_version() > self.format_version {
+            return Err(invalid(
+                "format_version",
+                "an angular step or an angle direction needs format version 3",
+            ));
+        }
+        let stepped = self
+            .vibrations_run
+            .as_ref()
+            .is_some_and(|r| r.angular_step.is_some());
+        if !stepped
+            && let Some(s) = self
+                .segments
+                .iter()
+                .position(|s| matches!(s.axis, Direction::Angle(_)))
+        {
+            return Err(invalid(
+                format!("segments[{s}].axis"),
+                "an angle direction needs a vibrations angular_step",
+            ));
+        }
         let vectors = self
             .segments
             .iter()
@@ -498,7 +559,7 @@ impl SessionMeta {
                 "a vector direction needs format version 2",
             ));
         }
-        if vectors > 0 && vectors < self.segments.len() {
+        if !stepped && vectors > 0 && vectors < self.segments.len() {
             return Err(invalid(
                 "segments",
                 "X or Y segments and vector segments cannot be mixed",
@@ -604,12 +665,7 @@ impl SessionMeta {
                     "must be finite and positive",
                 ));
             }
-            if self.segments.len() > 2 {
-                return Err(invalid(
-                    "vibrations_run",
-                    "a vibrations session has at most two segments",
-                ));
-            }
+            self.validate_angular_plan(run)?;
         }
         for (s, segment) in self.segments.iter().enumerate() {
             let at = format!("segments[{s}].steps");
@@ -640,6 +696,50 @@ impl SessionMeta {
                     ));
                 }
                 previous_end = w.end;
+            }
+        }
+        Ok(())
+    }
+
+    /// The segment rules of a vibrations run: two at most without a step; with one, a prefix of
+    /// the planned angles, each labelled canonically, all at one point.
+    fn validate_angular_plan(&self, run: &VibrationsRun) -> Result<(), SessionError> {
+        let Some(step) = run.angular_step else {
+            if self.segments.len() > 2 {
+                return Err(invalid(
+                    "vibrations_run",
+                    "a vibrations session has at most two segments",
+                ));
+            }
+            return Ok(());
+        };
+        if !ANGULAR_STEPS.contains(&step) {
+            return Err(invalid(
+                "vibrations_run.angular_step",
+                "must be 45, 22.5 or 15",
+            ));
+        }
+        let Some(planned) = run.planned_angles() else {
+            return Err(invalid(
+                "vibrations_run.angular_step",
+                "needs kinematics with a known motor pair",
+            ));
+        };
+        if self.segments.len() > planned.len() {
+            return Err(invalid("segments", "more segments than the planned angles"));
+        }
+        for (s, (segment, angle)) in self.segments.iter().zip(planned).enumerate() {
+            if segment.axis != Direction::from_degrees(angle) {
+                return Err(invalid(
+                    format!("segments[{s}].axis"),
+                    format!("must be the planned angle {angle} with its canonical label"),
+                ));
+            }
+            if segment.point != self.segments[0].point {
+                return Err(invalid(
+                    format!("segments[{s}].point"),
+                    "a stepped vibrations run measures at one point",
+                ));
             }
         }
         Ok(())

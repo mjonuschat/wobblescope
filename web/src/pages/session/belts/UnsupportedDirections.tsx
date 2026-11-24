@@ -6,6 +6,7 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 /** `X`, `Y`, or the vector's components, without a trailing zero z (`1,-1`). */
 export function directionLabel(direction: Direction): string {
   if (typeof direction === "string") return direction;
+  if ("Angle" in direction) return `${direction.Angle / 1000} deg`;
   const [x, y, z] = direction.Vector;
   return (z === 0 ? [x, y] : [x, y, z]).join(",");
 }

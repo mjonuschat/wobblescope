@@ -3,4 +3,4 @@
 /**
  * A test direction: a bed axis, or an arbitrary direction vector such as a CoreXY belt.
  */
-export type Direction = "X" | "Y" | { "Vector": [number, number, number] };
+export type Direction = "X" | "Y" | { "Vector": [number, number, number] } | { "Angle": number };
