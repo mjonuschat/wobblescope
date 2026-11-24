@@ -99,12 +99,28 @@ describe("the vibrations view", () => {
       name: "Angles",
     });
     const motors = within(group).getByRole("button", { name: "Motor directions" });
+    expect(within(group).getByRole("button", { name: "Every 45 degrees" })).toBeTruthy();
     const steps = within(group).getByRole("button", { name: "Every 22.5 degrees" });
     expect(within(group).getByRole("button", { name: "Every 15 degrees" })).toBeTruthy();
     expect(motors.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(steps);
     expect(steps.getAttribute("aria-pressed")).toBe("true");
     expect(motors.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("the_panel_opens_on_the_runs_step", async () => {
+    const measured = [
+      { angle: 0, speeds: [20, 40], energy: [1, 2] },
+      { angle: 22.5, speeds: [20, 40], energy: [1, 2] },
+    ];
+    fake.vibrations.mockResolvedValue(analysis({ worst_case: vibrationsResult({ measured }) }));
+    const meta = vibrationsMeta();
+    meta.vibrations_run!.angular_step = 22.5;
+    renderView(meta);
+    const panelEl = await screen.findByRole("region", { name: "Angular speed profiles" });
+    expect(within(panelEl).getByRole("button", { name: "Every 22.5 degrees" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
   });
 
   it("shows_the_motor_panel_on_a_chip_tab", async () => {

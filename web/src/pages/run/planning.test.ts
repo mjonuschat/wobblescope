@@ -52,6 +52,11 @@ describe("angleLabel", () => {
     expect(angleLabel({ Vector: [1, -1, 0] })).toBe("135 deg");
     expect(angleLabel({ Vector: [1, 2, 0] })).toBe("1,2,0");
   });
+
+  it("angleLabel_names_an_angle_direction", () => {
+    expect(angleLabel({ Angle: 22500 })).toBe("22.5 deg");
+    expect(angleLabel({ Angle: 15000 })).toBe("15 deg");
+  });
 });
 
 describe("segmentLabel", () => {

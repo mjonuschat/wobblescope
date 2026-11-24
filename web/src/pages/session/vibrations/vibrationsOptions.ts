@@ -4,6 +4,7 @@ import type { MotorResult } from "@/lib/generated/MotorResult";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import { INFERNO, ON_HEATMAP } from "@/components/charts/colormaps";
 import { clampIndex, closestIndex } from "@/components/charts/indexes";
+import { LEGEND_LEFT } from "@/components/charts/options";
 import { mixColors } from "@/ui-kit/color";
 import { DEFAULT_CHART_THEME, type ChartTheme } from "@/ui-kit/chartTheme";
 
@@ -516,17 +517,20 @@ function angleLabels(kinematics: string): [number, string][] {
   ];
 }
 
-export type AnglePreset = "motors" | "step-22.5" | "step-15";
-
-export const DEFAULT_ANGLE_PRESET: AnglePreset = "motors";
+export type AnglePreset = "motors" | "step-45" | "step-22.5" | "step-15";
 
 export const ANGLE_PRESETS: { value: AnglePreset; label: string; short: string }[] = [
   { value: "motors", label: "Motor directions", short: "Motors" },
+  { value: "step-45", label: "Every 45 degrees", short: "45°" },
   { value: "step-22.5", label: "Every 22.5 degrees", short: "22.5°" },
   { value: "step-15", label: "Every 15 degrees", short: "15°" },
 ];
 
-const PRESET_STEP: Record<Exclude<AnglePreset, "motors">, number> = { "step-22.5": 22.5, "step-15": 15 };
+export function defaultPreset(angularStep: number | null): AnglePreset {
+  return ANGLE_PRESETS.find((p) => p.value === `step-${angularStep}`)?.value ?? "motors";
+}
+
+const PRESET_STEP: Record<Exclude<AnglePreset, "motors">, number> = { "step-45": 45, "step-22.5": 22.5, "step-15": 15 };
 
 /** The angles of a preset in ascending order below 180, as a direction repeats every 180 degrees. */
 export function presetAngles(preset: AnglePreset): number[] {
@@ -555,29 +559,64 @@ export function angleColor(angle: number, theme: ChartTheme): string {
   return mixColors(stops[low], stops[(low + 1) % stops.length], at - low);
 }
 
+/** X, Y and the two belt directions: the angles the motors drive. */
+const MAJOR_ANGLES = [0, 45, 90, 135];
+
+const sameAngle = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+
+/**
+ * The speed profile of each angle of `preset`. With `hasStep` (the run recorded an angular step),
+ * an angle the result measured is a solid series of its own recorded speeds and energy, named
+ * "(measured)", and any other is dashed from the grid row, named "(computed)". Without it every
+ * curve is read from the grid and carries no suffix.
+ */
 export function angularProfilesOption(
   result: VibrationsResult,
   kinematics: string,
   theme: ChartTheme = DEFAULT_CHART_THEME,
-  preset: AnglePreset = DEFAULT_ANGLE_PRESET,
+  preset: AnglePreset = "motors",
+  hasStep = false,
 ): EChartsCoreOption {
   const curves = presetCurves(preset, kinematics);
+  const fromGrid = (angle: number) =>
+    (result.grid[closestIndex(result.angles, angle)] ?? []).map((v, i) => [result.speeds[i], v]);
+  const series = curves.map(([angle, name]) => {
+    const measured = hasStep ? result.measured.find((m) => sameAngle(m.angle, angle)) : undefined;
+    if (measured) {
+      return {
+        name: `${name} (measured)`,
+        type: "line",
+        showSymbol: false,
+        data: measured.energy.map((v, i) => [measured.speeds[i], v]),
+      };
+    }
+    return {
+      name: hasStep ? `${name} (computed)` : name,
+      type: "line",
+      showSymbol: false,
+      ...(hasStep ? { lineStyle: { type: "dashed" } } : {}),
+      // The rows are linspace(0, 360, n), a step of 360 / (n - 1) that is not exactly 0.5 degrees, so
+      // an angle such as 22.5 rarely has a row of its own and the nearest row stands in for it.
+      data: fromGrid(angle),
+    };
+  });
+  const isMajor = (angle: number) => MAJOR_ANGLES.some((m) => sameAngle(m, angle));
+  const major = series.filter((_, i) => isMajor(curves[i][0])).map((s) => s.name);
+  const minor = series.filter((_, i) => !isMajor(curves[i][0])).map((s) => s.name);
   return {
     ...base(theme),
     color: curves.map(([angle]) => angleColor(angle, theme)),
     tooltip: { trigger: "axis" },
-    legend: { type: "scroll", top: 0, textStyle: { color: theme.text } },
-    grid: { top: 48, left: 64, right: 64, bottom: 40 },
+    legend: [
+      { type: "scroll", data: major, top: 0, left: LEGEND_LEFT, textStyle: { color: theme.text } },
+      ...(minor.length > 0
+        ? [{ type: "scroll", data: minor, top: 28, left: LEGEND_LEFT, textStyle: { color: theme.text } }]
+        : []),
+    ],
+    grid: { top: minor.length > 0 ? 84 : 52, left: 64, right: 64, bottom: 40 },
     xAxis: { type: "value", name: "Speed (mm/s)", min: "dataMin", max: "dataMax", splitLine: splitLine(theme) },
     yAxis: { type: "value", name: "Energy", splitLine: splitLine(theme) },
-    series: curves.map(([angle, name]) => ({
-      name,
-      type: "line",
-      showSymbol: false,
-      // The rows are linspace(0, 360, n), a step of 360 / (n - 1) that is not exactly 0.5 degrees, so
-      // an angle such as 22.5 rarely has a row of its own and the nearest row stands in for it.
-      data: (result.grid[closestIndex(result.angles, angle)] ?? []).map((v, i) => [result.speeds[i], v]),
-    })),
+    series,
   };
 }
 

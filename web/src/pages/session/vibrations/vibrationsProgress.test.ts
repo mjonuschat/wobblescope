@@ -68,3 +68,24 @@ describe("vibrationsProgress", () => {
     expect(vibrationsProgress(meta)).toBeNull();
   });
 });
+
+describe("vibrationsProgress at more directions", () => {
+  it("recovered_progress_counts_directions_from_the_run_record", () => {
+    const meta = metaWith(12, 12, 12, 12, 12, 12, 3);
+    meta.vibrations_run!.max_speed = 240;
+    meta.vibrations_run!.angular_step = 15;
+    expect(vibrationsProgress(meta)).toBe("Angle 7 of 12, speed 3 of 12");
+  });
+
+  it("names_the_last_finished_direction_of_a_longer_run", () => {
+    const meta = metaWith(5, 5);
+    meta.vibrations_run!.angular_step = 45;
+    expect(vibrationsProgress(meta)).toBe("Angle 2 of 4 finished, no step of angle 3 finished");
+  });
+
+  it("recovered_progress_for_a_motor_only_run_is_unchanged", () => {
+    const meta = metaWith(5, 2);
+    meta.vibrations_run!.angular_step = null;
+    expect(vibrationsProgress(meta)).toBe("Angle 2 of 2, speed 2 of 5");
+  });
+});

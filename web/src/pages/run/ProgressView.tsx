@@ -149,16 +149,18 @@ export function ProgressView({ test, connected, ended, onNext }: ProgressProps) 
   const vibrations = test.kind === "vibrations";
   const label = move
     ? `Moving ${move}`
-    : test.axis
-      ? vibrations
-        ? angleLabel(test.axis)
-        : segmentLabel(test.axis)
-      : null;
+    : vibrations && test.direction_degrees !== null
+      ? `${test.direction_degrees} deg`
+      : test.axis
+        ? vibrations
+          ? angleLabel(test.axis)
+          : segmentLabel(test.axis)
+        : null;
+  // A vibrations run counts its directions, which the daemon plans, not the segments of a fixed pair.
+  const total = vibrations ? (test.planned_directions ?? test.segments) : test.segments;
   // A run that completed has done every segment, whatever the last live snapshot said.
   const segment =
-    ended?.outcome === "complete"
-      ? `${test.segments} of ${test.segments}`
-      : `${test.segment} of ${test.segments}${label ? `: ${label}` : ""}`;
+    ended?.outcome === "complete" ? `${total} of ${total}` : `${test.segment} of ${total}${label ? `: ${label}` : ""}`;
   const percent =
     test.expected_segment_seconds > 0 ? Math.min(100, (test.elapsed_seconds / test.expected_segment_seconds) * 100) : 0;
   return (

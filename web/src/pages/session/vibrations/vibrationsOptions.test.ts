@@ -14,6 +14,7 @@ import {
   angleColor,
   angularProfilesOption,
   heatmapOption,
+  defaultPreset,
   presetAngles,
   motorProfileOption,
   polarAngleOption,
@@ -431,14 +432,31 @@ describe("angularProfilesOption", () => {
 });
 
 describe("angle presets", () => {
-  const names = (preset: "motors" | "step-22.5" | "step-15", kinematics = "corexy") =>
+  const names = (preset: "motors" | "step-45" | "step-22.5" | "step-15", kinematics = "corexy") =>
     series(angularProfilesOption(vibrationsResult(), kinematics, DEFAULT_CHART_THEME, preset)).map((x) => x.name);
 
   it("draws the four motor directions by default", () => {
     const defaults = series(angularProfilesOption(vibrationsResult(), "corexy")).map((x) => x.name);
     expect(defaults).toEqual(names("motors"));
     expect(defaults).toEqual(["X (0 deg)", "Y (90 deg)", "A (45 deg)", "B (135 deg)"]);
-    expect(ANGLE_PRESETS.map((p) => p.value)[0]).toBe("motors");
+    expect(ANGLE_PRESETS.map((p) => p.value)).toEqual(["motors", "step-45", "step-22.5", "step-15"]);
+  });
+
+  it("step_45_preset_has_four_angles", () => {
+    expect(presetAngles("step-45")).toEqual([0, 45, 90, 135]);
+    expect(names("step-45")).toEqual(["X (0 deg)", "A (45 deg)", "Y (90 deg)", "B (135 deg)"]);
+    expect(ANGLE_PRESETS.find((p) => p.value === "step-45")).toEqual({
+      value: "step-45",
+      label: "Every 45 degrees",
+      short: "45°",
+    });
+  });
+
+  it("the_panel_opens_on_each_recorded_step", () => {
+    expect(defaultPreset(45)).toBe("step-45");
+    expect(defaultPreset(22.5)).toBe("step-22.5");
+    expect(defaultPreset(15)).toBe("step-15");
+    expect(defaultPreset(null)).toBe("motors");
   });
 
   it("lists the angles of each preset, all below 180", () => {
@@ -485,6 +503,72 @@ describe("angle presets", () => {
     expect(colors("step-15")[3]).toBe(colors("motors")[2]);
     expect(new Set(colors("step-15")).size).toBe(12);
     expect(angleColor(0, theme)).toBe(angleColor(180, theme));
+  });
+});
+
+describe("angularProfilesOption measured and computed", () => {
+  const measured = [
+    { angle: 0, speeds: [20, 40], energy: [7, 8] },
+    { angle: 22.5, speeds: [20, 40], energy: [5, 6] },
+  ];
+
+  it("a_session_without_a_step_keeps_todays_series", () => {
+    const r = vibrationsResult({ measured });
+    const s = series(angularProfilesOption(r, "corexy", DEFAULT_CHART_THEME, "step-22.5", false));
+    expect(s.map((x) => x.name)).toContain("X (0 deg)");
+    expect(s.every((x) => x.lineStyle === undefined)).toBe(true);
+    expect(s[0].data.map((d: number[]) => d[1])).toEqual(r.grid[0]);
+  });
+
+  it("the_legend_has_a_major_row_for_x_y_a_b_and_a_minor_row_for_every_other_angle", () => {
+    const r = vibrationsResult({ measured });
+    const legend = angularProfilesOption(r, "corexy", DEFAULT_CHART_THEME, "step-22.5", true).legend as {
+      data: string[];
+    }[];
+    expect(legend).toHaveLength(2);
+    expect(legend[0].data).toEqual([
+      "X (0 deg) (measured)",
+      "A (45 deg) (computed)",
+      "Y (90 deg) (computed)",
+      "B (135 deg) (computed)",
+    ]);
+    expect(legend[1].data).toHaveLength(4);
+    expect(legend[1].data).toContain("22.5 deg (measured)");
+  });
+
+  it("the_motor_preset_has_only_the_major_legend_row", () => {
+    const r = vibrationsResult({ measured });
+    const legend = angularProfilesOption(r, "corexy", DEFAULT_CHART_THEME, "motors", false).legend as unknown[];
+    expect(legend).toHaveLength(1);
+  });
+
+  it("a_measured_angle_is_solid_and_named_measured_from_its_own_steps", () => {
+    const r = vibrationsResult({ measured });
+    const s = series(angularProfilesOption(r, "corexy", DEFAULT_CHART_THEME, "step-22.5", true));
+    expect(s[0].name).toBe("X (0 deg) (measured)");
+    expect(s[0].lineStyle).toBeUndefined();
+    expect(s[0].data).toEqual([
+      [20, 7],
+      [40, 8],
+    ]);
+    expect(s[1].name).toBe("22.5 deg (measured)");
+  });
+
+  it("an_unmeasured_angle_is_dashed_and_named_computed", () => {
+    const r = vibrationsResult({ measured });
+    const s = series(angularProfilesOption(r, "corexy", DEFAULT_CHART_THEME, "step-22.5", true));
+    expect(s[2].name).toBe("A (45 deg) (computed)");
+    expect(s[2].lineStyle).toEqual({ type: "dashed" });
+    expect(s[2].data.map((d: number[]) => d[1])).toEqual(r.grid[1]);
+  });
+
+  it("a_combined_result_labels_only_the_angles_all_chips_measured", () => {
+    const combined = vibrationsResult({ measured: [measured[0]] });
+    const names = series(angularProfilesOption(combined, "corexy", DEFAULT_CHART_THEME, "step-22.5", true)).map(
+      (x) => x.name,
+    );
+    expect(names.filter((n) => n.endsWith("(measured)"))).toEqual(["X (0 deg) (measured)"]);
+    expect(names.filter((n) => n.endsWith("(computed)"))).toHaveLength(7);
   });
 });
 

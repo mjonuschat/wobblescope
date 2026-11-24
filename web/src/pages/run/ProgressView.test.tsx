@@ -473,6 +473,46 @@ describe("vibrations runs", () => {
   });
 });
 
+describe("vibrations runs at more directions", () => {
+  it("the_progress_view_shows_direction_3_of_8_at_22_5_degrees", async () => {
+    await mount(
+      {
+        test: {
+          ...running,
+          kind: "vibrations",
+          segment: 3,
+          segments: 2,
+          axis: { Angle: 22500 },
+          planned_directions: 8,
+          direction_degrees: 22.5,
+        },
+        last: null,
+      },
+      "/run/vibrations",
+    );
+    expect(await screen.findByText("3 of 8: 22.5 deg")).toBeTruthy();
+  });
+
+  it("the_progress_view_names_the_direction_by_its_degrees_when_known", async () => {
+    await mount(
+      {
+        test: {
+          ...running,
+          kind: "vibrations",
+          segment: 2,
+          segments: 2,
+          axis: "X",
+          planned_directions: 4,
+          direction_degrees: 45,
+        },
+        last: null,
+      },
+      "/run/vibrations",
+    );
+    expect(await screen.findByText("2 of 4: 45 deg")).toBeTruthy();
+  });
+});
+
 describe("belt tests", () => {
   const HINT = "Belt tests need Klipper v0.12.0 or newer, or Kalico v2026.01.00 or newer.";
 

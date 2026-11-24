@@ -90,6 +90,7 @@ export function VibrationsResults({ id, meta, header }: { id: string; meta: Sess
           combined={query.data.worst_case}
           chip={tab === ALL_CHIPS ? null : tab}
           kinematics={meta.vibrations_run?.kinematics ?? ""}
+          angularStep={meta.vibrations_run?.angular_step ?? null}
           onInclude={() => setIncludeExcluded(true)}
         />
       )}

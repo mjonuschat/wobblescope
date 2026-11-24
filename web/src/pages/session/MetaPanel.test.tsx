@@ -277,6 +277,42 @@ describe("the session details", () => {
     expect(screen.getByText("Vibrations profile")).toBeTruthy();
   });
 
+  it("shows_the_angular_resolution_of_a_stepped_run_as_the_form_names_it", () => {
+    const meta = twoAxisMeta();
+    meta.vibrations_run = {
+      size: 100,
+      z_height: 20,
+      max_speed: 100,
+      speed_increment: 5,
+      accel: 3000,
+      travel_speed: 120,
+      min_speed: 20,
+      kinematics: "cartesian",
+      angular_step: 15,
+    };
+    render(<MetaPanel meta={meta} />);
+    const group = screen.getByLabelText("The recording");
+    expect(within(group).getByText("Angular resolution").nextElementSibling?.textContent).toBe("Every 15°");
+    expect(within(group).getByText("Probe points")).toBeTruthy();
+  });
+
+  it("shows_motor_directions_for_a_session_without_a_step", () => {
+    const meta = twoAxisMeta();
+    meta.vibrations_run = {
+      size: 100,
+      z_height: 20,
+      max_speed: 100,
+      speed_increment: 5,
+      accel: 3000,
+      travel_speed: 120,
+      min_speed: 20,
+      kinematics: "corexy",
+    };
+    render(<MetaPanel meta={meta} />);
+    const group = screen.getByLabelText("The recording");
+    expect(within(group).getByText("Angular resolution").nextElementSibling?.textContent).toBe("Motor directions");
+  });
+
   it("hides_the_input_shaper_rows_for_a_vibrations_session", () => {
     const meta = twoAxisMeta();
     meta.printer = {

@@ -69,10 +69,13 @@ export function patternPoints(pattern: PointPattern, limits: AxisLimits, z: numb
   }
 }
 
-/**
- * The progress panel's name for a segment's direction: the belt a diagonal tests, `X Axis` or
- * `Y Axis`, or the vector's own text for any other direction.
- */
+export const RESOLUTIONS: { value: "motors" | "45" | "22.5" | "15"; label: string; directions: number }[] = [
+  { value: "motors", label: "Motor directions", directions: 2 },
+  { value: "45", label: "Every 45°", directions: 4 },
+  { value: "22.5", label: "Every 22.5°", directions: 8 },
+  { value: "15", label: "Every 15°", directions: 12 },
+];
+
 /**
  * A vibrations angle by its direction in degrees: the two axes of a Cartesian printer, or the two
  * diagonals the motors drive on a CoreXY. The chips' belt names do not apply to it.
@@ -88,6 +91,10 @@ export function angleLabel(axis: Direction): string {
   return axis.Vector.join(",");
 }
 
+/**
+ * The progress panel's name for a segment's direction: the belt a diagonal tests, `X Axis` or
+ * `Y Axis`, or the vector's own text for any other direction.
+ */
 export function segmentLabel(axis: Direction): string {
   if (typeof axis === "string") return `${axis} Axis`;
   if ("Angle" in axis) return `${axis.Angle / 1000} deg`;

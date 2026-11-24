@@ -11,7 +11,7 @@ import type { Outcome } from "@/lib/generated/Outcome";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import { formatMap } from "./axesMapFormat";
-import { angleLabel } from "@/pages/run/planning";
+import { angleLabel, RESOLUTIONS } from "@/pages/run/planning";
 import { directionLabel } from "./belts/UnsupportedDirections";
 import { effectiveSettings } from "./fit";
 import { subheadingClass } from "@/ui-kit/CardLabel";
@@ -114,9 +114,17 @@ export function MetaPanel({ meta, analysis = null }: { meta: SessionMeta; analys
               : (meta.mode ?? "Not recorded"),
         )}
         {row("Outcome", outcomeText(meta.outcome))}
-        <Field label="Probe points" className="col-span-full">
+        <Field label="Probe points" className={meta.vibrations_run ? undefined : "col-span-full"}>
           <ProbePoints points={meta.probe_points} />
         </Field>
+        {meta.vibrations_run &&
+          row(
+            "Angular resolution",
+            (
+              RESOLUTIONS.find((r) => r.value === String(meta.vibrations_run?.angular_step ?? "motors")) ??
+              RESOLUTIONS[0]
+            ).label,
+          )}
       </Fields>
       <Fields aria-label="The printer">
         {row("Printer", meta.printer?.name ?? "Not recorded")}

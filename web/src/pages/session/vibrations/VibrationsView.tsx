@@ -17,7 +17,7 @@ import { explainReason } from "../EligibilityPanel";
 import { GoodAngleRanges } from "./VibrationsSummary";
 import {
   ANGLE_PRESETS,
-  DEFAULT_ANGLE_PRESET,
+  defaultPreset,
   LOW_FREQ_WARNING,
   type AnglePreset,
   angularProfilesOption,
@@ -48,6 +48,7 @@ function ChartPanel({
   intro,
   selector,
   below,
+  legendSwitches,
 }: {
   title: string;
   option: EChartsCoreOption;
@@ -60,6 +61,7 @@ function ChartPanel({
   selector?: ReactNode;
   /** What the chart's numbers refer to, shown under it and in the expanded view. */
   below?: ReactNode;
+  legendSwitches?: string[];
 }) {
   return (
     <Panel
@@ -71,14 +73,14 @@ function ChartPanel({
           <ExpandDialog title={title}>
             {selector}
             {intro}
-            <EChart option={option} label={label} height={EXPANDED_CHART_HEIGHT} />
+            <EChart option={option} label={label} height={EXPANDED_CHART_HEIGHT} legendSwitches={legendSwitches} />
             {below}
           </ExpandDialog>
         </div>
       }
     >
       {intro}
-      <EChart option={option} label={label} height={height} minWidth={minWidth} />
+      <EChart option={option} label={label} height={height} minWidth={minWidth} legendSwitches={legendSwitches} />
       {below}
     </Panel>
   );
@@ -122,19 +124,30 @@ function AnglePresetPicker({ value, onChange }: { value: AnglePreset; onChange: 
 }
 
 /** The charts of one result, made once for it as the heatmaps are large. */
-function Charts({ result, kinematics, name }: { result: VibrationsResult; kinematics: string; name: string }) {
+function Charts({
+  result,
+  kinematics,
+  angularStep,
+  name,
+}: {
+  result: VibrationsResult;
+  kinematics: string;
+  angularStep: number | null;
+  name: string;
+}) {
   const theme = useChartTheme();
-  const [preset, setPreset] = useState<AnglePreset>(DEFAULT_ANGLE_PRESET);
+  const [preset, setPreset] = useState<AnglePreset>(() => defaultPreset(angularStep));
+  const hasStep = angularStep !== null;
   const options = useMemo(
     () => ({
       polarAngle: polarAngleOption(result, theme),
       polarHeatmap: polarHeatmapOption(result, theme),
       speed: speedProfileOption(result, theme),
-      angular: angularProfilesOption(result, kinematics, theme, preset),
+      angular: angularProfilesOption(result, kinematics, theme, preset, hasStep),
       heatmap: heatmapOption(result, theme),
       motor: result.motor ? motorProfileOption(result.motor, MAX_FREQ, kinematics, theme) : null,
     }),
-    [result, kinematics, theme, preset],
+    [result, kinematics, theme, preset, hasStep],
   );
   return (
     <>
@@ -166,6 +179,7 @@ function Charts({ result, kinematics, name }: { result: VibrationsResult; kinema
         option={options.angular}
         label={`Angular speed profiles of ${name}`}
         selector={<AnglePresetPicker value={preset} onChange={setPreset} />}
+        legendSwitches={["Major", "Minor"]}
       />
       <ChartPanel
         minWidth={WIDE_CHART}
@@ -220,12 +234,14 @@ export function VibrationsView({
   combined,
   chip,
   kinematics,
+  angularStep,
   onInclude,
 }: {
   perChip: ChipVibrations[];
   combined: VibrationsResult | null;
   chip: string | null;
   kinematics: string;
+  angularStep: number | null;
   onInclude: () => void;
 }) {
   if (chip === null) {
@@ -233,7 +249,7 @@ export function VibrationsView({
       <>
         <DataQuality chips={perChip} onInclude={onInclude} />
         {combined ? (
-          <Charts result={combined} kinematics={kinematics} name="all chips" />
+          <Charts result={combined} kinematics={kinematics} angularStep={angularStep} name="all chips" />
         ) : (
           <p role="status" className="text-sm">
             No chip qualifies for All chips.
@@ -247,7 +263,9 @@ export function VibrationsView({
   return (
     <>
       <DataQuality chips={[entry]} onInclude={onInclude} />
-      {entry.result && <Charts result={entry.result} kinematics={kinematics} name={chipLabel(chip)} />}
+      {entry.result && (
+        <Charts result={entry.result} kinematics={kinematics} angularStep={angularStep} name={chipLabel(chip)} />
+      )}
     </>
   );
 }
