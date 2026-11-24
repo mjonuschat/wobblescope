@@ -747,7 +747,7 @@ mod vibrations {
     use wobblescope_session::bridge::{analyze_vibrations, vibrations_inputs};
     use wobblescope_session::meta::{
         ChipMeta, Outcome, ProbePoint, SegmentFile, SegmentMeta, SessionKind, SessionMeta, Source,
-        StepMeta, TimeDomain, TimeWindow, VibrationsRun, sample_file_name,
+        StepMeta, TimeDomain, TimeWindow, VibrationsRun, expected_speeds, sample_file_name,
     };
 
     const RATE: f64 = 1600.0;
@@ -1072,5 +1072,132 @@ mod vibrations {
             assert!(excluded.contains(failure), "{excluded}");
             assert!(out.per_chip[0].excluded.is_none());
         }
+    }
+
+    /// As [`session`], for a run with a 45 degree step: segments at 0, 90, 45 and 135 degrees.
+    fn stepped(chips: &[(&str, Health, f64)]) -> (SessionMeta, HashMap<String, RawSamples>) {
+        let (mut meta, mut files) = session(chips);
+        meta.format_version = 3;
+        meta.vibrations_run.as_mut().unwrap().angular_step = Some(45.0);
+        for (index, angle) in [45.0, 135.0].into_iter().enumerate() {
+            let number = 2 + index;
+            let mut list = Vec::new();
+            for (chip, (_, _, amplitude)) in chips.iter().enumerate() {
+                let entry = file(chip as u32, number);
+                files.insert(entry.sample_file.clone(), recording(*amplitude));
+                list.push(entry);
+            }
+            meta.segments
+                .push(segment(Direction::from_degrees(angle), list));
+        }
+        (meta, files)
+    }
+
+    parity_test! {
+        fn a_motor_only_session_is_analysed_as_before() {
+            let (meta, files) = session(&[("a", Health::Ok, 1.0)]);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let a = &out.per_chip[0];
+            assert!(a.excluded.is_none() && a.failure.is_none());
+            let measured: Vec<f64> = a.result.as_ref().unwrap().measured.iter().map(|m| m.angle).collect();
+            assert_eq!(measured, vec![0.0, 90.0]);
+        }
+    }
+
+    parity_test! {
+        fn an_extra_direction_reaches_the_analysis() {
+            let (meta, files) = stepped(&[("a", Health::Ok, 1.0)]);
+            let steps = vibrations_inputs(&meta, "a", loader(&files)).unwrap();
+            assert_eq!(steps.len(), 4 * SPEEDS.len());
+            let angles: Vec<f64> = steps.iter().step_by(SPEEDS.len()).map(|s| s.angle).collect();
+            assert_eq!(angles, vec![0.0, 90.0, 45.0, 135.0]);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let a = &out.per_chip[0];
+            assert!(a.excluded.is_none() && a.failure.is_none(), "{a:?}");
+            let measured: Vec<f64> = a.result.as_ref().unwrap().measured.iter().map(|m| m.angle).collect();
+            for angle in [0.0, 90.0, 45.0, 135.0] {
+                assert!(measured.contains(&angle), "{measured:?}");
+            }
+            assert_eq!(a.decisions.len(), 4);
+        }
+    }
+
+    parity_test! {
+        fn a_chip_with_a_missing_extra_direction_has_no_result_and_says_which() {
+            let (mut meta, files) = stepped(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 1.0)]);
+            meta.segments[2].files.retain(|f| f.chip != 1);
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let b = &out.per_chip[1];
+            assert!(b.result.is_none() && b.failure.is_none());
+            assert!(b.excluded.as_deref().unwrap().contains("no recording at 45 degrees"));
+            assert!(out.per_chip[0].result.is_some());
+            assert!(out.worst_case.is_some());
+        }
+    }
+
+    parity_test! {
+        fn a_chip_with_a_partial_direction_has_no_result() {
+            let (mut meta, files) = stepped(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 1.0)]);
+            meta.segments[3].steps.pop();
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            for chip in &out.per_chip {
+                assert!(chip.result.is_none() && chip.failure.is_none());
+                assert!(chip.excluded.as_deref().unwrap().contains("135 degrees"), "{chip:?}");
+            }
+            assert!(out.worst_case.is_none());
+        }
+    }
+
+    parity_test! {
+        fn a_chip_with_extras_at_other_speeds_has_no_result() {
+            let (mut meta, files) = stepped(&[("a", Health::Ok, 1.0)]);
+            meta.segments[2].steps[1].speed = 35.0;
+            let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
+            let a = &out.per_chip[0];
+            assert!(a.result.is_none());
+            assert!(a.excluded.as_deref().unwrap().contains("45 degrees"));
+        }
+    }
+
+    parity_test! {
+        fn include_excluded_does_not_admit_a_missing_direction() {
+            let (mut meta, files) = stepped(&[("a", Health::Ok, 1.0), ("b", Health::Ok, 1.0)]);
+            meta.segments[2].files.retain(|f| f.chip != 1);
+            let out = analyze_vibrations(&meta, 200.0, true, loader(&files)).unwrap();
+            assert!(out.per_chip[1].result.is_none());
+            assert!(out.per_chip[1].excluded.is_some());
+        }
+    }
+
+    parity_test! {
+        fn an_incomplete_session_is_still_refused() {
+            let (mut meta, files) = stepped(&[("a", Health::Ok, 1.0)]);
+            meta.outcome = Outcome::Incomplete { reason: "stopped".to_owned() };
+            let err = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap_err();
+            assert!(err.to_string().contains("incomplete"), "{err}");
+        }
+    }
+
+    parity_test! {
+        fn a_complete_outcome_with_only_the_motor_pair_of_a_stepped_run_is_refused() {
+            let (mut meta, files) = stepped(&[("a", Health::Ok, 1.0)]);
+            meta.segments.truncate(2);
+            assert_eq!(meta.outcome, Outcome::Complete);
+            let err = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap_err();
+            assert!(err.to_string().contains("incomplete"), "{err}");
+        }
+    }
+
+    #[test]
+    fn expected_speeds_matches_the_planners_list_for_the_default_settings() {
+        let (mut meta, _) = session(&[("a", Health::Ok, 1.0)]);
+        let run = meta.vibrations_run.as_mut().unwrap();
+        (run.min_speed, run.max_speed, run.speed_increment) = (2.0, 200.0, 2.0);
+        let planner: Vec<f64> = (1..=100).map(|i| 2.0 * f64::from(i)).collect();
+        assert_eq!(expected_speeds(run), planner);
+        (run.min_speed, run.max_speed, run.speed_increment) = (2.0, 200.0, 5.0);
+        let speeds = expected_speeds(run);
+        assert_eq!((speeds.len(), speeds[0], speeds[40]), (41, 2.0, 200.0));
+        assert_eq!(speeds[39], 197.0);
     }
 }

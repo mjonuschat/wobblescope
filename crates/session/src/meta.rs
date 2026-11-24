@@ -149,6 +149,23 @@ impl VibrationsRun {
     }
 }
 
+/// The speeds of one angle of `run`: the start speed, every step above it while below the end
+/// speed, then the end speed itself. Shake&Tune stops at the last step below the end speed.
+pub fn expected_speeds(run: &VibrationsRun) -> Vec<f64> {
+    let mut speeds = Vec::new();
+    let mut i = 0.0;
+    loop {
+        let speed = run.min_speed + i * run.speed_increment;
+        if speed >= run.max_speed {
+            break;
+        }
+        speeds.push(speed);
+        i += 1.0;
+    }
+    speeds.push(run.max_speed);
+    speeds
+}
+
 /// The sweep settings a test actually ran with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

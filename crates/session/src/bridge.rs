@@ -14,7 +14,8 @@ use wobblescope_core::vibrations::{
 
 use crate::SessionError;
 use crate::meta::{
-    AXES_MAP_DIRECTIONS, Outcome, SegmentFile, SessionKind, SessionMeta, undersampled_note,
+    AXES_MAP_DIRECTIONS, Outcome, SegmentFile, SegmentMeta, SessionKind, SessionMeta,
+    VibrationsRun, expected_speeds, undersampled_note,
 };
 
 /// Builds the `core` inputs for every recording of `direction`, segments in metadata order and each
@@ -379,19 +380,43 @@ fn invalid(field: &str, reason: impl Into<String>) -> SessionError {
     }
 }
 
-fn vibrations_setup(meta: &SessionMeta) -> Result<([f64; 2], Kinematics), SessionError> {
+/// The run, its planned angles in segment order and its kinematics. Without `angular_step` the
+/// angles are the motor pair, which a session with fewer segments need not have all of.
+fn vibrations_setup(
+    meta: &SessionMeta,
+) -> Result<(&VibrationsRun, Vec<f64>, Kinematics), SessionError> {
     meta.validate()?;
     let Some(run) = &meta.vibrations_run else {
         return Err(invalid("kind", "not a vibrations session"));
     };
-    let (Some(angles), Some(kinematics)) = (run.angles(), Kinematics::parse(&run.kinematics))
+    let (Some(angles), Some(kinematics)) =
+        (run.planned_angles(), Kinematics::parse(&run.kinematics))
     else {
         return Err(invalid(
             "vibrations_run.kinematics",
             format!("unknown kinematics {}", run.kinematics),
         ));
     };
-    Ok((angles, kinematics))
+    Ok((run, angles, kinematics))
+}
+
+/// Why `segment` is not a complete recording of the run's speeds, or `None` when its steps match
+/// `speeds` one for one and each step window is a finite, non-empty range.
+fn incomplete_direction(segment: &SegmentMeta, speeds: &[f64]) -> Option<String> {
+    if segment.steps.len() != speeds.len()
+        || segment.steps.iter().zip(speeds).any(|(s, v)| s.speed != *v)
+    {
+        return Some("its steps are not the run's speeds".to_owned());
+    }
+    segment
+        .steps
+        .iter()
+        .any(|s| {
+            !(s.window.start.is_finite()
+                && s.window.end.is_finite()
+                && s.window.start < s.window.end)
+        })
+        .then(|| "a step window is unusable".to_owned())
 }
 
 /// The recording `file` holds, checked against the sample count the metadata records.
@@ -412,7 +437,8 @@ where
 }
 
 /// The steps of `chip`: each step's window cut from its segment file (`start <= t < end`), the
-/// segments in metadata order. Segment 0 is the first angle of the run and segment 1 the second.
+/// segments in metadata order. A segment's angle is its direction in degrees for a run with an
+/// angular step, else segment 0 is the first angle of the motor pair and segment 1 the second.
 /// A segment the chip has no file for gives no steps. Only the chip's files are loaded.
 ///
 /// # Errors
@@ -426,9 +452,19 @@ pub fn vibrations_inputs<F>(
 where
     F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
 {
-    let (angles, _) = vibrations_setup(meta)?;
+    let (run, angles, _) = vibrations_setup(meta)?;
     let mut steps = Vec::new();
-    for (segment, angle) in meta.segments.iter().zip(angles) {
+    for (index, segment) in meta.segments.iter().enumerate() {
+        let angle = if run.angular_step.is_some() {
+            segment
+                .axis
+                .degrees()
+                .ok_or_else(|| invalid("segments", "a segment is not at a bed angle"))?
+        } else if let Some(angle) = angles.get(index) {
+            *angle
+        } else {
+            break;
+        };
         let Some(file) = segment
             .files
             .iter()
@@ -454,15 +490,16 @@ where
 /// Analyses every chip of a complete vibrations session and the worst case over the chips that
 /// take part.
 ///
-/// A chip takes part when each of the two angles has a recording and the eligibility rules leave
-/// both in, which they do not for poor health, coverage or an undersampled rate. `include_excluded`
-/// lets both take part anyway. A
+/// A chip takes part when each measured direction has a recording and the eligibility rules leave
+/// them all in, which they do not for poor health, coverage or an undersampled rate.
+/// `include_excluded` lets them take part anyway. A
 /// chip left out still gets its own profile when its data can be analysed. A file `load`
 /// cannot read, or a profile that cannot be computed, is that chip's `failure` and no other
 /// chip's. The worst case is `None` when no chip takes part or their grids differ.
 ///
 /// # Errors
-/// `meta` is not a vibrations session, is not complete, or has unknown kinematics.
+/// `meta` is not a vibrations session, is not complete, or has unknown kinematics. A session with
+/// an `angular_step` is not complete without the `Complete` outcome and every planned segment.
 pub fn analyze_vibrations<F>(
     meta: &SessionMeta,
     max_freq: f64,
@@ -472,13 +509,15 @@ pub fn analyze_vibrations<F>(
 where
     F: FnMut(&SegmentFile) -> Result<RawSamples, SessionError>,
 {
-    let (angles, kinematics) = vibrations_setup(meta)?;
-    if meta.outcome != Outcome::Complete {
+    let (run, angles, kinematics) = vibrations_setup(meta)?;
+    let stepped = run.angular_step.is_some();
+    if meta.outcome != Outcome::Complete || (stepped && meta.segments.len() < angles.len()) {
         return Err(invalid(
             "outcome",
             "the vibrations session is incomplete and cannot be analysed",
         ));
     }
+    let speeds = expected_speeds(run);
     let params = VibrationsParams {
         max_freq,
         kinematics,
@@ -491,15 +530,21 @@ where
         let mut inputs = Vec::new();
         let mut recorded_angles = Vec::new();
         let mut missing_angles = Vec::new();
+        let mut unusable_angles = Vec::new();
         for (segment, angle) in angles.iter().enumerate() {
             let recording = meta.segments.get(segment).and_then(|s| {
                 dataset_inputs_for_chip(meta, s.axis, &chip.name, |_| Ok(RawSamples::default()))
                     .ok()?
                     .into_iter()
                     .next()
+                    .map(|input| (s, input))
             });
             match recording {
-                Some(mut input) => {
+                Some((s, mut input)) => {
+                    if let Some(why) = stepped.then(|| incomplete_direction(s, &speeds)).flatten() {
+                        unusable_angles.push(format!("{angle} degrees: {why}"));
+                        continue;
+                    }
                     input.include_override = include_excluded;
                     inputs.push(input);
                     recorded_angles.push(*angle);
@@ -514,6 +559,7 @@ where
             .iter()
             .map(|angle| format!("no recording at {angle} degrees"))
             .collect();
+        reasons.extend(unusable_angles.iter().cloned());
         for (decision, angle) in decisions.iter().zip(&recorded_angles) {
             if decision.decision == Decision::Excluded {
                 reasons.push(format!("{angle} degrees: {}", decision.reasons.join(", ")));
@@ -522,7 +568,7 @@ where
         let mut excluded = (!reasons.is_empty()).then(|| reasons.join("; "));
 
         let (mut result, mut failure) = (None, None);
-        if missing_angles.is_empty() {
+        if missing_angles.is_empty() && unusable_angles.is_empty() {
             let analysed = vibrations_inputs(meta, &chip.name, &mut load)
                 .map_err(|e| e.to_string())
                 .and_then(|steps| analyze_chip(&steps, &params).map_err(|e| e.to_string()));

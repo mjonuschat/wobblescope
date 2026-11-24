@@ -4,7 +4,7 @@
 use serde::Deserialize;
 use wobblescope_core::direction::Direction;
 use wobblescope_session::codec::MAX_SAMPLES;
-use wobblescope_session::meta::{Mode, VibrationsRun};
+use wobblescope_session::meta::{ANGULAR_STEPS, Mode, VibrationsRun, expected_speeds};
 
 use super::request::{
     Effective, Overrides, RequestError, Segment, TestKind, TestPlan, check_chips, refuse,
@@ -97,24 +97,6 @@ fn setting(field: &str, value: Option<f64>, default: f64, min: f64) -> Result<f6
         return refuse(field, format!("must be at least {min}"));
     }
     Ok(value)
-}
-
-/// The speeds of one angle are the start speed, every step above it while below the end speed,
-/// then the end speed itself. Shake&Tune stops at the last step below the end speed, so a run
-/// never measures the end speed.
-fn speed_list(min_speed: f64, max_speed: f64, speed_increment: f64) -> Vec<f64> {
-    let mut speeds = Vec::new();
-    let mut i = 0.0;
-    loop {
-        let speed = min_speed + i * speed_increment;
-        if speed >= max_speed {
-            break;
-        }
-        speeds.push(speed);
-        i += 1.0;
-    }
-    speeds.push(max_speed);
-    speeds
 }
 
 /// The factor on the segment length at `speed`. Shake&Tune shortens the segments below 100 mm/s
@@ -280,10 +262,11 @@ pub fn plan_vibrations(
             }
         }
     }
+    let speeds = expected_speeds(&run);
     let plan = VibrationsPlan {
         run,
         angles,
-        speeds: speed_list(min_speed, max_speed, speed_increment),
+        speeds,
         mid,
     };
     let segment_seconds = estimated_angle_seconds(&plan);
@@ -561,7 +544,9 @@ mod tests {
 
     #[test]
     fn the_last_speed_is_the_end_speed() {
-        let speeds = speed_list(2.0, 200.0, 5.0);
+        let mut r = request();
+        r.speed_increment = Some(5.0);
+        let speeds = vibrations(&r).speeds;
         assert_eq!(speeds.len(), 41);
         assert_eq!(&speeds[..3], &[2.0, 7.0, 12.0]);
         assert_eq!(&speeds[39..], &[197.0, 200.0]);
@@ -569,7 +554,9 @@ mod tests {
 
     #[test]
     fn an_end_speed_on_a_step_is_listed_once() {
-        let speeds = speed_list(2.0, 200.0, 2.0);
+        let mut r = request();
+        r.speed_increment = Some(2.0);
+        let speeds = vibrations(&r).speeds;
         assert_eq!(speeds.len(), 100);
         assert_eq!(&speeds[97..], &[196.0, 198.0, 200.0]);
     }
