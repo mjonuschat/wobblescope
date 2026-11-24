@@ -171,3 +171,12 @@ step of 5 ends at 197. Wobblescope always includes the maximum speed.
 
 Shake&Tune can finish a long test and then end with an error. Wobblescope reports that there
 is no low vibration speed range.
+
+### Can I measure more directions than the two motor directions?
+
+Shake&Tune measures the two motor directions and computes every other angle from them.
+Wobblescope has an "Angular resolution" setting: motor directions only (the default, which gives
+the same result as Shake&Tune), or every 45, 22.5 or 15 degrees. Measured directions are drawn
+from their recorded steps and labelled measured; the others are labelled computed, estimated
+from the measured ones. A run takes longer in proportion to the number of directions, and
+the form shows the estimate before you start.

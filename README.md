@@ -6,7 +6,7 @@ Multi-accelerometer resonance testing for Klipper and Kalico printers, with the 
 
 - **Input shaper calibration.** Runs a resonance test on several accelerometers at once and fits Klipper's shapers to each chip. It recommends one shaper per chip and one for all chips, and prints the `[input_shaper]` lines for `printer.cfg`.
 - **Belt comparison.** Compares the two belts of a CoreXY or limited CoreXY printer, chip by chip.
-- **Vibrations profile.** Records the toolhead at a range of speeds and angles and shows which speeds to avoid.
+- **Vibrations profile.** Records the toolhead at a range of speeds and angles and shows which speeds to avoid. The angular resolution setting measures only the two motor directions (the default) or every 45, 22.5 or 15 degrees. Measured directions show the recorded values; the other angles are estimated from them.
 - **Axes map.** Finds which accelerometer axis follows which printer axis.
 - **Live view.** Streams an accelerometer into a live spectrum and holds the excitation at one frequency.
 - **History.** Keeps each session's raw samples for later re-analysis, saves results as files that open on any device, and imports Klipper's raw CSV files.
