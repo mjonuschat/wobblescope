@@ -1,6 +1,6 @@
 use wobblescope_core::RawSamples;
 use wobblescope_core::vibrations::{
-    Grid, Kinematics, StepInput, VibrationsParams, analyze_chip, worst_case,
+    Grid, Kinematics, MeasuredCurve, StepInput, VibrationsParams, analyze_chip, worst_case,
 };
 
 fn params() -> VibrationsParams {
@@ -35,7 +35,7 @@ fn worst_case_of_none_is_none() {
 #[test]
 fn worst_case_is_the_elementwise_maximum() {
     let (a, b) = (grid(1.0), grid(2.5));
-    let got = worst_case(&[&a, &b], &params()).unwrap();
+    let got = worst_case(&[(&a, &[]), (&b, &[])], &params()).unwrap();
     for r in 0..720 {
         for c in 0..12 {
             assert_eq!(
@@ -54,7 +54,7 @@ fn worst_case_is_the_elementwise_maximum() {
 #[test]
 fn worst_case_of_one_chip_equals_that_chip() {
     let a = grid(1.7);
-    let got = worst_case(&[&a], &params()).unwrap();
+    let got = worst_case(&[(&a, &[])], &params()).unwrap();
     assert_eq!(got.grid, a.data);
     assert_eq!(
         got.angle_energy,
@@ -107,10 +107,60 @@ fn worst_case_of_one_chip_matches_analyze_chip_in_every_other_field() {
         speeds: want.speeds.clone(),
         data: want.grid.clone(),
     };
-    let mut got = worst_case(&[&grid], &params()).unwrap();
+    let mut got = worst_case(&[(&grid, &want.measured)], &params()).unwrap();
     want.steps.clear();
     want.motor = None;
     got.steps.clear();
     got.motor = None;
     assert_eq!(got, want);
+}
+
+fn curve(angle: f64, speeds: &[f64], energy: &[f64]) -> MeasuredCurve {
+    MeasuredCurve {
+        angle,
+        speeds: speeds.to_vec(),
+        energy: energy.to_vec(),
+    }
+}
+
+#[test]
+fn combined_measured_is_the_intersection() {
+    let (a, b) = (grid(1.0), grid(2.5));
+    let speeds = [20.0, 30.0];
+    let first = [
+        curve(0.0, &speeds, &[1.0, 5.0]),
+        curve(22.5, &speeds, &[2.0, 2.0]),
+        curve(90.0, &speeds, &[3.0, 3.0]),
+    ];
+    let second = [
+        curve(0.0, &speeds, &[4.0, 2.0]),
+        curve(90.0, &speeds, &[1.0, 1.0]),
+        curve(135.0, &speeds, &[9.0, 9.0]),
+    ];
+    let got = worst_case(&[(&a, &first), (&b, &second)], &params()).unwrap();
+    assert_eq!(
+        got.measured,
+        vec![
+            curve(0.0, &speeds, &[4.0, 5.0]),
+            curve(90.0, &speeds, &[3.0, 3.0])
+        ]
+    );
+}
+
+#[test]
+fn equal_axes_but_different_interior_speeds_give_no_measured_angle() {
+    let (a, b) = (grid(1.0), grid(2.5));
+    let first = [curve(0.0, &[20.0, 30.0, 40.0], &[1.0, 2.0, 3.0])];
+    let second = [curve(0.0, &[20.0, 35.0, 40.0], &[1.0, 2.0, 3.0])];
+    let got = worst_case(&[(&a, &first), (&b, &second)], &params()).unwrap();
+    assert!(got.measured.is_empty());
+}
+
+#[test]
+fn different_axes_give_no_combined_result() {
+    let a = grid(1.0);
+    let mut b = grid(1.0);
+    b.speeds[3] += 1.0;
+    let measured = [curve(0.0, &[20.0, 30.0], &[1.0, 2.0])];
+    assert!(worst_case(&[(&a, &measured), (&b, &measured)], &params()).is_none());
 }

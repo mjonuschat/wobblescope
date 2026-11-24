@@ -8,7 +8,8 @@ use wobblescope_core::eligibility::{
     Coverage, DatasetDecision, DatasetInput, Decision, Health, select_eligible,
 };
 use wobblescope_core::vibrations::{
-    Grid, Kinematics, StepInput, VibrationsParams, VibrationsResult, analyze_chip, worst_case,
+    Grid, Kinematics, MeasuredCurve, StepInput, VibrationsParams, VibrationsResult, analyze_chip,
+    worst_case,
 };
 
 use crate::SessionError;
@@ -484,7 +485,7 @@ where
     };
 
     let mut per_chip = Vec::with_capacity(meta.chips.len());
-    let mut grids: Vec<Grid> = Vec::new();
+    let mut grids: Vec<(Grid, Vec<MeasuredCurve>)> = Vec::new();
     for chip in &meta.chips {
         // The decisions need only metadata, so the inputs are made without the samples.
         let mut inputs = Vec::new();
@@ -534,11 +535,14 @@ where
             excluded = Some(format!("left out of All chips: {reason}"));
         }
         if let (Some(profile), None) = (&result, &excluded) {
-            grids.push(Grid {
-                angles: profile.angles.clone(),
-                speeds: profile.speeds.clone(),
-                data: profile.grid.clone(),
-            });
+            grids.push((
+                Grid {
+                    angles: profile.angles.clone(),
+                    speeds: profile.speeds.clone(),
+                    data: profile.grid.clone(),
+                },
+                profile.measured.clone(),
+            ));
         }
         per_chip.push(ChipVibrations {
             chip: chip.name.clone(),
@@ -548,7 +552,10 @@ where
             failure,
         });
     }
-    let grid_refs: Vec<&Grid> = grids.iter().collect();
+    let grid_refs: Vec<(&Grid, &[MeasuredCurve])> = grids
+        .iter()
+        .map(|(grid, measured)| (grid, measured.as_slice()))
+        .collect();
     Ok(VibrationsAnalysis {
         per_chip,
         worst_case: worst_case(&grid_refs, &params),

@@ -1001,10 +1001,14 @@ mod vibrations {
             ]);
             let out = analyze_vibrations(&meta, 200.0, false, loader(&files)).unwrap();
             let grid = |i: usize| grid_of(out.per_chip[i].result.as_ref().unwrap());
+            let measured = |i: usize| out.per_chip[i].result.as_ref().unwrap().measured.clone();
             let params = VibrationsParams { max_freq: 200.0, kinematics: Kinematics::Cartesian };
-            let expected = worst_case(&[&grid(0), &grid(1)], &params).unwrap();
+            let expected = worst_case(&[(&grid(0), &measured(0)), (&grid(1), &measured(1))], &params).unwrap();
             assert_eq!(out.worst_case.as_ref().unwrap(), &expected);
-            let with_c = worst_case(&[&grid(0), &grid(1), &grid(2)], &params).unwrap();
+            let with_c = worst_case(
+                &[(&grid(0), &measured(0)), (&grid(1), &measured(1)), (&grid(2), &measured(2))],
+                &params,
+            ).unwrap();
             assert_ne!(expected.grid, with_c.grid);
         }
     }

@@ -40,6 +40,7 @@ export function vibrationsResult(overrides: Partial<VibrationsResult> = {}): Vib
     good_angles: [{ start: 1, end: 3, energy: 20 }],
     symmetry: 87.65,
     motor: motorResult(),
+    measured: [],
     core_version: "0.0.0",
     ...overrides,
   };

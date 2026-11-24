@@ -3,8 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::correct::{Measured, corrected_grid};
 use super::grid::{
-    EnergyByAngleSpeed, Grid, Kinematics, angle_powers, direction_speed_grid, speed_powers,
+    EnergyByAngleSpeed, Grid, Kinematics, Model, angle_powers, direction_speed_grid, speed_powers,
     symmetry,
 };
 use super::motor::{PsdByAngleSpeed, motor_profiles};
@@ -54,6 +55,18 @@ pub struct StepEnergy {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+/// The energy recorded at one measured direction, drawn as it was recorded and not read from the grid.
+pub struct MeasuredCurve {
+    /// Direction in degrees.
+    pub angle: f64,
+    /// Recorded speeds in mm/s, ascending.
+    pub speeds: Vec<f64>,
+    /// Energy at each of `speeds`, in the same order.
+    pub energy: Vec<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MotorResult {
     /// Frequencies in Hz.
     pub freqs: Vec<f64>,
@@ -96,6 +109,9 @@ pub struct VibrationsResult {
     pub symmetry: Option<f64>,
     /// The motor profile. `None` for a worst case and when no resonance can be found.
     pub motor: Option<MotorResult>,
+    /// The recorded curve of every angle that had steps, ascending by angle. For a worst case, the
+    /// angles every chip measured at the same speeds, each the element-wise maximum.
+    pub measured: Vec<MeasuredCurve>,
     /// `wobblescope-core` version that produced it.
     pub core_version: String,
 }
@@ -154,17 +170,77 @@ pub(crate) fn derive(grid: &Grid, kinematics: Kinematics) -> VibrationsResult {
         good_angles,
         symmetry,
         motor: None,
+        measured: Vec::new(),
         core_version: CORE_VERSION.to_string(),
+    }
+}
+
+pub(super) fn measured_curves(energy: &EnergyByAngleSpeed) -> Vec<Measured> {
+    let mut curves: Vec<Measured> = energy
+        .iter()
+        .map(|(angle, by_speed)| {
+            let mut by_speed = by_speed.clone();
+            by_speed.sort_by(|a, b| a.0.total_cmp(&b.0));
+            Measured {
+                angle: *angle,
+                speeds: by_speed.iter().map(|(s, _)| *s).collect(),
+                energy: by_speed.iter().map(|(_, e)| *e).collect(),
+            }
+        })
+        .collect();
+    curves.sort_by(|a, b| a.angle.total_cmp(&b.angle));
+    curves
+}
+
+/// Fails with "no usable vibration energy" when every column of a corrected grid is constant,
+/// which leaves the speed curves undefined. Columns are compared cell by cell, because the
+/// variance of identical cells is only zero up to rounding.
+fn check_usable_grid(grid: &Grid) -> Result<(), CoreError> {
+    let varies = (0..grid.speeds.len()).any(|c| {
+        let first = grid.data[0][c];
+        grid.data.iter().any(|row| row[c] != first)
+    });
+    if varies {
+        Ok(())
+    } else {
+        Err(CoreError::InvalidParameter(
+            "no usable vibration energy".into(),
+        ))
+    }
+}
+
+/// Fails with "no usable vibration energy" when a figure derived from a corrected grid is not
+/// finite. A NaN symmetry is not one: it is already `None`.
+fn check_usable_figures(result: &VibrationsResult) -> Result<(), CoreError> {
+    let finite = |v: &[f64]| v.iter().all(|x| x.is_finite());
+    if finite(&result.speed_min)
+        && finite(&result.speed_max)
+        && finite(&result.speed_variance)
+        && finite(&result.vibration_metric)
+        && finite(&result.peak_speeds)
+        && finite(&result.angle_energy)
+    {
+        Ok(())
+    } else {
+        Err(CoreError::InvalidParameter(
+            "no usable vibration energy".into(),
+        ))
     }
 }
 
 /// The vibrations profile of one chip.
 ///
+/// Steps may be at any angle. The main angles of the kinematics are required and give the model
+/// and the motor profile. Every other angle is an extra: it must have the speeds of the motor
+/// angles, and when there is one the angles are drawn from the model corrected by the extras
+/// instead of the model. With none, the result is the model's, as before.
+///
 /// # Errors
 /// [`CoreError::InvalidParameter`] when there are no steps, when a main angle of the kinematics
 /// has no step, or when the steps cover fewer than two distinct speeds. It also returns what
 /// [`CalibrationData::from_samples`](crate::psd::CalibrationData::from_samples) rejects in a
-/// recording, such as one with no samples.
+/// recording, such as one with no samples. With extras it also rejects an extra at other speeds
+/// than the motor angles, and a corrected grid that has no variance or no finite figures.
 pub fn analyze_chip(
     steps: &[StepInput],
     p: &VibrationsParams,
@@ -200,9 +276,31 @@ pub fn analyze_chip(
         }
     }
 
-    let grid = direction_speed_grid(&energy, p.kinematics, main);
-    let mut result = derive(&grid, p.kinematics);
-    let (profiles, combined) = motor_profiles(&freqs, &psds, &result.angle_energy, main);
+    let curves = measured_curves(&energy);
+    let (motor, extras): (Vec<Measured>, Vec<Measured>) = curves
+        .iter()
+        .cloned()
+        .partition(|m| main.contains(&m.angle));
+    let motor_energy: EnergyByAngleSpeed = energy
+        .iter()
+        .filter(|(angle, _)| main.contains(angle))
+        .cloned()
+        .collect();
+
+    let model_grid = direction_speed_grid(&motor_energy, p.kinematics, main);
+    let mut result = if extras.is_empty() {
+        derive(&model_grid, p.kinematics)
+    } else {
+        let model = Model::new(&motor_energy, p.kinematics, main);
+        let corrected = corrected_grid(&model, &extras, &motor)?;
+        check_usable_grid(&corrected)?;
+        let corrected_result = derive(&corrected, p.kinematics);
+        check_usable_figures(&corrected_result)?;
+        corrected_result
+    };
+    // The motor profile is weighted by the model grid's angular energy, extras or not.
+    let model_angle_energy = angle_powers(&model_grid);
+    let (profiles, combined) = motor_profiles(&freqs, &psds, &model_angle_energy, main);
     result.motor = estimate_damping_above(&freqs, &combined, MOTOR_MIN_FREQ).map(|m| MotorResult {
         freqs,
         profiles,
@@ -212,6 +310,14 @@ pub fn analyze_chip(
         peak_index: m.peak_index,
         low_freq_warning: m.low_freq_max,
     });
+    result.measured = curves
+        .into_iter()
+        .map(|m| MeasuredCurve {
+            angle: m.angle,
+            speeds: m.speeds,
+            energy: m.energy,
+        })
+        .collect();
     result.steps = step_psds
         .iter()
         .map(|s| StepEnergy {
@@ -221,4 +327,48 @@ pub fn analyze_chip(
         })
         .collect();
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::numeric::linspace;
+
+    fn usable() -> VibrationsResult {
+        let speeds = linspace(20.0, 60.0, 12);
+        let angles = linspace(0.0, 360.0, 720);
+        let data = (0..720)
+            .map(|a| {
+                (0..12)
+                    .map(|s| 1.0 + ((a as f64 * 0.05 + s as f64).sin() + 1.0))
+                    .collect()
+            })
+            .collect();
+        derive(
+            &Grid {
+                angles,
+                speeds,
+                data,
+            },
+            Kinematics::Cartesian,
+        )
+    }
+
+    #[test]
+    fn a_non_finite_speed_curve_peak_or_angular_energy_fails_the_chip() {
+        assert!(check_usable_figures(&usable()).is_ok());
+        let mut curve = usable();
+        curve.speed_max[3] = f64::INFINITY;
+        let mut peak = usable();
+        peak.peak_speeds.push(f64::NAN);
+        let mut angular = usable();
+        angular.angle_energy[7] = f64::NAN;
+        for result in [curve, peak, angular] {
+            let err = check_usable_figures(&result).unwrap_err();
+            assert!(
+                err.to_string().contains("no usable vibration energy"),
+                "{err}"
+            );
+        }
+    }
 }

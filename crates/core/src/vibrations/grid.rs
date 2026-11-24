@@ -58,7 +58,7 @@ const SPEED_SMOOTHING: usize = 15;
 /// Shake&Tune's `get_interpolated_vibrations`: the energy at `speed`, interpolated linearly
 /// between the two measured speeds around it, or extrapolated from the first or last pair.
 /// `measured` holds the sorted measured speeds, `energy` the energy at each of them.
-fn interpolated(measured: &[f64], energy: &[f64], speed: f64) -> f64 {
+pub(crate) fn interpolated(measured: &[f64], energy: &[f64], speed: f64) -> f64 {
     let at = measured.partition_point(|s| *s < speed);
     let idx = at.max(1).min(measured.len() - 1);
     let (lower, upper) = (idx.saturating_sub(1), idx);
@@ -67,42 +67,93 @@ fn interpolated(measured: &[f64], energy: &[f64], speed: f64) -> f64 {
             / (measured[upper] - measured[lower])
 }
 
-/// Projects the energy measured on the two motor directions onto every direction of travel.
+/// The model of the vibrations profile: the energy measured on the two motor directions projected
+/// onto any direction of travel and speed. [`direction_speed_grid`] samples it.
 ///
-/// `energy` must hold both `main` angles with at least two distinct speeds overall (the caller
-/// checks, as Shake&Tune does before this step). A speed missing at an angle counts as zero energy,
-/// as in Shake&Tune. A speed below the lowest measured one is extrapolated and may give negative
-/// energy.
+/// Only the motor angles give it its speeds, so measuring other directions never changes its
+/// speed axis.
+#[derive(Debug, Clone)]
+pub struct Model {
+    kinematics: Kinematics,
+    measured: Vec<f64>,
+    /// The energy at each of `measured` for each motor angle, zero where the speed is missing.
+    by_main: [Vec<f64>; 2],
+}
+
+impl Model {
+    /// `energy` must hold both `main` angles with at least two distinct speeds overall (the caller
+    /// checks, as Shake&Tune does before this step). A speed missing at an angle counts as zero
+    /// energy, as in Shake&Tune. Angles other than `main` are ignored.
+    pub fn new(energy: &EnergyByAngleSpeed, k: Kinematics, main: [f64; 2]) -> Model {
+        let mut measured: Vec<f64> = energy
+            .iter()
+            .filter(|(angle, _)| main.contains(angle))
+            .flat_map(|(_, by_speed)| by_speed.iter().map(|(speed, _)| *speed))
+            .collect();
+        measured.sort_by(f64::total_cmp);
+        measured.dedup();
+        let by_main = main.map(|angle| {
+            measured
+                .iter()
+                .map(|speed| {
+                    energy
+                        .iter()
+                        .find(|(a, _)| *a == angle)
+                        .and_then(|(_, by_speed)| by_speed.iter().find(|(s, _)| s == speed))
+                        .map_or(0.0, |(_, e)| *e)
+                })
+                .collect::<Vec<f64>>()
+        });
+        Model {
+            kinematics: k,
+            measured,
+            by_main,
+        }
+    }
+
+    pub fn speed_axis(&self) -> Vec<f64> {
+        linspace(
+            self.measured[0],
+            self.measured[self.measured.len() - 1],
+            self.measured.len() * SPEEDS_PER_MEASURED,
+        )
+    }
+
+    /// The modelled energy at `angle_degrees` and `speed`. It is not clamped, so a speed below the
+    /// lowest measured one can give a negative value.
+    pub fn value(&self, angle_degrees: f64, speed: f64) -> f64 {
+        let radians = angle_degrees.to_radians();
+        self.value_at(radians.sin(), radians.cos(), speed)
+    }
+
+    fn value_at(&self, sin: f64, cos: f64, speed: f64) -> f64 {
+        let sqrt_2_inv = 1.0 / 2.0_f64.sqrt();
+        let (speed_1, speed_2) = match self.kinematics {
+            Kinematics::Cartesian => ((speed * cos).abs(), (speed * sin).abs()),
+            Kinematics::CoreXy => (
+                (speed * (cos + sin) * sqrt_2_inv).abs(),
+                (speed * (cos - sin) * sqrt_2_inv).abs(),
+            ),
+        };
+        interpolated(&self.measured, &self.by_main[0], speed_1)
+            + interpolated(&self.measured, &self.by_main[1], speed_2)
+    }
+}
+
+/// The 720 angles of the grid in degrees, `linspace(0, 360, 720)`, which contains both 0 and 360.
+pub(crate) fn row_angles() -> Vec<f64> {
+    linspace(0.0, 360.0, ANGLE_COUNT)
+}
+
+/// Projects the energy measured on the two motor directions onto every direction of travel: the
+/// [`Model`] sampled at 720 angles and `6 * N` speeds.
 ///
 /// The angles are `linspace(0, 360, 720)`, which contains both 0 and 360, so the first row equals
 /// the last and the step is 0.5007 degrees.
 pub fn direction_speed_grid(energy: &EnergyByAngleSpeed, k: Kinematics, main: [f64; 2]) -> Grid {
-    let mut measured: Vec<f64> = energy
-        .iter()
-        .flat_map(|(_, by_speed)| by_speed.iter().map(|(speed, _)| *speed))
-        .collect();
-    measured.sort_by(f64::total_cmp);
-    measured.dedup();
-    let by_main = main.map(|angle| {
-        measured
-            .iter()
-            .map(|speed| {
-                energy
-                    .iter()
-                    .find(|(a, _)| *a == angle)
-                    .and_then(|(_, by_speed)| by_speed.iter().find(|(s, _)| s == speed))
-                    .map_or(0.0, |(_, e)| *e)
-            })
-            .collect::<Vec<f64>>()
-    });
-
-    let angles = linspace(0.0, 360.0, ANGLE_COUNT);
-    let speeds = linspace(
-        measured[0],
-        measured[measured.len() - 1],
-        measured.len() * SPEEDS_PER_MEASURED,
-    );
-    let sqrt_2_inv = 1.0 / 2.0_f64.sqrt();
+    let model = Model::new(energy, k, main);
+    let angles = row_angles();
+    let speeds = model.speed_axis();
     let data = angles
         .iter()
         .map(|angle| {
@@ -110,17 +161,7 @@ pub fn direction_speed_grid(energy: &EnergyByAngleSpeed, k: Kinematics, main: [f
             let (sin, cos) = (radians.sin(), radians.cos());
             speeds
                 .iter()
-                .map(|speed| {
-                    let (speed_1, speed_2) = match k {
-                        Kinematics::Cartesian => ((speed * cos).abs(), (speed * sin).abs()),
-                        Kinematics::CoreXy => (
-                            (speed * (cos + sin) * sqrt_2_inv).abs(),
-                            (speed * (cos - sin) * sqrt_2_inv).abs(),
-                        ),
-                    };
-                    interpolated(&measured, &by_main[0], speed_1)
-                        + interpolated(&measured, &by_main[1], speed_2)
-                })
+                .map(|speed| model.value_at(sin, cos, *speed))
                 .collect()
         })
         .collect();

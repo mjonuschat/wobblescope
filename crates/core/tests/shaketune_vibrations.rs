@@ -4,10 +4,7 @@
 #[macro_use]
 mod common;
 
-use std::collections::BTreeMap;
-
-use common::{assert_close, close, unzstd};
-use serde::Deserialize;
+use common::{Fixture, assert_close, close, fixtures, inputs};
 use wobblescope_core::RawSamples;
 use wobblescope_core::peaks::detect_peaks_relative;
 use wobblescope_core::vibrations::{
@@ -15,85 +12,6 @@ use wobblescope_core::vibrations::{
     analyze_chip, angle_powers, direction_speed_grid, estimate_damping_above,
     filter_and_split_zones, low_energy_zones, motor_profiles, speed_powers, step_psds, symmetry,
 };
-
-#[derive(Deserialize)]
-struct Fixture {
-    max_freq: f64,
-    steps: Vec<FixtureStep>,
-    target_freqs: Vec<f64>,
-    psds: Vec<FixturePsd>,
-    energies: Vec<FixtureEnergy>,
-    kinematics: String,
-    main_angles: Vec<f64>,
-    all_angles: Vec<f64>,
-    all_speeds: Vec<f64>,
-    spectrogram_data: Vec<Vec<f64>>,
-    all_angles_energy: Vec<f64>,
-    sp_min_energy: Vec<f64>,
-    sp_max_energy: Vec<f64>,
-    sp_variance_energy: Vec<f64>,
-    vibration_metric: Vec<f64>,
-    vibration_peaks: Vec<usize>,
-    good_speeds: Vec<(usize, usize, f64)>,
-    good_angles: Vec<(usize, usize, f64)>,
-    motor_profiles: BTreeMap<String, Vec<f64>>,
-    global_motor_profile: Vec<f64>,
-    symmetry_factor: f64,
-    motor_fr: f64,
-    motor_zeta: Option<f64>,
-    motor_res_idx: usize,
-    motor_lowfreq_max: bool,
-}
-
-#[derive(Deserialize)]
-struct FixtureStep {
-    angle: f64,
-    speed: f64,
-    t: Vec<f64>,
-    x: Vec<f64>,
-    y: Vec<f64>,
-    z: Vec<f64>,
-}
-
-#[derive(Deserialize)]
-struct FixturePsd {
-    angle: f64,
-    speed: f64,
-    psd: Vec<f64>,
-}
-
-#[derive(Deserialize)]
-struct FixtureEnergy {
-    angle: f64,
-    speed: f64,
-    energy: f64,
-}
-
-fn fixtures() -> Vec<(&'static str, Fixture)> {
-    let cartesian = include_bytes!("data/vibrations_cartesian.json.zst");
-    let corexy = include_bytes!("data/vibrations_corexy.json.zst");
-    [("cartesian", &cartesian[..]), ("corexy", &corexy[..])]
-        .into_iter()
-        .map(|(name, bytes)| (name, serde_json::from_str(&unzstd(bytes)).unwrap()))
-        .collect()
-}
-
-fn inputs(fixture: &Fixture) -> Vec<StepInput> {
-    fixture
-        .steps
-        .iter()
-        .map(|s| StepInput {
-            angle: s.angle,
-            speed: s.speed,
-            samples: RawSamples {
-                t: s.t.clone(),
-                x: s.x.clone(),
-                y: s.y.clone(),
-                z: s.z.clone(),
-            },
-        })
-        .collect()
-}
 
 parity_test! {
     fn step_energy_matches_shaketune() {

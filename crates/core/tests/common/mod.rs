@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use wobblescope_core::RawSamples;
+use wobblescope_core::vibrations::StepInput;
 
 /// Level-1 relative tolerance: PSD and per-frequency vibration/smoothing/score. The worst
 /// deviation seen across all goldens is about 1.5e-11 (the DC bin, a cancellation artifact),
@@ -613,4 +614,85 @@ pub fn klipper_params() -> wobblescope_core::fit::FitParams {
         damping_ratio: Some(0.1),
         ..Default::default()
     }
+}
+
+// The fixtures of the vibrations profile, written by `tests/golden/vibrations_regen.py`.
+
+#[derive(Deserialize)]
+pub struct Fixture {
+    pub max_freq: f64,
+    pub steps: Vec<FixtureStep>,
+    pub target_freqs: Vec<f64>,
+    pub psds: Vec<FixturePsd>,
+    pub energies: Vec<FixtureEnergy>,
+    pub kinematics: String,
+    pub main_angles: Vec<f64>,
+    pub all_angles: Vec<f64>,
+    pub all_speeds: Vec<f64>,
+    pub spectrogram_data: Vec<Vec<f64>>,
+    pub all_angles_energy: Vec<f64>,
+    pub sp_min_energy: Vec<f64>,
+    pub sp_max_energy: Vec<f64>,
+    pub sp_variance_energy: Vec<f64>,
+    pub vibration_metric: Vec<f64>,
+    pub vibration_peaks: Vec<usize>,
+    pub good_speeds: Vec<(usize, usize, f64)>,
+    pub good_angles: Vec<(usize, usize, f64)>,
+    pub motor_profiles: BTreeMap<String, Vec<f64>>,
+    pub global_motor_profile: Vec<f64>,
+    pub symmetry_factor: f64,
+    pub motor_fr: f64,
+    pub motor_zeta: Option<f64>,
+    pub motor_res_idx: usize,
+    pub motor_lowfreq_max: bool,
+}
+
+#[derive(Deserialize)]
+pub struct FixtureStep {
+    pub angle: f64,
+    pub speed: f64,
+    pub t: Vec<f64>,
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub z: Vec<f64>,
+}
+
+#[derive(Deserialize)]
+pub struct FixturePsd {
+    pub angle: f64,
+    pub speed: f64,
+    pub psd: Vec<f64>,
+}
+
+#[derive(Deserialize)]
+pub struct FixtureEnergy {
+    pub angle: f64,
+    pub speed: f64,
+    pub energy: f64,
+}
+
+pub fn fixtures() -> Vec<(&'static str, Fixture)> {
+    let cartesian = include_bytes!("../data/vibrations_cartesian.json.zst");
+    let corexy = include_bytes!("../data/vibrations_corexy.json.zst");
+    [("cartesian", &cartesian[..]), ("corexy", &corexy[..])]
+        .into_iter()
+        .map(|(name, bytes)| (name, serde_json::from_str(&unzstd(bytes)).unwrap()))
+        .collect()
+}
+
+pub fn inputs(fixture: &Fixture) -> Vec<StepInput> {
+    fixture
+        .steps
+        .iter()
+        .map(|s| StepInput {
+            angle: s.angle,
+            speed: s.speed,
+            samples: RawSamples {
+                t: s.t.clone(),
+                x: s.x.clone(),
+                y: s.y.clone(),
+                z: s.z.clone(),
+            },
+        })
+        .collect()
 }
