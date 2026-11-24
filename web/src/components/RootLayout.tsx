@@ -10,7 +10,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useRecoverStorage } from "@/lib/api/queries";
-import { ThemeToggle } from "@/ui-kit/ThemeToggle";
+import { PreferencesMenu } from "@/ui-kit/PreferencesMenu";
 import { useTheme } from "@/ui-kit/ThemeProvider";
 
 /** The History tabs share one mounted layout, so the sessions and results lists count as one page. */
@@ -47,7 +47,7 @@ export function RootLayout() {
             <StatusDots />
             <PrinterControls />
             <div className="ml-3">
-              <ThemeToggle />
+              <PreferencesMenu />
             </div>
           </div>
         </header>
