@@ -37,6 +37,14 @@ axis: Direction | null,
  */
 position: [number, number, number] | null, 
 /**
+ * How many directions a vibrations profile measures; `None` for any other test.
+ */
+planned_directions: number | null, 
+/**
+ * The angle in degrees of the direction in progress in a vibrations profile; `None` otherwise.
+ */
+direction_degrees: number | null, 
+/**
  * How long a segment is expected to take, in seconds.
  */
 expected_segment_seconds: number, 

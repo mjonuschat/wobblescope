@@ -374,6 +374,12 @@ impl Run {
             phase,
             segment: segment.map_or(0, |(c, _)| c.index as u32 + 1),
             segments: self.plan.segments.len() as u32,
+            planned_directions: self.plan.vibrations.as_ref().map(|v| v.angles.len() as u32),
+            direction_degrees: self.plan.vibrations.as_ref().and_then(|v| {
+                self.current
+                    .as_ref()
+                    .and_then(|c| v.angles.get(c.index).copied())
+            }),
             axis,
             position: segment.map(|(_, s)| s.position),
             expected_segment_seconds: self.plan.segment_seconds,

@@ -12,6 +12,8 @@ const state = (over: Partial<TestState> = {}): TestState => ({
   segments: 2,
   axis: "X",
   position: [150, 150, 20],
+  planned_directions: null,
+  direction_degrees: null,
   expected_segment_seconds: 100,
   elapsed_seconds: 10,
   frequency_hz: 12,

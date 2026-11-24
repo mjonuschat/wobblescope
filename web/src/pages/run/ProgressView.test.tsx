@@ -31,6 +31,8 @@ const running: TestState = {
   segments: 4,
   axis: "X",
   position: [150.5, 154, 20],
+  planned_directions: null,
+  direction_degrees: null,
   expected_segment_seconds: 145,
   elapsed_seconds: 12,
   frequency_hz: 17,

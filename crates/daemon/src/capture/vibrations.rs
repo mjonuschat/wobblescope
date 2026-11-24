@@ -66,13 +66,16 @@ pub struct VibrationsRequest {
     /// Speed of the positioning moves, in mm/s.
     #[serde(default)]
     pub travel_speed: Option<f64>,
+    /// Degrees between the measured directions: 45, 22.5 or 15. The motor pair alone when unset.
+    #[serde(default)]
+    pub angular_step: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VibrationsPlan {
     pub run: VibrationsRun,
-    /// The two angles in degrees, in running order.
-    pub angles: [f64; 2],
+    /// The angles in degrees, in running order: the motor pair first.
+    pub angles: Vec<f64>,
     /// The speeds of every angle in mm/s, lowest first.
     pub speeds: Vec<f64>,
     /// The middle of the XY travel, `[x, y]` in mm.
@@ -119,18 +122,6 @@ fn repeats(speed: f64) -> u32 {
     }
 }
 
-fn angle_direction(angle: f64) -> Direction {
-    if angle == 0.0 {
-        Direction::X
-    } else if angle == 90.0 {
-        Direction::Y
-    } else if angle == 45.0 {
-        Direction::BELT_B
-    } else {
-        Direction::BELT_A
-    }
-}
-
 /// Checks `request` against what the printer reports and builds the plan. `chip_rates` holds the
 /// nominal sample rate of each chip in the request, `None` when unknown.
 ///
@@ -146,6 +137,11 @@ pub fn plan_vibrations(
     chip_rates: &[Option<f64>],
 ) -> Result<TestPlan, RequestError> {
     check_chips(&request.chips)?;
+    if let Some(step) = request.angular_step
+        && !ANGULAR_STEPS.contains(&step)
+    {
+        return refuse("angular_step", "must be 45, 22.5 or 15");
+    }
     // Shake&Tune refuses to run without an input shaper object, and the profile is meant to be
     // measured with the printer's shaper on.
     if !printer.input_shaper_configured {
@@ -214,9 +210,9 @@ pub fn plan_vibrations(
         min_speed,
         kinematics,
         max_velocity: printer.machine.max_velocity,
-        angular_step: None,
+        angular_step: request.angular_step,
     };
-    let Some(angles) = run.angles() else {
+    let Some(angles) = run.planned_angles() else {
         return refuse(
             "kinematics",
             format!(
@@ -237,7 +233,7 @@ pub fn plan_vibrations(
         f64::midpoint(limits.y.min, limits.y.max),
     ];
     let half = size / 2.0;
-    // The four corners of the largest step, the full size at both angles.
+    // The four corners of the largest step, at full size whatever the direction.
     let corners = [
         [mid[0] - half, mid[1] - half],
         [mid[0] + half, mid[1] - half],
@@ -284,12 +280,13 @@ pub fn plan_vibrations(
             ),
         );
     }
-    let segments = angles
+    let segments = plan
+        .angles
         .iter()
         .map(|&angle| {
             let start = step_geometry(&plan, angle, plan.speeds[0]).start;
             Segment {
-                axis: angle_direction(angle),
+                axis: Direction::from_degrees(angle),
                 point: 0,
                 position: [start[0], start[1], z_height],
                 target: None,
@@ -428,6 +425,7 @@ mod tests {
             speed_increment: None,
             accel: None,
             travel_speed: None,
+            angular_step: None,
         }
     }
 
@@ -725,6 +723,144 @@ mod tests {
         assert!(plan_vibrations(&r, &uncapped, 600, &[Some(rate)]).is_ok());
         let err = plan_vibrations(&r, &low, 600, &[Some(rate)]).unwrap_err();
         assert_eq!(err.field, "max_speed");
+    }
+
+    fn stepped(step: f64) -> VibrationsRequest {
+        VibrationsRequest {
+            angular_step: Some(step),
+            ..request()
+        }
+    }
+
+    #[test]
+    fn angular_step_45_plans_four_angles_motor_first() {
+        let plan = planned(&stepped(45.0)).unwrap();
+        let vibrations = plan.vibrations.unwrap();
+        assert_eq!(vibrations.angles, [45.0, 135.0, 0.0, 90.0]);
+        assert_eq!(vibrations.run.angular_step, Some(45.0));
+        let axes: Vec<Direction> = plan.segments.iter().map(|s| s.axis).collect();
+        assert_eq!(
+            axes,
+            [
+                Direction::BELT_B,
+                Direction::BELT_A,
+                Direction::X,
+                Direction::Y
+            ]
+        );
+    }
+
+    #[test]
+    fn corexy_45_plans_45_135_0_90() {
+        assert_eq!(vibrations(&stepped(45.0)).angles, [45.0, 135.0, 0.0, 90.0]);
+        let plan =
+            plan_vibrations(&stepped(45.0), &printer(Some("cartesian")), 600, &[None]).unwrap();
+        assert_eq!(plan.vibrations.unwrap().angles, [0.0, 90.0, 45.0, 135.0]);
+    }
+
+    #[test]
+    fn step_22_5_and_15_plan_eight_and_twelve() {
+        let eight = vibrations(&stepped(22.5));
+        assert_eq!(eight.angles.len(), 8);
+        assert_eq!(&eight.angles[..2], &[45.0, 135.0]);
+        assert_eq!(vibrations(&stepped(15.0)).angles.len(), 12);
+    }
+
+    #[test]
+    fn an_unaccepted_step_is_refused_naming_angular_step() {
+        for step in [30.0, 0.0, -15.0, f64::NAN] {
+            assert_eq!(refused(&stepped(step)).field, "angular_step", "{step}");
+        }
+    }
+
+    #[test]
+    fn no_step_plans_the_motor_pair_and_writes_the_version_it_writes_today() {
+        use crate::capture::meta::initial;
+        let plan = planned(&request()).unwrap();
+        assert_eq!(plan.vibrations.as_ref().unwrap().angles, [45.0, 135.0]);
+        assert_eq!(plan.segments.len(), 2);
+        let meta = initial(&plan, "vibrations-20261101T121400Z", "now", &[], None);
+        assert_eq!(meta.format_version, 1);
+        assert!(meta.vibrations_run.is_none());
+    }
+
+    #[test]
+    fn the_sample_limit_uses_the_fastest_chip_rate_for_every_angle() {
+        let r = stepped(15.0);
+        let printer = printer(Some("corexy"));
+        let seconds = estimated_angle_seconds(&vibrations(&r));
+        // The rate at which one angle just fits the sample file.
+        let limit = MAX_SAMPLES as f64 / (SAMPLE_MARGIN * seconds);
+        let (slow, fast) = (limit * 0.5, limit * 2.0);
+        assert!(plan_vibrations(&r, &printer, 600, &[Some(slow)]).is_ok());
+        let both = plan_vibrations(&r, &printer, 600, &[Some(slow), Some(fast)]);
+        assert_eq!(both.unwrap_err().field, "max_speed");
+    }
+
+    #[test]
+    fn estimated_step_seconds_matches_hand_computed_values() {
+        let mut plan = vibrations(&request());
+        plan.run.size = 100.0;
+        plan.run.accel = 1000.0;
+        plan.run.travel_speed = 400.0;
+        plan.run.max_velocity = Some(300.0);
+        // Speed 50: length 100 * 0.6 = 60, one repeat = two moves, no cap.
+        let at_50 = 60.0 / 300.0_f64.min(400.0) + 2.0 * (60.0 / 50.0 + 50.0 / 1000.0) + 0.3;
+        // Speed 150: length 100, two repeats = four moves.
+        let at_150 = 100.0 / 300.0 + 4.0 * (100.0 / 150.0 + 150.0 / 1000.0) + 0.3;
+        // Speed 250: length 100, three repeats = six moves, capped at 300 so unaffected.
+        let at_250 = 100.0 / 300.0 + 6.0 * (100.0 / 250.0 + 250.0 / 1000.0) + 0.3;
+        // Speed 400 is above the cap of 300: it runs at 300.
+        let at_400 = 100.0 / 300.0 + 6.0 * (100.0 / 300.0 + 300.0 / 1000.0) + 0.3;
+        for (speed, want) in [
+            (50.0, at_50),
+            (150.0, at_150),
+            (250.0, at_250),
+            (400.0, at_400),
+        ] {
+            let got = estimated_step_seconds(&plan.run, speed);
+            assert!((got - want).abs() < 1e-9, "{speed}: {got} vs {want}");
+        }
+    }
+
+    fn journal_of(step: f64) -> (wobblescope_session::meta::SessionMeta, VibrationsPlan) {
+        use crate::capture::meta::initial;
+        let plan = planned(&stepped(step)).unwrap();
+        let meta = initial(&plan, "vibrations-20261101T121400Z", "now", &[], None);
+        (meta, plan.vibrations.unwrap())
+    }
+
+    #[test]
+    fn the_journal_of_a_step_run_is_valid_and_version_3_from_creation_and_after_each_stored_segment()
+     {
+        use wobblescope_session::meta::SegmentMeta;
+        let (mut meta, plan) = journal_of(22.5);
+        assert_eq!(meta.format_version, 3);
+        meta.validate().unwrap();
+        for &angle in &plan.angles {
+            meta.segments.push(SegmentMeta {
+                axis: Direction::from_degrees(angle),
+                point: 0,
+                window: None,
+                files: Vec::new(),
+                steps: Vec::new(),
+            });
+            meta.format_version = meta.required_version();
+            assert_eq!(meta.format_version, 3);
+            meta.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn recovery_before_any_segment_keeps_the_plan_and_version_3() {
+        let (meta, plan) = journal_of(15.0);
+        let read =
+            wobblescope_session::meta::SessionMeta::from_json(&meta.to_json().unwrap()).unwrap();
+        assert_eq!(read.format_version, 3);
+        assert!(read.segments.is_empty());
+        let run = read.vibrations_run.unwrap();
+        assert_eq!(run.angular_step, Some(15.0));
+        assert_eq!(run.planned_angles().unwrap(), plan.angles);
     }
 
     #[test]

@@ -35,4 +35,8 @@ accel: number | null,
 /**
  * Speed of the positioning moves, in mm/s.
  */
-travel_speed: number | null, };
+travel_speed: number | null, 
+/**
+ * Degrees between the measured directions: 45, 22.5 or 15. The motor pair alone when unset.
+ */
+angular_step: number | null, };

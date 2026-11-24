@@ -2,8 +2,8 @@
 
 use wobblescope_core::eligibility::Health;
 use wobblescope_session::meta::{
-    ChipMeta, FORMAT_VERSION, Outcome, PrinterInfo, ProbePoint, SessionMeta, Source, TimeDomain,
-    undersampled_note,
+    ChipMeta, FORMAT_VERSION, FORMAT_VERSION_ANGLE, Outcome, PrinterInfo, ProbePoint, SessionMeta,
+    Source, TimeDomain, undersampled_note,
 };
 
 use super::recorder::ChipSummary;
@@ -64,14 +64,25 @@ pub fn initial(
     let axes_map = plan.axes_map.as_ref();
     // A calibration and a vibrations profile record no test mode or sweep settings.
     let swept = axes_map.is_none() && plan.vibrations.is_none();
+    // A stepped run carries its plan from the start, so a crash before the first angle finished
+    // still leaves a journal that says which angles were planned. Other runs add their settings
+    // with the first segment.
+    let stepped = plan
+        .vibrations
+        .as_ref()
+        .filter(|v| v.run.angular_step.is_some());
     SessionMeta {
-        format_version: FORMAT_VERSION,
+        format_version: if stepped.is_some() {
+            FORMAT_VERSION_ANGLE
+        } else {
+            FORMAT_VERSION
+        },
         id: id.to_owned(),
         created_at: created_at.to_owned(),
         source: Source::Capture,
         time_domain: TimeDomain::KlipperPrintTime,
         axes_map_run: None,
-        vibrations_run: None,
+        vibrations_run: stepped.map(|v| v.run.clone()),
         mode: swept.then_some(plan.mode),
         settings: swept.then(|| plan.sweep_settings()),
         printer,

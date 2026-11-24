@@ -15,6 +15,11 @@ const CHIPS: [&str; 2] = ["adxl345", "lis2dw ebb36"];
 
 /// A plan with two speeds (2 and 10 mm/s) per angle, so a run takes four steps.
 fn plan() -> TestPlan {
+    plan_with_step(None)
+}
+
+/// The same plan with `angular_step`: at 45 it measures four angles, two steps each.
+fn plan_with_step(angular_step: Option<f64>) -> TestPlan {
     let mut printer = parse_settings(
         &common::fake_printer::fixture("real_settings.json"),
         &common::fake_printer::fixture("real_printer_info.json"),
@@ -31,6 +36,7 @@ fn plan() -> TestPlan {
         speed_increment: Some(8.0),
         accel: Some(3000.0),
         travel_speed: Some(120.0),
+        angular_step,
     };
     plan_vibrations(&request, &printer, 600, &[Some(500.0), Some(400.0)]).unwrap()
 }
@@ -142,8 +148,11 @@ async fn a_full_run_stores_two_segments_with_steps_in_order() {
     assert!(meta.vibrations_run.is_some());
     assert_eq!(meta.segments.len(), 2);
     let vibrations = plan.vibrations.as_ref().unwrap();
-    for (segment, angle) in meta.segments.iter().zip(vibrations.angles) {
-        assert_eq!(segment.axis, plan.segments[usize::from(angle > 100.0)].axis);
+    for (segment, angle) in meta.segments.iter().zip(&vibrations.angles) {
+        assert_eq!(
+            segment.axis,
+            plan.segments[usize::from(*angle > 100.0)].axis
+        );
         let speeds: Vec<f64> = segment.steps.iter().map(|s| s.speed).collect();
         assert_eq!(speeds, vibrations.speeds);
     }
@@ -451,3 +460,124 @@ async fn klipper_going_down_mid_run_ends_the_session_without_a_restore_attempt_t
     assert_eq!(meta.segments[0].steps.len(), 2);
     assert_clean(&rig);
 }
+
+/// Checks that `meta` is a valid version 3 session of the 45 degree plan holding the first
+/// `segments` angles, each with its canonical direction.
+fn assert_step_session(meta: &SessionMeta, segments: usize) {
+    meta.validate().unwrap();
+    assert_eq!(meta.format_version, 3);
+    assert_eq!(meta.kind(), SessionKind::Vibrations);
+    assert_eq!(
+        meta.vibrations_run.as_ref().unwrap().angular_step,
+        Some(45.0)
+    );
+    assert_eq!(meta.segments.len(), segments);
+    let planned = [45.0, 135.0, 0.0, 90.0];
+    for (segment, angle) in meta.segments.iter().zip(planned) {
+        assert_eq!(
+            segment.axis,
+            wobblescope_core::direction::Direction::from_degrees(angle)
+        );
+    }
+}
+
+/// A run stopped while step `nth` (from 0) of the 45 degree plan runs. The stop is seen after it.
+async fn stopped_at_step(nth: usize) -> (Rig, FinishedTest) {
+    let rig = vibrations_rig(true).await;
+    let slot = rig.slot.clone();
+    on_step(&rig, nth, move || {
+        assert!(slot.request_stop_current().is_some());
+    });
+    let finished = run(&rig, &plan_with_step(Some(45.0))).await;
+    assert_eq!(finished.outcome, FinishedOutcome::Failed, "{finished:?}");
+    assert_clean(&rig);
+    (rig, finished)
+}
+
+#[tokio::test]
+async fn a_cancelled_extra_direction_run_stores_a_valid_version_3_session() {
+    // After the motor pair: both angles are whole and no extra has begun.
+    let (rig, finished) = stopped_at_step(3).await;
+    assert_step_session(&meta_of(&rig, &finished), 2);
+    // In the middle of the first extra: its finished step is kept.
+    let (rig, finished) = stopped_at_step(4).await;
+    let meta = meta_of(&rig, &finished);
+    assert_step_session(&meta, 3);
+    assert_eq!(meta.segments[2].steps.len(), 1);
+    // Before the first angle finished: its finished step is kept.
+    let (rig, finished) = stopped_at_step(0).await;
+    let meta = meta_of(&rig, &finished);
+    assert_step_session(&meta, 1);
+    assert_eq!(meta.segments[0].steps.len(), 1);
+}
+
+/// Kills the runner while step `nth` of the 45 degree plan never answers, and returns the
+/// journal it left and the session the next open recovers, if any.
+async fn crashed_at_step(nth: usize) -> (SessionMeta, Option<SessionMeta>) {
+    let rig = vibrations_rig(true).await;
+    let seen = std::sync::atomic::AtomicUsize::new(0);
+    rig.sim.intercept(move |script| {
+        (is_step(script) && seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == nth)
+            .then_some(Script::Silent)
+    });
+    let Ok(task) = rig.start(&plan_with_step(Some(45.0))).await else {
+        panic!("pre-flight must pass");
+    };
+    rig.until("a running test", || rig.snapshot().test.is_some())
+        .await;
+    let id = rig.snapshot().test.unwrap().id;
+    rig.until("the silent step", || {
+        rig.sim.scripts().iter().filter(|s| is_step(s)).count() == nth + 1
+    })
+    .await;
+    task.abort();
+    let _ = task.await;
+    rig.until("the bridges to close", || rig.bridges_open() == 0)
+        .await;
+    let journal = std::fs::read_to_string(
+        common::sessions_dir(rig.dir.path())
+            .join(format!(".{id}.tmp"))
+            .join(wobblescope_session::writer::JOURNAL_FILE),
+    )
+    .unwrap();
+    let journal = SessionMeta::from_json(&journal).unwrap();
+    let (reopened, _) = common::open(rig.dir.path(), u64::MAX / 4);
+    (journal, reopened.session(&id).ok().map(|(_, meta)| meta))
+}
+
+#[tokio::test]
+async fn a_crash_recovered_extra_direction_run_stores_a_valid_version_3_session() {
+    // After the motor pair: the third angle is under way and nothing of it was stored.
+    let (journal, recovered) = crashed_at_step(4).await;
+    assert_step_session(&journal, 2);
+    assert_step_session(&recovered.expect("a recovered session"), 2);
+    // In the middle of the motor pair's second angle: only the first is stored.
+    let (journal, recovered) = crashed_at_step(3).await;
+    assert_step_session(&journal, 1);
+    assert_step_session(&recovered.expect("a recovered session"), 1);
+    // In the middle of an extra, after one whole extra was stored.
+    let (journal, recovered) = crashed_at_step(7).await;
+    assert_step_session(&journal, 3);
+    assert_step_session(&recovered.expect("a recovered session"), 3);
+    // Before the first angle finished: the journal knows the plan, and recovery has no data to keep.
+    let (journal, recovered) = crashed_at_step(1).await;
+    assert_step_session(&journal, 0);
+    assert!(recovered.is_none());
+}
+
+#[tokio::test]
+async fn the_start_route_refuses_a_step_until_enabled() {
+    let rig = vibrations_rig(true).await;
+    let body = json!({"chips": CHIPS, "angular_step": 45});
+    let (status, _, bytes) = common::send(&rig.app(), post("/api/vibrations", &body)).await;
+    let answer: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+    assert!(
+        answer
+            .to_string()
+            .contains("angular_step is not available yet"),
+        "{answer}"
+    );
+    assert!(rig.sim.scripts().is_empty());
+}
+

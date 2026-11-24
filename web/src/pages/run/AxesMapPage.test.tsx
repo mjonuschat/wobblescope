@@ -225,6 +225,8 @@ describe("a test of another kind on the axes-map run page", () => {
     segments: 2,
     axis: null,
     position: [150, 150, 20],
+    planned_directions: null,
+    direction_degrees: null,
     expected_segment_seconds: 100,
     elapsed_seconds: 5,
     frequency_hz: 20,

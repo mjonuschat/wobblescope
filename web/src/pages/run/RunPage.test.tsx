@@ -633,6 +633,8 @@ describe("a test of the other kind", () => {
     segments: 2,
     axis: null,
     position: [150, 150, 20],
+    planned_directions: null,
+    direction_degrees: null,
     expected_segment_seconds: 100,
     elapsed_seconds: 5,
     frequency_hz: 20,

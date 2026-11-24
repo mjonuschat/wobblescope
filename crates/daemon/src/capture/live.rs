@@ -61,6 +61,10 @@ pub struct TestState {
     pub axis: Option<Direction>,
     /// The toolhead position of the current segment: `[x, y, z]` in mm.
     pub position: Option<[f64; 3]>,
+    /// How many directions a vibrations profile measures; `None` for any other test.
+    pub planned_directions: Option<u32>,
+    /// The angle in degrees of the direction in progress in a vibrations profile; `None` otherwise.
+    pub direction_degrees: Option<f64>,
     /// How long a segment is expected to take, in seconds.
     pub expected_segment_seconds: f64,
     /// How long the current segment has run, in seconds.
