@@ -46,7 +46,11 @@ export const defaultDraft: FitDraft = draftFrom(defaultFitParams);
 export interface FitBaseline {
   params: FitParams;
   /** What the printer recorded. The damping ratio is only named; the fit estimates it unless one is entered. */
-  recorded: { scv: boolean; damping: number | null };
+  recorded: {
+    scv: boolean;
+    damping: number | null;
+    dampingByAxis?: Partial<Record<Axis, number>>;
+  };
 }
 
 export function baselineFor(meta: SessionMeta, axis: Axis): FitBaseline {
@@ -119,4 +123,15 @@ export function fitSettingFields(settings: Recommendation["settings"]): { label:
     fields.push({ label: "Shapers", value: settings.shapers.join(" ") });
   }
   return fields;
+}
+
+export function baselineForAxes(meta: SessionMeta, axes: Axis[]): FitBaseline {
+  const first = baselineFor(meta, axes[0] ?? "X");
+  if (axes.length < 2) return first;
+  const dampingByAxis: Partial<Record<Axis, number>> = {};
+  for (const axis of axes) {
+    const damping = baselineFor(meta, axis).recorded.damping;
+    if (damping !== null) dampingByAxis[axis] = damping;
+  }
+  return { ...first, recorded: { ...first.recorded, dampingByAxis } };
 }

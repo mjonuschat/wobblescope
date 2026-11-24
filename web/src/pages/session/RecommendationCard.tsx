@@ -41,6 +41,17 @@ interface Props {
   probePoints?: ProbePoint[];
 }
 
+export function SnippetBlock({ text }: { text: string }) {
+  return (
+    <div className="relative">
+      <pre className="overflow-x-auto rounded-lg bg-muted p-3 pr-14 font-mono text-sm select-text">{text}</pre>
+      <div className="absolute top-2 right-2 rounded-lg bg-muted">
+        <CopyButton text={text} />
+      </div>
+    </div>
+  );
+}
+
 interface ShaperProps {
   result: CalibrationResult;
   snippet: string | null;
@@ -83,14 +94,7 @@ function Shaper({ result, snippet, heading, damping, dampingHint, byChip, settin
           </Field>
         ))}
       </Fields>
-      {snippet && (
-        <div className="relative">
-          <pre className="overflow-x-auto rounded-lg bg-muted p-3 pr-14 font-mono text-sm select-text">{snippet}</pre>
-          <div className="absolute top-2 right-2 rounded-lg bg-muted">
-            <CopyButton text={snippet} />
-          </div>
-        </div>
-      )}
+      {snippet && <SnippetBlock text={snippet} />}
     </section>
   );
 }

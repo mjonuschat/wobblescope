@@ -5,7 +5,10 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { sessionDownloadUrl } from "@/lib/api/endpoints";
+import { useSession } from "@/lib/api/queries";
+import { useResultsLayout } from "@/ui-kit/resultsLayout";
 
+import { sessionAxes } from "./axes";
 import { SessionResults } from "./SessionResults";
 import { PageHeader } from "@/ui-kit/PageHeader";
 import { Panel } from "@/ui-kit/Panel";
@@ -13,8 +16,12 @@ import { Panel } from "@/ui-kit/Panel";
 export function SessionPage({ id }: { id: string }) {
   // The Save button belongs to the analysis, which lives below. It is drawn into the page header, left of Download.
   const [saveSlot, setSaveSlot] = useState<HTMLElement | null>(null);
+  // Both axes side by side need more room than the page's usual width.
+  const session = useSession(id).data;
+  const wide =
+    useResultsLayout() === "side-by-side" && session?.summary.kind === "axes" && sessionAxes(session.meta).length >= 2;
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className={`mx-auto space-y-6 ${wide ? "max-w-[1600px]" : "max-w-5xl"}`}>
       <PageHeader
         title={id}
         mono

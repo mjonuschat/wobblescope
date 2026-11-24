@@ -323,11 +323,11 @@ describe("the analysis client", () => {
     expect(() => worker.answerSpectrogram(id)).not.toThrow();
   });
 
-  it("drops a queued request that a newer one replaces, never posting it", async () => {
+  it("drops a queued request that a newer one for the same axis replaces, never posting it", async () => {
     const { worker, client, job } = setup();
     const first = client.analyze(job());
     const second = client.analyze(job({ axis: "Y" }));
-    const third = client.analyze(job({ axis: "X", params: { ...defaultParams, scv: 6 } }));
+    const third = client.analyze(job({ axis: "Y", params: { ...defaultParams, scv: 6 } }));
     await expect(second).rejects.toBeInstanceOf(SupersededError);
     await flush();
     worker.answer(worker.analyses()[0].id);
@@ -335,8 +335,25 @@ describe("the analysis client", () => {
     await flush();
     worker.answer(worker.analyses()[1].id);
     await third;
-    expect(worker.analyses().map((m) => m.axis)).toEqual(["X", "X"]);
+    expect(worker.analyses().map((m) => m.axis)).toEqual(["X", "Y"]);
     expect(worker.analyses()[1].params.scv).toBe(6);
+  });
+
+  it("keeps a queued analysis of each axis, since a session wants both", async () => {
+    const { worker, client, job } = setup();
+    const first = client.analyze(job());
+    const x = client.analyze(job({ axis: "X", params: { ...defaultParams, scv: 6 } }));
+    const y = client.analyze(job({ axis: "Y" }));
+    await flush();
+    worker.answer(worker.analyses()[0].id);
+    await first;
+    await flush();
+    worker.answer(worker.analyses()[1].id);
+    await x;
+    await flush();
+    worker.answer(worker.analyses()[2].id);
+    await y;
+    expect(worker.analyses().map((m) => m.axis)).toEqual(["X", "X", "Y"]);
   });
 
   it("rejects an aborted request and ignores its late result", async () => {

@@ -9,8 +9,11 @@ import { analysis, decision, recommendation, spectrogram, twoAxisMeta } from "@/
 import { stubApiWithStatus as stubApi } from "@/test/status";
 import { renderRoute } from "@/test/render";
 import { summary } from "@/test/summaries";
+import { setResultsLayout } from "@/ui-kit/resultsLayout";
 
 const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn(), prefetch: vi.fn() }));
+/** Both axes are analysed, so a test that counts analyses looks at one axis. */
+const callsFor = (axis: string) => fake.analyze.mock.calls.filter((c) => c[0].axis === axis);
 
 vi.mock("@/analysis/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/analysis/client")>()),
@@ -210,10 +213,10 @@ describe("the session view", () => {
     expect(box.closest("li")?.textContent).toContain("The capture looks unreliable");
     expect(box.getAttribute("aria-checked")).toBe("false");
     expect(screen.queryByRole("checkbox", { name: /Include a anyway/ })).toBeNull();
-    expect(fake.analyze.mock.calls[0][0].overrides).toEqual([]);
+    expect(callsFor("X")[0][0].overrides).toEqual([]);
     fireEvent.click(box);
-    await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
-    expect(fake.analyze.mock.calls[1][0].overrides).toEqual(["b"]);
+    await waitFor(() => expect(callsFor("X")).toHaveLength(2));
+    expect(callsFor("X")[1][0].overrides).toEqual(["b"]);
   });
 
   it("shows a chip that was included by override as checked", async () => {
@@ -288,8 +291,8 @@ describe("the session view", () => {
     const box = await screen.findByRole("checkbox", { name: /Include b anyway/ });
     expect(screen.getByRole("region", { name: "Data quality" }).textContent).toContain("395 Hz");
     fireEvent.click(box);
-    await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
-    expect(fake.analyze.mock.calls[1][0].overrides).toEqual(["b"]);
+    await waitFor(() => expect(callsFor("X")).toHaveLength(2));
+    expect(callsFor("X")[1][0].overrides).toEqual(["b"]);
   });
 
   it("keeps the override box checked for an overridden chip that was dropped, and unticking removes it", async () => {
@@ -418,7 +421,7 @@ describe("the session view", () => {
     serve(meta);
     renderRoute("/sessions/s1");
     await screen.findByRole("region", { name: "Recommended input shaper" });
-    expect(fake.analyze.mock.calls[0][0].params).toMatchObject({ scv: 8, damping_ratio: null });
+    expect(callsFor("X")[0][0].params).toMatchObject({ scv: 8, damping_ratio: null });
     fireEvent.change(screen.getByLabelText(/Square corner velocity/), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(fake.analyze.mock.calls.at(-1)?.[0].params).toMatchObject({ scv: 3 }));
@@ -442,11 +445,11 @@ describe("the session view", () => {
     expect(screen.queryByRole("tab", { name: "Axis Y" })).toBeNull();
   });
 
-  it("analyses the other axis when its tab is chosen", async () => {
+  it("analyses both axes at once, so a tab switch needs no wait", async () => {
     fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
     serve();
     renderRoute("/sessions/s1");
-    fireEvent.click(await screen.findByRole("tab", { name: "Axis Y" }));
+    await screen.findByRole("tab", { name: "Axis Y" });
     await waitFor(() => expect(fake.analyze.mock.calls.map((c) => c[0].axis)).toEqual(["X", "Y"]));
   });
 
@@ -457,8 +460,8 @@ describe("the session view", () => {
     await screen.findByRole("region", { name: "Recommended input shaper" });
     fireEvent.change(screen.getByLabelText(/Maximum corner rounding/), { target: { value: "0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
-    expect(fake.analyze.mock.calls[1][0].params.max_smoothing).toBe(0.1);
+    await waitFor(() => expect(callsFor("X")).toHaveLength(2));
+    expect(callsFor("X")[1][0].params.max_smoothing).toBe(0.1);
   });
 
   it("shows how far and with what version the session was analysed in its details, and no list of shapers", async () => {
@@ -482,7 +485,7 @@ describe("the session view", () => {
     expect(fake.analyze).not.toHaveBeenCalled();
   });
 
-  it("saves the shown analysis with the label, the worker\u2019s core version and the session\u2019s created_at", async () => {
+  it("saves both axes with the label, the worker\u2019s core version and the session\u2019s created_at", async () => {
     const a = analysis();
     a.core_version = "9.9.9";
     fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
@@ -505,21 +508,41 @@ describe("the session view", () => {
       label: "after belts",
       core_version: "9.9.9",
       session_created_at: meta.created_at,
-      fit_params: fake.analyze.mock.calls[0][0].params,
+      fit_params: callsFor("X")[0][0].params,
       overrides: [],
-      axes: [
-        {
-          axis: "X",
-          analysis: a,
-          snippets: {
-            worst_case: result(a, [SNIPPET, null]).snippets.worstCase,
-            per_chip: result(a, [SNIPPET, null]).snippets.perChip,
-            worst_case_performance: result(a, [SNIPPET, null]).snippets.worstCasePerformance,
-          },
+      axes: (["X", "Y"] as const).map((axis) => ({
+        axis,
+        analysis: a,
+        snippets: {
+          worst_case: result(a, [SNIPPET, null]).snippets.worstCase,
+          per_chip: result(a, [SNIPPET, null]).snippets.perChip,
+          worst_case_performance: result(a, [SNIPPET, null]).snippets.worstCasePerformance,
         },
-      ],
+      })),
     };
     expect(JSON.parse(post.body as string)).toEqual(expected);
+  });
+
+  it("saves the axis that was analysed when the other one failed, and says so", async () => {
+    const a = analysis();
+    fake.analyze.mockImplementation(async (job: { axis: string }) => {
+      if (job.axis === "Y") throw new Error("c1-s1.zst holds 1 sample");
+      return result(a, [SNIPPET, null]);
+    });
+    const calls = stubApi(({ url, method }) => {
+      if (method === "POST" && url.pathname.endsWith("/sessions/s1/results")) {
+        return { status: 201, body: { id: "r-1" } };
+      }
+      return url.pathname.endsWith("/sessions/s1")
+        ? { body: { summary: summary("s1"), meta: twoAxisMeta() } }
+        : { status: 404, body: { error: "not_found", message: "no such session" } };
+    });
+    renderRoute("/sessions/s1");
+    await openSaveDialog();
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved as r-1")).toBeTruthy();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect((JSON.parse(post.body as string) as SaveRequest).axes.map((x) => x.axis)).toEqual(["X"]);
   });
 
   it("shows the daemon\u2019s refusal when the session changed", async () => {
@@ -596,11 +619,11 @@ describe("the session view", () => {
       await saveOnce();
       fireEvent.change(screen.getByLabelText(/Maximum corner rounding/), { target: { value: "0.1" } });
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-      await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(callsFor("X")).toHaveLength(2));
       await waitFor(() => expect(saveButton().disabled).toBe(false));
     });
 
-    it("re-enables Save when the axis or overrides change", async () => {
+    it("re-enables Save when the overrides change, but not when only the tab does, since both axes are saved", async () => {
       const a = analysis();
       a.eligibility.decisions = [decision("a", "Included"), decision("b", "Excluded", ["degraded capture health"])];
       fake.analyze.mockResolvedValue(result(a, [SNIPPET, null]));
@@ -609,13 +632,13 @@ describe("the session view", () => {
       await save();
 
       fireEvent.click(screen.getByRole("checkbox", { name: /Include b anyway/ }));
-      await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(callsFor("X")).toHaveLength(2));
       await waitFor(() => expect(saveButton().disabled).toBe(false));
       await save();
 
       fireEvent.click(screen.getByRole("tab", { name: "Axis Y" }));
-      await waitFor(() => expect(fake.analyze).toHaveBeenCalledTimes(3));
-      await waitFor(() => expect(saveButton().disabled).toBe(false));
+      await screen.findByRole("tab", { name: "Axis Y", selected: true });
+      expect(saveButton().disabled).toBe(true);
     });
 
     it("does not disable Save after a failed save", async () => {
@@ -633,8 +656,8 @@ describe("the session view", () => {
   describe("analysis progress", () => {
     it("shows the queue, the download and the analysis in turn", async () => {
       let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
-      fake.analyze.mockImplementation((_job, _signal, progress) => {
-        onProgress = progress;
+      fake.analyze.mockImplementation((job, _signal, progress) => {
+        if (job.axis === "X") onProgress = progress;
         return new Promise(() => {});
       });
       serve();
@@ -659,8 +682,8 @@ describe("the session view", () => {
 
     it("an unknown total shows an indeterminate bar", async () => {
       let onProgress: ((p: import("@/analysis/client").AnalysisProgress) => void) | undefined;
-      fake.analyze.mockImplementation((_job, _signal, progress) => {
-        onProgress = progress;
+      fake.analyze.mockImplementation((job, _signal, progress) => {
+        if (job.axis === "X") onProgress = progress;
         return new Promise(() => {});
       });
       serve();
@@ -673,6 +696,77 @@ describe("the session view", () => {
       expect(screen.getByText("1 MiB")).toBeTruthy();
       const progress = screen.getByRole("progressbar", { name: "Download progress" });
       expect(progress.hasAttribute("aria-valuenow")).toBe(false);
+    });
+  });
+
+  describe("side by side", () => {
+    afterEach(() => act(() => setResultsLayout("tabs")));
+
+    it("shows both axes with no axis tabs, one config for both and one fit settings form", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      serve();
+      renderRoute("/sessions/s1");
+      expect(await screen.findAllByRole("region", { name: "Recommended input shaper" })).toHaveLength(2);
+      expect(screen.queryByRole("tab", { name: "Axis X" })).toBeNull();
+      expect(screen.getAllByText("Axis X").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Axis Y").length).toBeGreaterThan(0);
+      const both = within(screen.getByRole("region", { name: "Config for both axes" }));
+      expect(both.getByText(/shaper_type_x: mzv/)).toBeTruthy();
+      expect(screen.getAllByLabelText(/Square corner velocity/)).toHaveLength(1);
+    });
+
+    it("puts X first whatever order the axes were recorded in", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      const meta = twoAxisMeta();
+      meta.segments = [...meta.segments].reverse();
+      serve(meta);
+      renderRoute("/sessions/s1");
+      await screen.findAllByRole("region", { name: "Recommended input shaper" });
+      const x = screen.getAllByText("Axis X")[0];
+      const y = screen.getAllByText("Axis Y")[0];
+      expect(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("keeps a chip tab selected that only one axis has, and shows nothing for it on the other", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      fake.analyze.mockImplementation(async (job: { axis: string }) => {
+        const a = analysis();
+        if (job.axis === "Y") a.per_chip = a.per_chip.filter((c) => c.chip === "a");
+        return result(a, [SNIPPET, SNIPPET]);
+      });
+      serve();
+      renderRoute("/sessions/s1");
+      const tab = await screen.findByRole("tab", { name: chipLabel("b") });
+      fireEvent.mouseDown(tab);
+      fireEvent.click(tab);
+      expect(await screen.findByRole("tab", { name: chipLabel("b"), selected: true })).toBeTruthy();
+      expect(screen.getAllByRole("region", { name: "Chip b" })).toHaveLength(1);
+    });
+
+    it("keeps the tabs for a session with one recorded axis", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      const meta = twoAxisMeta();
+      meta.segments = meta.segments.filter((s) => s.axis === "X");
+      serve(meta);
+      renderRoute("/sessions/s1");
+      expect(await screen.findByRole("tab", { name: "Axis X" })).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "Config for both axes" })).toBeNull();
+    });
+
+    it("applies the fit settings to both axes", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      fake.analyze.mockResolvedValue(result(analysis(), [SNIPPET, null]));
+      serve();
+      renderRoute("/sessions/s1");
+      await screen.findAllByRole("region", { name: "Recommended input shaper" });
+      fireEvent.change(screen.getByLabelText(/Maximum corner rounding/), { target: { value: "0.1" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      await waitFor(() => expect(callsFor("X")).toHaveLength(2));
+      await waitFor(() => expect(callsFor("Y")).toHaveLength(2));
+      expect(callsFor("Y")[1][0].params.max_smoothing).toBe(0.1);
     });
   });
 });

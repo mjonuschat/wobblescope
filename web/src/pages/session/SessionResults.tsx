@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 import { useSessionAnalysis } from "@/analysis/useSessionAnalysis";
 import { Panel } from "@/ui-kit/Panel";
 import { axisTabClass, axisTabsListClass } from "@/ui-kit/axisTabs";
+import { useResultsLayout } from "@/ui-kit/resultsLayout";
 import { Waiting } from "@/components/Waiting";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/api/queries";
@@ -11,6 +12,7 @@ import type { FitParams } from "@/lib/generated/FitParams";
 import type { SessionMeta } from "@/lib/generated/SessionMeta";
 
 import { AxesMapResults } from "./AxesMapResults";
+import { AxisPairResults, type PairColumn } from "./AxisPairResults";
 import { AxisResults } from "./AxisResults";
 import { FitSettingsForm } from "./FitSettingsForm";
 import { MetaPanel } from "./MetaPanel";
@@ -18,25 +20,12 @@ import { BeltResults } from "./belts/BeltResults";
 import { UnsupportedDirections } from "./belts/UnsupportedDirections";
 import { VibrationsResults } from "./vibrations/VibrationsResults";
 import { SaveResultButton } from "./SaveResultDialog";
-import { baselineFor } from "./fit";
+import { sessionAxes } from "./axes";
+import { baselineFor, baselineForAxes } from "./fit";
 
 type AnalysisQuery = ReturnType<typeof useSessionAnalysis>;
 
-function AnalysisView({
-  sessionId,
-  query,
-  axis,
-  meta,
-  overrides,
-  onOverridesChange,
-}: {
-  sessionId: string;
-  query: AnalysisQuery;
-  axis: Axis;
-  meta: SessionMeta;
-  overrides: string[];
-  onOverridesChange: (overrides: string[]) => void;
-}) {
+function analysisPlaceholder(query: AnalysisQuery, axis: Axis): ReactNode {
   if (query.isPending) {
     const { progress } = query;
     const message =
@@ -55,6 +44,26 @@ function AnalysisView({
       </p>
     );
   }
+  return null;
+}
+
+function AnalysisView({
+  sessionId,
+  query,
+  axis,
+  meta,
+  overrides,
+  onOverridesChange,
+}: {
+  sessionId: string;
+  query: AnalysisQuery;
+  axis: Axis;
+  meta: SessionMeta;
+  overrides: string[];
+  onOverridesChange: (overrides: string[]) => void;
+}) {
+  const placeholder = analysisPlaceholder(query, axis);
+  if (placeholder || !query.data) return placeholder;
   return (
     <AxisResults
       result={query.data}
@@ -133,29 +142,42 @@ const defaultHeader: Header = (save, summary) =>
   ) : null;
 
 function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: Header }) {
+  const layout = useResultsLayout();
   const [selected, setSelected] = useState<Axis | null>(null);
   // The settings the user applied. Until they do, the fit starts from what the session recorded.
   const [applied, setApplied] = useState<FitParams | null>(null);
   const [overrides, setOverrides] = useState<string[]>([]);
 
   // Only a session of X and Y segments gets here, so no vector is dropped.
-  const axes = [...new Set(meta.segments.map((s) => s.axis).filter((a): a is Axis => typeof a === "string"))];
+  const axes = sessionAxes(meta);
   const axis = selected && axes.includes(selected) ? selected : (axes[0] ?? null);
-  const baseline = baselineFor(meta, axis ?? "X");
+  const together = layout === "side-by-side" && axes.length >= 2;
+  const baseline = together ? baselineForAxes(meta, axes) : baselineFor(meta, axis ?? "X");
   const params = applied ?? baseline.params;
-  const query = useSessionAnalysis({ sessionId: id, meta, axis, params, overrides });
+  // Every axis is analysed, so that a save keeps both and a switch of tab shows at once.
+  const queries = [
+    useSessionAnalysis({ sessionId: id, meta, axis: axes[0] ?? null, params, overrides }),
+    useSessionAnalysis({ sessionId: id, meta, axis: axes[1] ?? null, params, overrides }),
+  ];
+  const queryOf = (a: Axis) => queries[Math.max(0, axes.indexOf(a))];
+  const query = queryOf(axis ?? "X");
 
   const save =
     axis === null ? null : (
       <SaveResultButton
         sessionId={id}
         meta={meta}
-        axis={axis}
         params={params}
         overrides={overrides}
-        result={query.data ?? null}
+        axes={axes.map((a) => ({ axis: a, result: queryOf(a).data ?? null, failed: queryOf(a).isError }))}
       />
     );
+  const column = (a: Axis): PairColumn => ({
+    axis: a,
+    result: queryOf(a).data ?? null,
+    placeholder: analysisPlaceholder(queryOf(a), a),
+    source: { sessionId: id, axis: a },
+  });
 
   return (
     <div className="space-y-4">
@@ -164,25 +186,36 @@ function Loaded({ id, meta, header }: { id: string; meta: SessionMeta; header: H
         <p className="text-sm">This session has no recordings to analyse.</p>
       ) : (
         <>
-          <Tabs value={axis} onValueChange={(value) => setSelected(value as Axis)}>
-            <TabsList variant="line" className={axisTabsListClass}>
-              {axes.map((a) => (
-                <TabsTrigger key={a} value={a} className={axisTabClass}>
-                  Axis {a}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <AnalysisView
-            sessionId={id}
-            query={query}
-            axis={axis}
-            meta={meta}
-            overrides={overrides}
-            onOverridesChange={setOverrides}
-          />
+          {together ? (
+            <AxisPairResults
+              columns={[column(axes[0]), column(axes[1])]}
+              meta={meta}
+              overrides={overrides}
+              onOverridesChange={setOverrides}
+            />
+          ) : (
+            <>
+              <Tabs value={axis} onValueChange={(value) => setSelected(value as Axis)}>
+                <TabsList variant="line" className={axisTabsListClass}>
+                  {axes.map((a) => (
+                    <TabsTrigger key={a} value={a} className={axisTabClass}>
+                      Axis {a}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              <AnalysisView
+                sessionId={id}
+                query={query}
+                axis={axis}
+                meta={meta}
+                overrides={overrides}
+                onOverridesChange={setOverrides}
+              />
+            </>
+          )}
           <FitSettingsForm
-            key={applied ? "applied" : axis}
+            key={applied ? "applied" : together ? "both" : axis}
             baseline={baseline}
             applied={applied}
             onApply={setApplied}

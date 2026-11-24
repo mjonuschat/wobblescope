@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Panel } from "@/ui-kit/Panel";
@@ -9,6 +9,8 @@ import type { SummedPsd } from "@/lib/generated/SummedPsd";
 import { useChartTheme } from "@/ui-kit/chartTheme";
 
 interface Props {
+  /** Where the vibration axis ends, so two charts can share it. */
+  max?: number;
   summed: SummedPsd;
   maxFreq: number;
   switcher: ReactNode;
@@ -16,9 +18,10 @@ interface Props {
 
 const LABEL = "All chips added together, vibration strength against frequency";
 
-export function CombinedResult({ summed, maxFreq, switcher }: Props) {
+export function CombinedResult({ summed, maxFreq, switcher, max }: Props) {
   const theme = useChartTheme();
-  const option = summedOption(summed, maxFreq, theme);
+  // The same option on a re-render keeps the legend choices.
+  const option = useMemo(() => summedOption(summed, maxFreq, theme, max), [summed, maxFreq, theme, max]);
   return (
     <Panel title="Resonance and shapers" label="All chips">
       {switcher}

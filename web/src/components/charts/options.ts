@@ -40,7 +40,7 @@ interface PsdInput {
 }
 
 /** 1.05 times the largest total PSD up to `maxFreq`, as Shake&Tune scales its graph. */
-function autoscale(chip: ChipAnalysis, maxFreq: number): number | undefined {
+export function autoscale(chip: ChipAnalysis, maxFreq: number): number | undefined {
   let largest = Number.NEGATIVE_INFINITY;
   for (const [, data] of chip.datasets) {
     data.freq_bins.forEach((f, i) => {
@@ -224,6 +224,8 @@ export function summedOption(
   summed: SummedPsd,
   maxFreq: number,
   theme: ChartTheme = DEFAULT_CHART_THEME,
+  /** Where the vibration axis ends; the data's own maximum when omitted. */
+  max?: number,
 ): EChartsCoreOption {
   const curves = [
     ["Total", summed.psd],
@@ -243,7 +245,7 @@ export function summedOption(
       selected: { X: false, Y: false, Z: false },
       textStyle: { color: theme.text },
     },
-    yAxis: { type: "value", name: "Vibration strength", splitLine: splitLine(theme) },
+    yAxis: { type: "value", name: "Vibration strength", splitLine: splitLine(theme), max },
     series: curves.map(([name, values]) => ({
       name,
       type: "line",

@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnalysisResult } from "@/analysis/protocol";
 import type { Analysis } from "@/lib/generated/Analysis";
@@ -7,6 +7,7 @@ import { analysis, candidate, recommendation, spectrogram } from "@/test/fixture
 import { renderRoute } from "@/test/render";
 import { resultDetail } from "@/test/results";
 import { stubApiWithStatus as stubApi } from "@/test/status";
+import { setResultsLayout } from "@/ui-kit/resultsLayout";
 
 const fake = vi.hoisted(() => ({ analyze: vi.fn(), spectrogram: vi.fn(), forget: vi.fn(), prefetch: vi.fn() }));
 
@@ -175,6 +176,40 @@ describe("the result page", () => {
     fireEvent.mouseDown(tab);
     fireEvent.click(tab);
     expect(await screen.findAllByText(/y snippet/)).toBeTruthy();
+  });
+
+  describe("side by side", () => {
+    afterEach(() => act(() => setResultsLayout("tabs")));
+
+    it("shows both saved axes at once, with one config for both", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      const detail = resultDetail();
+      detail.record.axes.push({
+        ...detail.record.axes[0],
+        axis: "Y",
+        snippets: {
+          worst_case: "[input_shaper]\nshaper_type_y: ei\n",
+          per_chip: [["y snippet"], null],
+          worst_case_performance: null,
+        },
+      });
+      fake.analyze.mockImplementation(pending);
+      serve(detail);
+      renderRoute("/results/r1");
+      expect(await screen.findAllByRole("region", { name: "Recommended input shaper" })).toHaveLength(2);
+      expect(screen.queryByRole("tab", { name: "Axis Y" })).toBeNull();
+      const both = screen.getByRole("region", { name: "Config for both axes" });
+      expect(both.textContent).toContain("shaper_type_x: mzv");
+      expect(both.textContent).toContain("shaper_type_y: ei");
+    });
+
+    it("keeps the tabs for a result of one axis", async () => {
+      act(() => setResultsLayout("side-by-side"));
+      fake.analyze.mockImplementation(pending);
+      serve();
+      renderRoute("/results/r1");
+      expect(await screen.findByRole("tab", { name: "Axis X" })).toBeTruthy();
+    });
   });
 
   describe("analysis progress", () => {

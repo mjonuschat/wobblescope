@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { EXPANDED_CHART_HEIGHT, ExpandDialog } from "@/components/ExpandDialog";
 import { Panel } from "@/ui-kit/Panel";
@@ -13,12 +13,20 @@ import { ScaleDialog } from "./ScaleDialog";
 import { ShaperTable } from "./ShaperTable";
 import { useChartTheme } from "@/ui-kit/chartTheme";
 
+export interface SharedScale {
+  value: number | null;
+  onChange: (value: number | null) => void;
+  auto?: number;
+}
+
 interface Props {
   chip: ChipAnalysis;
   switcher: ReactNode;
   snippets: string[] | null;
   maxFreq: number;
   decisions: DatasetDecision[];
+  /** Replaces the chart's own scale, so two charts can be compared at one scale. */
+  scale?: SharedScale;
 }
 
 function ChipDetails({
@@ -27,16 +35,24 @@ function ChipDetails({
   maxFreq,
   decisions,
   maxScale,
+  autoScale,
   chartHeight,
   corner,
-}: Omit<Props, "switcher"> & {
+}: Omit<Props, "switcher" | "scale"> & {
   /** The left axis of the PSD chart ends here; `null` scales it to the data. */
   maxScale: number | null;
+  /** The scale to use when `maxScale` is `null`, in place of one fitted to this chart's data. */
+  autoScale?: number;
   chartHeight?: number | string;
   corner?: ReactNode;
 }) {
   const theme = useChartTheme();
   const rec = chip.recommendation;
+  // The same option on a re-render keeps the legend choices.
+  const option = useMemo(
+    () => psdOption({ chip, recommendation: rec, maxFreq, maxScale: maxScale ?? autoScale ?? null, theme }),
+    [chip, rec, maxFreq, maxScale, autoScale, theme],
+  );
   const reasons = decisions
     .filter((d) => d.chip === chip.chip)
     .flatMap((d) => (d.decision === "Excluded" ? d.reasons : d.dropped !== null ? [d.dropped] : []));
@@ -44,7 +60,7 @@ function ChipDetails({
     <>
       <div className="relative">
         <EChart
-          option={psdOption({ chip, recommendation: rec, maxFreq, maxScale, theme })}
+          option={option}
           label={`PSD of ${chip.chip}${rec ? `, recommended ${rec.best.name} at ${formatHz(rec.best.freq)} Hz` : ""}`}
           height={chartHeight}
           minWidth={WIDE_CHART}
@@ -63,10 +79,12 @@ function ChipDetails({
   );
 }
 
-export function ChipResult({ chip, switcher, snippets, maxFreq, decisions }: Props) {
+export function ChipResult({ chip, switcher, snippets, maxFreq, decisions, scale }: Props) {
   // Where the vibration axis ends. `null` fits it to the data.
-  const [maxScale, setMaxScale] = useState<number | null>(null);
-  const details = { chip, snippets, maxFreq, decisions, maxScale };
+  const [ownScale, setOwnScale] = useState<number | null>(null);
+  const maxScale = scale ? scale.value : ownScale;
+  const setMaxScale = scale ? scale.onChange : setOwnScale;
+  const details = { chip, snippets, maxFreq, decisions, maxScale, autoScale: scale?.auto };
   const expand = (
     <ExpandDialog title={`Resonance and shapers: ${chip.chip}`}>
       <ChipDetails {...details} chartHeight={EXPANDED_CHART_HEIGHT} />

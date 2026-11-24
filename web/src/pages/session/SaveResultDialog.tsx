@@ -25,47 +25,48 @@ import type { SessionMeta } from "@/lib/generated/SessionMeta";
 interface Props {
   sessionId: string;
   meta: SessionMeta;
-  axis: Axis;
   params: FitParams;
   overrides: string[];
-  /** The shown analysis; null while it is not there, which disables the button. */
-  result: AnalysisResult | null;
+  /**
+   * Every axis of the session with its analysis. The button waits while one is pending, and saves
+   * the others when an analysis failed.
+   */
+  axes: { axis: Axis; result: AnalysisResult | null; failed?: boolean }[];
 }
 
 /**
- * A button that asks for a name in a dialog and then saves the shown axis, as the worker computed
- * it, so the daemon keeps what the user saw.
+ * A button that asks for a name in a dialog and then saves every axis of the session, as the worker
+ * computed them, so the daemon keeps what the user saw.
  */
-export function SaveResultButton({ sessionId, meta, axis, params, overrides, result }: Props) {
+export function SaveResultButton({ sessionId, meta, params, overrides, axes }: Props) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const save = useSaveResult();
 
-  const body = useMemo<SaveRequest | null>(
-    () =>
-      result && {
-        label: null,
-        // The version that computed the axes, which can differ from this app's own version.
-        core_version: result.analysis.core_version,
-        session_created_at: meta.created_at,
-        fit_params: params,
-        overrides,
-        axes: [
-          {
-            axis,
-            analysis: result.analysis,
-            snippets: {
-              worst_case: result.snippets.worstCase,
-              worst_case_performance: result.snippets.worstCasePerformance,
-              per_chip: result.snippets.perChip,
-            },
-          },
-        ],
-      },
-    [axis, meta.created_at, overrides, params, result],
-  );
+  const body = useMemo<SaveRequest | null>(() => {
+    const done = axes.flatMap(({ axis, result }) => (result ? [{ axis, result }] : []));
+    const pending = axes.some(({ result, failed }) => !result && !failed);
+    if (done.length === 0 || pending) return null;
+    return {
+      label: null,
+      // The version that computed the axes, which can differ from this app's own version.
+      core_version: done[0].result.analysis.core_version,
+      session_created_at: meta.created_at,
+      fit_params: params,
+      overrides,
+      axes: done.map(({ axis, result }) => ({
+        axis,
+        analysis: result.analysis,
+        snippets: {
+          worst_case: result.snippets.worstCase,
+          worst_case_performance: result.snippets.worstCasePerformance,
+          per_chip: result.snippets.perChip,
+        },
+      })),
+    };
+  }, [axes, meta.created_at, overrides, params]);
   // Identifies what a save would store. A second save of the same key would duplicate a result.
   const key = body ? `${sessionId}\n${JSON.stringify(body)}` : null;
   const saved = key !== null && savedKey === key;
@@ -97,6 +98,11 @@ export function SaveResultButton({ sessionId, meta, axis, params, overrides, res
     );
   }
 
+  const skipped = axes.filter(({ failed }) => failed).map(({ axis }) => axis);
+  const partial =
+    skipped.length > 0
+      ? `Saves axis ${body?.axes.map((a) => a.axis).join(", ")} only: the analysis of axis ${skipped.join(", ")} failed.`
+      : null;
   const unavailable = !body ? "The analysis is not ready." : saved ? "This analysis is already saved." : null;
   return (
     <>
@@ -113,7 +119,7 @@ export function SaveResultButton({ sessionId, meta, axis, params, overrides, res
             <SaveIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom">{unavailable ?? "Save result"}</TooltipContent>
+        <TooltipContent side="bottom">{unavailable ?? partial ?? "Save result"}</TooltipContent>
       </Tooltip>
       <Dialog open={open} onOpenChange={close}>
         <DialogContent>

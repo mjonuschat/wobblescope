@@ -125,8 +125,6 @@ interface Options {
   fetchResultSample?: typeof fetchResultSampleFile;
 }
 
-type Kind = "analysis" | "spectrogram" | "belts" | "axesMap" | "vibrations";
-
 type Answer = AnalysisResult | Spectrogram | BeltsAnalysis | AxesMapChip[] | VibrationsAnalysis;
 
 type Queued =
@@ -222,7 +220,8 @@ function beltFilesFor(meta: SessionMeta, chip: string) {
 /**
  * Owns the analysis worker. It fetches the sample files of the requested axis on the main
  * thread, sends the worker only the ones it lacks (as transferred buffers), and answers one
- * request at a time. A newer request replaces a waiting one of the same kind, and a waiting
+ * request at a time. A newer request replaces a waiting one of the same kind (for an analysis, of
+ * the same axis, since both axes of a session are wanted at once), and a waiting
  * analysis goes before a waiting spectrogram, which goes before a waiting belt comparison, which
  * goes before a waiting calibration analysis, which goes before a waiting vibrations profile.
  */
@@ -238,8 +237,11 @@ export function createAnalysisClient({
   let nextId = 1;
   const pending = new Map<number, { resolve: (r: Answer) => void; reject: (e: unknown) => void }>();
   let active: Queued | null = null;
-  const waiting: Record<Kind, Queued | null> = {
-    analysis: null,
+  // The slot of a request is its kind, and for an analysis its axis too. The order is the priority.
+  const slotOf = (entry: Queued) => (entry.kind === "analysis" ? `analysis:${entry.job.axis}` : entry.kind);
+  const waiting: Record<string, Queued | null> = {
+    "analysis:X": null,
+    "analysis:Y": null,
     spectrogram: null,
     belts: null,
     axesMap: null,
@@ -466,38 +468,29 @@ export function createAnalysisClient({
       entry.reject(error);
     } finally {
       active = null;
-      const kind: Kind | null = waiting.analysis
-        ? "analysis"
-        : waiting.spectrogram
-          ? "spectrogram"
-          : waiting.belts
-            ? "belts"
-            : waiting.axesMap
-              ? "axesMap"
-              : waiting.vibrations
-                ? "vibrations"
-                : null;
-      const next = kind && waiting[kind];
-      if (kind) waiting[kind] = null;
+      const slot = Object.keys(waiting).find((key) => waiting[key]);
+      const next = slot ? waiting[slot] : null;
+      if (slot) waiting[slot] = null;
       if (next) void start(next);
     }
   }
 
   /** Starts `entry` now, or queues it behind the active request in the slot of its kind. */
   function submit(entry: Queued) {
-    const { kind, signal } = entry;
+    const { signal } = entry;
     if (!active) {
       void start(entry);
       return;
     }
-    waiting[kind]?.reject(new SupersededError());
-    waiting[kind] = entry;
+    const slot = slotOf(entry);
+    waiting[slot]?.reject(new SupersededError());
+    waiting[slot] = entry;
     if (entry.kind === "analysis") entry.onProgress?.({ phase: "queued" });
     signal?.addEventListener(
       "abort",
       () => {
-        if (waiting[kind] === entry) {
-          waiting[kind] = null;
+        if (waiting[slot] === entry) {
+          waiting[slot] = null;
           entry.reject(abortError());
         }
       },

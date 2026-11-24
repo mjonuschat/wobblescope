@@ -17,6 +17,14 @@ const FIELDS: Record<keyof FitDraft, { label: string; unit: string; step: number
   max_vibrations: { label: "Acceptable vibration", unit: "%", step: 0.1 },
 };
 
+function recordedDamping(recorded: FitBaseline["recorded"]): string {
+  const byAxis = Object.entries(recorded.dampingByAxis ?? {});
+  if (byAxis.length > 0) {
+    return `The printer's input shaper uses ${byAxis.map(([axis, value]) => `${axis} ${value}`).join(", ")}. `;
+  }
+  return recorded.damping !== null ? `The printer's input shaper uses ${recorded.damping}. ` : "";
+}
+
 function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string {
   switch (key) {
     case "scv":
@@ -24,9 +32,9 @@ function hintFor(key: keyof FitDraft, recorded: FitBaseline["recorded"]): string
         recorded.scv ? "From the printer when it was tested." : "Klipper's default. Not recorded for this session."
       }`;
     case "damping_ratio":
-      return `How quickly the printer's resonance dies out; lower rings longer. ${
-        recorded.damping !== null ? `The printer's input shaper uses ${recorded.damping}. ` : ""
-      }Empty estimates it from the data.`;
+      return `How quickly the printer's resonance dies out; lower rings longer. ${recordedDamping(
+        recorded,
+      )}Empty estimates it from the data.`;
     case "max_smoothing":
       return "Skip shapers that round corners more than this. Empty means no limit.";
     case "max_vibrations":

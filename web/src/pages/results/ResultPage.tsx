@@ -15,11 +15,13 @@ import { formatTime } from "@/lib/format";
 import type { Axis } from "@/lib/generated/Axis";
 import type { ResultDetail } from "@/lib/generated/ResultDetail";
 
+import { AxisPairResults } from "../session/AxisPairResults";
 import { AxisResults } from "../session/AxisResults";
 import { MetaPanel } from "../session/MetaPanel";
 import { compareAnalyses } from "./compare";
 import { Alert } from "@/ui-kit/Alert";
 import { PageHeader } from "@/ui-kit/PageHeader";
+import { useResultsLayout } from "@/ui-kit/resultsLayout";
 
 type AxisSnapshot = ResultDetail["record"]["axes"][number];
 
@@ -86,9 +88,8 @@ function Comparison({ rid, detail, axis }: { rid: string; detail: ResultDetail; 
   );
 }
 
-function AxisView({ rid, detail, axis }: { rid: string; detail: ResultDetail; axis: AxisSnapshot }) {
-  const { record, meta } = detail;
-  const result: AnalysisResult = {
+function resultOf(axis: AxisSnapshot): AnalysisResult {
+  return {
     analysis: axis.analysis,
     snippets: {
       worstCase: axis.snippets.worst_case,
@@ -96,6 +97,38 @@ function AxisView({ rid, detail, axis }: { rid: string; detail: ResultDetail; ax
       perChip: axis.snippets.per_chip,
     },
   };
+}
+
+function PairView({ rid, detail, axes }: { rid: string; detail: ResultDetail; axes: [AxisSnapshot, AxisSnapshot] }) {
+  return (
+    <div className="space-y-4">
+      {axes.map((axis) => (
+        <Comparison key={axis.axis} rid={rid} detail={detail} axis={axis} />
+      ))}
+      <AxisPairResults
+        columns={[
+          {
+            axis: axes[0].axis,
+            result: resultOf(axes[0]),
+            source: { sessionId: `result:${rid}`, resultId: rid, axis: axes[0].axis },
+          },
+          {
+            axis: axes[1].axis,
+            result: resultOf(axes[1]),
+            source: { sessionId: `result:${rid}`, resultId: rid, axis: axes[1].axis },
+          },
+        ]}
+        meta={detail.meta}
+        overrides={detail.record.overrides}
+        readOnly
+      />
+    </div>
+  );
+}
+
+function AxisView({ rid, detail, axis }: { rid: string; detail: ResultDetail; axis: AxisSnapshot }) {
+  const { record, meta } = detail;
+  const result = resultOf(axis);
   return (
     <div className="space-y-4">
       <Comparison rid={rid} detail={detail} axis={axis} />
@@ -113,6 +146,7 @@ function AxisView({ rid, detail, axis }: { rid: string; detail: ResultDetail; ax
 export function ResultPage({ rid }: { rid: string }) {
   const query = useResult(rid);
   const [selected, setSelected] = useState<Axis | null>(null);
+  const layout = useResultsLayout();
 
   if (query.isPending) return <Waiting>Loading result…</Waiting>;
   if (query.isError) {
@@ -132,9 +166,13 @@ export function ResultPage({ rid }: { rid: string }) {
   const { record, meta } = detail;
   const axes = record.axes.map((a) => a.axis);
   const axis = record.axes.find((a) => a.axis === selected) ?? record.axes[0];
+  const pair =
+    layout === "side-by-side" && record.axes.length >= 2
+      ? ([record.axes[0], record.axes[1]] as [AxisSnapshot, AxisSnapshot])
+      : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className={`mx-auto space-y-6 ${pair ? "max-w-[1600px]" : "max-w-5xl"}`}>
       <PageHeader
         title={record.label ?? record.id}
         leading={
@@ -153,6 +191,8 @@ export function ResultPage({ rid }: { rid: string }) {
       <MetaPanel meta={meta} />
       {axis === undefined ? (
         <p className="text-sm">This result holds no analysed axis.</p>
+      ) : pair ? (
+        <PairView rid={rid} detail={detail} axes={pair} />
       ) : (
         <>
           <Tabs value={axis.axis} onValueChange={(value) => setSelected(value as Axis)}>
