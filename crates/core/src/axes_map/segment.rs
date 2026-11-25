@@ -59,6 +59,8 @@ pub(crate) struct SegmentResult {
     pub peak_velocities: [f64; 3],
     /// Magnitude of the per-axis median acceleration.
     pub gravity: f64,
+    /// The per-axis median acceleration in chip axes: gravity, up to the motion.
+    pub gravity_vector: [f64; 3],
     /// Time of the matched axis's velocity peak since the first sample (s).
     pub peak_time_s: f64,
     /// Decimated corrected velocities for plotting.
@@ -200,6 +202,7 @@ pub(crate) fn process_segment(
         noise_level,
         peak_velocities: peaks,
         gravity,
+        gravity_vector: medians,
         peak_time_s,
         curves,
     })
@@ -573,5 +576,13 @@ mod tests {
         let b = process_segment(&s, None, Method::Reference).unwrap();
         assert_eq!(a.peak_velocities, b.peak_velocities);
         assert_eq!(a.confidence, b.confidence);
+    }
+
+    #[test]
+    fn the_gravity_vector_is_the_median_of_each_axis() {
+        let s = pulse(1, 0.75, [[0.0; 2]; 3]);
+        let got = process_segment(&s, None, Method::Wobblescope).unwrap();
+        assert!(got.gravity_vector[0].abs() < 50.0);
+        assert!((got.gravity_vector[2] - 9810.0).abs() < 50.0);
     }
 }

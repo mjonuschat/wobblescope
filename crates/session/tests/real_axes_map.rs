@@ -108,3 +108,41 @@ fn a_step_in_the_chip_reading_does_not_hide_the_y_move_on_hank() {
         assert!(reference.axes[1].confidence < 0.2, "{id}");
     }
 }
+
+#[test]
+fn gravity_gives_hanks_z_when_its_move_is_too_weak_to_read() {
+    // The Z move is 15 mm/s at 500 mm/s², under the baseline error, and read on its own it
+    // takes chip z, the axis the Y move has, or chip x at 7 % confidence. Chip x reads +1 g at
+    // rest, so it is up.
+    for id in HANK_IDS {
+        let (meta, ChipCapture::Ready { input, .. }) = capture_of(id) else {
+            panic!("expected a ready capture");
+        };
+        let params = axes_map_params(&meta).expect("params");
+        let got = analyze_axes_map(&input, &params).expect("analysis");
+        assert_eq!(got.state, MapState::Complete, "{id}");
+        assert_eq!(got.map.as_deref(), Some("y, z, x"), "{id}");
+        assert_eq!(got.axes[2].state, AxisState::Virtual, "{id}");
+        assert_ne!(got.quality.status, QualityStatus::Error, "{id}");
+    }
+}
+
+#[test]
+fn gravity_agrees_with_the_z_axis_of_the_other_real_captures() {
+    // buster reads Z from its other two axes and uku's Beacon cannot feel it; gravity gives the
+    // same chip axis and sign, so their maps do not change.
+    let (meta, ChipCapture::Ready { input, .. }) = capture() else {
+        panic!("expected a ready capture");
+    };
+    let params = axes_map_params(&meta).expect("params");
+    let got = analyze_axes_map(&input, &params).expect("analysis");
+    let reference = analyze_axes_map_as_reference(&input, &params).expect("analysis");
+    assert_eq!(got.map, reference.map);
+    let (meta, ChipCapture::Ready { input, .. }) = capture_of(BEACON_ID) else {
+        panic!("expected a ready capture");
+    };
+    let params = axes_map_params(&meta).expect("params");
+    let got = analyze_axes_map(&input, &params).expect("analysis");
+    let reference = analyze_axes_map_as_reference(&input, &params).expect("analysis");
+    assert_eq!(got.map, reference.map);
+}

@@ -77,6 +77,46 @@ fn weak_repeat(seg: &[SegmentResult; 3], peaks: [f64; 3]) -> Option<usize> {
     (peaks[weaker] < REPEAT_FRACTION * peaks[stronger]).then_some(weaker)
 }
 
+/// Share of the measured gravity that the vertical chip axis must carry.
+const VERTICAL_SHARE: f64 = 0.9;
+/// Confidence an axis needs to be believed when gravity says otherwise or to take a part in the
+/// reading of gravity.
+const CONFIDENT: f64 = 0.5;
+
+/// Whether Z is better taken from gravity than from the Z move, for a toolhead chip whose three
+/// moves are all measured.
+///
+/// The chip axis that reads gravity, upwards, is the vertical one, whatever the Z move shows. It
+/// stands in for the Z move when X and Y are both read with confidence on two other chip axes
+/// whose cross product points up, and the Z move is not confident or reads the vertical axis
+/// upwards anyway. Z moves slowly, so its velocity is of the size of the baseline error, and on a printer
+/// whose bed moves Z the chip feels almost nothing.
+pub(crate) fn gravity_gives_z(seg: &[SegmentResult; 3]) -> bool {
+    let mut gravity = [0.0; 3];
+    for s in seg {
+        for (g, v) in gravity.iter_mut().zip(s.gravity_vector) {
+            *g += v / 3.0;
+        }
+    }
+    let norm = gravity.iter().map(|g| g * g).sum::<f64>().sqrt();
+    let up = super::quality::dominant_index(&gravity);
+    if gravity[up] <= 0.0 || gravity[up] < VERTICAL_SHARE * norm {
+        return false;
+    }
+    let (x, y) = (&seg[0], &seg[1]);
+    if x.confidence < CONFIDENT || y.confidence < CONFIDENT {
+        return false;
+    }
+    let mut directions = [x.direction_vector, y.direction_vector, [0.0; 3]];
+    if !super::orientation::complete_axis(&mut directions, 2) || directions[2][up] < 0.5 {
+        return false;
+    }
+    let z = &seg[2];
+    let agrees =
+        super::quality::dominant_index(&z.direction_vector) == up && z.direction_vector[up] > 0.0;
+    agrees || z.confidence < CONFIDENT
+}
+
 /// Decide which of the three printer axes carry motion.
 ///
 /// # Errors
@@ -181,6 +221,7 @@ mod tests {
             noise_level: 0.0,
             peak_velocities: peaks,
             gravity: 9810.0,
+            gravity_vector: [0.0, 0.0, 9810.0],
             peak_time_s: 0.0,
             curves: SegmentCurves {
                 t: vec![],
@@ -576,5 +617,103 @@ mod tests {
                     .to_owned()
             ))
         );
+    }
+
+    /// A segment that claims chip axis `claimed` with gravity along `up` of the chip.
+    fn with_gravity(claimed: usize, sign: f64, up: usize, confidence: f64) -> SegmentResult {
+        let mut s = claiming(claimed, [0.0; 3], confidence);
+        s.direction_vector[claimed] = sign;
+        s.gravity_vector = [0.0; 3];
+        s.gravity_vector[up] = 9800.0;
+        s
+    }
+
+    #[test]
+    fn gravity_gives_z_when_the_z_move_is_unsure_and_x_and_y_leave_the_vertical_axis() {
+        // The chip is turned so that x is up: X moves along chip y and Y along chip z, as on hank.
+        let segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.2),
+        ];
+        assert!(gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn a_confident_z_move_on_another_axis_is_believed() {
+        let segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.9),
+        ];
+        assert!(!gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn a_confident_z_move_on_the_vertical_axis_agrees() {
+        let segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.95),
+            with_gravity(0, 1.0, 0, 0.9),
+        ];
+        assert!(gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn gravity_needs_x_and_y_to_be_confident() {
+        let segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.3),
+            with_gravity(2, 1.0, 0, 0.2),
+        ];
+        assert!(!gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn gravity_needs_the_cross_product_of_x_and_y_to_point_up() {
+        // A chip that is mirrored or upside down has its vertical axis against the right-hand
+        // rule. Z is left to its own move there.
+        let segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, -1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.2),
+        ];
+        assert!(!gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn gravity_pointing_down_the_chip_axis_is_not_used() {
+        let mut segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.2),
+        ];
+        for s in &mut segs {
+            s.gravity_vector = [-9800.0, 0.0, 0.0];
+        }
+        assert!(!gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn gravity_spread_over_the_axes_is_not_used() {
+        let mut segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.2),
+        ];
+        for s in &mut segs {
+            s.gravity_vector = [7000.0, 7000.0, 0.0];
+        }
+        assert!(!gravity_gives_z(&segs));
+    }
+
+    #[test]
+    fn a_confident_z_move_down_the_vertical_axis_is_believed() {
+        let segs = [
+            with_gravity(1, 1.0, 0, 0.95),
+            with_gravity(2, 1.0, 0, 0.95),
+            with_gravity(0, -1.0, 0, 0.9),
+        ];
+        assert!(!gravity_gives_z(&segs));
     }
 }

@@ -256,7 +256,16 @@ fn analyze(
         segment::process_segment(&s2, inverse.as_ref(), method)?,
     ];
 
-    let case = bed::classify(input.mounting, &segments, params)?;
+    let case = match bed::classify(input.mounting, &segments, params)? {
+        bed::MotionCase::Full
+            if method == segment::Method::Wobblescope
+                && input.mounting == Mounting::Toolhead
+                && bed::gravity_gives_z(&segments) =>
+        {
+            bed::MotionCase::Complete { missing: 2 }
+        }
+        case => case,
+    };
     let gravity = segments.iter().map(|s| s.gravity).sum::<f64>() / 3.0;
     let noise = segments.iter().map(|s| s.noise_level).sum::<f64>() / 3.0;
 

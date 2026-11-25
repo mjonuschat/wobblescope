@@ -169,6 +169,16 @@ and change which axis, and which sign, the move is read as. Wobblescope measures
 reading before the move and after it separately, and uses only the move and a short stretch around
 it. Where a segment has no rest before the move, it is read as Shake&Tune reads it.
 
+### Why is my Z axis taken from gravity?
+
+The Z move is slow, so its velocity is as small as the error in the baseline, and on a printer whose
+bed moves Z a toolhead chip feels almost nothing. Shake&Tune reads Z from that move all the same and
+can end with the same chip axis twice. Wobblescope checks which chip axis points up. If the X and
+Y moves are read with confidence and fit that axis, and the Z move is not confident or agrees, Z is
+taken from it and shown as computed, as when Z is worked out from the other two. A Z move that is
+confident on another axis, a chip that reads gravity downwards and a mirrored chip are left to the Z
+move.
+
 ## Vibrations profile
 
 ### Why does the last speed match the maximum I asked for?
