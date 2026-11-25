@@ -308,7 +308,10 @@ fn analyze(
         rotation,
         gravity: gravity / 1000.0,
         noise,
-        noise_verdict: quality::noise_verdict(noise),
+        noise_verdict: quality::noise_verdict(
+            noise,
+            (method == segment::Method::Wobblescope).then_some(params.accel),
+        ),
         quality,
         config_check,
         curves: [c0, c1, c2],

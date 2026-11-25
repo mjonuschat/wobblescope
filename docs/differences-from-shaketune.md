@@ -159,6 +159,14 @@ out the missing axis from the other two.
 Yes. Shake&Tune has no support for this. Wobblescope flips the direction of the Y axis for a
 bed sensor, and returns a partial result with no suggestion when it cannot work out Z.
 
+### Why does the noise verdict say "Fine" when Shake&Tune says "High"?
+
+Shake&Tune judges the noise against fixed limits, 350 and 700 mm/s², for the figure it prints. Its
+warning about noise uses another limit, 30% of the acceleration you tested at, so on one run the
+two can disagree: at 1500 mm/s² a noise of 400 is called high in the figure and passes the check.
+Wobblescope uses the warning's limit for both. The noise is "Fine" up to 30% of the test
+acceleration, "High" up to 60% and "Too high" beyond.
+
 ### Why does my axes map read cleaner than in Shake&Tune?
 
 An accelerometer does not read the same at rest before and after a move. The toolhead settles at a

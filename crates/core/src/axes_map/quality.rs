@@ -10,10 +10,15 @@ const MAX_ANGLE_ERROR: f64 = 15.0;
 const EXPECTED_GRAVITY: f64 = 9810.0;
 /// Allowed relative deviation from `EXPECTED_GRAVITY`.
 const GRAVITY_TOLERANCE: f64 = 0.20;
-/// Noise level (mm/s^2) up to which the verdict is `Fine`.
+/// Noise level (mm/s^2) up to which Shake&Tune's verdict is `Fine`.
 const NOISE_FINE_MAX: f64 = 350.0;
-/// Noise level (mm/s^2) up to which the verdict is `High`.
+/// Noise level (mm/s^2) up to which Shake&Tune's verdict is `High`.
 const NOISE_HIGH_MAX: f64 = 700.0;
+/// Share of the test acceleration the noise may reach before it is a warning and the verdict is
+/// `High`.
+const NOISE_WARNING_SHARE: f64 = 0.3;
+/// Share of the test acceleration the noise may reach before the verdict is `TooHigh`.
+const NOISE_TOO_HIGH_SHARE: f64 = 0.6;
 
 /// Index of the largest absolute component; the first wins ties, like numpy's `argmax`.
 pub(crate) fn dominant_index(v: &[f64; 3]) -> usize {
@@ -76,7 +81,7 @@ pub(crate) fn validate(
         ));
     }
 
-    if accel != 0.0 && noise > accel * 0.3 {
+    if accel != 0.0 && noise > accel * NOISE_WARNING_SHARE {
         warn(&mut status);
         messages.push(format!("High noise level ({noise:.0} mm/s^2)"));
     }
@@ -94,10 +99,18 @@ fn warn(status: &mut QualityStatus) {
 }
 
 /// Classify a noise level in mm/s^2.
-pub(crate) fn noise_verdict(noise: f64) -> NoiseVerdict {
-    if noise <= NOISE_FINE_MAX {
+///
+/// With the test acceleration, the limits are the shares of it that the warning uses, so the
+/// verdict and the warning agree. Without one, or with none to speak of, they are the fixed ones
+/// Shake&Tune prints.
+pub(crate) fn noise_verdict(noise: f64, accel: Option<f64>) -> NoiseVerdict {
+    let (fine_max, high_max) = match accel.filter(|a| *a > 0.0) {
+        Some(a) => (a * NOISE_WARNING_SHARE, a * NOISE_TOO_HIGH_SHARE),
+        None => (NOISE_FINE_MAX, NOISE_HIGH_MAX),
+    };
+    if noise <= fine_max {
         NoiseVerdict::Fine
-    } else if noise <= NOISE_HIGH_MAX {
+    } else if noise <= high_max {
         NoiseVerdict::High
     } else {
         NoiseVerdict::TooHigh
@@ -145,10 +158,35 @@ mod tests {
     }
 
     #[test]
-    fn noise_verdict_thresholds() {
-        assert_eq!(noise_verdict(350.0), NoiseVerdict::Fine);
-        assert_eq!(noise_verdict(350.1), NoiseVerdict::High);
-        assert_eq!(noise_verdict(700.0), NoiseVerdict::High);
-        assert_eq!(noise_verdict(700.1), NoiseVerdict::TooHigh);
+    fn noise_verdict_thresholds_without_an_acceleration_are_shaketunes() {
+        for accel in [None, Some(0.0)] {
+            assert_eq!(noise_verdict(350.0, accel), NoiseVerdict::Fine);
+            assert_eq!(noise_verdict(350.1, accel), NoiseVerdict::High);
+            assert_eq!(noise_verdict(700.0, accel), NoiseVerdict::High);
+            assert_eq!(noise_verdict(700.1, accel), NoiseVerdict::TooHigh);
+        }
+    }
+
+    #[test]
+    fn noise_verdict_thresholds_scale_with_the_acceleration() {
+        assert_eq!(noise_verdict(450.0, Some(1500.0)), NoiseVerdict::Fine);
+        assert_eq!(noise_verdict(450.1, Some(1500.0)), NoiseVerdict::High);
+        assert_eq!(noise_verdict(900.0, Some(1500.0)), NoiseVerdict::High);
+        assert_eq!(noise_verdict(900.1, Some(1500.0)), NoiseVerdict::TooHigh);
+        assert_eq!(noise_verdict(900.0, Some(3000.0)), NoiseVerdict::Fine);
+    }
+
+    #[test]
+    fn the_verdict_is_not_fine_exactly_when_the_quality_check_warns_about_noise() {
+        for accel in [1000.0, 1500.0, 3000.0] {
+            for noise in [
+                0.0, 100.0, 299.0, 300.0, 450.0, 450.5, 600.0, 900.0, 1000.0, 2000.0,
+            ] {
+                let q = validate(&IDENTITY, [1.0; 3], [1.0; 3], noise, 9810.0, accel);
+                let warned = q.messages.iter().any(|m| m.starts_with("High noise level"));
+                let verdict = noise_verdict(noise, Some(accel));
+                assert_eq!(verdict != NoiseVerdict::Fine, warned, "{noise} at {accel}");
+            }
+        }
     }
 }

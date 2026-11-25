@@ -3,7 +3,8 @@
 use std::path::Path;
 
 use wobblescope_core::axes_map::{
-    AxisState, ChipAxis, MapState, QualityStatus, analyze_axes_map, analyze_axes_map_as_reference,
+    AxisState, ChipAxis, MapState, NoiseVerdict, QualityStatus, analyze_axes_map,
+    analyze_axes_map_as_reference,
 };
 use wobblescope_session::bridge::{ChipCapture, axes_map_inputs, axes_map_params};
 use wobblescope_session::fs::open_session;
@@ -145,4 +146,20 @@ fn gravity_agrees_with_the_z_axis_of_the_other_real_captures() {
     let got = analyze_axes_map(&input, &params).expect("analysis");
     let reference = analyze_axes_map_as_reference(&input, &params).expect("analysis");
     assert_eq!(got.map, reference.map);
+}
+
+#[test]
+fn the_noise_verdict_agrees_with_the_quality_check_on_hank() {
+    // Noise of 355 to 389 mm/s² at 1500 mm/s² is under the 450 the quality check warns at.
+    for id in HANK_IDS {
+        let (meta, ChipCapture::Ready { input, .. }) = capture_of(id) else {
+            panic!("expected a ready capture");
+        };
+        let params = axes_map_params(&meta).expect("params");
+        let got = analyze_axes_map(&input, &params).expect("analysis");
+        assert_eq!(got.noise_verdict, NoiseVerdict::Fine, "{id}: {}", got.noise);
+        assert_eq!(got.quality.status, QualityStatus::Ok, "{id}");
+        let reference = analyze_axes_map_as_reference(&input, &params).expect("analysis");
+        assert_eq!(reference.noise_verdict, NoiseVerdict::High, "{id}");
+    }
 }
