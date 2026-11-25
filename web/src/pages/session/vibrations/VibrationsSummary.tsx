@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { VibrationsResult } from "@/lib/generated/VibrationsResult";
 import type { Zone } from "@/lib/generated/Zone";
 
@@ -19,22 +22,50 @@ function Badge({ n }: { n: number }) {
   );
 }
 
+type Order = "position" | "quality";
+
+/** Lists the zones in the order of their position or of how quiet they are, the quietest first. A
+ * zone keeps the number it has in the plot, which counts them by position. */
 function ZoneTable({
   title,
   unit,
   empty,
+  positionLabel,
   zones,
   range,
 }: {
   title: string;
   unit: string;
   empty: string;
+  positionLabel: string;
   zones: Zone[];
   range: (zone: Zone) => string;
 }) {
+  const [order, setOrder] = useState<Order>("position");
+  const rows = zones.map((zone, index) => ({ zone, number: index + 1 }));
+  if (order === "quality") rows.sort((a, b) => a.zone.energy - b.zone.energy || a.number - b.number);
   return (
-    <div className="space-y-2">
-      <h3 className={heading}>{title}</h3>
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className={heading}>{title}</h3>
+        {zones.length > 1 && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            Sort by
+            <ToggleGroup
+              variant="outline"
+              size="sm"
+              aria-label={`Sort ${title.toLowerCase()}`}
+              value={[order]}
+              onValueChange={(next) => {
+                if (next.length > 0) setOrder(next[0] as Order);
+              }}
+            >
+              <ToggleGroupItem value="position">{positionLabel}</ToggleGroupItem>
+              <ToggleGroupItem value="quality">Quality</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        )}
+      </div>
       {zones.length === 0 ? (
         <p className="text-sm">{empty}</p>
       ) : (
@@ -47,10 +78,10 @@ function ZoneTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {zones.map((zone, index) => (
+            {rows.map(({ zone, number }) => (
               <TableRow key={`${zone.start}-${zone.end}`}>
                 <TableCell>
-                  <Badge n={index + 1} />
+                  <Badge n={number} />
                 </TableCell>
                 <TableCell className="tabular-nums">{range(zone)}</TableCell>
                 <TableCell className="text-right tabular-nums">{zone.energy.toFixed(1)}</TableCell>
@@ -59,7 +90,7 @@ function ZoneTable({
           </TableBody>
         </Table>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -69,6 +100,7 @@ export function GoodSpeedRanges({ result }: { result: VibrationsResult }) {
       title="Recommended speed ranges"
       unit="mm/s"
       empty="No recommended speed ranges were found."
+      positionLabel="Speed"
       zones={result.good_speeds}
       range={(zone) => `${round1(at(result.speeds, zone.start))} to ${round1(at(result.speeds, zone.end))}`}
     />
@@ -81,6 +113,7 @@ export function GoodAngleRanges({ result }: { result: VibrationsResult }) {
       title="Good angle ranges"
       unit="degrees"
       empty="No good angle ranges were found."
+      positionLabel="Angle"
       zones={result.good_angles}
       range={(zone) => `${round1(at(result.angles, zone.start))} to ${round1(at(result.angles, zone.end))}`}
     />
