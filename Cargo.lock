@@ -2045,7 +2045,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wobblescope"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "axum",
  "clap",
@@ -2081,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "wobblescope-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "realfft",
  "serde",
@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "wobblescope-session"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "wobblescope-wasm"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "js-sys",
  "serde",
