@@ -11,7 +11,8 @@ const PROFILE_SMOOTHING: usize = 20;
 /// Power the energy and the area under the profile are raised to for the weights.
 const ENERGY_AMPLIFICATION: i32 = 2;
 
-/// The PSD profile of each main angle and the weighted average of both.
+/// The PSD profile of each main angle and the weighted average of both, as Shake&Tune computes
+/// them.
 ///
 /// A profile is the mean PSD over the angle's speeds, smoothed with a moving average of 20 bins
 /// whose ends are padded with zeros, so it fades towards zero at both ends. The weight of an
@@ -27,6 +28,32 @@ pub fn motor_profiles(
     psds: &PsdByAngleSpeed,
     angle_energy: &[f64],
     main: [f64; 2],
+) -> (Vec<(f64, Vec<f64>)>, Vec<f64>) {
+    profiles(freqs, psds, angle_energy, main, |angle| angle as usize)
+}
+
+/// [`motor_profiles`] with the energy of each angle read from the row nearest that angle.
+///
+/// `angle_energy` has a row for each of the angles `linspace(0, 360, n)`, so the row of an angle
+/// in degrees is `angle / 360 * (n - 1)`, rounded. Both `main` angles must be below 360.
+pub fn motor_profiles_by_angle(
+    freqs: &[f64],
+    psds: &PsdByAngleSpeed,
+    angle_energy: &[f64],
+    main: [f64; 2],
+) -> (Vec<(f64, Vec<f64>)>, Vec<f64>) {
+    let last = angle_energy.len().saturating_sub(1) as f64;
+    profiles(freqs, psds, angle_energy, main, |angle| {
+        (angle / 360.0 * last).round() as usize
+    })
+}
+
+fn profiles(
+    freqs: &[f64],
+    psds: &PsdByAngleSpeed,
+    angle_energy: &[f64],
+    main: [f64; 2],
+    row_of: impl Fn(f64) -> usize,
 ) -> (Vec<(f64, Vec<f64>)>, Vec<f64>) {
     let mut profiles: Vec<(f64, Vec<f64>)> = Vec::with_capacity(main.len());
     let mut weighted_sum = vec![0.0; freqs.len()];
@@ -47,7 +74,7 @@ pub fn motor_profiles(
         let mean_curve: Vec<f64> = sum_curve.iter().map(|v| v / count).collect();
         let profile = convolve_same(&mean_curve, &kernel);
 
-        let energy = angle_energy[angle as usize].powi(ENERGY_AMPLIFICATION);
+        let energy = angle_energy[row_of(angle)].powi(ENERGY_AMPLIFICATION);
         let area = trapz(&profile, freqs).powi(ENERGY_AMPLIFICATION);
         let weight = energy * area;
         for (total, value) in weighted_sum.iter_mut().zip(&profile) {

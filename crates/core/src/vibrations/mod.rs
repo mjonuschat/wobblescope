@@ -13,6 +13,7 @@ mod zones;
 pub use crate::resonance::{MechanicalParams, estimate_damping_above};
 pub use analysis::{
     MeasuredCurve, MotorResult, StepEnergy, VibrationsParams, VibrationsResult, analyze_chip,
+    analyze_chip_as_reference,
 };
 pub use correct::{Measured, corrected_grid, corrected_value};
 pub use grid::{
@@ -20,7 +21,7 @@ pub use grid::{
     speed_powers, symmetry,
 };
 pub use holdout::{HoldoutScore, holdout_scores, median};
-pub use motor::{PsdByAngleSpeed, motor_profiles};
+pub use motor::{PsdByAngleSpeed, motor_profiles, motor_profiles_by_angle};
 pub use steps::{StepInput, StepPsd, step_psds};
 pub use worst::worst_case;
 pub use zones::{Zone, filter_and_split_zones, low_energy_zones};

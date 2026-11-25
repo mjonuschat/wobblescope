@@ -8,7 +8,7 @@ use super::grid::{
     EnergyByAngleSpeed, Grid, Kinematics, Model, angle_powers, direction_speed_grid, speed_powers,
     symmetry,
 };
-use super::motor::{PsdByAngleSpeed, motor_profiles};
+use super::motor::{PsdByAngleSpeed, motor_profiles, motor_profiles_by_angle};
 use super::steps::{StepInput, step_psds};
 use super::zones::{Zone, filter_and_split_zones, low_energy_zones};
 use crate::CORE_VERSION;
@@ -245,6 +245,26 @@ pub fn analyze_chip(
     steps: &[StepInput],
     p: &VibrationsParams,
 ) -> Result<VibrationsResult, CoreError> {
+    analyze(steps, p, false)
+}
+
+/// [`analyze_chip`] with the motor profile weighted as Shake&Tune weighs it. For the tests that
+/// compare the numbers with its own; the app does not use it.
+///
+/// # Errors
+/// As [`analyze_chip`].
+pub fn analyze_chip_as_reference(
+    steps: &[StepInput],
+    p: &VibrationsParams,
+) -> Result<VibrationsResult, CoreError> {
+    analyze(steps, p, true)
+}
+
+fn analyze(
+    steps: &[StepInput],
+    p: &VibrationsParams,
+    reference_weights: bool,
+) -> Result<VibrationsResult, CoreError> {
     let (freqs, step_psds) = step_psds(steps, p.max_freq)?;
     let main = p.kinematics.main_angles();
     for angle in main {
@@ -300,7 +320,11 @@ pub fn analyze_chip(
     };
     // The motor profile is weighted by the model grid's angular energy, extras or not.
     let model_angle_energy = angle_powers(&model_grid);
-    let (profiles, combined) = motor_profiles(&freqs, &psds, &model_angle_energy, main);
+    let (profiles, combined) = if reference_weights {
+        motor_profiles(&freqs, &psds, &model_angle_energy, main)
+    } else {
+        motor_profiles_by_angle(&freqs, &psds, &model_angle_energy, main)
+    };
     result.motor = estimate_damping_above(&freqs, &combined, MOTOR_MIN_FREQ).map(|m| MotorResult {
         freqs,
         profiles,

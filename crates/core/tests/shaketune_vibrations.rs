@@ -9,8 +9,9 @@ use wobblescope_core::RawSamples;
 use wobblescope_core::peaks::detect_peaks_relative;
 use wobblescope_core::vibrations::{
     EnergyByAngleSpeed, Kinematics, PsdByAngleSpeed, StepInput, VibrationsParams, Zone,
-    analyze_chip, angle_powers, direction_speed_grid, estimate_damping_above,
-    filter_and_split_zones, low_energy_zones, motor_profiles, speed_powers, step_psds, symmetry,
+    analyze_chip, analyze_chip_as_reference, angle_powers, direction_speed_grid,
+    estimate_damping_above, filter_and_split_zones, low_energy_zones, motor_profiles, speed_powers,
+    step_psds, symmetry,
 };
 
 parity_test! {
@@ -247,7 +248,7 @@ fn params(fixture: &Fixture) -> VibrationsParams {
 parity_test! {
     fn analyze_chip_matches_shaketune_end_to_end() {
         for (name, fixture) in fixtures() {
-            let got = analyze_chip(&inputs(&fixture), &params(&fixture)).unwrap();
+            let got = analyze_chip_as_reference(&inputs(&fixture), &params(&fixture)).unwrap();
             assert_eq!(got.steps.len(), fixture.energies.len(), "{name} steps");
             for step in &got.steps {
                 let want = fixture

@@ -190,6 +190,13 @@ step of 5 ends at 197. Wobblescope always includes the maximum speed.
 Shake&Tune can finish a long test and then end with an error. Wobblescope reports that there
 is no low vibration speed range.
 
+### Why is the motor resonance weighted differently?
+
+Shake&Tune combines the profiles of the two motor directions into one, weighting each by how much
+energy the printer shows at that angle. A lookup mistake makes it read the energy at the wrong
+angle. Wobblescope reads it at each motor's own angle. The resonance frequency stays the same on
+the recordings tested, and the damping ratio moves a little.
+
 ### Can I measure more directions than the two motor directions?
 
 Shake&Tune measures the two motor directions and computes every other angle from them.
