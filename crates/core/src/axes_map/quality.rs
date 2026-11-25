@@ -34,6 +34,8 @@ pub(crate) fn dominant_index(v: &[f64; 3]) -> usize {
 /// Check the detection against the reference's thresholds.
 ///
 /// `gravity` and `noise` are in mm/s^2, `accel` is the commanded acceleration in mm/s^2.
+/// `unmeasured` is an axis that was worked out from the other two, which the confidence check
+/// leaves out; Shake&Tune averages it in as zero.
 pub(crate) fn validate(
     directions: &[[f64; 3]; 3],
     confidences: [f64; 3],
@@ -41,6 +43,7 @@ pub(crate) fn validate(
     noise: f64,
     gravity: f64,
     accel: f64,
+    unmeasured: Option<usize>,
 ) -> Quality {
     let mut messages = Vec::new();
     let mut status = QualityStatus::Ok;
@@ -51,7 +54,13 @@ pub(crate) fn validate(
         messages.push("Same accelerometer axis detected for multiple machine axes!".to_owned());
     }
 
-    let mean_confidence = confidences.iter().sum::<f64>() / 3.0;
+    let counted: Vec<f64> = confidences
+        .iter()
+        .enumerate()
+        .filter(|(axis, _)| Some(*axis) != unmeasured)
+        .map(|(_, c)| *c)
+        .collect();
+    let mean_confidence = counted.iter().sum::<f64>() / counted.len() as f64;
     if mean_confidence < MIN_CONFIDENCE {
         warn(&mut status);
         messages.push(format!(
@@ -125,7 +134,7 @@ mod tests {
 
     #[test]
     fn a_clean_result_is_good() {
-        let q = validate(&IDENTITY, [1.0; 3], [1.0; 3], 100.0, 9810.0, 1500.0);
+        let q = validate(&IDENTITY, [1.0; 3], [1.0; 3], 100.0, 9810.0, 1500.0, None);
         assert_eq!(q.status, QualityStatus::Ok);
         assert_eq!(q.messages, ["Detection quality: GOOD"]);
     }
@@ -134,7 +143,7 @@ mod tests {
     fn a_repeated_chip_axis_is_an_error() {
         let mut d = IDENTITY;
         d[1] = d[0];
-        let q = validate(&d, [1.0; 3], [0.0; 3], 100.0, 9810.0, 1500.0);
+        let q = validate(&d, [1.0; 3], [0.0; 3], 100.0, 9810.0, 1500.0, None);
         assert_eq!(q.status, QualityStatus::Error);
         assert_eq!(
             q.messages,
@@ -144,7 +153,7 @@ mod tests {
 
     #[test]
     fn warnings_use_the_reference_texts() {
-        let q = validate(&IDENTITY, [0.2; 3], [16.04; 3], 600.0, 5000.0, 1500.0);
+        let q = validate(&IDENTITY, [0.2; 3], [16.04; 3], 600.0, 5000.0, 1500.0, None);
         assert_eq!(q.status, QualityStatus::Warning);
         assert_eq!(
             q.messages,
@@ -182,11 +191,49 @@ mod tests {
             for noise in [
                 0.0, 100.0, 299.0, 300.0, 450.0, 450.5, 600.0, 900.0, 1000.0, 2000.0,
             ] {
-                let q = validate(&IDENTITY, [1.0; 3], [1.0; 3], noise, 9810.0, accel);
+                let q = validate(&IDENTITY, [1.0; 3], [1.0; 3], noise, 9810.0, accel, None);
                 let warned = q.messages.iter().any(|m| m.starts_with("High noise level"));
                 let verdict = noise_verdict(noise, Some(accel));
                 assert_eq!(verdict != NoiseVerdict::Fine, warned, "{noise} at {accel}");
             }
         }
+    }
+    #[test]
+    fn a_computed_axis_is_left_out_of_the_confidence_average() {
+        let confidences = [0.6, 0.6, 0.0];
+        let counted = validate(
+            &IDENTITY,
+            confidences,
+            [1.0; 3],
+            100.0,
+            9810.0,
+            1500.0,
+            Some(2),
+        );
+        assert_eq!(counted.status, QualityStatus::Ok);
+        let as_zero = validate(
+            &IDENTITY,
+            confidences,
+            [1.0; 3],
+            100.0,
+            9810.0,
+            1500.0,
+            None,
+        );
+        assert_eq!(as_zero.messages, ["Low detection confidence (40%)"]);
+    }
+
+    #[test]
+    fn two_measured_axes_below_the_limit_still_warn() {
+        let q = validate(
+            &IDENTITY,
+            [0.4, 0.4, 0.0],
+            [1.0; 3],
+            100.0,
+            9810.0,
+            1500.0,
+            Some(2),
+        );
+        assert_eq!(q.messages, ["Low detection confidence (40%)"]);
     }
 }

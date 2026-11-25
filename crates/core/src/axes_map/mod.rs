@@ -272,9 +272,15 @@ fn analyze(
     let outcome = match case {
         bed::MotionCase::NoMotion => no_motion_outcome(params),
         bed::MotionCase::Partial { moving } => partial_outcome(&segments, &moving, input.mounting),
-        bed::MotionCase::Full => {
-            complete_outcome(&segments, None, input.mounting, noise, gravity, params)
-        }
+        bed::MotionCase::Full => complete_outcome(
+            &segments,
+            None,
+            input.mounting,
+            noise,
+            gravity,
+            params,
+            method,
+        ),
         bed::MotionCase::Complete { missing } => complete_outcome(
             &segments,
             Some(missing),
@@ -282,6 +288,7 @@ fn analyze(
             noise,
             gravity,
             params,
+            method,
         ),
     };
     let Outcome {
@@ -420,6 +427,7 @@ fn complete_outcome(
     noise: f64,
     gravity: f64,
     params: &AxesMapParams,
+    method: segment::Method,
 ) -> Outcome {
     let sign = mounting_sign(mounting);
     let mut directions = segments
@@ -449,6 +457,7 @@ fn complete_outcome(
         noise,
         gravity,
         params.accel,
+        virtual_axis.filter(|_| method == segment::Method::Wobblescope),
     );
 
     let chip_axes: [usize; 3] = directions.map(|d| quality::dominant_index(&d));
@@ -520,6 +529,68 @@ fn chip_axis_from_index(index: usize) -> ChipAxis {
         0 => ChipAxis::X,
         1 => ChipAxis::Y,
         _ => ChipAxis::Z,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::segment::{Method, SegmentResult};
+    use super::*;
+
+    fn segment(direction: [f64; 3], confidence: f64) -> SegmentResult {
+        SegmentResult {
+            direction_vector: direction,
+            actual_direction: direction,
+            angle_error: 5.0,
+            confidence,
+            noise_level: 100.0,
+            peak_velocities: direction.map(|c| c * 80.0),
+            gravity: 9810.0,
+            gravity_vector: [0.0, 0.0, 9810.0],
+            peak_time_s: 0.5,
+            curves: SegmentCurves {
+                t: vec![],
+                velocity: [vec![], vec![], vec![]],
+            },
+        }
+    }
+
+    fn quality_with_a_computed_z(method: Method) -> Quality {
+        let segments = [
+            segment([1.0, 0.0, 0.0], 0.7),
+            segment([0.0, 1.0, 0.0], 0.7),
+            segment([0.0, 0.0, 1.0], 0.1),
+        ];
+        let params = AxesMapParams {
+            speed: 80.0,
+            accel: 1500.0,
+            max_z_velocity: Some(15.0),
+            max_z_accel: Some(500.0),
+        };
+        complete_outcome(
+            &segments,
+            Some(2),
+            Mounting::Toolhead,
+            100.0,
+            9810.0,
+            &params,
+            method,
+        )
+        .quality
+    }
+
+    #[test]
+    fn the_confidence_of_a_computed_axis_is_not_averaged_in() {
+        let quality = quality_with_a_computed_z(Method::Wobblescope);
+        assert_eq!(quality.status, QualityStatus::Ok);
+        assert_eq!(quality.messages, ["Detection quality: GOOD"]);
+    }
+
+    #[test]
+    fn the_reference_averages_it_in_as_zero() {
+        let quality = quality_with_a_computed_z(Method::Reference);
+        assert_eq!(quality.status, QualityStatus::Warning);
+        assert_eq!(quality.messages, ["Low detection confidence (47%)"]);
     }
 }
 

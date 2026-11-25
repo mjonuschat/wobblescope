@@ -159,6 +159,13 @@ out the missing axis from the other two.
 Yes. Shake&Tune has no support for this. Wobblescope flips the direction of the Y axis for a
 bed sensor, and returns a partial result with no suggestion when it cannot work out Z.
 
+### Why does a computed axis not count against the detection confidence?
+
+When one axis is worked out from the other two, Shake&Tune scores its confidence as zero and
+averages it in with the two it measured. Two clean readings at 60% then average 40% and raise a
+"low detection confidence" warning, because the limit is 50%. Wobblescope averages only the axes it
+measured, so the limit applies to what was actually detected.
+
 ### Why does the noise verdict say "Fine" when Shake&Tune says "High"?
 
 Shake&Tune judges the noise against fixed limits, 350 and 700 mm/s², for the figure it prints. Its
