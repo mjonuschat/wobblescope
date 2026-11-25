@@ -70,6 +70,28 @@ function Registers({ query }: { query: ReturnType<typeof useMotorRegisters> }) {
   );
 }
 
+function Cell({
+  entry,
+  other,
+  k,
+  align,
+  children,
+}: {
+  entry: MotorTuning;
+  other: MotorTuning | undefined;
+  k: Key;
+  align?: boolean;
+  children: string;
+}) {
+  const reference = other && entry.differs.includes(k) ? `${other.stepper}: ${shown(other, k)}` : undefined;
+  return (
+    <TableCell className={cn(align && "text-right tabular-nums", reference && DIFFERS)} title={reference}>
+      {children}
+      {reference && <span className="sr-only"> (differs, {reference})</span>}
+    </TableCell>
+  );
+}
+
 function Row({ entry, other }: { entry: MotorTuning; other: MotorTuning | undefined }) {
   const [open, setOpen] = useState(false);
   const set = AUTOTUNE.filter((key) => entry[key] !== null);
@@ -78,30 +100,26 @@ function Row({ entry, other }: { entry: MotorTuning; other: MotorTuning | undefi
   const differs = (key: Key) => entry.differs.includes(key);
   const hiddenDifference = set.some(differs);
 
-  const Cell = ({ k, align, children }: { k: Key; align?: boolean; children: string }) => {
-    const reference = other && differs(k) ? `${other.stepper}: ${shown(other, k)}` : undefined;
-    return (
-      <TableCell className={cn(align && "text-right tabular-nums", reference && DIFFERS)} title={reference}>
-        {children}
-        {reference && <span className="sr-only"> (differs, {reference})</span>}
-      </TableCell>
-    );
-  };
-
   return (
     <Fragment>
       <TableRow>
         <TableCell>{entry.stepper}</TableCell>
-        <Cell k="driver">{show(entry.driver)}</Cell>
-        <Cell k="motor">{show(entry.motor)}</Cell>
-        <Cell k="tuning_goal">{show(entry.tuning_goal)}</Cell>
-        <Cell k="run_current" align>
+        <Cell entry={entry} other={other} k="driver">
+          {show(entry.driver)}
+        </Cell>
+        <Cell entry={entry} other={other} k="motor">
+          {show(entry.motor)}
+        </Cell>
+        <Cell entry={entry} other={other} k="tuning_goal">
+          {show(entry.tuning_goal)}
+        </Cell>
+        <Cell entry={entry} other={other} k="run_current" align>
           {amperes(entry.run_current)}
         </Cell>
-        <Cell k="hold_current" align>
+        <Cell entry={entry} other={other} k="hold_current" align>
           {amperes(entry.hold_current)}
         </Cell>
-        <Cell k="microsteps" align>
+        <Cell entry={entry} other={other} k="microsteps" align>
           {show(entry.microsteps)}
         </Cell>
         <TableCell className="text-right">
