@@ -222,6 +222,26 @@ pub fn analyze_axes_map(
     input: &AxesMapInput,
     params: &AxesMapParams,
 ) -> Result<AxesMapResult, CoreError> {
+    analyze(input, params, segment::Method::Wobblescope)
+}
+
+/// [`analyze_axes_map`] as Shake&Tune reads the same recordings. For the tests that compare the
+/// numbers with its own; the app does not use it.
+///
+/// # Errors
+/// As [`analyze_axes_map`].
+pub fn analyze_axes_map_as_reference(
+    input: &AxesMapInput,
+    params: &AxesMapParams,
+) -> Result<AxesMapResult, CoreError> {
+    analyze(input, params, segment::Method::Reference)
+}
+
+fn analyze(
+    input: &AxesMapInput,
+    params: &AxesMapParams,
+    method: segment::Method,
+) -> Result<AxesMapResult, CoreError> {
     let inverse = map::inverse_matrix(input.configured_map.as_deref());
     let [s0, s1, s2] = &input.segments;
     let [w0, w1, w2] = &input.windows;
@@ -231,9 +251,9 @@ pub fn analyze_axes_map(
         within(s2, w2.as_ref())?,
     );
     let segments = [
-        segment::process_segment(&s0, inverse.as_ref())?,
-        segment::process_segment(&s1, inverse.as_ref())?,
-        segment::process_segment(&s2, inverse.as_ref())?,
+        segment::process_segment(&s0, inverse.as_ref(), method)?,
+        segment::process_segment(&s1, inverse.as_ref(), method)?,
+        segment::process_segment(&s2, inverse.as_ref(), method)?,
     ];
 
     let case = bed::classify(input.mounting, &segments, params)?;

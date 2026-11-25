@@ -1,0 +1,144 @@
+{
+  "format_version": 2,
+  "id": "axesmap-20261125T034718Z",
+  "created_at": "2026-11-25T03:47:18Z",
+  "source": "Capture",
+  "time_domain": "KlipperPrintTime",
+  "mode": null,
+  "settings": null,
+  "printer": {
+    "name": "hank",
+    "klipper_version": "v2026.09.00-3-g6127720c",
+    "mcu_firmware": [
+      "mcu: v2026.11.00-33-g4b15247f",
+      "toolhead: v2026.09.00-3-g6127720c"
+    ],
+    "square_corner_velocity": 5.0,
+    "damping_ratio_x": 0.1,
+    "damping_ratio_y": 0.1
+  },
+  "outcome": "Complete",
+  "axes_map_run": {
+    "speed": 80.0,
+    "max_velocity": 400.0,
+    "accel": 1500.0,
+    "z_height": 20.0,
+    "travel_speed": 120.0,
+    "max_z_velocity": 15.0,
+    "max_z_accel": 500.0
+  },
+  "vibrations_run": null,
+  "notes": [],
+  "probe_points": [
+    {
+      "position": [
+        160.0,
+        162.5,
+        20.0
+      ]
+    },
+    {
+      "position": [
+        190.0,
+        162.5,
+        20.0
+      ]
+    },
+    {
+      "position": [
+        190.0,
+        192.5,
+        20.0
+      ]
+    }
+  ],
+  "chips": [
+    {
+      "name": "adxl345",
+      "chip_type": "adxl345",
+      "nominal_rate_hz": 3200.0,
+      "observed_rate_hz": 3236.245697342792,
+      "axes_map": "x,y,z",
+      "mounting": "toolhead",
+      "health": "Ok",
+      "health_notes": []
+    }
+  ],
+  "segments": [
+    {
+      "axis": {
+        "Vector": [
+          1,
+          0,
+          0
+        ]
+      },
+      "point": 0,
+      "window": {
+        "start": 546108.1039334941,
+        "end": 546109.7903880536
+      },
+      "files": [
+        {
+          "chip": 0,
+          "sample_file": "c0-s0.zst",
+          "sample_count": 9770,
+          "coverage": "Complete",
+          "health": "Ok",
+          "health_notes": []
+        }
+      ],
+      "steps": []
+    },
+    {
+      "axis": {
+        "Vector": [
+          0,
+          1,
+          0
+        ]
+      },
+      "point": 1,
+      "window": {
+        "start": 546110.8713514643,
+        "end": 546112.5595419762
+      },
+      "files": [
+        {
+          "chip": 0,
+          "sample_file": "c0-s1.zst",
+          "sample_count": 6510,
+          "coverage": "Complete",
+          "health": "Ok",
+          "health_notes": []
+        }
+      ],
+      "steps": []
+    },
+    {
+      "axis": {
+        "Vector": [
+          0,
+          0,
+          1
+        ]
+      },
+      "point": 2,
+      "window": {
+        "start": 546113.636084625,
+        "end": 546116.9248482262
+      },
+      "files": [
+        {
+          "chip": 0,
+          "sample_file": "c0-s2.zst",
+          "sample_count": 12050,
+          "coverage": "Complete",
+          "health": "Ok",
+          "health_notes": []
+        }
+      ],
+      "steps": []
+    }
+  ]
+}

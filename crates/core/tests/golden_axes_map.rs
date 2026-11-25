@@ -6,7 +6,7 @@ use common::{AxesMapCase, AxesMapSegment, axes_map_cases, close};
 use wobblescope_core::RawSamples;
 use wobblescope_core::axes_map::{
     AxesMapInput, AxesMapParams, AxesMapResult, AxisState, MapState, Mounting, NoiseVerdict,
-    QualityStatus, analyze_axes_map,
+    QualityStatus, analyze_axes_map_as_reference,
 };
 
 fn raw(s: &AxesMapSegment) -> RawSamples {
@@ -35,7 +35,7 @@ fn run(case: &AxesMapCase) -> AxesMapResult {
         configured_map: case.configured_map.clone(),
         mounting: Mounting::Toolhead,
     };
-    analyze_axes_map(&input, &params(case)).unwrap()
+    analyze_axes_map_as_reference(&input, &params(case)).unwrap()
 }
 
 fn status_name(s: QualityStatus) -> &'static str {
@@ -164,7 +164,7 @@ fn a_degenerate_cross_product_is_ambiguous_not_nan() {
         configured_map: None,
         mounting: Mounting::Toolhead,
     };
-    let got = analyze_axes_map(&input, &params(case)).unwrap();
+    let got = analyze_axes_map_as_reference(&input, &params(case)).unwrap();
     assert_eq!(got.state, MapState::Ambiguous);
     assert_eq!(got.map, None);
     assert_eq!(got.quality.status, QualityStatus::Error);
@@ -198,7 +198,7 @@ fn a_configured_map_gives_the_same_map_as_none() {
         configured_map: Some("-z, y, x".to_owned()),
         mounting: Mounting::Toolhead,
     };
-    let got = analyze_axes_map(&input, &params(identity)).unwrap();
+    let got = analyze_axes_map_as_reference(&input, &params(identity)).unwrap();
     assert_eq!(got.state, MapState::Complete);
     assert_eq!(got.map, reference.map);
     assert_eq!(got.configured_map.as_deref(), Some("-z, y, x"));

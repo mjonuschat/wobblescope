@@ -2,12 +2,15 @@
 
 use std::path::Path;
 
-use wobblescope_core::axes_map::{AxisState, MapState, QualityStatus, analyze_axes_map};
+use wobblescope_core::axes_map::{
+    AxisState, ChipAxis, MapState, QualityStatus, analyze_axes_map, analyze_axes_map_as_reference,
+};
 use wobblescope_session::bridge::{ChipCapture, axes_map_inputs, axes_map_params};
 use wobblescope_session::fs::open_session;
 
 const ID: &str = "test-20261117T011928Z";
 const BEACON_ID: &str = "test-20261117T034234Z";
+const HANK_IDS: [&str; 2] = ["axesmap-20261125T034718Z", "axesmap-20261125T034912Z"];
 
 fn capture() -> (wobblescope_session::meta::SessionMeta, ChipCapture) {
     capture_of(ID)
@@ -58,7 +61,7 @@ fn the_same_capture_read_whole_gives_the_false_warning() {
     };
     input.windows = [None, None, None];
     let params = axes_map_params(&meta).expect("params");
-    let got = analyze_axes_map(&input, &params).expect("analysis");
+    let got = analyze_axes_map_as_reference(&input, &params).expect("analysis");
     assert!(got.axes[0].tilt_deg > 12.0, "tilt {}", got.axes[0].tilt_deg);
     assert!(
         got.quality
@@ -81,4 +84,27 @@ fn a_real_beacon_capture_infers_the_z_axis_it_cannot_feel() {
     assert_eq!(got.map.as_deref(), Some("-x, -y, z"));
     assert_eq!(got.axes[2].state, AxisState::Virtual);
     assert_ne!(got.quality.status, QualityStatus::Error);
+}
+
+#[test]
+fn a_step_in_the_chip_reading_does_not_hide_the_y_move_on_hank() {
+    // The chip reads 74 to 148 mm/s² differently at rest after the Y move than before it. One
+    // baseline per segment turned that into -43 and +49 mm/s of the 80 mm/s on chip z in the two
+    // runs, and a confidence of 2 and 15 %.
+    for id in HANK_IDS {
+        let (meta, ChipCapture::Ready { input, .. }) = capture_of(id) else {
+            panic!("expected a ready capture");
+        };
+        let params = axes_map_params(&meta).expect("params");
+        let got = analyze_axes_map(&input, &params).expect("analysis");
+        let (x, y) = (&got.axes[0], &got.axes[1]);
+        assert_eq!(x.chip_axis, Some(ChipAxis::Y), "{id}");
+        assert_eq!(y.chip_axis, Some(ChipAxis::Z), "{id}");
+        assert!(!x.negative && !y.negative, "{id}");
+        assert!(y.peaks[2] > 70.0, "{id}: peak {}", y.peaks[2]);
+        assert!(x.confidence > 0.9 && y.confidence > 0.9, "{id}");
+        assert!(x.tilt_deg < 15.0 && y.tilt_deg < 15.0, "{id}");
+        let reference = analyze_axes_map_as_reference(&input, &params).expect("analysis");
+        assert!(reference.axes[1].confidence < 0.2, "{id}");
+    }
 }

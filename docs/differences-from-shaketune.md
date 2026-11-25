@@ -160,6 +160,15 @@ Yes. Shake&Tune has no support for this. Wobblescope flips the direction of the 
 bed sensor, and returns a partial result with no suggestion when it cannot work out Z. This is
 tested on simulated data only. No recording from a bed-mounted sensor has been analysed yet.
 
+### Why does my axes map read cleaner than in Shake&Tune?
+
+An accelerometer does not read the same at rest before and after a move. The toolhead settles at a
+slightly different tilt, and on a reading of 1 g that is tens of mm/s². Shake&Tune reads the whole
+segment against one resting reading, so a small shift at rest can look as large as the move itself
+and change which axis, and which sign, the move is read as. Wobblescope measures the resting
+reading before the move and after it separately, and uses only the move and a short stretch around
+it. Where a segment has no rest before the move, it is read as Shake&Tune reads it.
+
 ## Vibrations profile
 
 ### Why does the last speed match the maximum I asked for?

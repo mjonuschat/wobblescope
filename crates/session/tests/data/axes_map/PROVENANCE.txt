@@ -26,3 +26,17 @@ The files are exactly as the daemon wrote them. The bed moves Z, so the Beacon f
 during the Z move. A 10.5 mm/s wiggle on chip x, at 34 % confidence, matches the chip axis that the
 X move already has. Shake&Tune reports that as the same axis twice. Here Z is inferred from the
 other two and the map reads -x, -y, z.
+
+Two more real axes-map calibrations, written by the daemon (session format 3), from hank.
+
+Printer:   hank, a CoreXY printer with quad gantry levelling (Klipper v2026.09.00-3-g6127720c)
+Captured:  2026-11-25 (session ids axesmap-20261125T034718Z and axesmap-20261125T034912Z)
+Chip:      adxl345, 3200 Hz nominal, mounted on the toolhead, axes_map x,y,z (the default). Chip x
+           is vertical: it reads about +9179 mm/s^2 at rest. The map is y, z, x.
+Run:       speed 80 mm/s, accel 1500 mm/s^2, Z height 20 mm, travel speed 120 mm/s. Z is limited to
+           15 mm/s and 500 mm/s^2.
+
+The files are exactly as the daemon wrote them. The chip reading at rest is not the same before and
+after a move: it steps by 74 to 148 mm/s^2 (one or two steps of the sensor's resolution), as the
+toolhead settles at a slightly different tilt. Read with one baseline per segment, the Y move shows
+-39 and +49 mm/s on chip z in the two runs, against a real 80 mm/s.
