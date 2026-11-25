@@ -157,8 +157,7 @@ out the missing axis from the other two.
 ### Can I test a sensor mounted on the bed?
 
 Yes. Shake&Tune has no support for this. Wobblescope flips the direction of the Y axis for a
-bed sensor, and returns a partial result with no suggestion when it cannot work out Z. This is
-tested on simulated data only. No recording from a bed-mounted sensor has been analysed yet.
+bed sensor, and returns a partial result with no suggestion when it cannot work out Z.
 
 ### Why does my axes map read cleaner than in Shake&Tune?
 
