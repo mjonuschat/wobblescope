@@ -133,7 +133,20 @@ describe("measure", () => {
   });
 
   it("shows the motor tuning card below the other sections when the printer has autotune sections", async () => {
-    motorTuning = [{ stepper: "stepper_z", driver: "tmc2240", motor: "m", tuning_goal: "auto", voltage: 24 }];
+    motorTuning = [
+      {
+        stepper: "stepper_z",
+        driver: "tmc2240",
+        run_current: 0.8,
+        hold_current: 0.8,
+        microsteps: 32,
+        motor: "m",
+        tuning_goal: "auto",
+        voltage: 24,
+        differs_from: null,
+        differs: [],
+      },
+    ];
     api();
     renderRoute("/");
     expect(await screen.findByText("Motor tuning")).toBeTruthy();

@@ -622,7 +622,9 @@ async fn motor_tuning_leaves_a_missing_driver_and_absent_options_null() {
         "tmc2240 stepper_x": {},
     }));
     let (_, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
-    let entry = &body[0];
+    let list = body.as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    let entry = &list[1];
     assert_eq!(entry["stepper"], "stepper_y");
     assert_eq!(entry["driver"], Value::Null);
     assert_eq!(entry["motor"], "m");
@@ -632,21 +634,119 @@ async fn motor_tuning_leaves_a_missing_driver_and_absent_options_null() {
         "sg4_thrs",
         "overvoltage_vth",
         "voltage",
+        "run_current",
+        "hold_current",
+        "microsteps",
     ] {
         assert_eq!(entry[key], Value::Null, "{key}");
     }
-    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["stepper"], "stepper_x");
+    assert_eq!(list[0]["driver"], "tmc2240");
+    assert_eq!(list[0]["motor"], Value::Null);
 }
 
 #[tokio::test]
-async fn motor_tuning_is_empty_without_autotune_sections() {
+async fn motor_tuning_is_empty_without_a_stepper_with_a_driver_or_autotune_section() {
     let rig = rig().await;
-    rig.sim
-        .printer
-        .set_settings(json!({"extruder": {}, "tmc2240 stepper_z": {}}));
+    rig.sim.printer.set_settings(json!({"extruder": {}}));
     let (status, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!([]));
+}
+
+fn corexy(x: Value, y: Value) -> Value {
+    json!({
+        "printer": {"kinematics": "corexy"},
+        "stepper_x": {"microsteps": 32},
+        "stepper_y": {"microsteps": 32},
+        "tmc2209 stepper_x": x,
+        "tmc2209 stepper_y": y,
+        "autotune_tmc stepper_x": section("ldo-42sth48-2004mah"),
+        "autotune_tmc stepper_y": section("ldo-42sth48-2004mah"),
+    })
+}
+
+fn driver(rig: &Rig, stepper: &str, run: f64, hold: f64) {
+    let name = format!("tmc2209 {stepper}");
+    rig.sim.printer.set_field(&name, "run_current", json!(run));
+    rig.sim
+        .printer
+        .set_field(&name, "hold_current", json!(hold));
+}
+
+#[tokio::test]
+async fn motor_tuning_gives_the_currents_in_use_to_two_decimals_and_the_microsteps() {
+    let rig = rig().await;
+    rig.sim
+        .printer
+        .set_settings(corexy(json!({"hold_current": 2.0}), json!({})));
+    driver(
+        &rig,
+        "stepper_x",
+        0.998_268_396_969_243_6,
+        0.998_268_396_969_243_6,
+    );
+    driver(
+        &rig,
+        "stepper_y",
+        0.998_268_396_969_243_6,
+        0.998_268_396_969_243_6,
+    );
+    let (_, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(body[0]["run_current"], 1.0);
+    assert_eq!(body[0]["hold_current"], 1.0);
+    assert_eq!(body[0]["microsteps"], 32);
+}
+
+#[tokio::test]
+async fn motor_tuning_marks_what_differs_on_the_second_corexy_motor() {
+    let rig = rig().await;
+    let mut settings = corexy(json!({}), json!({}));
+    settings["autotune_tmc stepper_y"]["tuning_goal"] = json!("silent");
+    rig.sim.printer.set_settings(settings);
+    driver(&rig, "stepper_x", 1.2, 1.2);
+    driver(&rig, "stepper_y", 1.0, 0.5);
+    let (_, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(body[0]["differs"], json!([]));
+    assert_eq!(body[0]["differs_from"], Value::Null);
+    assert_eq!(body[1]["differs_from"], "stepper_x");
+    assert_eq!(
+        body[1]["differs"],
+        json!(["tuning_goal", "run_current", "hold_current"])
+    );
+}
+
+#[tokio::test]
+async fn motor_tuning_marks_nothing_when_the_motors_match_to_two_decimals() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    driver(&rig, "stepper_x", 0.998, 0.998);
+    driver(&rig, "stepper_y", 1.002, 1.002);
+    let (_, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(body[1]["differs"], json!([]));
+    assert_eq!(body[1]["differs_from"], Value::Null);
+}
+
+#[tokio::test]
+async fn motor_tuning_compares_the_motors_of_a_corexy_printer_only() {
+    let rig = rig().await;
+    let mut settings = corexy(json!({}), json!({}));
+    settings["printer"]["kinematics"] = json!("cartesian");
+    rig.sim.printer.set_settings(settings);
+    driver(&rig, "stepper_x", 1.2, 1.2);
+    driver(&rig, "stepper_y", 1.0, 1.0);
+    let (_, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(body[1]["differs"], json!([]));
+}
+
+#[tokio::test]
+async fn motor_tuning_leaves_the_currents_null_without_a_driver_object() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    let (status, body) = answer(&rig, common::request("GET", "/api/printer/motor-tuning")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["run_current"], Value::Null);
+    assert_eq!(body[0]["microsteps"], 32);
 }
 
 #[tokio::test]
