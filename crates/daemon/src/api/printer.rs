@@ -378,28 +378,40 @@ async fn begin_motion(state: &ApiState, id: &'static str) -> Result<(SlotPermit,
             "a test is running; the printer cannot move until it ends",
         )]));
     };
+    require_no_uncertain_motion(state)?;
+    let control = control(state)?;
+    require_idle(&control).await?;
+    Ok((permit, control))
+}
+
+/// Refuses while the last test may still be moving the toolhead.
+pub(super) fn require_no_uncertain_motion(state: &ApiState) -> Result<(), ApiError> {
     if state.capture.slot.motion_uncertain().is_some() {
         return Err(ApiError::preflight(vec![CheckFailure::new(
             CheckId::NoUncertainMotion,
             "the printer may still be moving; stop it first",
         )]));
     }
-    let control = control(state)?;
-    // A print, or a macro that Klipper is still running after the daemon stopped waiting for it,
-    // keeps Klipper out of idle, so motion is refused without relying on the marker alone. A
-    // missing idle state counts as not idle. The check and the script are separate calls, so a
-    // client that starts a print between them is not stopped; Klipper has no atomic guard for
-    // that without a macro.
-    let read = tokio::time::timeout(QUERY_TIMEOUT, read_printer_state(&control))
+    Ok(())
+}
+
+/// Refuses while a print runs or the toolhead is not idle. A macro that Klipper is still running
+/// after the daemon stopped waiting for it keeps Klipper out of idle, so the uncertain-motion
+/// marker alone is not relied on. A missing idle state counts as not idle. The check and what
+/// follows are separate calls, so a client that starts a print between them is not stopped;
+/// Klipper has no atomic guard for that without a macro.
+pub(super) async fn require_idle(control: &Rpc) -> Result<(), ApiError> {
+    let read = tokio::time::timeout(QUERY_TIMEOUT, read_printer_state(control))
         .await
         .map_err(|_| unavailable("Moonraker did not answer the printer state query"))?
         .map_err(|e| unavailable(format!("cannot read the printer's state: {e}")))?;
     let mut failures = read.failures(true);
     failures.retain(|f| f.check != CheckId::Homed);
-    if !failures.is_empty() {
-        return Err(ApiError::preflight(failures));
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(ApiError::preflight(failures))
     }
-    Ok((permit, control))
 }
 
 async fn run_script(

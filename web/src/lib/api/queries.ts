@@ -38,6 +38,7 @@ import {
   importGroup,
   listResults,
   listSessions,
+  getMotorRegisters,
   getMotorTuning,
   getPrinter,
   homePrinter,
@@ -63,6 +64,7 @@ export const queryKeys = {
   status: ["status"] as const,
   printer: ["printer"] as const,
   motorTuning: ["printer", "motor-tuning"] as const,
+  motorRegisters: (stepper: string) => ["printer", "motor-registers", stepper] as const,
   analysesOf: (id: string) => ["analysis", id] as const,
   spectrogramsOf: (id: string) => ["spectrogram", id] as const,
   /** One chip's map at one probe point. `createdAt` and `resultId` tell what it was made from, as for an analysis. */
@@ -409,5 +411,19 @@ export function useMotorTuning() {
   return useQuery({
     queryKey: queryKeys.motorTuning,
     queryFn: ({ signal }) => getMotorTuning(signal),
+  });
+}
+
+/**
+ * One stepper's driver registers, read fresh each time its row opens. Nothing is kept, because a
+ * register can change while Klipper runs.
+ */
+export function useMotorRegisters(stepper: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.motorRegisters(stepper),
+    queryFn: ({ signal }) => getMotorRegisters(stepper, signal),
+    enabled,
+    retry: false,
+    gcTime: 0,
   });
 }

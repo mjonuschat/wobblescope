@@ -3,6 +3,7 @@ import { Fragment, useState } from "react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useMotorRegisters } from "@/lib/api/queries";
 import type { MotorTuning } from "@/lib/generated/MotorTuning";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/ui-kit/Alert";
@@ -48,9 +49,32 @@ function shown(entry: MotorTuning, key: Key): string {
   return show(value as number | string | null);
 }
 
+function Registers({ query }: { query: ReturnType<typeof useMotorRegisters> }) {
+  if (query.isPending) return <p className="text-sm text-muted-foreground">Reading registers…</p>;
+  if (query.isError) return <p className="text-sm text-muted-foreground">{query.error.message}</p>;
+  const { registers, differs, differs_from: other } = query.data;
+  if (registers.length === 0) return <p className="text-sm text-muted-foreground">The driver reported no registers.</p>;
+  return (
+    <Fields>
+      {registers.map((register) => {
+        const difference = differs.find((d) => d.name === register.name);
+        const reference = difference && other ? `${other}: ${difference.other}` : undefined;
+        return (
+          <Field key={register.name} label={register.name} className={reference && cn(DIFFERS, "-mx-1 rounded px-1")}>
+            <span title={reference}>{register.value}</span>
+            {reference && <span className="sr-only"> (differs, {reference})</span>}
+          </Field>
+        );
+      })}
+    </Fields>
+  );
+}
+
 function Row({ entry, other }: { entry: MotorTuning; other: MotorTuning | undefined }) {
   const [open, setOpen] = useState(false);
   const set = AUTOTUNE.filter((key) => entry[key] !== null);
+  const hasDriver = entry.driver !== null;
+  const registers = useMotorRegisters(entry.stepper, open && hasDriver);
   const differs = (key: Key) => entry.differs.includes(key);
   const hiddenDifference = set.some(differs);
 
@@ -81,7 +105,7 @@ function Row({ entry, other }: { entry: MotorTuning; other: MotorTuning | undefi
           {show(entry.microsteps)}
         </Cell>
         <TableCell className="text-right">
-          {set.length > 0 && (
+          {(set.length > 0 || hasDriver) && (
             <button
               type="button"
               aria-expanded={open}
@@ -107,18 +131,28 @@ function Row({ entry, other }: { entry: MotorTuning; other: MotorTuning | undefi
       {open && (
         <TableRow>
           <TableCell colSpan={8}>
-            <h3 className="mb-2 text-sm font-medium">Autotune</h3>
-            <Fields>
-              {set.map((key) => {
-                const reference = other && differs(key) ? `${other.stepper}: ${shown(other, key)}` : undefined;
-                return (
-                  <Field key={key} label={key} className={reference && cn(DIFFERS, "-mx-1 rounded px-1")}>
-                    <span title={reference}>{show(entry[key])}</span>
-                    {reference && <span className="sr-only"> (differs, {reference})</span>}
-                  </Field>
-                );
-              })}
-            </Fields>
+            {set.length > 0 && (
+              <section>
+                <h3 className="mb-2 text-sm font-medium">Autotune</h3>
+                <Fields>
+                  {set.map((key) => {
+                    const reference = other && differs(key) ? `${other.stepper}: ${shown(other, key)}` : undefined;
+                    return (
+                      <Field key={key} label={key} className={reference && cn(DIFFERS, "-mx-1 rounded px-1")}>
+                        <span title={reference}>{show(entry[key])}</span>
+                        {reference && <span className="sr-only"> (differs, {reference})</span>}
+                      </Field>
+                    );
+                  })}
+                </Fields>
+              </section>
+            )}
+            {hasDriver && (
+              <section className={cn(set.length > 0 && "mt-6")}>
+                <h3 className="mb-2 text-sm font-medium">Registers</h3>
+                <Registers query={registers} />
+              </section>
+            )}
           </TableCell>
         </TableRow>
       )}

@@ -9,6 +9,7 @@ import type { Levelled } from "@/lib/generated/Levelled";
 import type { Prepared } from "@/lib/generated/Prepared";
 import type { Mode } from "@/lib/generated/Mode";
 import type { Overrides } from "@/lib/generated/Overrides";
+import type { MotorRegisters } from "@/lib/generated/MotorRegisters";
 import type { MotorTuning } from "@/lib/generated/MotorTuning";
 import type { PrinterSettings } from "@/lib/generated/PrinterSettings";
 import type { PrinterState } from "@/lib/generated/PrinterState";
@@ -286,4 +287,9 @@ export function sessionDownloadUrl(id: string): string {
 /** The TMC autotune sections Klipper read at startup. The list is empty when there are none. */
 export function getMotorTuning(signal?: AbortSignal) {
   return apiJson<MotorTuning[]>("printer/motor-tuning", { signal });
+}
+
+/** The registers of one stepper's driver, read now. */
+export function getMotorRegisters(stepper: string, signal?: AbortSignal) {
+  return apiJson<MotorRegisters>(`printer/motor-tuning/${encodeURIComponent(stepper)}/registers`, { signal });
 }

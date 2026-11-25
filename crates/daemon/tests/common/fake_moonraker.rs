@@ -22,6 +22,8 @@ pub enum Script {
     Error(i64, &'static str),
     /// Answers after a delay.
     After(Duration, Box<Script>),
+    /// Sends these notifications, then answers with the script.
+    Notify(Vec<(&'static str, Value)>, Box<Script>),
     /// Never answers.
     Silent,
     /// Closes the socket.
@@ -369,6 +371,13 @@ fn reply(out: &mpsc::UnboundedSender<Out>, id: Value, script: Script) {
             let frame =
                 json!({"jsonrpc": "2.0", "error": {"code": code, "message": message}, "id": id});
             let _ = out.send(Out::Text(frame.to_string()));
+        }
+        Script::Notify(notes, then) => {
+            for (method, params) in notes {
+                let frame = json!({"jsonrpc": "2.0", "method": method, "params": params});
+                let _ = out.send(Out::Text(frame.to_string()));
+            }
+            reply(out, id, *then);
         }
         Script::After(delay, then) => {
             let out = out.clone();

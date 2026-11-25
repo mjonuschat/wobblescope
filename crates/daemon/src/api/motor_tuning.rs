@@ -9,8 +9,12 @@ use axum::extract::State;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use super::error::ApiPath;
+use super::printer::{require_idle, require_no_uncertain_motion};
 use super::{ApiError, ApiState};
-use crate::moonraker::rpc::RpcError;
+use crate::capture::{CheckFailure, CheckId};
+use crate::moonraker::Moonraker;
+use crate::moonraker::rpc::{Rpc, RpcError};
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -19,6 +23,13 @@ const SECTION_PREFIX: &str = "autotune_tmc ";
 /// The two motors of a CoreXY printer, which are compared with each other.
 const MOTOR_PAIR: [&str; 2] = ["stepper_x", "stepper_y"];
 const PAIRED_KINEMATICS: [&str; 2] = ["corexy", "limited_corexy"];
+
+/// The registers the card shows, in this order. They are the ones that set how a driver runs the
+/// motor and that Shake&Tune compares. The others hold the driver's live state.
+const REGISTERS: [&str; 5] = ["CHOPCONF", "PWMCONF", "COOLCONF", "TPWMTHRS", "TCOOLTHRS"];
+/// How long one register read may take, and how long its answer may trail the command.
+const REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
+const CONSOLE_GRACE: Duration = Duration::from_millis(500);
 
 const DRIVERS: [&str; 6] = [
     "tmc2130", "tmc2208", "tmc2209", "tmc2240", "tmc2660", "tmc5160",
@@ -57,6 +68,34 @@ pub struct MotorTuning {
     pub differs_from: Option<String>,
     /// The names of the fields that differ from `differs_from`.
     pub differs: Vec<String>,
+}
+
+/// A driver register and its value as `0x` and eight hexadecimal digits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Register {
+    pub name: String,
+    pub value: String,
+}
+
+/// A register whose value differs from the other motor's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct RegisterDifference {
+    pub name: String,
+    pub other: String,
+}
+
+/// The registers of one stepper's driver.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct MotorRegisters {
+    pub stepper: String,
+    /// The registers the driver answered for, in a fixed order.
+    pub registers: Vec<Register>,
+    /// The other motor of a CoreXY pair, on the second motor.
+    pub differs_from: Option<String>,
+    pub differs: Vec<RegisterDifference>,
 }
 
 pub(super) async fn motor_tuning(
@@ -244,5 +283,209 @@ fn mark_differences(list: &mut [MotorTuning], kinematics: Option<&str>) {
     if !differs.is_empty() {
         list[b].differs_from = Some(first.to_owned());
         list[b].differs = differs;
+    }
+}
+
+/// `GET /api/printer/motor-tuning/{stepper}/registers`: reads the stepper's registers from its
+/// driver with one `DUMP_TMC STEPPER=<stepper> REGISTER=<name>` each, which Klipper prints to the
+/// console. On the second motor of a CoreXY pair it also reads the first motor's, to say what
+/// differs. Refused while a test or a print runs.
+pub(super) async fn motor_registers(
+    State(state): State<ApiState>,
+    ApiPath(stepper): ApiPath<String>,
+) -> Result<Json<MotorRegisters>, ApiError> {
+    let control = state
+        .moonraker
+        .control()
+        .ok_or_else(|| ApiError::MoonrakerUnavailable {
+            message: "the daemon is not connected to Moonraker".to_owned(),
+        })?;
+    let status = control
+        .query_objects(json!({"configfile": ["settings"]}), QUERY_TIMEOUT)
+        .await
+        .map_err(|e| ApiError::MoonrakerUnavailable {
+            message: format!("cannot read the printer's config: {e}"),
+        })?;
+    // Only a name from the config reaches a script.
+    let has_driver = |name: &str| {
+        status
+            .pointer("/configfile/settings")
+            .and_then(Value::as_object)
+            .is_some_and(|settings| {
+                DRIVERS
+                    .iter()
+                    .any(|driver| settings.contains_key(&format!("{driver} {name}")))
+            })
+    };
+    if !has_driver(&stepper) {
+        return Err(ApiError::not_found(format!(
+            "no stepper {stepper} with a TMC driver"
+        )));
+    }
+    if state.capture.slot.is_held() {
+        return Err(ApiError::preflight(vec![CheckFailure::new(
+            CheckId::NoTestRunning,
+            "a test is running; the registers cannot be read until it ends",
+        )]));
+    }
+    require_no_uncertain_motion(&state)?;
+    require_idle(&control).await?;
+    let registers = read_registers(&control, &state.moonraker, &stepper).await;
+    let [first, second] = MOTOR_PAIR;
+    let mut differs_from = None;
+    let mut differs = Vec::new();
+    if stepper == second
+        && kinematics(&status).is_some_and(|k| PAIRED_KINEMATICS.contains(&k))
+        && has_driver(first)
+    {
+        let other = read_registers(&control, &state.moonraker, first).await;
+        differs = differing_registers(&registers, &other);
+        differs_from = Some(first.to_owned());
+    }
+    Ok(Json(MotorRegisters {
+        stepper,
+        registers,
+        differs_from,
+        differs,
+    }))
+}
+
+async fn read_registers(control: &Rpc, moonraker: &Moonraker, stepper: &str) -> Vec<Register> {
+    let mut registers = Vec::new();
+    for name in REGISTERS {
+        if let Some(value) = read_register(control, moonraker, stepper, name).await {
+            registers.push(Register {
+                name: name.to_owned(),
+                value,
+            });
+        }
+    }
+    registers
+}
+
+/// One register's value, or `None` when the driver has no such register or does not answer.
+async fn read_register(
+    control: &Rpc,
+    moonraker: &Moonraker,
+    stepper: &str,
+    name: &str,
+) -> Option<String> {
+    // Subscribed before the command, so no line of the answer is missed.
+    let mut console = moonraker.gcode_lines();
+    let script = format!("DUMP_TMC STEPPER={stepper} REGISTER={name}");
+    control
+        .call(
+            "printer.gcode.script",
+            Some(json!({"script": script})),
+            REGISTER_TIMEOUT,
+        )
+        .await
+        .ok()?;
+    loop {
+        match tokio::time::timeout(CONSOLE_GRACE, console.recv()).await {
+            Ok(Ok(line)) => {
+                if let Some(value) = parse_register(&line, name) {
+                    return Some(value);
+                }
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => {}
+            Ok(Err(_)) | Err(_) => return None,
+        }
+    }
+}
+
+/// The value in a console line such as `// CHOPCONF:   330081e1 toff=1 tbl=1`, as `0x330081e1`.
+fn parse_register(line: &str, name: &str) -> Option<String> {
+    let rest = line
+        .trim()
+        .strip_prefix("//")?
+        .trim_start()
+        .strip_prefix(name)?
+        .strip_prefix(':')?
+        .trim_start();
+    let digits = rest.get(..8)?;
+    let ends = rest
+        .get(8..)
+        .is_some_and(|r| r.is_empty() || r.starts_with(' '));
+    (ends && digits.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| format!("0x{}", digits.to_ascii_lowercase()))
+}
+
+/// The registers of `a` whose value is not the one `b` has. A register one of them lacks is not
+/// compared.
+fn differing_registers(a: &[Register], b: &[Register]) -> Vec<RegisterDifference> {
+    a.iter()
+        .filter_map(|mine| {
+            let theirs = b.iter().find(|r| r.name == mine.name)?;
+            (theirs.value != mine.value).then(|| RegisterDifference {
+                name: mine.name.clone(),
+                other: theirs.value.clone(),
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_register_line_gives_its_value() {
+        let line = "// CHOPCONF:   330081e1 toff=1 hstrt=6 mres=3(32usteps)";
+        assert_eq!(
+            parse_register(line, "CHOPCONF").as_deref(),
+            Some("0x330081e1")
+        );
+    }
+
+    #[test]
+    fn the_value_is_found_whatever_the_padding_and_the_case() {
+        assert_eq!(
+            parse_register("// FACTORY_CONF: 0000000D fclktrim=13", "FACTORY_CONF").as_deref(),
+            Some("0x0000000d")
+        );
+        assert_eq!(
+            parse_register("// GSTAT:      00000000", "GSTAT").as_deref(),
+            Some("0x00000000")
+        );
+    }
+
+    #[test]
+    fn another_register_or_a_malformed_line_gives_nothing() {
+        for line in [
+            "// PWMCONF:   4f0e0516 pwm_ofs=22",
+            "// CHOPCONF:   330081e",
+            "// CHOPCONF:   330081e12 toff=1",
+            "// CHOPCONF:   33008zz1 toff=1",
+            "CHOPCONF:   330081e1",
+            "// ========== Queried registers ==========",
+            "!! Unknown register name 'CHOPCONF'",
+        ] {
+            assert_eq!(parse_register(line, "CHOPCONF"), None, "{line}");
+        }
+    }
+
+    fn register(name: &str, value: &str) -> Register {
+        Register {
+            name: name.to_owned(),
+            value: value.to_owned(),
+        }
+    }
+
+    #[test]
+    fn only_registers_both_motors_have_are_compared() {
+        let a = [
+            register("CHOPCONF", "0x1"),
+            register("PWMCONF", "0x2"),
+            register("COOLCONF", "0x3"),
+        ];
+        let b = [register("CHOPCONF", "0x1"), register("PWMCONF", "0x9")];
+        assert_eq!(
+            differing_registers(&a, &b),
+            [RegisterDifference {
+                name: "PWMCONF".to_owned(),
+                other: "0x9".to_owned()
+            }]
+        );
     }
 }

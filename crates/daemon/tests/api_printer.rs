@@ -760,3 +760,175 @@ async fn motor_tuning_is_empty_when_klipper_is_not_ready() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body, json!([]));
 }
+
+const REGISTERS: [&str; 5] = ["CHOPCONF", "PWMCONF", "COOLCONF", "TPWMTHRS", "TCOOLTHRS"];
+
+/// Answers `DUMP_TMC STEPPER=<stepper> REGISTER=<register>` as Klipper does: one console line
+/// and then the script's result. A register that is not in `values` is an error, as one that the
+/// driver does not have is.
+fn serve_registers(rig: &Rig, values: Vec<(&'static str, &'static str, u32)>) {
+    rig.sim
+        .fake
+        .on_fn("printer.gcode.script", move |params, _| {
+            let script = params["script"].as_str().unwrap_or_default();
+            let word = |key: &str| {
+                script
+                    .split_whitespace()
+                    .find_map(|w| w.strip_prefix(key))
+                    .unwrap_or_default()
+                    .to_owned()
+            };
+            let (stepper, register) = (word("STEPPER="), word("REGISTER="));
+            match values
+                .iter()
+                .find(|(s, r, _)| *s == stepper && *r == register)
+            {
+                Some((_, register, value)) => Script::Notify(
+                    vec![(
+                        "notify_gcode_response",
+                        json!([format!("// {register}:   {value:08x} toff=3 tbl=2")]),
+                    )],
+                    Box::new(Script::Result(json!("ok"))),
+                ),
+                None => Script::Error(400, "Unknown register name"),
+            }
+        });
+}
+
+fn dumps(rig: &Rig) -> Vec<String> {
+    rig.sim
+        .fake
+        .requests_for("printer.gcode.script")
+        .iter()
+        .filter_map(|c| c.params["script"].as_str())
+        .filter(|s| s.starts_with("DUMP_TMC"))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn registers_of(stepper: &'static str, base: u32) -> Vec<(&'static str, &'static str, u32)> {
+    REGISTERS
+        .iter()
+        .zip(0..)
+        .map(|(register, n)| (stepper, *register, base + n))
+        .collect()
+}
+
+async fn registers_of_stepper(rig: &Rig, stepper: &str) -> (StatusCode, Value) {
+    let uri = format!("/api/printer/motor-tuning/{stepper}/registers");
+    answer(rig, common::request("GET", &uri)).await
+}
+
+#[tokio::test]
+async fn motor_registers_reads_the_five_registers_one_at_a_time_in_order() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    serve_registers(&rig, registers_of("stepper_x", 0x3300_81e0));
+    let (status, body) = registers_of_stepper(&rig, "stepper_x").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["stepper"], "stepper_x");
+    let names: Vec<_> = body["registers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, REGISTERS);
+    assert_eq!(body["registers"][0]["value"], "0x330081e0");
+    assert_eq!(body["registers"][4]["value"], "0x330081e4");
+    assert_eq!(body["differs_from"], Value::Null);
+    assert_eq!(body["differs"], json!([]));
+    assert_eq!(
+        dumps(&rig),
+        REGISTERS
+            .iter()
+            .map(|r| format!("DUMP_TMC STEPPER=stepper_x REGISTER={r}"))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn motor_registers_leaves_out_a_register_the_driver_does_not_have() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    let mut values = registers_of("stepper_x", 0x10);
+    values.retain(|(_, register, _)| *register != "COOLCONF");
+    serve_registers(&rig, values);
+    let (status, body) = registers_of_stepper(&rig, "stepper_x").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["registers"].as_array().unwrap().len(), 4);
+    assert!(
+        body["registers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["name"] != "COOLCONF")
+    );
+}
+
+#[tokio::test]
+async fn motor_registers_of_the_second_corexy_motor_say_what_differs_from_the_first() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    let mut values = registers_of("stepper_x", 0x100);
+    let mut y = registers_of("stepper_y", 0x100);
+    y[1].2 = 0x4f0e_0516;
+    values.extend(y);
+    serve_registers(&rig, values);
+    let (_, body) = registers_of_stepper(&rig, "stepper_y").await;
+    assert_eq!(body["differs_from"], "stepper_x");
+    assert_eq!(
+        body["differs"],
+        json!([{"name": "PWMCONF", "other": "0x00000101"}])
+    );
+    assert_eq!(body["registers"][1]["value"], "0x4f0e0516");
+    assert_eq!(dumps(&rig).len(), 10);
+}
+
+#[tokio::test]
+async fn motor_registers_of_the_first_corexy_motor_are_not_compared() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    let mut values = registers_of("stepper_x", 0x100);
+    values.extend(registers_of("stepper_y", 0x900));
+    serve_registers(&rig, values);
+    let (_, body) = registers_of_stepper(&rig, "stepper_x").await;
+    assert_eq!(body["differs"], json!([]));
+    assert_eq!(dumps(&rig).len(), 5);
+}
+
+#[tokio::test]
+async fn motor_registers_are_refused_while_a_print_runs_and_nothing_is_sent() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    serve_registers(&rig, registers_of("stepper_x", 0x10));
+    rig.sim
+        .printer
+        .set_field("print_stats", "state", json!("printing"));
+    let (status, body) = registers_of_stepper(&rig, "stepper_x").await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(dumps(&rig).is_empty());
+}
+
+#[tokio::test]
+async fn motor_registers_are_refused_while_a_test_holds_the_slot() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    serve_registers(&rig, registers_of("stepper_x", 0x10));
+    let _test = rig.slot.try_acquire_as("a-test").unwrap();
+    let (status, _) = registers_of_stepper(&rig, "stepper_x").await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(dumps(&rig).is_empty());
+}
+
+#[tokio::test]
+async fn motor_registers_of_an_unknown_stepper_send_nothing() {
+    let rig = rig().await;
+    rig.sim.printer.set_settings(corexy(json!({}), json!({})));
+    serve_registers(&rig, registers_of("stepper_x", 0x10));
+    for name in ["stepper_q", "stepper_x%0AG28", "stepper_x%20REGISTER=GCONF"] {
+        let (status, body) = registers_of_stepper(&rig, name).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{name}: {body}");
+    }
+    assert!(dumps(&rig).is_empty());
+}
